@@ -1,0 +1,26 @@
+services:
+  backend:
+    build: ./backend
+    volumes:
+      # Database persistence
+      - backend_data:/app/data
+      # Google Service Account - mount from home directory (read-only)
+      - ~/.inversiones-app/credentials/google-service-account.json:/app/data/google-service-account.json:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  backend_data:

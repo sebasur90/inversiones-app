@@ -1,0 +1,15 @@
+node_modules/
+dist/
+__pycache__/
+*.pyc
+.venv/
+data/
+*.db
+
+# Credentials - never commit
+google-service-account.json
+backend/data/google-service-account.json
+**/credentials/
+CREDENTIALS.md
+.env.local
+.env.*.local

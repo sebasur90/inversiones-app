@@ -1,0 +1,100 @@
+from sqlalchemy import create_engine, Column, Integer, String, Date, Numeric, ForeignKey, UniqueConstraint, text
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
+import os
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "data.db")
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+
+engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class TipoCambio(Base):
+    __tablename__ = "tipos_cambio"
+    id = Column(Integer, primary_key=True, index=True)
+    fecha = Column(Date, nullable=False)
+    tipo = Column(String, nullable=False)
+    compra = Column(Numeric(18, 4), nullable=True)
+    venta = Column(Numeric(18, 4), nullable=True)
+
+    __table_args__ = (UniqueConstraint("fecha", "tipo", name="uq_tipo_cambio"),)
+
+
+class InstrumentoInversion(Base):
+    __tablename__ = "instrumentos_inversion"
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String, unique=True, nullable=False)
+    nombre = Column(String, nullable=False)
+    tipo_instrumento = Column(String, nullable=False)
+    mercado = Column(String, nullable=False)
+    moneda = Column(String, nullable=False)
+    pais = Column(String, nullable=True)
+    sector = Column(String, nullable=True)
+    fecha_vencimiento = Column(Date, nullable=True)
+
+
+class MovimientoInversion(Base):
+    __tablename__ = "movimientos_inversion"
+    id = Column(Integer, primary_key=True, index=True)
+    fecha = Column(Date, nullable=False)
+    cartera = Column(String, nullable=False)
+    ticker = Column(String, ForeignKey("instrumentos_inversion.ticker"), nullable=False)
+    tipo_movimiento = Column(String, nullable=False)  # compra, venta, dividendo, cupon, amortizacion
+    cantidad = Column(Numeric(18, 6), nullable=True)
+    precio = Column(Numeric(18, 6), nullable=False)
+    moneda = Column(String, nullable=False)
+    comision = Column(Numeric(18, 2), nullable=False, default=0)
+
+
+class PrecioInstrumento(Base):
+    __tablename__ = "precios_instrumento"
+    id = Column(Integer, primary_key=True, index=True)
+    fecha = Column(Date, nullable=False)
+    ticker = Column(String, ForeignKey("instrumentos_inversion.ticker"), nullable=False)
+    precio = Column(Numeric(18, 6), nullable=False)
+    moneda = Column(String, nullable=False)
+
+    __table_args__ = (UniqueConstraint("fecha", "ticker", name="uq_precio_instrumento"),)
+
+
+class IndiceMercado(Base):
+    __tablename__ = "indices_mercado"
+    id = Column(Integer, primary_key=True, index=True)
+    fecha = Column(Date, nullable=False, unique=True)
+    cer = Column(Numeric(18, 6), nullable=True)
+    mep = Column(Numeric(18, 6), nullable=True)
+
+
+class ObjetivoInversion(Base):
+    __tablename__ = "objetivos_inversion"
+    id = Column(Integer, primary_key=True, index=True)
+    cartera = Column(String, unique=True, nullable=False)
+    nombre = Column(String, nullable=False)
+    icono = Column(String, nullable=False, default="🎯")
+    monto_usd = Column(Numeric(18, 2), nullable=False)
+    fecha_limite = Column(Date, nullable=False)
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def init_db():
+    Base.metadata.create_all(bind=engine)
+
+    # sqlite create_all no agrega columnas nuevas en tablas existentes.
+    # aseguramos compatibilidad con DB antiguas que no tenían es_jubilacion.
+    with engine.connect() as conn:
+        result = conn.execute(text("PRAGMA table_info(objetivos_inversion)"))
+        cols = [row[1] for row in result.fetchall()]
+        if 'es_jubilacion' not in cols:
+            conn.execute(text("ALTER TABLE objetivos_inversion ADD COLUMN es_jubilacion INTEGER NOT NULL DEFAULT 0"))
+            conn.commit()

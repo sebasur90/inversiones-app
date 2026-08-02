@@ -1,0 +1,82 @@
+"""Lectura de las pestañas del Google Sheet de inversiones (cuenta de servicio)."""
+import os
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+
+SPREADSHEET_ID = "1c-dr1C793IVSNzfQZATf01kg2TCPO7nSjYoVKJBtxks"
+
+SHEET_TABS = ("Movimientos", "Instrumentos", "Precios")
+
+
+class SheetsClientError(Exception):
+    pass
+
+
+def _credentials_path() -> str:
+    return os.getenv(
+        "GOOGLE_SERVICE_ACCOUNT_FILE",
+        os.path.join(os.path.dirname(__file__), "..", "..", "data", "google-service-account.json"),
+    )
+
+
+def _get_service():
+    path = _credentials_path()
+    if not os.path.isfile(path):
+        raise SheetsClientError(
+            f"No se encontraron las credenciales de la cuenta de servicio en '{path}'. "
+            "Configurá GOOGLE_SERVICE_ACCOUNT_FILE o colocá el archivo en backend/data/google-service-account.json."
+        )
+    try:
+        credentials = service_account.Credentials.from_service_account_file(path, scopes=SCOPES)
+        return build("sheets", "v4", credentials=credentials)
+    except Exception as exc:
+        raise SheetsClientError(f"Credenciales de Google inválidas: {exc}") from exc
+
+
+def _rows_to_dicts(values: list[list[str]]) -> list[tuple[int, dict]]:
+    """Devuelve [(nro_fila_planilla, fila_como_dict)], saltando filas totalmente vacías."""
+    if not values:
+        return []
+    header = [h.strip() for h in values[0]]
+    rows = []
+    for offset, raw_row in enumerate(values[1:]):
+        row = {}
+        for i, col in enumerate(header):
+            cell = raw_row[i] if i < len(raw_row) else ""
+            row[col] = cell.strip() if isinstance(cell, str) else cell
+        if any(str(v).strip() for v in row.values()):
+            rows.append((offset + 2, row))
+    return rows
+
+
+def fetch_sheet_data() -> dict[str, list[tuple[int, dict]]]:
+    """Lee las 3 pestañas del Sheet y devuelve {pestaña: [(nro_fila, fila_como_dict)]}."""
+    service = _get_service()
+    result: dict[str, list[tuple[int, dict]]] = {}
+    try:
+        for tab in SHEET_TABS:
+            resp = (
+                service.spreadsheets()
+                .values()
+                .get(spreadsheetId=SPREADSHEET_ID, range=tab)
+                .execute()
+            )
+            result[tab] = _rows_to_dicts(resp.get("values", []))
+    except SheetsClientError:
+        raise
+    except Exception as exc:
+        message = str(exc)
+        if "PERMISSION_DENIED" in message or "403" in message:
+            raise SheetsClientError(
+                "El Sheet no está compartido con la cuenta de servicio. "
+                "Compartilo (acceso de lectura) con el email que figura en el archivo de credenciales."
+            ) from exc
+        raise SheetsClientError(f"Error leyendo el Google Sheet: {exc}") from exc
+
+    faltantes = [tab for tab in SHEET_TABS if not result.get(tab)]
+    if len(faltantes) == len(SHEET_TABS):
+        raise SheetsClientError("El Sheet está vacío o no se encontraron las pestañas Movimientos/Instrumentos/Precios.")
+
+    return result
