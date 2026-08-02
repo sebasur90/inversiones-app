@@ -1,6 +1,7 @@
 """Valuación, XIRR, TWR, exposición y benchmarks para la página de Inversiones."""
 import bisect
-from datetime import date
+import calendar
+from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from ..database import MovimientoInversion, InstrumentoInversion, PrecioInstrumento, IndiceMercado
@@ -905,6 +906,71 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
         })
 
     return sorted(resultado, key=lambda x: -abs(x["valor_actual_usd"]))
+
+
+# ── Evolución histórica (sparklines) ─────────────────────────────────────────
+
+def _fin_de_mes_range(desde: date, hasta: date) -> list[date]:
+    """Último día de cada mes entre `desde` y `hasta`, con `hasta` siempre como último punto."""
+    fechas: list[date] = []
+    cursor = date(desde.year, desde.month, 1)
+    while cursor <= hasta:
+        ultimo_dia = calendar.monthrange(cursor.year, cursor.month)[1]
+        fin_mes = min(date(cursor.year, cursor.month, ultimo_dia), hasta)
+        fechas.append(fin_mes)
+        if cursor.month == 12:
+            cursor = date(cursor.year + 1, 1, 1)
+        else:
+            cursor = date(cursor.year, cursor.month + 1, 1)
+    if not fechas or fechas[-1] != hasta:
+        fechas.append(hasta)
+    return fechas
+
+
+def get_evolucion(cartera: str | None, db: Session, max_puntos: int = 24) -> dict:
+    """Serie histórica (mensual) del valor de la cartera, para sparklines."""
+    movs = _movimientos_ordenados(db, cartera)
+    if not movs:
+        return {"puntos": []}
+
+    precios_por_ticker = _precios_por_ticker(db)
+    mep_cache: dict = {}
+    hoy = date.today()
+
+    fechas = _fin_de_mes_range(movs[0].fecha, hoy)
+    if len(fechas) > max_puntos:
+        paso = len(fechas) / max_puntos
+        muestreadas = [fechas[int(i * paso)] for i in range(max_puntos - 1)]
+        fechas = muestreadas + [fechas[-1]]
+
+    tracker = _HoldingsTracker(movs)
+    puntos = []
+    for f in fechas:
+        tracker.avanzar_a(f)
+        snapshot = tracker.snapshot()
+        valor_usd, _, _ = _valuar_holdings(snapshot, f, precios_por_ticker, db, mep_cache)
+        valor_ars, _, _ = _valuar_holdings_ars(snapshot, f, precios_por_ticker, db, mep_cache)
+        puntos.append({"fecha": f, "valor_usd": round(valor_usd, 2), "valor_ars": round(valor_ars, 2)})
+
+    return {"puntos": puntos}
+
+
+def get_precios_ticker(ticker: str, dias: int, db: Session) -> dict:
+    """Serie histórica de precio de un ticker (directo de PrecioInstrumento), para sparklines."""
+    desde = date.today() - timedelta(days=dias)
+    rows = (
+        db.query(PrecioInstrumento)
+        .filter(PrecioInstrumento.ticker == ticker, PrecioInstrumento.fecha >= desde)
+        .order_by(PrecioInstrumento.fecha)
+        .all()
+    )
+    return {
+        "ticker": ticker,
+        "puntos": [
+            {"fecha": r.fecha, "precio": float(r.precio), "moneda": r.moneda}
+            for r in rows
+        ],
+    }
 
 
 # ── Objetivos de inversión ──────────────────────────────────────────────────

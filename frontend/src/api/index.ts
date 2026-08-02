@@ -115,6 +115,33 @@ export const getMovimientosInversion = (params: { cartera?: string; ticker?: str
 export const getRendimientoPorTicker = (cartera: string | null) =>
   api.get<RendimientoPorTickerItem[]>(`${carteraPath(cartera)}/rendimiento-por-ticker`).then(r => r.data)
 
+export interface EvolucionPunto {
+  fecha: string
+  valor_usd: number
+  valor_ars: number
+}
+
+export interface EvolucionOut {
+  puntos: EvolucionPunto[]
+}
+
+export const getEvolucionInversiones = (cartera: string | null) =>
+  api.get<EvolucionOut>(`${carteraPath(cartera)}/evolucion`).then(r => r.data)
+
+export interface PrecioPunto {
+  fecha: string
+  precio: number
+  moneda: string
+}
+
+export interface PrecioSerieOut {
+  ticker: string
+  puntos: PrecioPunto[]
+}
+
+export const getPreciosTicker = (ticker: string, dias = 365) =>
+  api.get<PrecioSerieOut>(`/inversiones/ticker/${encodeURIComponent(ticker)}/precios`, { params: { dias } }).then(r => r.data)
+
 // --- Objetivos de Inversión ---
 
 export interface AportePunto {

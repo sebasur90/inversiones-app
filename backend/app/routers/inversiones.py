@@ -2,7 +2,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from ..database import get_db, MovimientoInversion
+from ..database import get_db, MovimientoInversion, InstrumentoInversion
 from ..schemas import (
     SyncResult,
     CarteraInfo,
@@ -10,10 +10,18 @@ from ..schemas import (
     ExposicionOut,
     MovimientoInversionOut,
     RendimientoPorTickerItem,
+    EvolucionOut,
+    PrecioSerieOut,
 )
 from ..services.sheets_client import SheetsClientError
 from ..services.inversiones_sync import sync_from_sheet, get_ultimo_sync
-from ..services.inversiones_analytics import get_carteras, get_resumen, get_exposicion
+from ..services.inversiones_analytics import (
+    get_carteras,
+    get_resumen,
+    get_exposicion,
+    get_evolucion,
+    get_precios_ticker,
+)
 
 router = APIRouter(prefix="/api/inversiones", tags=["inversiones"])
 
@@ -91,3 +99,22 @@ def rendimiento_por_ticker_consolidado(db: Session = Depends(get_db)):
     from ..services.inversiones_analytics import get_rendimiento_por_ticker
 
     return get_rendimiento_por_ticker(None, db)
+
+
+@router.get("/carteras/{nombre}/evolucion", response_model=EvolucionOut)
+def evolucion_cartera(nombre: str, db: Session = Depends(get_db)):
+    _validar_cartera(nombre, db)
+    return get_evolucion(nombre, db)
+
+
+@router.get("/consolidado/evolucion", response_model=EvolucionOut)
+def evolucion_consolidado(db: Session = Depends(get_db)):
+    return get_evolucion(None, db)
+
+
+@router.get("/ticker/{ticker}/precios", response_model=PrecioSerieOut)
+def precios_ticker(ticker: str, dias: int = Query(365, ge=1, le=3650), db: Session = Depends(get_db)):
+    existe = db.query(InstrumentoInversion).filter(InstrumentoInversion.ticker == ticker).first()
+    if not existe:
+        raise HTTPException(status_code=404, detail=f"Ticker '{ticker}' no encontrado")
+    return get_precios_ticker(ticker, dias, db)

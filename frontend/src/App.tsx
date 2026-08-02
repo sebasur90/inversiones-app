@@ -1,28 +1,106 @@
-import { ConfigProvider, theme } from 'antd'
-import esES from 'antd/locale/es_ES'
-import Inversiones from './pages/Inversiones'
+import { useEffect, useRef } from 'react'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { InversionesProvider, useInversionesContext } from './context/InversionesContext'
+import { IconSprite } from './components/icons/Icons'
+import Splash from './components/layout/Splash'
+import AppShell from './components/layout/AppShell'
+import Toast from './components/ui/Toast'
+import Modal from './components/ui/Modal'
+import Resumen from './pages/Resumen'
+import Exposicion from './pages/Exposicion'
+import Movimientos from './pages/Movimientos'
+import Posiciones from './pages/Posiciones'
+import TickerDetalle from './pages/TickerDetalle'
+import Objetivo from './pages/Objetivo'
+
+function SyncResultModal() {
+  const { syncSheetOpen, closeSyncSheet, syncErrors, syncWarnings, syncResumenTexto } = useInversionesContext()
+  const titulo = syncErrors.length > 0 ? `Sincronización con ${syncErrors.length} fila${syncErrors.length > 1 ? 's' : ''} inválida${syncErrors.length > 1 ? 's' : ''}` : 'Sincronización completada'
+
+  return (
+    <Modal open={syncSheetOpen} onClose={closeSyncSheet} title={titulo}>
+      <p className="text-[13px] text-app-text mb-4">
+        Se cargaron: <strong>{syncResumenTexto}</strong>
+      </p>
+      {syncErrors.length > 0 && (
+        <div className="mb-4">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2">Filas con errores</div>
+          <ul className="flex flex-col gap-1.5">
+            {syncErrors.map((e, i) => (
+              <li key={i} className="text-[12.5px] text-app-text bg-app-coral-soft rounded-lg px-3 py-2">
+                <strong>Fila {e.fila}:</strong> {e.motivo}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {syncWarnings.length > 0 && (
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2">Advertencias</div>
+          <ul className="flex flex-col gap-1.5">
+            {syncWarnings.map((e, i) => (
+              <li key={i} className="text-[12.5px] text-app-text bg-app-gold-soft rounded-lg px-3 py-2">
+                {e.motivo}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+function useVolverAInicioAlReabrir() {
+  const navigate = useNavigate()
+  const salioDeLaApp = useRef(false)
+
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState === 'hidden') {
+        salioDeLaApp.current = true
+      } else if (document.visibilityState === 'visible' && salioDeLaApp.current) {
+        salioDeLaApp.current = false
+        navigate('/resumen', { replace: true })
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
+  }, [navigate])
+}
+
+function Root() {
+  const { sinDatos, toast, dismissToast } = useInversionesContext()
+  useVolverAInicioAlReabrir()
+
+  return (
+    <>
+      {sinDatos ? (
+        <Splash />
+      ) : (
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route index element={<Navigate to="/resumen" replace />} />
+            <Route path="resumen" element={<Resumen />} />
+            <Route path="exposicion" element={<Exposicion />} />
+            <Route path="movimientos" element={<Movimientos />} />
+            <Route path="posiciones" element={<Posiciones />} />
+            <Route path="ticker/:ticker" element={<TickerDetalle />} />
+            <Route path="objetivo" element={<Objetivo />} />
+            <Route path="*" element={<Navigate to="/resumen" replace />} />
+          </Route>
+        </Routes>
+      )}
+      <Toast message={toast?.message ?? null} tone={toast?.tone} onDone={dismissToast} />
+      <SyncResultModal />
+    </>
+  )
+}
 
 export default function App() {
   return (
-    <ConfigProvider
-      locale={esES}
-      theme={{
-        algorithm: theme.darkAlgorithm,
-        token: {
-          colorPrimary: '#58a6ff',
-          colorBgBase: '#0d1117',
-          colorBgContainer: '#161b22',
-          colorBgElevated: '#21262d',
-          colorBorder: '#30363d',
-          colorText: '#c9d1d9',
-          colorTextSecondary: '#8b949e',
-          borderRadius: 8,
-        },
-      }}
-    >
-      <div style={{ minHeight: '100vh', background: '#0d1117', padding: 24 }}>
-        <Inversiones />
-      </div>
-    </ConfigProvider>
+    <InversionesProvider>
+      <IconSprite />
+      <Root />
+    </InversionesProvider>
   )
 }

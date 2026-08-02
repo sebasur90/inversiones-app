@@ -73,6 +73,27 @@ class MovimientoInversionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class EvolucionPunto(BaseModel):
+    fecha: date
+    valor_usd: float
+    valor_ars: float
+
+
+class EvolucionOut(BaseModel):
+    puntos: list[EvolucionPunto]
+
+
+class PrecioPunto(BaseModel):
+    fecha: date
+    precio: float
+    moneda: str
+
+
+class PrecioSerieOut(BaseModel):
+    ticker: str
+    puntos: list[PrecioPunto]
+
+
 class RendimientoPorTickerItem(BaseModel):
     ticker: str
     nombre: str
