@@ -12,6 +12,8 @@ from ..schemas import (
     RendimientoPorTickerItem,
     EvolucionOut,
     PrecioSerieOut,
+    PrecioHistoricoOut,
+    TickerConPrecioItem,
 )
 from ..services.sheets_client import SheetsClientError
 from ..services.inversiones_sync import sync_from_sheet, get_ultimo_sync
@@ -21,6 +23,8 @@ from ..services.inversiones_analytics import (
     get_exposicion,
     get_evolucion,
     get_precios_ticker,
+    get_tickers_con_precios,
+    get_precios_historicos_ticker,
 )
 
 router = APIRouter(prefix="/api/inversiones", tags=["inversiones"])
@@ -118,3 +122,16 @@ def precios_ticker(ticker: str, dias: int = Query(365, ge=1, le=3650), db: Sessi
     if not existe:
         raise HTTPException(status_code=404, detail=f"Ticker '{ticker}' no encontrado")
     return get_precios_ticker(ticker, dias, db)
+
+
+@router.get("/tickers-con-precios", response_model=list[TickerConPrecioItem])
+def tickers_con_precios(db: Session = Depends(get_db)):
+    return get_tickers_con_precios(db)
+
+
+@router.get("/ticker/{ticker}/precios-historicos", response_model=PrecioHistoricoOut)
+def precios_historicos_ticker(ticker: str, dias: int = Query(3650, ge=1, le=3650), db: Session = Depends(get_db)):
+    existe = db.query(InstrumentoInversion).filter(InstrumentoInversion.ticker == ticker).first()
+    if not existe:
+        raise HTTPException(status_code=404, detail=f"Ticker '{ticker}' no encontrado")
+    return get_precios_historicos_ticker(ticker, dias, db)

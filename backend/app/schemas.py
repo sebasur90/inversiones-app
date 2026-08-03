@@ -155,3 +155,22 @@ class AportePunto(BaseModel):
 class AportesHistoricosOut(BaseModel):
     curva: list[AportePunto]
     valor_actual_usd: float
+
+
+class PrecioHistoricoPunto(BaseModel):
+    fecha: date
+    precio_nominal: float
+    precio_usd: Optional[float] = None
+    precio_cer: Optional[float] = None
+
+
+class PrecioHistoricoOut(BaseModel):
+    ticker: str
+    moneda: str
+    puntos: list[PrecioHistoricoPunto]
+
+
+class TickerConPrecioItem(BaseModel):
+    ticker: str
+    nombre: str
+    moneda: str

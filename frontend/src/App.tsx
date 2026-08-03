@@ -12,6 +12,7 @@ import Movimientos from './pages/Movimientos'
 import Posiciones from './pages/Posiciones'
 import TickerDetalle from './pages/TickerDetalle'
 import Objetivo from './pages/Objetivo'
+import Precios from './pages/Precios'
 
 function SyncResultModal() {
   const { syncSheetOpen, closeSyncSheet, syncErrors, syncWarnings, syncResumenTexto } = useInversionesContext()
@@ -86,6 +87,7 @@ function Root() {
             <Route path="posiciones" element={<Posiciones />} />
             <Route path="ticker/:ticker" element={<TickerDetalle />} />
             <Route path="objetivo" element={<Objetivo />} />
+            <Route path="precios" element={<Precios />} />
             <Route path="*" element={<Navigate to="/resumen" replace />} />
           </Route>
         </Routes>

@@ -973,6 +973,74 @@ def get_precios_ticker(ticker: str, dias: int, db: Session) -> dict:
     }
 
 
+# ── Precios históricos con ajustes ──────────────────────────────────────────
+
+def get_tickers_con_precios(db: Session) -> list[dict]:
+    """Lista de tickers que tienen al menos un precio cargado en PrecioInstrumento."""
+    tickers_rows = db.query(PrecioInstrumento.ticker).distinct().all()
+    tickers = [r[0] for r in tickers_rows]
+    instrumentos = {
+        i.ticker: i
+        for i in db.query(InstrumentoInversion).filter(InstrumentoInversion.ticker.in_(tickers)).all()
+    }
+    return [
+        {
+            "ticker": t,
+            "nombre": instrumentos[t].nombre if t in instrumentos else t,
+            "moneda": instrumentos[t].moneda if t in instrumentos else "—",
+        }
+        for t in sorted(tickers)
+    ]
+
+
+def get_precios_historicos_ticker(ticker: str, dias: int, db: Session) -> dict:
+    """Serie de precios de un ticker con ajuste por MEP (USD) y CER para el frontend."""
+    desde = date.today() - timedelta(days=dias)
+    rows = (
+        db.query(PrecioInstrumento)
+        .filter(PrecioInstrumento.ticker == ticker, PrecioInstrumento.fecha >= desde)
+        .order_by(PrecioInstrumento.fecha)
+        .all()
+    )
+
+    instrumento = db.query(InstrumentoInversion).filter(InstrumentoInversion.ticker == ticker).first()
+    moneda = instrumento.moneda if instrumento else "ARS"
+
+    mep_cache: dict = {}
+    cer_cache: dict = {}
+    hoy = date.today()
+    cer_hoy = _cer_indice(hoy, db, cer_cache)
+
+    puntos = []
+    for row in rows:
+        precio_nominal = float(row.precio)
+        precio_usd: float | None = None
+        precio_cer: float | None = None
+
+        if moneda == "ARS":
+            mep = _mep_sheet(row.fecha, db, mep_cache)
+            if mep and mep > 0:
+                precio_usd = precio_nominal / mep
+            if cer_hoy is not None:
+                cer_fecha = _cer_indice(row.fecha, db, cer_cache)
+                if cer_fecha is not None and cer_fecha > 0:
+                    precio_cer = precio_nominal * (cer_hoy / cer_fecha)
+        else:  # USD
+            precio_usd = precio_nominal
+            mep = _mep_sheet(row.fecha, db, mep_cache)
+            if mep and mep > 0:
+                precio_cer = precio_nominal * mep  # equivalente en ARS al tipo de cambio de cada fecha
+
+        puntos.append({
+            "fecha": row.fecha,
+            "precio_nominal": round(precio_nominal, 4),
+            "precio_usd": round(precio_usd, 4) if precio_usd is not None else None,
+            "precio_cer": round(precio_cer, 4) if precio_cer is not None else None,
+        })
+
+    return {"ticker": ticker, "moneda": moneda, "puntos": puntos}
+
+
 # ── Objetivos de inversión ──────────────────────────────────────────────────
 
 def get_aportes_historicos(cartera: str, db: Session) -> dict:

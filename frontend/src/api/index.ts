@@ -142,6 +142,31 @@ export interface PrecioSerieOut {
 export const getPreciosTicker = (ticker: string, dias = 365) =>
   api.get<PrecioSerieOut>(`/inversiones/ticker/${encodeURIComponent(ticker)}/precios`, { params: { dias } }).then(r => r.data)
 
+export interface PrecioHistoricoPunto {
+  fecha: string
+  precio_nominal: number
+  precio_usd: number | null
+  precio_cer: number | null
+}
+
+export interface PrecioHistoricoOut {
+  ticker: string
+  moneda: string
+  puntos: PrecioHistoricoPunto[]
+}
+
+export interface TickerConPrecio {
+  ticker: string
+  nombre: string
+  moneda: string
+}
+
+export const getTickersConPrecios = () =>
+  api.get<TickerConPrecio[]>('/inversiones/tickers-con-precios').then(r => r.data)
+
+export const getPreciosHistoricos = (ticker: string, dias = 3650) =>
+  api.get<PrecioHistoricoOut>(`/inversiones/ticker/${encodeURIComponent(ticker)}/precios-historicos`, { params: { dias } }).then(r => r.data)
+
 // --- Objetivos de Inversión ---
 
 export interface AportePunto {

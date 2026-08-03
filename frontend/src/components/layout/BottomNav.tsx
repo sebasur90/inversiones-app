@@ -5,6 +5,7 @@ const ITEMS: { to: string; label: string; icon: IconName }[] = [
   { to: '/resumen', label: 'Resumen', icon: 'home' },
   { to: '/exposicion', label: 'Exposición', icon: 'pie' },
   { to: '/movimientos', label: 'Movim.', icon: 'list' },
+  { to: '/precios', label: 'Precios', icon: 'trend' },
   { to: '/objetivo', label: 'Objetivo', icon: 'target' },
 ]
 
