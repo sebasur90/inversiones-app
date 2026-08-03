@@ -1,5 +1,6 @@
-"""Lectura de las pestañas del Google Sheet de inversiones (cuenta de servicio)."""
+"""Lectura de las pestañas del Google Sheet de inversiones (cuenta de servicio) o Excel local."""
 import os
+import pandas as pd
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
@@ -35,6 +36,17 @@ def _get_service():
         raise SheetsClientError(f"Credenciales de Google inválidas: {exc}") from exc
 
 
+def _is_local_env() -> bool:
+    """Detecta si se debe usar archivo Excel local en lugar de Google Sheets."""
+    use_local = os.getenv("USE_LOCAL_SHEET", "false").lower() in ("true", "1", "yes")
+    return use_local
+
+
+def _get_excel_path() -> str:
+    """Retorna la ruta del archivo Excel local."""
+    return os.path.join(os.path.dirname(__file__), "..", "..", "sheet_local", "sheet_inversiones.xlsx")
+
+
 def _rows_to_dicts(values: list[list[str]]) -> list[tuple[int, dict]]:
     """Devuelve [(nro_fila_planilla, fila_como_dict)], saltando filas totalmente vacías."""
     if not values:
@@ -51,8 +63,38 @@ def _rows_to_dicts(values: list[list[str]]) -> list[tuple[int, dict]]:
     return rows
 
 
+def _fetch_from_excel() -> dict[str, list[tuple[int, dict]]]:
+    """Lee datos desde archivo Excel local."""
+    excel_path = _get_excel_path()
+    if not os.path.isfile(excel_path):
+        raise SheetsClientError(
+            f"Archivo Excel no encontrado en '{excel_path}'. "
+            f"Coloca 'sheet_inversiones.xlsx' en la carpeta 'sheet_local/'."
+        )
+
+    result: dict[str, list[tuple[int, dict]]] = {}
+    try:
+        excel_file = pd.ExcelFile(excel_path)
+        for tab in SHEET_TABS:
+            if tab not in excel_file.sheet_names:
+                raise SheetsClientError(f"Pestaña '{tab}' no encontrada en Excel. Pestañas disponibles: {excel_file.sheet_names}")
+
+            df = pd.read_excel(excel_path, sheet_name=tab)
+            values = [df.columns.tolist()] + df.values.tolist()
+            result[tab] = _rows_to_dicts([[str(v) for v in row] for row in values])
+    except SheetsClientError:
+        raise
+    except Exception as exc:
+        raise SheetsClientError(f"Error leyendo Excel: {exc}") from exc
+
+    return result
+
+
 def fetch_sheet_data() -> dict[str, list[tuple[int, dict]]]:
-    """Lee las 3 pestañas del Sheet y devuelve {pestaña: [(nro_fila, fila_como_dict)]}."""
+    """Lee las 3 pestañas del Sheet (Excel local o Google Sheets) y devuelve {pestaña: [(nro_fila, fila_como_dict)]}."""
+    if _is_local_env():
+        return _fetch_from_excel()
+
     service = _get_service()
     result: dict[str, list[tuple[int, dict]]] = {}
     try:

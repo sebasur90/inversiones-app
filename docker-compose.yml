@@ -5,11 +5,14 @@ services:
       - CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:8087,http://localhost:80,http://smoa7001lx:8087
       - NO_PROXY=localhost,127.0.0.1,.googleapis.com,.google.com
       - no_proxy=localhost,127.0.0.1,.googleapis.com,.google.com
+      - USE_LOCAL_SHEET=true
     volumes:
       # Database persistence
       - backend_data:/app/data
       # Google Service Account - mount from local credentials directory (read-only)
       - ./credentials/google-service-account.json:/app/data/google-service-account.json:ro
+      # Local Excel file for development environment (read-only)
+      - ./sheet_local:/app/sheet_local:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
