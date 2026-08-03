@@ -154,7 +154,7 @@ def _validar_instrumentos(rows: list[tuple[int, dict]], errores: list[dict]) -> 
 
         fecha_venc = None
         fecha_venc_raw = (row.get("Fecha Vencimiento") or "").strip()
-        if fecha_venc_raw:
+        if fecha_venc_raw and fecha_venc_raw.lower() != "nan":
             fecha_venc = _parse_fecha(fecha_venc_raw)
             if fecha_venc is None:
                 errores.append({"fila": row_num, "motivo": f"Fecha Vencimiento inválida: {fecha_venc_raw}"})
