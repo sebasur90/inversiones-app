@@ -1,11 +1,13 @@
 services:
   backend:
     build: ./backend
+    environment:
+      - CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:8087,http://localhost:80,http://smoa7001lx:8087
     volumes:
       # Database persistence
       - backend_data:/app/data
-      # Google Service Account - mount from home directory (read-only)
-      - ~/.inversiones-app/credentials/google-service-account.json:/app/data/google-service-account.json:ro
+      # Google Service Account - mount from local credentials directory (read-only)
+      - ./credentials/google-service-account.json:/app/data/google-service-account.json:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
@@ -16,7 +18,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "8080:80"
+      - "8087:80"
     depends_on:
       backend:
         condition: service_healthy
