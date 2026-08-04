@@ -167,6 +167,73 @@ export const getTickersConPrecios = () =>
 export const getPreciosHistoricos = (ticker: string, dias = 3650) =>
   api.get<PrecioHistoricoOut>(`/inversiones/ticker/${encodeURIComponent(ticker)}/precios-historicos`, { params: { dias } }).then(r => r.data)
 
+// --- Indicadores macro (CER/MEP) ---
+
+export interface IndiceMercadoPunto {
+  fecha: string
+  cer: number | null
+  mep: number | null
+}
+
+export interface IndicesMercadoOut {
+  puntos: IndiceMercadoPunto[]
+  variacion_cer_pct: number | null
+  variacion_mep_pct: number | null
+}
+
+export const getIndicesMercado = (dias = 3650) =>
+  api.get<IndicesMercadoOut>('/inversiones/indices-mercado', { params: { dias } }).then(r => r.data)
+
+// --- Vencimientos ---
+
+export interface VencimientoItem {
+  ticker: string
+  nombre: string
+  fecha_vencimiento: string
+  dias_restantes: number
+  vencido: boolean
+  cantidad_actual: number
+  valor_actual_usd: number
+  valor_actual_ars: number
+  moneda: string
+}
+
+export const getVencimientos = (cartera: string | null) =>
+  api.get<VencimientoItem[]>(`${carteraPath(cartera)}/vencimientos`).then(r => r.data)
+
+// --- Comisiones ---
+
+export interface ComisionPorCarteraItem {
+  etiqueta: string
+  total_usd: number
+  total_ars: number
+}
+
+export interface ComisionPorTickerItem {
+  ticker: string
+  nombre: string
+  total_usd: number
+  total_ars: number
+}
+
+export interface ComisionPeriodoItem {
+  periodo: string
+  total_usd: number
+}
+
+export interface ComisionesOut {
+  total_usd: number
+  total_ars: number
+  movimientos_con_comision: number
+  por_cartera: ComisionPorCarteraItem[]
+  por_ticker: ComisionPorTickerItem[]
+  por_mes: ComisionPeriodoItem[]
+  por_anio: ComisionPeriodoItem[]
+}
+
+export const getComisiones = (cartera: string | null) =>
+  api.get<ComisionesOut>(`${carteraPath(cartera)}/comisiones`).then(r => r.data)
+
 // --- Objetivos de Inversión ---
 
 export interface AportePunto {

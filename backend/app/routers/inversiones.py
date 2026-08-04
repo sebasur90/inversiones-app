@@ -14,6 +14,9 @@ from ..schemas import (
     PrecioSerieOut,
     PrecioHistoricoOut,
     TickerConPrecioItem,
+    IndicesMercadoOut,
+    VencimientoItem,
+    ComisionesOut,
 )
 from ..services.sheets_client import SheetsClientError
 from ..services.inversiones_sync import sync_from_sheet, get_ultimo_sync
@@ -25,6 +28,9 @@ from ..services.inversiones_analytics import (
     get_precios_ticker,
     get_tickers_con_precios,
     get_precios_historicos_ticker,
+    get_indices_mercado,
+    get_vencimientos,
+    get_comisiones,
 )
 
 router = APIRouter(prefix="/api/inversiones", tags=["inversiones"])
@@ -135,3 +141,30 @@ def precios_historicos_ticker(ticker: str, dias: int = Query(3650, ge=1, le=3650
     if not existe:
         raise HTTPException(status_code=404, detail=f"Ticker '{ticker}' no encontrado")
     return get_precios_historicos_ticker(ticker, dias, db)
+
+
+@router.get("/indices-mercado", response_model=IndicesMercadoOut)
+def indices_mercado(dias: int = Query(3650, ge=1, le=3650), db: Session = Depends(get_db)):
+    return get_indices_mercado(dias, db)
+
+
+@router.get("/carteras/{nombre}/vencimientos", response_model=list[VencimientoItem])
+def vencimientos_cartera(nombre: str, db: Session = Depends(get_db)):
+    _validar_cartera(nombre, db)
+    return get_vencimientos(nombre, db)
+
+
+@router.get("/consolidado/vencimientos", response_model=list[VencimientoItem])
+def vencimientos_consolidado(db: Session = Depends(get_db)):
+    return get_vencimientos(None, db)
+
+
+@router.get("/carteras/{nombre}/comisiones", response_model=ComisionesOut)
+def comisiones_cartera(nombre: str, db: Session = Depends(get_db)):
+    _validar_cartera(nombre, db)
+    return get_comisiones(nombre, db)
+
+
+@router.get("/consolidado/comisiones", response_model=ComisionesOut)
+def comisiones_consolidado(db: Session = Depends(get_db)):
+    return get_comisiones(None, db)

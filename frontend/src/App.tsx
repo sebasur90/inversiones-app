@@ -13,6 +13,10 @@ import Posiciones from './pages/Posiciones'
 import TickerDetalle from './pages/TickerDetalle'
 import Objetivo from './pages/Objetivo'
 import Precios from './pages/Precios'
+import IndicadoresMacro from './pages/IndicadoresMacro'
+import Vencimientos from './pages/Vencimientos'
+import Comparador from './pages/Comparador'
+import Comisiones from './pages/Comisiones'
 
 function SyncResultModal() {
   const { syncSheetOpen, closeSyncSheet, syncErrors, syncWarnings, syncResumenTexto } = useInversionesContext()
@@ -88,6 +92,10 @@ function Root() {
             <Route path="ticker/:ticker" element={<TickerDetalle />} />
             <Route path="objetivo" element={<Objetivo />} />
             <Route path="precios" element={<Precios />} />
+            <Route path="indicadores" element={<IndicadoresMacro />} />
+            <Route path="vencimientos" element={<Vencimientos />} />
+            <Route path="comparar" element={<Comparador />} />
+            <Route path="comisiones" element={<Comisiones />} />
             <Route path="*" element={<Navigate to="/resumen" replace />} />
           </Route>
         </Routes>

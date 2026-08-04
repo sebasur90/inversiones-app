@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
@@ -9,6 +10,7 @@ import {
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import EmptyState from '../components/ui/EmptyState'
+import { Icon } from '../components/icons/Icons'
 
 type Vista = 'nominal' | 'usd' | 'cer'
 
@@ -37,6 +39,7 @@ function formatFechaTooltip(iso: string): string {
 }
 
 export default function Precios() {
+  const navigate = useNavigate()
   const [tickers, setTickers] = useState<TickerConPrecio[]>([])
   const [tickerSel, setTickerSel] = useState<string | null>(null)
   const [datos, setDatos] = useState<PrecioHistoricoOut | null>(null)
@@ -120,6 +123,15 @@ export default function Precios() {
   return (
     <div className="pb-4">
       <ScreenHeader title="Precios" />
+
+      <div className="flex flex-wrap gap-x-4 gap-y-1 mb-2">
+        <button onClick={() => navigate('/indicadores')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+          <Icon name="trend" className="w-3.5 h-3.5" /> Indicadores macro (CER/MEP)
+        </button>
+        <button onClick={() => navigate('/comparar')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+          <Icon name="trend" className="w-3.5 h-3.5" /> Comparar varios tickers
+        </button>
+      </div>
 
       {/* Selector de ticker */}
       <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 mb-3 -mx-4 px-4">

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import dayjs from 'dayjs'
 import { useInversionesContext } from '../context/InversionesContext'
 import ScreenHeader from '../components/layout/ScreenHeader'
@@ -9,6 +9,7 @@ import EmptyState from '../components/ui/EmptyState'
 import { Icon } from '../components/icons/Icons'
 
 export default function Movimientos() {
+  const navigate = useNavigate()
   const { movimientos, loading } = useInversionesContext()
   const [searchParams, setSearchParams] = useSearchParams()
   const tickerFiltro = searchParams.get('ticker')
@@ -46,6 +47,10 @@ export default function Movimientos() {
   return (
     <div className="pb-4">
       <ScreenHeader title="Movimientos" />
+
+      <button onClick={() => navigate('/comisiones')} className="mb-3 inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+        Ver comisiones pagadas →
+      </button>
 
       <div className="flex items-center gap-2 bg-app-surface border border-app-border rounded-xl h-10 px-3 mb-3">
         <Icon name="search" className="w-4 h-4 text-app-text-faint" />

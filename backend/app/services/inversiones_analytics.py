@@ -98,6 +98,20 @@ def _monto_ajustado(mov: MovimientoInversion) -> float:
     return bruto + comision if mov.tipo_movimiento == "compra" else bruto - comision
 
 
+def _comision_usd(mov: MovimientoInversion, db: Session, mep_cache: dict) -> float | None:
+    comision = float(mov.comision or 0)
+    if comision == 0:
+        return 0.0
+    return _to_usd(comision, mov.moneda, mov.fecha, db, mep_cache)
+
+
+def _comision_ars(mov: MovimientoInversion, db: Session, mep_cache: dict) -> float | None:
+    comision = float(mov.comision or 0)
+    if comision == 0:
+        return 0.0
+    return _convertir(comision, mov.moneda, "ARS", mov.fecha, db, mep_cache)
+
+
 def _monto_usd(mov: MovimientoInversion, db: Session, mep_cache: dict) -> float | None:
     return _to_usd(_monto_ajustado(mov), mov.moneda, mov.fecha, db, mep_cache)
 
@@ -1039,6 +1053,143 @@ def get_precios_historicos_ticker(ticker: str, dias: int, db: Session) -> dict:
         })
 
     return {"ticker": ticker, "moneda": moneda, "puntos": puntos}
+
+
+# ── Indicadores macro (CER/MEP) ──────────────────────────────────────────────
+
+def get_indices_mercado(dias: int, db: Session) -> dict:
+    """Serie histórica de CER y MEP, para verlos como indicadores propios."""
+    desde = date.today() - timedelta(days=dias)
+    rows = (
+        db.query(IndiceMercado)
+        .filter(IndiceMercado.fecha >= desde)
+        .order_by(IndiceMercado.fecha)
+        .all()
+    )
+    puntos = [
+        {
+            "fecha": r.fecha,
+            "cer": float(r.cer) if r.cer is not None else None,
+            "mep": float(r.mep) if r.mep is not None else None,
+        }
+        for r in rows
+    ]
+
+    def variacion(campo: str) -> float | None:
+        valores = [p[campo] for p in puntos if p[campo] is not None]
+        if len(valores) < 2 or valores[0] <= 0:
+            return None
+        return round((valores[-1] / valores[0] - 1) * 100, 2)
+
+    return {
+        "puntos": puntos,
+        "variacion_cer_pct": variacion("cer"),
+        "variacion_mep_pct": variacion("mep"),
+    }
+
+
+# ── Vencimientos ─────────────────────────────────────────────────────────────
+
+def get_vencimientos(cartera: str | None, db: Session) -> list[dict]:
+    """Instrumentos con tenencia activa y fecha de vencimiento, ordenados por proximidad."""
+    rendimientos = get_rendimiento_por_ticker(cartera, db)
+    instrumentos = {
+        i.ticker: i
+        for i in db.query(InstrumentoInversion).filter(InstrumentoInversion.fecha_vencimiento.isnot(None)).all()
+    }
+    hoy = date.today()
+
+    resultado = []
+    for item in rendimientos:
+        instrumento = instrumentos.get(item["ticker"])
+        if not instrumento:
+            continue
+        dias_restantes = (instrumento.fecha_vencimiento - hoy).days
+        resultado.append({
+            "ticker": item["ticker"],
+            "nombre": item["nombre"],
+            "fecha_vencimiento": instrumento.fecha_vencimiento,
+            "dias_restantes": dias_restantes,
+            "vencido": dias_restantes < 0,
+            "cantidad_actual": item["cantidad_actual"],
+            "valor_actual_usd": item["valor_actual_usd"],
+            "valor_actual_ars": item["valor_actual_ars"],
+            "moneda": item["moneda"],
+        })
+
+    return sorted(resultado, key=lambda x: x["dias_restantes"])
+
+
+# ── Comisiones ────────────────────────────────────────────────────────────────
+
+def get_comisiones(cartera: str | None, db: Session) -> dict:
+    """Total y desglose de comisiones pagadas, por cartera/ticker/mes/año."""
+    movs = _movimientos_ordenados(db, cartera)
+    mep_cache: dict = {}
+    instrumentos = {i.ticker: i for i in db.query(InstrumentoInversion).all()}
+
+    total_usd = 0.0
+    total_ars = 0.0
+    por_cartera: dict[str, float] = {}
+    por_cartera_ars: dict[str, float] = {}
+    por_ticker: dict[str, float] = {}
+    por_ticker_ars: dict[str, float] = {}
+    por_mes: dict[str, float] = {}
+    por_anio: dict[str, float] = {}
+    movimientos_con_comision = 0
+
+    for mov in movs:
+        comision = float(mov.comision or 0)
+        if comision <= 0:
+            continue
+        movimientos_con_comision += 1
+
+        c_usd = _comision_usd(mov, db, mep_cache)
+        if c_usd is None:
+            continue
+        c_ars = _comision_ars(mov, db, mep_cache) or 0.0
+
+        total_usd += c_usd
+        total_ars += c_ars
+        por_cartera[mov.cartera] = por_cartera.get(mov.cartera, 0.0) + c_usd
+        por_cartera_ars[mov.cartera] = por_cartera_ars.get(mov.cartera, 0.0) + c_ars
+        por_ticker[mov.ticker] = por_ticker.get(mov.ticker, 0.0) + c_usd
+        por_ticker_ars[mov.ticker] = por_ticker_ars.get(mov.ticker, 0.0) + c_ars
+        mes_key = mov.fecha.strftime("%Y-%m")
+        anio_key = mov.fecha.strftime("%Y")
+        por_mes[mes_key] = por_mes.get(mes_key, 0.0) + c_usd
+        por_anio[anio_key] = por_anio.get(anio_key, 0.0) + c_usd
+
+    por_cartera_items = sorted(
+        [
+            {"etiqueta": k, "total_usd": round(v, 2), "total_ars": round(por_cartera_ars[k], 2)}
+            for k, v in por_cartera.items()
+        ],
+        key=lambda x: -x["total_usd"],
+    ) if cartera is None else []
+
+    por_ticker_items = sorted(
+        [
+            {
+                "ticker": k,
+                "nombre": instrumentos[k].nombre if k in instrumentos else k,
+                "total_usd": round(v, 2),
+                "total_ars": round(por_ticker_ars[k], 2),
+            }
+            for k, v in por_ticker.items()
+        ],
+        key=lambda x: -x["total_usd"],
+    )
+
+    return {
+        "total_usd": round(total_usd, 2),
+        "total_ars": round(total_ars, 2),
+        "movimientos_con_comision": movimientos_con_comision,
+        "por_cartera": por_cartera_items,
+        "por_ticker": por_ticker_items,
+        "por_mes": [{"periodo": k, "total_usd": round(v, 2)} for k, v in sorted(por_mes.items())],
+        "por_anio": [{"periodo": k, "total_usd": round(v, 2)} for k, v in sorted(por_anio.items())],
+    }
 
 
 # ── Objetivos de inversión ──────────────────────────────────────────────────

@@ -40,6 +40,11 @@ export default function MovimientoRow({ mov }: { mov: MovimientoInversion }) {
           {(TIPO_LABELS[mov.tipo_movimiento] ?? mov.tipo_movimiento).toUpperCase()}
         </span>
         <div className="text-[10.5px] text-app-text-dim mt-1 truncate">{detalle}</div>
+        {mov.comision > 0 && (
+          <div className="text-[10px] text-app-text-faint mt-0.5">
+            Comisión: {mov.moneda === 'USD' ? formatUSD(mov.comision) : `$${mov.comision.toLocaleString('es-AR')}`}
+          </div>
+        )}
       </div>
       <div className={`font-mono text-[12.5px] font-bold tabular-nums shrink-0 ${esIngreso ? 'text-app-teal' : 'text-app-text'}`}>{formatMonto(mov)}</div>
     </div>

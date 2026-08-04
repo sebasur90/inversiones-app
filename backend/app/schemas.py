@@ -174,3 +174,61 @@ class TickerConPrecioItem(BaseModel):
     ticker: str
     nombre: str
     moneda: str
+
+
+# --- Indicadores macro (CER/MEP) ---
+
+class IndiceMercadoPunto(BaseModel):
+    fecha: date
+    cer: Optional[float] = None
+    mep: Optional[float] = None
+
+
+class IndicesMercadoOut(BaseModel):
+    puntos: list[IndiceMercadoPunto]
+    variacion_cer_pct: Optional[float] = None
+    variacion_mep_pct: Optional[float] = None
+
+
+# --- Vencimientos ---
+
+class VencimientoItem(BaseModel):
+    ticker: str
+    nombre: str
+    fecha_vencimiento: date
+    dias_restantes: int
+    vencido: bool
+    cantidad_actual: float
+    valor_actual_usd: float
+    valor_actual_ars: float
+    moneda: str
+
+
+# --- Comisiones ---
+
+class ComisionPorCarteraItem(BaseModel):
+    etiqueta: str
+    total_usd: float
+    total_ars: float
+
+
+class ComisionPorTickerItem(BaseModel):
+    ticker: str
+    nombre: str
+    total_usd: float
+    total_ars: float
+
+
+class ComisionPeriodoItem(BaseModel):
+    periodo: str
+    total_usd: float
+
+
+class ComisionesOut(BaseModel):
+    total_usd: float
+    total_ars: float
+    movimientos_con_comision: int
+    por_cartera: list[ComisionPorCarteraItem]
+    por_ticker: list[ComisionPorTickerItem]
+    por_mes: list[ComisionPeriodoItem]
+    por_anio: list[ComisionPeriodoItem]

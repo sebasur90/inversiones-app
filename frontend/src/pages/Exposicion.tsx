@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useInversionesContext } from '../context/InversionesContext'
 import type { ExposicionItem } from '../api'
 import { CHART_COLORS, formatARS, formatUSD } from '../utils'
@@ -6,6 +7,7 @@ import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import Donut from '../components/charts/Donut'
 import EmptyState from '../components/ui/EmptyState'
+import { Icon } from '../components/icons/Icons'
 
 function bucketizeTop10(items: ExposicionItem[]): ExposicionItem[] {
   if (items.length <= 10) return items
@@ -23,6 +25,7 @@ function bucketizeTop10(items: ExposicionItem[]): ExposicionItem[] {
 }
 
 export default function Exposicion() {
+  const navigate = useNavigate()
   const { exposicion, monedaSeleccionada, loading } = useInversionesContext()
   const [ejeActivo, setEjeActivo] = useState<string | null>(null)
   const esARS = monedaSeleccionada === 'ARS'
@@ -44,6 +47,10 @@ export default function Exposicion() {
   return (
     <div className="pb-4">
       <ScreenHeader title="Exposición" />
+
+      <button onClick={() => navigate('/vencimientos')} className="mb-3 inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+        <Icon name="target" className="w-3.5 h-3.5" /> Ver calendario de vencimientos
+      </button>
 
       {loading ? (
         <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
