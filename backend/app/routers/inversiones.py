@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -17,6 +18,7 @@ from ..schemas import (
     IndicesMercadoOut,
     VencimientoItem,
     ComisionesOut,
+    PnlRealizadoNoRealizadoOut,
 )
 from ..services.sheets_client import SheetsClientError
 from ..services.inversiones_sync import sync_from_sheet, get_ultimo_sync
@@ -31,6 +33,7 @@ from ..services.inversiones_analytics import (
     get_indices_mercado,
     get_vencimientos,
     get_comisiones,
+    get_pnl_realizado_no_realizado,
 )
 
 router = APIRouter(prefix="/api/inversiones", tags=["inversiones"])
@@ -112,14 +115,16 @@ def rendimiento_por_ticker_consolidado(db: Session = Depends(get_db)):
 
 
 @router.get("/carteras/{nombre}/evolucion", response_model=EvolucionOut)
-def evolucion_cartera(nombre: str, db: Session = Depends(get_db)):
+def evolucion_cartera(nombre: str, desde: Optional[date] = Query(None), db: Session = Depends(get_db)):
     _validar_cartera(nombre, db)
-    return get_evolucion(nombre, db)
+    max_puntos = 180 if desde is not None else 24
+    return get_evolucion(nombre, db, desde=desde, max_puntos=max_puntos)
 
 
 @router.get("/consolidado/evolucion", response_model=EvolucionOut)
-def evolucion_consolidado(db: Session = Depends(get_db)):
-    return get_evolucion(None, db)
+def evolucion_consolidado(desde: Optional[date] = Query(None), db: Session = Depends(get_db)):
+    max_puntos = 180 if desde is not None else 24
+    return get_evolucion(None, db, desde=desde, max_puntos=max_puntos)
 
 
 @router.get("/ticker/{ticker}/precios", response_model=PrecioSerieOut)
@@ -168,3 +173,14 @@ def comisiones_cartera(nombre: str, db: Session = Depends(get_db)):
 @router.get("/consolidado/comisiones", response_model=ComisionesOut)
 def comisiones_consolidado(db: Session = Depends(get_db)):
     return get_comisiones(None, db)
+
+
+@router.get("/carteras/{nombre}/pnl-realizado", response_model=PnlRealizadoNoRealizadoOut)
+def pnl_realizado_cartera(nombre: str, db: Session = Depends(get_db)):
+    _validar_cartera(nombre, db)
+    return get_pnl_realizado_no_realizado(nombre, db)
+
+
+@router.get("/consolidado/pnl-realizado", response_model=PnlRealizadoNoRealizadoOut)
+def pnl_realizado_consolidado(db: Session = Depends(get_db)):
+    return get_pnl_realizado_no_realizado(None, db)

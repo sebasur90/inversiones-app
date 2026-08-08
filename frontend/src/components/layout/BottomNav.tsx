@@ -3,6 +3,8 @@ import { Icon, type IconName } from '../icons/Icons'
 
 const ITEMS: { to: string; label: string; icon: IconName }[] = [
   { to: '/resumen', label: 'Resumen', icon: 'home' },
+  { to: '/patrimonio', label: 'Patrim.', icon: 'trend' },
+  { to: '/rendimiento', label: 'Rendim.', icon: 'up' },
   { to: '/exposicion', label: 'Exposición', icon: 'pie' },
   { to: '/movimientos', label: 'Movim.', icon: 'list' },
   { to: '/precios', label: 'Precios', icon: 'trend' },

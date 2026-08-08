@@ -922,6 +922,166 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
     return sorted(resultado, key=lambda x: -abs(x["valor_actual_usd"]))
 
 
+# ── P&L Realizado vs No Realizado ────────────────────────────────────────────
+
+def get_pnl_realizado_no_realizado(cartera: str | None, db: Session) -> dict:
+    """P&L separado en realizado (ventas ya concretadas, costo promedio), no realizado
+    (tenencia actual a valor de mercado menos su costo remanente) e ingresos (dividendos/cupones).
+
+    Identidad algebraica con get_resumen: realizado + no_realizado + ingresos, sumado en USD,
+    coincide con (valor_actual_usd + ingresos_recibidos_usd - total_invertido_usd).
+    """
+    movs = _movimientos_ordenados(db, cartera)
+    if not movs:
+        return {
+            "consolidado": {
+                "realizado_usd": 0.0, "no_realizado_usd": 0.0, "ingresos_usd": 0.0, "total_usd": 0.0,
+                "realizado_ars": 0.0, "no_realizado_ars": 0.0, "ingresos_ars": 0.0, "total_ars": 0.0,
+                "realizado_ars_real": None, "no_realizado_ars_real": None, "ingresos_ars_real": None, "total_ars_real": None,
+            },
+            "por_ticker": [],
+        }
+
+    precios_por_ticker = _precios_por_ticker(db)
+    instrumentos = {i.ticker: i for i in db.query(InstrumentoInversion).all()}
+    mep_cache: dict = {}
+    cer_cache: dict = {}
+    hoy = date.today()
+    cer_hoy = _cer_indice(hoy, db, cer_cache)
+    cer_incompleto = cer_hoy is None
+
+    movimientos_por_ticker: dict[str, list[MovimientoInversion]] = {}
+    for mov in movs:
+        movimientos_por_ticker.setdefault(mov.ticker, []).append(mov)
+
+    por_ticker_resultado = []
+    tot = {k: 0.0 for k in (
+        "realizado_usd", "no_realizado_usd", "ingresos_usd",
+        "realizado_ars", "no_realizado_ars", "ingresos_ars",
+        "realizado_ars_real", "no_realizado_ars_real", "ingresos_ars_real",
+    )}
+
+    for ticker, movs_ticker in movimientos_por_ticker.items():
+        cantidad_held = 0.0
+        costo_usd = costo_ars = costo_ars_real = 0.0
+        realizado_usd = realizado_ars = realizado_ars_real = 0.0
+        ingresos_usd = ingresos_ars = ingresos_ars_real = 0.0
+        ars_real_valido = not cer_incompleto
+
+        for mov in movs_ticker:
+            monto_usd = _monto_usd(mov, db, mep_cache)
+            if monto_usd is None:
+                continue  # mismo criterio que get_resumen: sin conversión a USD no se puede ubicar el flujo
+            monto_ars = _monto_ars(mov, db, mep_cache)
+            monto_ars_real = _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy) if not cer_incompleto else None
+            if monto_ars_real is None:
+                ars_real_valido = False
+
+            cant = float(mov.cantidad or 0)
+
+            if mov.tipo_movimiento == "compra":
+                costo_usd += monto_usd
+                if monto_ars is not None:
+                    costo_ars += monto_ars
+                if ars_real_valido and monto_ars_real is not None:
+                    costo_ars_real += monto_ars_real
+                cantidad_held += cant
+            elif mov.tipo_movimiento in ("venta", "amortizacion"):
+                cantidad_vendida = min(cant, cantidad_held) if cantidad_held > EPS else 0.0
+                frac = cantidad_vendida / cantidad_held if cantidad_held > EPS else 0.0
+                costo_removido_usd = costo_usd * frac
+                costo_removido_ars = costo_ars * frac
+                costo_removido_ars_real = costo_ars_real * frac if ars_real_valido else 0.0
+
+                realizado_usd += monto_usd - costo_removido_usd
+                if monto_ars is not None:
+                    realizado_ars += monto_ars - costo_removido_ars
+                if ars_real_valido and monto_ars_real is not None:
+                    realizado_ars_real += monto_ars_real - costo_removido_ars_real
+
+                costo_usd -= costo_removido_usd
+                costo_ars -= costo_removido_ars
+                costo_ars_real -= costo_removido_ars_real
+                cantidad_held -= cantidad_vendida
+            elif mov.tipo_movimiento in TIPOS_INGRESO:
+                ingresos_usd += monto_usd
+                if monto_ars is not None:
+                    ingresos_ars += monto_ars
+                if ars_real_valido and monto_ars_real is not None:
+                    ingresos_ars_real += monto_ars_real
+
+        if abs(cantidad_held) < EPS:
+            no_realizado_usd, no_realizado_ars = 0.0, 0.0
+            no_realizado_ars_real = 0.0 if ars_real_valido else None
+        else:
+            precios_sorted = precios_por_ticker.get(ticker)
+            info = _precio_conocido(precios_sorted, hoy) if precios_sorted else None
+            if info is None:
+                continue  # sin precio actual no se puede valuar la tenencia remanente
+            _fecha_precio, precio_actual, moneda_precio = info
+            valor_usd = _to_usd(precio_actual * cantidad_held, moneda_precio, hoy, db, mep_cache)
+            valor_ars = _convertir(precio_actual * cantidad_held, moneda_precio, "ARS", hoy, db, mep_cache)
+            if valor_usd is None:
+                continue
+            no_realizado_usd = valor_usd - costo_usd
+            no_realizado_ars = (valor_ars - costo_ars) if valor_ars is not None else None
+            no_realizado_ars_real = (valor_ars - costo_ars_real) if (ars_real_valido and valor_ars is not None) else None
+
+        if not ars_real_valido:
+            cer_incompleto = True
+
+        tot["realizado_usd"] += realizado_usd
+        tot["no_realizado_usd"] += no_realizado_usd
+        tot["ingresos_usd"] += ingresos_usd
+        tot["realizado_ars"] += realizado_ars
+        if no_realizado_ars is not None:
+            tot["no_realizado_ars"] += no_realizado_ars
+        tot["ingresos_ars"] += ingresos_ars
+        if ars_real_valido:
+            tot["realizado_ars_real"] += realizado_ars_real
+            if no_realizado_ars_real is not None:
+                tot["no_realizado_ars_real"] += no_realizado_ars_real
+            tot["ingresos_ars_real"] += ingresos_ars_real
+
+        instrumento = instrumentos.get(ticker)
+        por_ticker_resultado.append({
+            "ticker": ticker,
+            "nombre": instrumento.nombre if instrumento else ticker,
+            "realizado_usd": round(realizado_usd, 2),
+            "no_realizado_usd": round(no_realizado_usd, 2),
+            "ingresos_usd": round(ingresos_usd, 2),
+            "total_usd": round(realizado_usd + no_realizado_usd + ingresos_usd, 2),
+            "realizado_ars": round(realizado_ars, 2),
+            "no_realizado_ars": round(no_realizado_ars, 2) if no_realizado_ars is not None else None,
+            "ingresos_ars": round(ingresos_ars, 2),
+            "total_ars": (
+                round(realizado_ars + no_realizado_ars + ingresos_ars, 2) if no_realizado_ars is not None else None
+            ),
+        })
+
+    por_ticker_resultado.sort(key=lambda x: -abs(x["total_usd"]))
+
+    consolidado = {
+        "realizado_usd": round(tot["realizado_usd"], 2),
+        "no_realizado_usd": round(tot["no_realizado_usd"], 2),
+        "ingresos_usd": round(tot["ingresos_usd"], 2),
+        "total_usd": round(tot["realizado_usd"] + tot["no_realizado_usd"] + tot["ingresos_usd"], 2),
+        "realizado_ars": round(tot["realizado_ars"], 2),
+        "no_realizado_ars": round(tot["no_realizado_ars"], 2),
+        "ingresos_ars": round(tot["ingresos_ars"], 2),
+        "total_ars": round(tot["realizado_ars"] + tot["no_realizado_ars"] + tot["ingresos_ars"], 2),
+        "realizado_ars_real": round(tot["realizado_ars_real"], 2) if not cer_incompleto else None,
+        "no_realizado_ars_real": round(tot["no_realizado_ars_real"], 2) if not cer_incompleto else None,
+        "ingresos_ars_real": round(tot["ingresos_ars_real"], 2) if not cer_incompleto else None,
+        "total_ars_real": (
+            round(tot["realizado_ars_real"] + tot["no_realizado_ars_real"] + tot["ingresos_ars_real"], 2)
+            if not cer_incompleto else None
+        ),
+    }
+
+    return {"consolidado": consolidado, "por_ticker": por_ticker_resultado}
+
+
 # ── Evolución histórica (sparklines) ─────────────────────────────────────────
 
 def _fin_de_mes_range(desde: date, hasta: date) -> list[date]:
@@ -941,17 +1101,44 @@ def _fin_de_mes_range(desde: date, hasta: date) -> list[date]:
     return fechas
 
 
-def get_evolucion(cartera: str | None, db: Session, max_puntos: int = 24) -> dict:
-    """Serie histórica (mensual) del valor de la cartera, para sparklines."""
+def _fechas_por_granularidad(desde: date, hasta: date) -> list[date]:
+    """Elige granularidad según el rango: diaria (≤40d), semanal (≤400d) o fin de mes (resto)."""
+    rango_dias = (hasta - desde).days
+    if rango_dias <= 40:
+        return [desde + timedelta(days=i) for i in range(rango_dias + 1)]
+    if rango_dias <= 400:
+        fechas = []
+        cursor = desde
+        while cursor < hasta:
+            fechas.append(cursor)
+            cursor += timedelta(days=7)
+        fechas.append(hasta)
+        return fechas
+    return _fin_de_mes_range(desde, hasta)
+
+
+def get_evolucion(cartera: str | None, db: Session, desde: date | None = None, max_puntos: int = 24) -> dict:
+    """Serie histórica del valor de la cartera (nominal USD/ARS y ARS real vía CER).
+
+    Sin `desde`, arranca en el primer movimiento con granularidad mensual (uso original: sparklines).
+    Con `desde`, ajusta la granularidad al rango solicitado (diaria/semanal/mensual).
+    """
     movs = _movimientos_ordenados(db, cartera)
     if not movs:
         return {"puntos": []}
 
     precios_por_ticker = _precios_por_ticker(db)
     mep_cache: dict = {}
+    cer_cache: dict = {}
     hoy = date.today()
+    cer_hoy = _cer_indice(hoy, db, cer_cache)
 
-    fechas = _fin_de_mes_range(movs[0].fecha, hoy)
+    desde_efectivo = desde if desde is not None else movs[0].fecha
+    if desde is not None:
+        fechas = _fechas_por_granularidad(desde_efectivo, hoy)
+    else:
+        fechas = _fin_de_mes_range(desde_efectivo, hoy)
+
     if len(fechas) > max_puntos:
         paso = len(fechas) / max_puntos
         muestreadas = [fechas[int(i * paso)] for i in range(max_puntos - 1)]
@@ -964,7 +1151,13 @@ def get_evolucion(cartera: str | None, db: Session, max_puntos: int = 24) -> dic
         snapshot = tracker.snapshot()
         valor_usd, _, _ = _valuar_holdings(snapshot, f, precios_por_ticker, db, mep_cache)
         valor_ars, _, _ = _valuar_holdings_ars(snapshot, f, precios_por_ticker, db, mep_cache)
-        puntos.append({"fecha": f, "valor_usd": round(valor_usd, 2), "valor_ars": round(valor_ars, 2)})
+        valor_ars_real, _, _ = _valuar_holdings_ars_real(snapshot, f, precios_por_ticker, db, mep_cache, cer_cache, cer_hoy)
+        puntos.append({
+            "fecha": f,
+            "valor_usd": round(valor_usd, 2),
+            "valor_ars": round(valor_ars, 2),
+            "valor_ars_real": round(valor_ars_real, 2) if valor_ars_real is not None else None,
+        })
 
     return {"puntos": puntos}
 

@@ -10,6 +10,7 @@ import PosicionRow from '../components/inversiones/PosicionRow'
 import EmptyState from '../components/ui/EmptyState'
 import Card from '../components/ui/Card'
 import ComparacionChart from '../components/charts/ComparacionChart'
+import InfoTerm from '../components/ui/InfoTerm'
 
 export default function Resumen() {
   const navigate = useNavigate()
@@ -49,7 +50,9 @@ export default function Resumen() {
           </div>
           <CarterasScroll carteras={carteras} seleccionada={carteraSeleccionada} onSelect={setCarteraSeleccionada} />
 
-          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5 mt-5">Cartera vs. benchmarks (ARS)</h3>
+          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5 mt-5">
+            <InfoTerm term="benchmark" label="Cartera vs. benchmarks (ARS)" />
+          </h3>
           <Card>
             <ComparacionChart resumen={resumen} />
           </Card>

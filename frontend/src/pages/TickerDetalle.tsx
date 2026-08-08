@@ -7,6 +7,8 @@ import ScreenHeader from '../components/layout/ScreenHeader'
 import Sparkline from '../components/charts/Sparkline'
 import Button from '../components/ui/Button'
 import { Icon } from '../components/icons/Icons'
+import InfoTerm from '../components/ui/InfoTerm'
+import type { GlosarioKey } from '../data/glosario'
 
 export default function TickerDetalle() {
   const { ticker: tickerParam } = useParams<{ ticker: string }>()
@@ -92,9 +94,9 @@ export default function TickerDetalle() {
       <div className="grid grid-cols-2 gap-2 mt-4">
         <StatCell label="Cantidad" value={formatCantidad(item.cantidad_actual)} />
         <StatCell label="Precio promedio" value={formatPrecio(item.precio_promedio)} />
-        <StatCell label="Invertido" value={formatMoneda(valorInvertido)} />
+        <StatCell label="Invertido" infoTerm="invertido" value={formatMoneda(valorInvertido)} />
         <StatCell label="Valor actual" value={formatMoneda(valorActual)} />
-        <StatCell label="Rend. simple" value={formatPctRatio(rendimiento)} tone={rendimiento == null ? undefined : positivo ? 'pos' : 'neg'} />
+        <StatCell label="Rend. simple" infoTerm="simple" value={formatPctRatio(rendimiento)} tone={rendimiento == null ? undefined : positivo ? 'pos' : 'neg'} />
         {esARS && item.rendimiento_simple_ars_real != null && (
           <StatCell label="Rend. ARS real" value={formatPctRatio(item.rendimiento_simple_ars_real)} tone={item.rendimiento_simple_ars_real >= 0 ? 'pos' : 'neg'} />
         )}
@@ -107,10 +109,12 @@ export default function TickerDetalle() {
   )
 }
 
-function StatCell({ label, value, tone }: { label: string; value: string; tone?: 'pos' | 'neg' }) {
+function StatCell({ label, infoTerm, value, tone }: { label: string; infoTerm?: GlosarioKey; value: string; tone?: 'pos' | 'neg' }) {
   return (
     <div className="bg-app-surface border border-app-border rounded-[13px] p-2.5">
-      <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">{label}</div>
+      <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
+        {infoTerm ? <InfoTerm term={infoTerm} label={label} /> : label}
+      </div>
       <div className={`font-mono text-[14.5px] font-bold tabular-nums ${tone === 'pos' ? 'text-app-teal' : tone === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>{value}</div>
     </div>
   )

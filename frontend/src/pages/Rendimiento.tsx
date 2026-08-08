@@ -1,0 +1,179 @@
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useInversionesContext } from '../context/InversionesContext'
+import { getPnlRealizadoNoRealizado, type PnlRealizadoNoRealizadoOut } from '../api'
+import { formatARS, formatUSD, formatPctRatio } from '../utils'
+import ScreenHeader from '../components/layout/ScreenHeader'
+import Card from '../components/ui/Card'
+import EmptyState from '../components/ui/EmptyState'
+import ComparacionChart from '../components/charts/ComparacionChart'
+import { Icon } from '../components/icons/Icons'
+import InfoTerm from '../components/ui/InfoTerm'
+import type { GlosarioKey } from '../data/glosario'
+
+function toneClass(v: number | null | undefined): string {
+  if (v == null) return 'text-app-text'
+  return v >= 0 ? 'text-app-teal' : 'text-app-coral'
+}
+
+function PnlCard({ label, infoTerm, value, tone }: { label: string; infoTerm?: GlosarioKey; value: string; tone?: 'pos' | 'neg' }) {
+  return (
+    <div className="bg-app-surface border border-app-border rounded-[13px] px-2.5 py-2.5">
+      <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
+        {infoTerm ? <InfoTerm term={infoTerm} label={label} /> : label}
+      </div>
+      <div className={`font-mono text-[14px] font-bold tabular-nums ${tone === 'pos' ? 'text-app-teal' : tone === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
+        {value}
+      </div>
+    </div>
+  )
+}
+
+function toneFor(v: number | null | undefined): 'pos' | 'neg' | undefined {
+  if (v == null) return undefined
+  return v >= 0 ? 'pos' : 'neg'
+}
+
+export default function Rendimiento() {
+  const navigate = useNavigate()
+  const { carteraSeleccionada, monedaSeleccionada, resumen } = useInversionesContext()
+  const [pnl, setPnl] = useState<PnlRealizadoNoRealizadoOut | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelado = false
+    setLoading(true)
+    getPnlRealizadoNoRealizado(carteraSeleccionada)
+      .then(data => {
+        if (!cancelado) setPnl(data)
+      })
+      .catch(() => {
+        if (!cancelado) setPnl(null)
+      })
+      .finally(() => {
+        if (!cancelado) setLoading(false)
+      })
+    return () => {
+      cancelado = true
+    }
+  }, [carteraSeleccionada])
+
+  const esARS = monedaSeleccionada === 'ARS'
+  const formatMoneda = esARS ? formatARS : formatUSD
+  const c = pnl?.consolidado
+
+  const realizado = c ? (esARS ? c.realizado_ars : c.realizado_usd) : null
+  const noRealizado = c ? (esARS ? c.no_realizado_ars : c.no_realizado_usd) : null
+  const ingresos = c ? (esARS ? c.ingresos_ars : c.ingresos_usd) : null
+  const total = c ? (esARS ? c.total_ars : c.total_usd) : null
+
+  const filas: { label: string; infoTerm: GlosarioKey; valores: (number | null | undefined)[] }[] = resumen
+    ? [
+        { label: 'Simple', infoTerm: 'simple', valores: [resumen.rendimiento_simple_ars, resumen.rendimiento_simple_ars_real, resumen.rendimiento_simple_usd] },
+        { label: 'TIR (XIRR)', infoTerm: 'xirr', valores: [resumen.xirr_ars, resumen.xirr_ars_real, resumen.xirr_usd] },
+        { label: 'TWRR', infoTerm: 'twr', valores: [resumen.twr_ars, resumen.twr_ars_real, resumen.twr_usd] },
+      ]
+    : []
+
+  return (
+    <div className="pb-4">
+      <ScreenHeader title="Rendimiento" onBack={() => navigate(-1)} />
+
+      <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
+        <button onClick={() => navigate('/patrimonio')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+          <Icon name="trend" className="w-3.5 h-3.5" /> Ver evolución del patrimonio
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+      ) : !pnl || !resumen ? (
+        <EmptyState title="Sin datos" description="No hay movimientos suficientes para calcular el rendimiento de esta cartera." />
+      ) : (
+        <>
+          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">P&amp;L realizado vs. no realizado</h3>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <PnlCard label="Realizado (ventas)" infoTerm="realizado" value={formatMoneda(realizado)} tone={toneFor(realizado)} />
+            <PnlCard label="No realizado (en cartera)" infoTerm="noRealizado" value={formatMoneda(noRealizado)} tone={toneFor(noRealizado)} />
+          </div>
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <PnlCard label="Ingresos (div./cupones)" infoTerm="ingresos" value={formatMoneda(ingresos)} tone={toneFor(ingresos)} />
+            <PnlCard label="Total" value={formatMoneda(total)} tone={toneFor(total)} />
+          </div>
+
+          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">Rendimiento: nominal vs. real vs. USD</h3>
+          <Card className="mb-4 overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr>
+                  <th className="text-left text-app-text-faint font-bold uppercase text-[9.5px] pb-2">&nbsp;</th>
+                  <th className="text-right text-app-text-faint font-bold uppercase text-[9.5px] pb-2 px-1.5">ARS Nominal</th>
+                  <th className="text-right text-app-text-faint font-bold uppercase text-[9.5px] pb-2 px-1.5">
+                    <InfoTerm term="cer" label="ARS Real (CER)" className="justify-end" />
+                  </th>
+                  <th className="text-right text-app-text-faint font-bold uppercase text-[9.5px] pb-2 px-1.5">
+                    <InfoTerm term="mep" label="USD (MEP)" className="justify-end" />
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filas.map(fila => (
+                  <tr key={fila.label} className="border-t border-app-border">
+                    <td className="py-2 font-semibold text-app-text">
+                      <InfoTerm term={fila.infoTerm} label={fila.label} />
+                    </td>
+                    {fila.valores.map((v, i) => (
+                      <td key={i} className={`py-2 px-1.5 text-right font-mono font-bold tabular-nums ${toneClass(v)}`}>
+                        {formatPctRatio(v)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+
+          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">
+            <InfoTerm term="benchmark" label="Cartera vs. benchmarks (ARS)" />
+          </h3>
+          <Card className="mb-4">
+            <ComparacionChart resumen={resumen} />
+          </Card>
+
+          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">P&amp;L por ticker</h3>
+          {pnl.por_ticker.length === 0 ? (
+            <EmptyState title="Sin posiciones" description="No hay tickers con actividad para esta cartera." />
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {pnl.por_ticker.map(item => {
+                const itemRealizado = esARS ? item.realizado_ars : item.realizado_usd
+                const itemNoRealizado = esARS ? item.no_realizado_ars : item.no_realizado_usd
+                const itemTotal = esARS ? item.total_ars : item.total_usd
+                return (
+                  <button
+                    key={item.ticker}
+                    onClick={() => navigate(`/ticker/${encodeURIComponent(item.ticker)}`)}
+                    className="flex items-center justify-between bg-app-surface border border-app-border rounded-[13px] px-3.5 py-2.5 text-left"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-semibold text-[13px] text-app-text">{item.ticker}</div>
+                      <div className="text-[10.5px] text-app-text-dim truncate">{item.nombre}</div>
+                    </div>
+                    <div className="text-right shrink-0 ml-3">
+                      <div className={`font-mono font-bold text-[13px] tabular-nums ${toneClass(itemTotal)}`}>
+                        {formatMoneda(itemTotal)}
+                      </div>
+                      <div className="text-[10px] text-app-text-dim tabular-nums">
+                        Real. {formatMoneda(itemRealizado)} · No real. {formatMoneda(itemNoRealizado)}
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}

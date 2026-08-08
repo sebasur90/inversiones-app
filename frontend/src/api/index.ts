@@ -119,14 +119,15 @@ export interface EvolucionPunto {
   fecha: string
   valor_usd: number
   valor_ars: number
+  valor_ars_real: number | null
 }
 
 export interface EvolucionOut {
   puntos: EvolucionPunto[]
 }
 
-export const getEvolucionInversiones = (cartera: string | null) =>
-  api.get<EvolucionOut>(`${carteraPath(cartera)}/evolucion`).then(r => r.data)
+export const getEvolucionInversiones = (cartera: string | null, desde?: string) =>
+  api.get<EvolucionOut>(`${carteraPath(cartera)}/evolucion`, { params: desde ? { desde } : undefined }).then(r => r.data)
 
 export interface PrecioPunto {
   fecha: string
@@ -233,6 +234,44 @@ export interface ComisionesOut {
 
 export const getComisiones = (cartera: string | null) =>
   api.get<ComisionesOut>(`${carteraPath(cartera)}/comisiones`).then(r => r.data)
+
+// --- P&L Realizado vs No Realizado ---
+
+export interface PnlConsolidado {
+  realizado_usd: number
+  no_realizado_usd: number
+  ingresos_usd: number
+  total_usd: number
+  realizado_ars: number
+  no_realizado_ars: number
+  ingresos_ars: number
+  total_ars: number
+  realizado_ars_real: number | null
+  no_realizado_ars_real: number | null
+  ingresos_ars_real: number | null
+  total_ars_real: number | null
+}
+
+export interface PnlPorTickerItem {
+  ticker: string
+  nombre: string
+  realizado_usd: number
+  no_realizado_usd: number
+  ingresos_usd: number
+  total_usd: number
+  realizado_ars: number
+  no_realizado_ars: number | null
+  ingresos_ars: number
+  total_ars: number | null
+}
+
+export interface PnlRealizadoNoRealizadoOut {
+  consolidado: PnlConsolidado
+  por_ticker: PnlPorTickerItem[]
+}
+
+export const getPnlRealizadoNoRealizado = (cartera: string | null) =>
+  api.get<PnlRealizadoNoRealizadoOut>(`${carteraPath(cartera)}/pnl-realizado`).then(r => r.data)
 
 // --- Objetivos de Inversión ---
 

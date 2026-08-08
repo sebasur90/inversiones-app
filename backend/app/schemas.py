@@ -77,6 +77,7 @@ class EvolucionPunto(BaseModel):
     fecha: date
     valor_usd: float
     valor_ars: float
+    valor_ars_real: Optional[float] = None
 
 
 class EvolucionOut(BaseModel):
@@ -232,3 +233,38 @@ class ComisionesOut(BaseModel):
     por_ticker: list[ComisionPorTickerItem]
     por_mes: list[ComisionPeriodoItem]
     por_anio: list[ComisionPeriodoItem]
+
+
+# --- P&L Realizado vs No Realizado ---
+
+class PnlConsolidado(BaseModel):
+    realizado_usd: float
+    no_realizado_usd: float
+    ingresos_usd: float
+    total_usd: float
+    realizado_ars: float
+    no_realizado_ars: float
+    ingresos_ars: float
+    total_ars: float
+    realizado_ars_real: Optional[float] = None
+    no_realizado_ars_real: Optional[float] = None
+    ingresos_ars_real: Optional[float] = None
+    total_ars_real: Optional[float] = None
+
+
+class PnlPorTickerItem(BaseModel):
+    ticker: str
+    nombre: str
+    realizado_usd: float
+    no_realizado_usd: float
+    ingresos_usd: float
+    total_usd: float
+    realizado_ars: float
+    no_realizado_ars: Optional[float] = None
+    ingresos_ars: float
+    total_ars: Optional[float] = None
+
+
+class PnlRealizadoNoRealizadoOut(BaseModel):
+    consolidado: PnlConsolidado
+    por_ticker: list[PnlPorTickerItem]

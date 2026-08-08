@@ -18,6 +18,7 @@ export type IconName =
   | 'alert'
   | 'download'
   | 'trend'
+  | 'info'
 
 export function IconSprite() {
   return (
@@ -99,6 +100,11 @@ export function IconSprite() {
         <symbol id="i-trend" viewBox="0 0 24 24">
           <polyline points="3 17 8 11 13 14 21 6" />
           <polyline points="17 6 21 6 21 10" />
+        </symbol>
+        <symbol id="i-info" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" />
+          <line x1="12" y1="11" x2="12" y2="16" />
+          <line x1="12" y1="8" x2="12" y2="8.01" />
         </symbol>
       </defs>
     </svg>

@@ -17,6 +17,8 @@ import IndicadoresMacro from './pages/IndicadoresMacro'
 import Vencimientos from './pages/Vencimientos'
 import Comparador from './pages/Comparador'
 import Comisiones from './pages/Comisiones'
+import Patrimonio from './pages/Patrimonio'
+import Rendimiento from './pages/Rendimiento'
 
 function SyncResultModal() {
   const { syncSheetOpen, closeSyncSheet, syncErrors, syncWarnings, syncResumenTexto } = useInversionesContext()
@@ -96,6 +98,8 @@ function Root() {
             <Route path="vencimientos" element={<Vencimientos />} />
             <Route path="comparar" element={<Comparador />} />
             <Route path="comisiones" element={<Comisiones />} />
+            <Route path="patrimonio" element={<Patrimonio />} />
+            <Route path="rendimiento" element={<Rendimiento />} />
             <Route path="*" element={<Navigate to="/resumen" replace />} />
           </Route>
         </Routes>
