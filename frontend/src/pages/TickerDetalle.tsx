@@ -84,6 +84,20 @@ export default function TickerDetalle() {
             {formatPctRatio(rendimiento)} desde promedio
           </span>
         )}
+        {(item.objetivo_alcanzado || item.stop_loss_disparado) && (
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {item.objetivo_alcanzado && (
+              <span className="text-[10.5px] font-bold text-app-teal bg-app-teal/10 border border-app-teal/30 px-2 py-1 rounded-[7px]">
+                🎯 Objetivo alcanzado
+              </span>
+            )}
+            {item.stop_loss_disparado && (
+              <span className="text-[10.5px] font-bold text-app-coral bg-app-coral/10 border border-app-coral/30 px-2 py-1 rounded-[7px]">
+                🛑 Stop loss disparado
+              </span>
+            )}
+          </div>
+        )}
         <Sparkline
           data={precios.map(p => p.precio)}
           color={positivo ? '#4fd1ae' : '#e2665a'}
@@ -100,6 +114,24 @@ export default function TickerDetalle() {
         {esARS && item.rendimiento_simple_ars_real != null && (
           <StatCell label="Rend. ARS real" value={formatPctRatio(item.rendimiento_simple_ars_real)} tone={item.rendimiento_simple_ars_real >= 0 ? 'pos' : 'neg'} />
         )}
+        {item.precio_objetivo != null && (
+          <StatCell
+            label="Precio Objetivo"
+            infoTerm="objetivo"
+            value={formatPrecio(item.precio_objetivo)}
+            sub={item.pct_a_objetivo != null ? `${item.pct_a_objetivo >= 0 ? 'falta' : 'superado por'} ${(Math.abs(item.pct_a_objetivo) * 100).toFixed(2)}%` : undefined}
+            tone={item.objetivo_alcanzado ? 'pos' : undefined}
+          />
+        )}
+        {item.precio_stop_loss != null && (
+          <StatCell
+            label="Stop Loss"
+            infoTerm="stopLoss"
+            value={formatPrecio(item.precio_stop_loss)}
+            sub={item.pct_a_stop_loss != null ? `${item.pct_a_stop_loss <= 0 ? 'superado por' : 'falta'} ${(Math.abs(item.pct_a_stop_loss) * 100).toFixed(2)}%` : undefined}
+            tone={item.stop_loss_disparado ? 'neg' : undefined}
+          />
+        )}
       </div>
 
       <Button variant="outline" icon={<Icon name="list" className="w-4 h-4" />} className="w-full mt-4" onClick={() => navigate(`/movimientos?ticker=${encodeURIComponent(item.ticker)}`)}>
@@ -109,13 +141,14 @@ export default function TickerDetalle() {
   )
 }
 
-function StatCell({ label, infoTerm, value, tone }: { label: string; infoTerm?: GlosarioKey; value: string; tone?: 'pos' | 'neg' }) {
+function StatCell({ label, infoTerm, value, sub, tone }: { label: string; infoTerm?: GlosarioKey; value: string; sub?: string; tone?: 'pos' | 'neg' }) {
   return (
     <div className="bg-app-surface border border-app-border rounded-[13px] p-2.5">
       <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
         {infoTerm ? <InfoTerm term={infoTerm} label={label} /> : label}
       </div>
       <div className={`font-mono text-[14.5px] font-bold tabular-nums ${tone === 'pos' ? 'text-app-teal' : tone === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>{value}</div>
+      {sub && <div className="text-[10px] text-app-text-dim mt-0.5">{sub}</div>}
     </div>
   )
 }

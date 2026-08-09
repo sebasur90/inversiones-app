@@ -115,6 +115,16 @@ class RendimientoPorTickerItem(BaseModel):
     rendimiento_simple_ars_real: Optional[float] = None
     precio_promedio_ars_ajustado_cer: Optional[float] = None
     precio_actual_ars_ajustado_cer: Optional[float] = None
+    objetivo_modo: Optional[str] = None
+    objetivo_valor: Optional[float] = None
+    precio_objetivo: Optional[float] = None
+    pct_a_objetivo: Optional[float] = None
+    objetivo_alcanzado: Optional[bool] = None
+    stop_loss_modo: Optional[str] = None
+    stop_loss_valor: Optional[float] = None
+    precio_stop_loss: Optional[float] = None
+    pct_a_stop_loss: Optional[float] = None
+    stop_loss_disparado: Optional[bool] = None
 
 
 # --- Objetivos de Inversión ---

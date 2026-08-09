@@ -92,6 +92,16 @@ export interface RendimientoPorTickerItem {
   rendimiento_simple_ars_real: number | null
   precio_promedio_ars_ajustado_cer: number | null
   precio_actual_ars_ajustado_cer: number | null
+  objetivo_modo: string | null
+  objetivo_valor: number | null
+  precio_objetivo: number | null
+  pct_a_objetivo: number | null
+  objetivo_alcanzado: boolean | null
+  stop_loss_modo: string | null
+  stop_loss_valor: number | null
+  precio_stop_loss: number | null
+  pct_a_stop_loss: number | null
+  stop_loss_disparado: boolean | null
 }
 
 const carteraPath = (cartera: string | null) =>

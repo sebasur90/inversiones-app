@@ -160,6 +160,20 @@ def _validar_instrumentos(rows: list[tuple[int, dict]], errores: list[dict]) -> 
                 errores.append({"fila": row_num, "motivo": f"Fecha Vencimiento inválida: {fecha_venc_raw}"})
                 continue
 
+        objetivo_modo, objetivo_valor, error_objetivo = _parse_nivel_precio(
+            row.get("Objetivo Modo"), row.get("Objetivo Valor")
+        )
+        if error_objetivo:
+            errores.append({"fila": row_num, "motivo": f"Objetivo inválido: {error_objetivo}"})
+            continue
+
+        stop_loss_modo, stop_loss_valor, error_stop = _parse_nivel_precio(
+            row.get("Stop Loss Modo"), row.get("Stop Loss Valor")
+        )
+        if error_stop:
+            errores.append({"fila": row_num, "motivo": f"Stop Loss inválido: {error_stop}"})
+            continue
+
         validos.append({
             "ticker": ticker,
             "nombre": row.get("Nombre") or ticker,
@@ -169,9 +183,36 @@ def _validar_instrumentos(rows: list[tuple[int, dict]], errores: list[dict]) -> 
             "pais": row.get("País") or row.get("Pais") or None,
             "sector": row.get("Sector") or None,
             "fecha_vencimiento": fecha_venc,
+            "objetivo_modo": objetivo_modo,
+            "objetivo_valor": objetivo_valor,
+            "stop_loss_modo": stop_loss_modo,
+            "stop_loss_valor": stop_loss_valor,
         })
         tickers.add(ticker)
     return validos, tickers
+
+
+def _parse_nivel_precio(modo_raw, valor_raw) -> tuple[str | None, float | None, str | None]:
+    """Parsea un par (Modo, Valor) de precio objetivo/stop loss. Devuelve (modo, valor, error)."""
+    modo = (modo_raw or "").strip()
+    valor_str = (valor_raw or "").strip()
+    tiene_modo = bool(modo) and modo.lower() != "nan"
+    tiene_valor = bool(valor_str) and valor_str.lower() != "nan"
+
+    if not tiene_modo and not tiene_valor:
+        return None, None, None
+    if tiene_modo != tiene_valor:
+        return None, None, "Modo y Valor deben completarse juntos"
+
+    modo_normalizado = modo.strip().capitalize()
+    if modo_normalizado not in ("Porcentaje", "Fijo"):
+        return None, None, f"Modo desconocido: {modo}"
+
+    valor = _parse_numero(valor_str)
+    if valor is None:
+        return None, None, f"Valor numérico inválido: {valor_str}"
+
+    return modo_normalizado, valor, None
 
 
 def _validar_movimientos(rows: list[tuple[int, dict]], tickers_conocidos: set[str], errores: list[dict]) -> tuple[list[dict], list[dict]]:

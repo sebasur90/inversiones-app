@@ -35,6 +35,10 @@ class InstrumentoInversion(Base):
     pais = Column(String, nullable=True)
     sector = Column(String, nullable=True)
     fecha_vencimiento = Column(Date, nullable=True)
+    objetivo_modo = Column(String, nullable=True)
+    objetivo_valor = Column(Numeric(18, 6), nullable=True)
+    stop_loss_modo = Column(String, nullable=True)
+    stop_loss_valor = Column(Numeric(18, 6), nullable=True)
 
 
 class MovimientoInversion(Base):
@@ -98,3 +102,16 @@ def init_db():
         if 'es_jubilacion' not in cols:
             conn.execute(text("ALTER TABLE objetivos_inversion ADD COLUMN es_jubilacion INTEGER NOT NULL DEFAULT 0"))
             conn.commit()
+
+        # aseguramos compatibilidad con DB antiguas que no tenían objetivo/stop loss.
+        result = conn.execute(text("PRAGMA table_info(instrumentos_inversion)"))
+        cols = [row[1] for row in result.fetchall()]
+        for columna, tipo in (
+            ("objetivo_modo", "TEXT"),
+            ("objetivo_valor", "NUMERIC"),
+            ("stop_loss_modo", "TEXT"),
+            ("stop_loss_valor", "NUMERIC"),
+        ):
+            if columna not in cols:
+                conn.execute(text(f"ALTER TABLE instrumentos_inversion ADD COLUMN {columna} {tipo}"))
+                conn.commit()

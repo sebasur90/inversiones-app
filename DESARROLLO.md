@@ -64,3 +64,19 @@ Independientemente del modo:
 - Las columnas deben coincidir exactamente con el Google Sheet original
 - En modo local no se requiere acceso a internet
 
+## Precio Objetivo y Stop Loss
+
+La pestaña `Instrumentos` admite 4 columnas opcionales para fijar, por ticker, un precio
+objetivo (para tomar ganancias) y un stop loss (para cortar pérdidas). Deben coincidir
+exactamente en el Google Sheet y en `sheet_local/sheet_inversiones.xlsx`:
+
+| Columna | Valores | Significado |
+|---|---|---|
+| `Objetivo Modo` | `Porcentaje` o `Fijo` | cómo interpretar `Objetivo Valor` |
+| `Objetivo Valor` | número | `Porcentaje`: % sobre el precio promedio de compra (ej. `20` = +20%). `Fijo`: precio absoluto |
+| `Stop Loss Modo` | `Porcentaje` o `Fijo` | cómo interpretar `Stop Loss Valor` |
+| `Stop Loss Valor` | número | `Porcentaje`: % de caída sobre el precio promedio de compra (ej. `-5`). `Fijo`: precio absoluto |
+
+`Modo` y `Valor` deben completarse juntos (o dejarse ambos vacíos). Se ven en el detalle de
+cada ticker en la app, junto con el % que falta para alcanzarlos.
+

@@ -799,6 +799,35 @@ def get_exposicion(cartera: str | None, db: Session) -> dict:
 
 # ── Rendimiento por ticker ─────────────────────────────────────────────────────
 
+def _nivel_precio(
+    modo: str | None,
+    valor,
+    precio_promedio_compra: float,
+    precio_actual: float,
+    alcanzado_si_mayor: bool,
+) -> tuple[float | None, float | None, bool | None]:
+    """Calcula el precio absoluto de un nivel (objetivo/stop loss), la distancia % al
+    precio actual y si ya fue alcanzado/disparado. `valor` puede ser % sobre el precio
+    promedio de compra (modo="Porcentaje") o un precio absoluto (modo="Fijo")."""
+    if not modo or valor is None:
+        return None, None, None
+
+    valor = float(valor)
+    if modo == "Porcentaje":
+        precio_nivel = precio_promedio_compra * (1 + valor / 100)
+    elif modo == "Fijo":
+        precio_nivel = valor
+    else:
+        return None, None, None
+
+    if abs(precio_actual) < EPS:
+        return round(precio_nivel, 6), None, None
+
+    pct_restante = (precio_nivel - precio_actual) / precio_actual
+    alcanzado = precio_actual >= precio_nivel if alcanzado_si_mayor else precio_actual <= precio_nivel
+    return precio_nivel, pct_restante, alcanzado
+
+
 def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
     """Rendimiento individual por ticker con análisis por moneda."""
     movs = _movimientos_ordenados(db, cartera)
@@ -897,6 +926,21 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
         instrumento = instrumentos.get(ticker, None)
         nombre = instrumento.nombre if instrumento else ticker
 
+        precio_objetivo, pct_a_objetivo, objetivo_alcanzado = _nivel_precio(
+            instrumento.objetivo_modo if instrumento else None,
+            instrumento.objetivo_valor if instrumento else None,
+            precio_promedio_compra,
+            precio_actual,
+            alcanzado_si_mayor=True,
+        )
+        precio_stop_loss, pct_a_stop_loss, stop_loss_disparado = _nivel_precio(
+            instrumento.stop_loss_modo if instrumento else None,
+            instrumento.stop_loss_valor if instrumento else None,
+            precio_promedio_compra,
+            precio_actual,
+            alcanzado_si_mayor=False,
+        )
+
         resultado.append({
             "ticker": ticker,
             "nombre": nombre,
@@ -917,6 +961,16 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
             "rendimiento_simple_ars_real": round(rendimiento_simple_ars_real, 4) if rendimiento_simple_ars_real is not None else None,
             "precio_promedio_ars_ajustado_cer": round(precio_promedio_ars_ajustado_cer, 6) if precio_promedio_ars_ajustado_cer is not None else None,
             "precio_actual_ars_ajustado_cer": round(precio_actual_ars_ajustado_cer, 6) if precio_actual_ars_ajustado_cer is not None else None,
+            "objetivo_modo": instrumento.objetivo_modo if instrumento else None,
+            "objetivo_valor": float(instrumento.objetivo_valor) if instrumento and instrumento.objetivo_valor is not None else None,
+            "precio_objetivo": round(precio_objetivo, 6) if precio_objetivo is not None else None,
+            "pct_a_objetivo": round(pct_a_objetivo, 4) if pct_a_objetivo is not None else None,
+            "objetivo_alcanzado": objetivo_alcanzado,
+            "stop_loss_modo": instrumento.stop_loss_modo if instrumento else None,
+            "stop_loss_valor": float(instrumento.stop_loss_valor) if instrumento and instrumento.stop_loss_valor is not None else None,
+            "precio_stop_loss": round(precio_stop_loss, 6) if precio_stop_loss is not None else None,
+            "pct_a_stop_loss": round(pct_a_stop_loss, 4) if pct_a_stop_loss is not None else None,
+            "stop_loss_disparado": stop_loss_disparado,
         })
 
     return sorted(resultado, key=lambda x: -abs(x["valor_actual_usd"]))

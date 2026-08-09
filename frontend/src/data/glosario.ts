@@ -9,6 +9,8 @@ export type GlosarioKey =
   | 'benchmark'
   | 'cer'
   | 'mep'
+  | 'objetivo'
+  | 'stopLoss'
 
 export const GLOSARIO: Record<GlosarioKey, { titulo: string; texto: string }> = {
   xirr: {
@@ -53,5 +55,13 @@ export const GLOSARIO: Record<GlosarioKey, { titulo: string; texto: string }> = 
   mep: {
     titulo: 'MEP',
     texto: 'Dólar MEP (Mercado Electrónico de Pagos): la cotización del dólar que resulta de comprar y vender bonos en el mercado local. Se usa para convertir tu cartera a dólares de forma legal.',
+  },
+  objetivo: {
+    titulo: 'Precio Objetivo',
+    texto: 'El precio al que te gustaría vender para tomar ganancias. Se define en el Sheet como % sobre tu precio promedio de compra o como precio fijo. Cuando el precio actual lo alcanza o supera, se marca como alcanzado.',
+  },
+  stopLoss: {
+    titulo: 'Stop Loss',
+    texto: 'El precio al que cortarías la pérdida y saldrías de la posición. Se define en el Sheet como % sobre tu precio promedio de compra o como precio fijo. Cuando el precio actual cae a ese nivel o por debajo, se marca como disparado.',
   },
 }
