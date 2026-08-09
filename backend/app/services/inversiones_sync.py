@@ -4,8 +4,8 @@ from datetime import date, datetime
 from dateutil import parser as dateutil_parser
 from sqlalchemy.orm import Session
 
-from ..database import InstrumentoInversion, MovimientoInversion, PrecioInstrumento, IndiceMercado
-from .sheets_client import fetch_sheet_data
+from ..database import InstrumentoInversion, MovimientoInversion, PrecioInstrumento, IndiceMercado, ObjetivoInversion
+from .sheets_client import fetch_sheet_data, fetch_objetivos_tab
 
 # Estado en memoria del proceso: se resetea al reiniciar el backend.
 _ultimo_sync: datetime | None = None
@@ -94,6 +94,7 @@ def sync_from_sheet(db: Session) -> dict:
     instrumentos_validos, tickers_conocidos = _validar_instrumentos(data.get("Instrumentos", []), errores)
     movimientos_validos, cer_mep_movimientos = _validar_movimientos(data.get("Movimientos", []), tickers_conocidos, errores)
     precios_validos, cer_mep_precios = _validar_precios(data.get("Precios", []), errores)
+    objetivos_validos = _validar_objetivos(fetch_objetivos_tab(), errores)
 
     indices_mercado, advertencias = _consolidar_indices_mercado(cer_mep_movimientos, cer_mep_precios, errores)
     errores.extend(advertencias)
@@ -102,6 +103,7 @@ def sync_from_sheet(db: Session) -> dict:
     db.query(PrecioInstrumento).delete()
     db.query(InstrumentoInversion).delete()
     db.query(IndiceMercado).delete()
+    db.query(ObjetivoInversion).delete()
     db.flush()
 
     for inst in instrumentos_validos:
@@ -126,6 +128,9 @@ def sync_from_sheet(db: Session) -> dict:
     for indice in indices_mercado:
         db.add(IndiceMercado(**indice))
 
+    for objetivo in objetivos_validos:
+        db.add(ObjetivoInversion(**objetivo))
+
     db.commit()
 
     global _ultimo_sync
@@ -135,6 +140,7 @@ def sync_from_sheet(db: Session) -> dict:
         "movimientos": len(movimientos_validos),
         "instrumentos": len(instrumentos_validos),
         "precios": len(precios_validos),
+        "objetivos": len(objetivos_validos),
         "indices_mercado": len(indices_mercado),
         "errores": errores,
     }
@@ -412,3 +418,47 @@ def _consolidar_indices_mercado(cer_mep_movimientos: list[dict], cer_mep_precios
                 existente["mep"] = mep
 
     return list(indices_por_fecha.values()), advertencias
+
+
+def _validar_objetivos(rows: list[tuple[int, dict]], errores: list[dict]) -> list[dict]:
+    validos = []
+    carteras_vistas: set[str] = set()
+    for row_num, row in rows:
+        cartera = (row.get("Cartera") or "").strip()
+        if not cartera:
+            errores.append({"fila": row_num, "motivo": "Cartera vacía en Objetivos"})
+            continue
+
+        if cartera in carteras_vistas:
+            errores.append({"fila": row_num, "motivo": f"Objetivo duplicado para cartera: {cartera}"})
+            continue
+
+        nombre = (row.get("Nombre") or "").strip()
+        if not nombre:
+            errores.append({"fila": row_num, "motivo": "Nombre vacío en Objetivos"})
+            continue
+
+        fecha_raw = (row.get("Fecha Límite") or row.get("Fecha Limite") or "").strip()
+        fecha_limite = _parse_fecha(fecha_raw)
+        if fecha_limite is None:
+            errores.append({"fila": row_num, "motivo": f"Fecha Límite inválida: {fecha_raw}"})
+            continue
+
+        monto_raw = (row.get("Monto USD") or "").strip()
+        monto_usd = _parse_numero(monto_raw)
+        if monto_usd is None:
+            errores.append({"fila": row_num, "motivo": f"Monto USD inválido: {monto_raw}"})
+            continue
+
+        icono = (row.get("Icono") or "").strip() or "🎯"
+
+        validos.append({
+            "cartera": cartera,
+            "nombre": nombre,
+            "icono": icono,
+            "monto_usd": monto_usd,
+            "fecha_limite": fecha_limite,
+        })
+        carteras_vistas.add(cartera)
+
+    return validos

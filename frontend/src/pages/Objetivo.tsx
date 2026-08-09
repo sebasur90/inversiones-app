@@ -1,23 +1,31 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import dayjs from 'dayjs'
 import { useInversionesContext } from '../context/InversionesContext'
 import { useObjetivoInversion } from '../hooks/useObjetivoInversion'
-import type { ObjetivoInversionPayload } from '../api'
-import { formatUSD } from '../utils'
+import { formatUSD, calcularProyeccionConInteres } from '../utils'
 import ScreenHeader from '../components/layout/ScreenHeader'
-import Button from '../components/ui/Button'
-import IconButton from '../components/ui/IconButton'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
 import AportesChart from '../components/charts/AportesChart'
-import ObjetivoModal from '../components/inversiones/ObjetivoModal'
 import { Icon } from '../components/icons/Icons'
 
 export default function Objetivo() {
-  const { carteras, carteraSeleccionada, setCarteraSeleccionada, showToast } = useInversionesContext()
-  const { objetivo, aportesHistoricos, loading, crear, editar, eliminar } = useObjetivoInversion(carteraSeleccionada)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [editando, setEditando] = useState(false)
+  const { carteras, carteraSeleccionada, setCarteraSeleccionada } = useInversionesContext()
+  const { objetivo, aportesHistoricos, loading } = useObjetivoInversion(carteraSeleccionada)
+  const [tasaInput, setTasaInput] = useState('')
+
+  useEffect(() => {
+    if (!carteraSeleccionada) return
+    const stored = localStorage.getItem(`objetivo-tasa-${carteraSeleccionada}`)
+    setTasaInput(stored ?? '')
+  }, [carteraSeleccionada])
+
+  const handleTasaChange = (value: string) => {
+    setTasaInput(value)
+    if (carteraSeleccionada) {
+      localStorage.setItem(`objetivo-tasa-${carteraSeleccionada}`, value)
+    }
+  }
 
   if (!carteraSeleccionada) {
     return (
@@ -42,38 +50,18 @@ export default function Objetivo() {
     )
   }
 
-  const handleCrear = async (payload: ObjetivoInversionPayload) => {
-    try {
-      await crear(payload)
-      showToast('Objetivo creado correctamente')
-      setModalOpen(false)
-    } catch (err: any) {
-      showToast(err?.response?.data?.detail || 'Error creando objetivo', 'error')
-    }
-  }
-
-  const handleEditar = async (payload: ObjetivoInversionPayload) => {
-    try {
-      await editar(payload)
-      showToast('Objetivo actualizado correctamente')
-      setEditando(false)
-      setModalOpen(false)
-    } catch (err: any) {
-      showToast(err?.response?.data?.detail || 'Error editando objetivo', 'error')
-    }
-  }
-
-  const handleEliminar = async () => {
-    if (!window.confirm('¿Eliminar este objetivo?')) return
-    try {
-      await eliminar()
-      showToast('Objetivo eliminado correctamente')
-    } catch (err: any) {
-      showToast(err?.response?.data?.detail || 'Error eliminando objetivo', 'error')
-    }
-  }
-
   const progreso = objetivo ? Math.min((objetivo.valor_actual_usd / objetivo.monto_usd) * 100, 100) : 0
+  const tasaAnualPct = Number(tasaInput.replace(',', '.')) || 0
+  const proyeccion = objetivo
+    ? calcularProyeccionConInteres(
+        objetivo.valor_actual_usd,
+        objetivo.monto_usd,
+        objetivo.meses_restantes,
+        objetivo.aporte_mensual_promedio_usd,
+        objetivo.aporte_mensual_necesario_usd,
+        tasaAnualPct
+      )
+    : null
 
   return (
     <div className="pb-4">
@@ -84,16 +72,7 @@ export default function Objetivo() {
       ) : !objetivo ? (
         <EmptyState
           title="Esta cartera no tiene un objetivo definido"
-          action={
-            <Button
-              onClick={() => {
-                setEditando(false)
-                setModalOpen(true)
-              }}
-            >
-              Definir objetivo
-            </Button>
-          }
+          description={`Agregá una fila para "${carteraSeleccionada}" en la pestaña "Objetivos" del Sheet (Cartera, Nombre, Fecha Límite, Monto USD) y sincronizá con el botón de arriba.`}
         />
       ) : (
         <>
@@ -103,18 +82,6 @@ export default function Objetivo() {
               <div className="font-display text-[18px] font-semibold text-app-text truncate">{objetivo.nombre}</div>
               <div className="text-[11.5px] text-app-text-dim">Meta al {dayjs(objetivo.fecha_limite).format('MMM YYYY')} · cartera {carteraSeleccionada}</div>
             </div>
-            <IconButton
-              onClick={() => {
-                setEditando(true)
-                setModalOpen(true)
-              }}
-              aria-label="Editar objetivo"
-            >
-              <Icon name="edit" className="w-4 h-4" />
-            </IconButton>
-            <IconButton onClick={handleEliminar} aria-label="Eliminar objetivo" tone="danger">
-              <Icon name="trash" className="w-4 h-4" />
-            </IconButton>
           </div>
 
           <Card>
@@ -160,22 +127,58 @@ export default function Objetivo() {
             </div>
           </div>
 
-          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">Aportes históricos</h3>
+          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5 flex items-center gap-1.5">
+            <Icon name="trend" className="w-3.5 h-3.5 text-app-gold" />
+            Simulador con interés
+          </h3>
+          <Card>
+            <label className="block text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2">
+              Tasa anual esperada (%)
+            </label>
+            <input
+              type="number"
+              min={0}
+              step={0.5}
+              placeholder="0"
+              value={tasaInput}
+              onChange={e => handleTasaChange(e.target.value)}
+              className="w-full h-11 rounded-xl bg-app-surface-2 border border-app-border px-3.5 text-[13.5px] text-app-text outline-none focus:border-app-gold/60 tabular-nums"
+            />
+
+            {proyeccion && tasaAnualPct > 0 && (
+              <div className="grid grid-cols-2 gap-2 mt-3.5">
+                <div className="bg-app-surface-2 rounded-[13px] p-2.5">
+                  <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">Necesario/mes con interés</div>
+                  <div className="font-mono text-[15px] font-bold text-app-text tabular-nums">
+                    {proyeccion.aporteMensualNecesarioConInteres != null ? formatUSD(proyeccion.aporteMensualNecesarioConInteres) : '—'}
+                  </div>
+                  {proyeccion.ahorroAporteMensualUsd != null && proyeccion.ahorroAporteMensualUsd > 0.5 && (
+                    <div className="text-[10.5px] text-app-teal font-semibold mt-1">
+                      {formatUSD(proyeccion.ahorroAporteMensualUsd)} menos/mes
+                    </div>
+                  )}
+                </div>
+                <div className="bg-app-surface-2 rounded-[13px] p-2.5">
+                  <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">Meses al ritmo actual</div>
+                  <div className="font-mono text-[15px] font-bold text-app-text tabular-nums">
+                    {proyeccion.mesesNecesariosConInteres != null ? `${proyeccion.mesesNecesariosConInteres.toFixed(1)} m` : '—'}
+                  </div>
+                  {proyeccion.mesesAhorrados != null && proyeccion.mesesAhorrados > 0.05 && (
+                    <div className="text-[10.5px] text-app-teal font-semibold mt-1">
+                      {proyeccion.mesesAhorrados.toFixed(1)} meses menos
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </Card>
+
+          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5 mt-3.5">Aportes históricos</h3>
           <Card>
             <AportesChart aportesHistoricos={aportesHistoricos} montoObjetivo={objetivo.monto_usd} />
           </Card>
         </>
       )}
-
-      <ObjetivoModal
-        open={modalOpen}
-        objetivo={editando ? objetivo : null}
-        onGuardar={editando ? handleEditar : handleCrear}
-        onCancelar={() => {
-          setModalOpen(false)
-          setEditando(false)
-        }}
-      />
     </div>
   )
 }

@@ -15,6 +15,7 @@ export interface SyncResult {
   instrumentos: number
   precios: number
   indices_mercado: number
+  objetivos: number
   errores: SyncErrorItem[]
 }
 
@@ -311,13 +312,6 @@ export interface ObjetivoInversion {
   deficit_usd: number
 }
 
-export interface ObjetivoInversionPayload {
-  nombre: string
-  icono: string
-  monto_usd: number
-  fecha_limite: string
-}
-
 export const getObjetivoInversion = async (cartera: string): Promise<ObjetivoInversion | null> => {
   try {
     const response = await api.get<ObjetivoInversion>(`/inversiones/carteras/${encodeURIComponent(cartera)}/objetivo`)
@@ -332,12 +326,3 @@ export const getObjetivoInversion = async (cartera: string): Promise<ObjetivoInv
 
 export const getAportesHistoricos = (cartera: string) =>
   api.get<AportesHistoricosOut>(`/inversiones/carteras/${encodeURIComponent(cartera)}/aportes-historicos`).then(r => r.data)
-
-export const crearObjetivoInversion = (cartera: string, payload: ObjetivoInversionPayload) =>
-  api.post<ObjetivoInversion>(`/inversiones/carteras/${encodeURIComponent(cartera)}/objetivo`, payload).then(r => r.data)
-
-export const editarObjetivoInversion = (objetivoId: number, payload: ObjetivoInversionPayload) =>
-  api.put<ObjetivoInversion>(`/inversiones/objetivos-inversion/${objetivoId}`, payload).then(r => r.data)
-
-export const eliminarObjetivoInversion = (objetivoId: number) =>
-  api.delete(`/inversiones/objetivos-inversion/${objetivoId}`).then(r => r.data)

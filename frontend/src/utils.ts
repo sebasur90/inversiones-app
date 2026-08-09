@@ -38,6 +38,70 @@ export function formatPrecio(value: number): string {
   return value.toLocaleString('es-AR', { maximumFractionDigits: 6 })
 }
 
+export interface ProyeccionConInteres {
+  aporteMensualNecesarioConInteres: number | null
+  ahorroAporteMensualUsd: number | null
+  mesesNecesariosSinInteres: number | null
+  mesesNecesariosConInteres: number | null
+  mesesAhorrados: number | null
+}
+
+// Proyecta el objetivo con una tasa de interés anual esperada (crecimiento compuesto de lo
+// invertido + aportes mensuales), comparando contra el escenario lineal (0% interés) actual.
+export function calcularProyeccionConInteres(
+  valorActualUsd: number,
+  montoObjetivoUsd: number,
+  mesesRestantes: number,
+  aporteMensualPromedioUsd: number,
+  aporteMensualNecesarioBaselineUsd: number | null,
+  tasaAnualPct: number
+): ProyeccionConInteres {
+  const i = tasaAnualPct > 0 ? Math.pow(1 + tasaAnualPct / 100, 1 / 12) - 1 : 0
+
+  // 1) Aporte mensual necesario para llegar a la fecha límite, con interés (despeja C de
+  //    V0*(1+i)^n + C*((1+i)^n - 1)/i = G).
+  let aporteMensualNecesarioConInteres: number | null = null
+  if (mesesRestantes > 0) {
+    if (i === 0) {
+      aporteMensualNecesarioConInteres = Math.max(0, (montoObjetivoUsd - valorActualUsd) / mesesRestantes)
+    } else {
+      const factor = Math.pow(1 + i, mesesRestantes)
+      aporteMensualNecesarioConInteres = Math.max(0, ((montoObjetivoUsd - valorActualUsd * factor) * i) / (factor - 1))
+    }
+  }
+
+  const ahorroAporteMensualUsd =
+    aporteMensualNecesarioBaselineUsd != null && aporteMensualNecesarioConInteres != null
+      ? Math.max(0, aporteMensualNecesarioBaselineUsd - aporteMensualNecesarioConInteres)
+      : null
+
+  // 2) Meses necesarios al ritmo actual (aporte promedio fijo), despejando n de la misma ecuación.
+  const mesesNecesarios = (tasaMensual: number): number | null => {
+    if (valorActualUsd >= montoObjetivoUsd) return 0
+    if (aporteMensualPromedioUsd <= 0) return null
+    if (tasaMensual === 0) return (montoObjetivoUsd - valorActualUsd) / aporteMensualPromedioUsd
+    const x =
+      (montoObjetivoUsd + aporteMensualPromedioUsd / tasaMensual) /
+      (valorActualUsd + aporteMensualPromedioUsd / tasaMensual)
+    return x > 0 ? Math.log(x) / Math.log(1 + tasaMensual) : null
+  }
+
+  const mesesNecesariosSinInteres = mesesNecesarios(0)
+  const mesesNecesariosConInteres = mesesNecesarios(i)
+  const mesesAhorrados =
+    mesesNecesariosSinInteres != null && mesesNecesariosConInteres != null
+      ? Math.max(0, mesesNecesariosSinInteres - mesesNecesariosConInteres)
+      : null
+
+  return {
+    aporteMensualNecesarioConInteres,
+    ahorroAporteMensualUsd,
+    mesesNecesariosSinInteres,
+    mesesNecesariosConInteres,
+    mesesAhorrados,
+  }
+}
+
 export const TIPO_COLORS: Record<string, string> = {
   ingreso: '#4fd1ae',
   egreso: '#e2665a',

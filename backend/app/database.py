@@ -76,7 +76,7 @@ class IndiceMercado(Base):
 class ObjetivoInversion(Base):
     __tablename__ = "objetivos_inversion"
     id = Column(Integer, primary_key=True, index=True)
-    cartera = Column(String, unique=True, nullable=False)
+    cartera = Column(String, nullable=False, index=True)
     nombre = Column(String, nullable=False)
     icono = Column(String, nullable=False, default="🎯")
     monto_usd = Column(Numeric(18, 2), nullable=False)

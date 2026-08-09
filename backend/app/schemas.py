@@ -14,6 +14,7 @@ class SyncResult(BaseModel):
     instrumentos: int
     precios: int
     indices_mercado: int
+    objetivos: int
     errores: list[SyncErrorItem]
 
 
@@ -129,24 +130,13 @@ class RendimientoPorTickerItem(BaseModel):
 
 # --- Objetivos de Inversión ---
 
-class ObjetivoInversionBase(BaseModel):
-    nombre: str
-    icono: str = "🎯"
-    monto_usd: float
-    fecha_limite: date
-
-
-class ObjetivoInversionCreate(ObjetivoInversionBase):
-    pass
-
-
-class ObjetivoInversionUpdate(ObjetivoInversionBase):
-    pass
-
-
-class ObjetivoInversionOut(ObjetivoInversionBase):
+class ObjetivoInversionOut(BaseModel):
     id: int
     cartera: str
+    nombre: str
+    icono: str
+    monto_usd: float
+    fecha_limite: date
     valor_actual_usd: float
     aporte_mensual_promedio_usd: float
     aporte_mensual_necesario_usd: Optional[float]
