@@ -144,19 +144,32 @@ class _HoldingsTracker:
         self.movs = movimientos
         self.idx = 0
         self.tenencias: dict[str, float] = {}
+        self.costo_promedio: dict[str, tuple[float, str]] = {}  # ticker -> (precio unitario promedio, moneda)
 
     def avanzar_a(self, fecha: date) -> None:
         while self.idx < len(self.movs) and self.movs[self.idx].fecha <= fecha:
             mov = self.movs[self.idx]
             cant = float(mov.cantidad or 0)
             if mov.tipo_movimiento == "compra":
-                self.tenencias[mov.ticker] = self.tenencias.get(mov.ticker, 0.0) + cant
+                cant_actual = self.tenencias.get(mov.ticker, 0.0)
+                precio_actual, _ = self.costo_promedio.get(mov.ticker, (0.0, mov.moneda))
+                nueva_cant = cant_actual + cant
+                if nueva_cant > EPS:
+                    self.costo_promedio[mov.ticker] = (
+                        (precio_actual * cant_actual + float(mov.precio) * cant) / nueva_cant,
+                        mov.moneda,
+                    )
+                self.tenencias[mov.ticker] = nueva_cant
             elif mov.tipo_movimiento in ("venta", "amortizacion"):
                 self.tenencias[mov.ticker] = self.tenencias.get(mov.ticker, 0.0) - cant
+                # El costo promedio no se recalcula al vender: la posición remanente sigue al mismo costo.
             self.idx += 1
 
     def snapshot(self) -> dict[str, float]:
         return dict(self.tenencias)
+
+    def costo_snapshot(self) -> dict[str, tuple[float, str]]:
+        return dict(self.costo_promedio)
 
 
 def _precios_por_ticker(db: Session) -> dict[str, list[tuple[date, float, str]]]:
@@ -181,8 +194,14 @@ def _valuar_holdings(
     precios_por_ticker: dict[str, list[tuple[date, float, str]]],
     db: Session,
     mep_cache: dict,
+    costos_por_ticker: dict[str, tuple[float, str]] | None = None,
 ) -> tuple[float, bool, bool]:
-    """Devuelve (valor_usd, aproximado, tiene_precio_faltante)."""
+    """Devuelve (valor_usd, aproximado, tiene_precio_faltante).
+
+    Si no hay cotización de mercado conocida para una fecha (p.ej. antes de que exista
+    histórico de precios para el ticker), se usa el costo promedio de compra como valor
+    de referencia (marcando `aproximado=True`) en lugar de descartar la posición.
+    """
     total_usd = 0.0
     aproximado = False
     precio_faltante = False
@@ -192,11 +211,16 @@ def _valuar_holdings(
         precios_sorted = precios_por_ticker.get(ticker)
         info = _precio_conocido(precios_sorted, fecha) if precios_sorted else None
         if info is None:
-            precio_faltante = True
-            continue
-        fecha_precio, precio, moneda = info
-        if (fecha - fecha_precio).days > UMBRAL_APROXIMADO_DIAS:
+            costo = costos_por_ticker.get(ticker) if costos_por_ticker else None
+            if costo is None:
+                precio_faltante = True
+                continue
+            precio, moneda = costo
             aproximado = True
+        else:
+            fecha_precio, precio, moneda = info
+            if (fecha - fecha_precio).days > UMBRAL_APROXIMADO_DIAS:
+                aproximado = True
         usd = _to_usd(precio * cantidad, moneda, fecha, db, mep_cache)
         if usd is None:
             precio_faltante = True
@@ -211,8 +235,9 @@ def _valuar_holdings_ars(
     precios_por_ticker: dict[str, list[tuple[date, float, str]]],
     db: Session,
     mep_cache: dict,
+    costos_por_ticker: dict[str, tuple[float, str]] | None = None,
 ) -> tuple[float, bool, bool]:
-    """Devuelve (valor_ars, aproximado, tiene_precio_faltante)."""
+    """Devuelve (valor_ars, aproximado, tiene_precio_faltante). Ver `_valuar_holdings` para el fallback de costo."""
     total_ars = 0.0
     aproximado = False
     precio_faltante = False
@@ -222,11 +247,16 @@ def _valuar_holdings_ars(
         precios_sorted = precios_por_ticker.get(ticker)
         info = _precio_conocido(precios_sorted, fecha) if precios_sorted else None
         if info is None:
-            precio_faltante = True
-            continue
-        fecha_precio, precio, moneda = info
-        if (fecha - fecha_precio).days > UMBRAL_APROXIMADO_DIAS:
+            costo = costos_por_ticker.get(ticker) if costos_por_ticker else None
+            if costo is None:
+                precio_faltante = True
+                continue
+            precio, moneda = costo
             aproximado = True
+        else:
+            fecha_precio, precio, moneda = info
+            if (fecha - fecha_precio).days > UMBRAL_APROXIMADO_DIAS:
+                aproximado = True
         ars = _convertir(precio * cantidad, moneda, "ARS", fecha, db, mep_cache)
         if ars is None:
             precio_faltante = True
@@ -243,8 +273,12 @@ def _valuar_holdings_ars_real(
     mep_cache: dict,
     cer_cache: dict,
     cer_hoy: float | None,
+    costos_por_ticker: dict[str, tuple[float, str]] | None = None,
 ) -> tuple[float | None, bool, bool]:
-    """Devuelve (valor_ars_real, aproximado, tiene_precio_faltante). None si falta CER."""
+    """Devuelve (valor_ars_real, aproximado, tiene_precio_faltante). None si falta CER.
+
+    Ver `_valuar_holdings` para el fallback de costo cuando no hay cotización de mercado.
+    """
     if cer_hoy is None:
         return None, False, False
     total_ars_real = 0.0
@@ -256,11 +290,16 @@ def _valuar_holdings_ars_real(
         precios_sorted = precios_por_ticker.get(ticker)
         info = _precio_conocido(precios_sorted, fecha) if precios_sorted else None
         if info is None:
-            precio_faltante = True
-            continue
-        fecha_precio, precio, moneda = info
-        if (fecha - fecha_precio).days > UMBRAL_APROXIMADO_DIAS:
+            costo = costos_por_ticker.get(ticker) if costos_por_ticker else None
+            if costo is None:
+                precio_faltante = True
+                continue
+            precio, moneda = costo
             aproximado = True
+        else:
+            fecha_precio, precio, moneda = info
+            if (fecha - fecha_precio).days > UMBRAL_APROXIMADO_DIAS:
+                aproximado = True
         ars = _convertir(precio * cantidad, moneda, "ARS", fecha, db, mep_cache)
         if ars is None:
             precio_faltante = True
@@ -304,7 +343,7 @@ def get_resumen(cartera: str | None, db: Session) -> dict:
     tracker = _HoldingsTracker(movs)
     tracker.avanzar_a(hoy)
     valor_actual_usd, aproximado, _precio_faltante = _valuar_holdings(
-        tracker.snapshot(), hoy, precios_por_ticker, db, mep_cache
+        tracker.snapshot(), hoy, precios_por_ticker, db, mep_cache, tracker.costo_snapshot()
     )
 
     total_invertido_usd = 0.0
@@ -377,7 +416,7 @@ def get_resumen(cartera: str | None, db: Session) -> dict:
     # Recalcular valor actual en ARS
     tracker = _HoldingsTracker(movs)
     tracker.avanzar_a(hoy)
-    valor_actual_ars, _, _ = _valuar_holdings_ars(tracker.snapshot(), hoy, precios_por_ticker, db, mep_cache)
+    valor_actual_ars, _, _ = _valuar_holdings_ars(tracker.snapshot(), hoy, precios_por_ticker, db, mep_cache, tracker.costo_snapshot())
 
     rendimiento_simple_ars = (
         (valor_actual_ars + ingresos_recibidos_ars - total_invertido_ars) / total_invertido_ars
@@ -417,7 +456,7 @@ def get_resumen(cartera: str | None, db: Session) -> dict:
         tracker = _HoldingsTracker(movs)
         tracker.avanzar_a(hoy)
         valor_actual_ars_real, _, _ = _valuar_holdings_ars_real(
-            tracker.snapshot(), hoy, precios_por_ticker, db, mep_cache, cer_cache, cer_hoy
+            tracker.snapshot(), hoy, precios_por_ticker, db, mep_cache, cer_cache, cer_hoy, tracker.costo_snapshot()
         )
 
         if valor_actual_ars_real is not None:
@@ -545,7 +584,7 @@ def _calcular_twr(
     aproximado = False
     for b in boundaries:
         tracker.avanzar_a(b)
-        valor, aprox, _ = _valuar_holdings(tracker.snapshot(), b, precios_por_ticker, db, mep_cache)
+        valor, aprox, _ = _valuar_holdings(tracker.snapshot(), b, precios_por_ticker, db, mep_cache, tracker.costo_snapshot())
         valores[b] = valor
         aproximado = aproximado or aprox
 
@@ -599,7 +638,7 @@ def _calcular_twr_ars(
     aproximado = False
     for b in boundaries:
         tracker.avanzar_a(b)
-        valor, aprox, _ = _valuar_holdings_ars(tracker.snapshot(), b, precios_por_ticker, db, mep_cache)
+        valor, aprox, _ = _valuar_holdings_ars(tracker.snapshot(), b, precios_por_ticker, db, mep_cache, tracker.costo_snapshot())
         valores[b] = valor
         aproximado = aproximado or aprox
 
@@ -655,7 +694,7 @@ def _calcular_twr_ars_real(
     aproximado = False
     for b in boundaries:
         tracker.avanzar_a(b)
-        valor, aprox, _ = _valuar_holdings_ars_real(tracker.snapshot(), b, precios_por_ticker, db, mep_cache, cer_cache, cer_hoy)
+        valor, aprox, _ = _valuar_holdings_ars_real(tracker.snapshot(), b, precios_por_ticker, db, mep_cache, cer_cache, cer_hoy, tracker.costo_snapshot())
         if valor is None:
             return None, False
         valores[b] = valor
@@ -1335,17 +1374,52 @@ def get_evolucion(cartera: str | None, db: Session, desde: date | None = None, m
 
     tracker = _HoldingsTracker(movs)
     puntos = []
+    idx_capital = 0
+    capital_usd = 0.0
+    capital_ars = 0.0
+    capital_ars_real = 0.0
+    capital_ars_real_valido = True
     for f in fechas:
         tracker.avanzar_a(f)
         snapshot = tracker.snapshot()
-        valor_usd, _, _ = _valuar_holdings(snapshot, f, precios_por_ticker, db, mep_cache)
-        valor_ars, _, _ = _valuar_holdings_ars(snapshot, f, precios_por_ticker, db, mep_cache)
-        valor_ars_real, _, _ = _valuar_holdings_ars_real(snapshot, f, precios_por_ticker, db, mep_cache, cer_cache, cer_hoy)
+        costos = tracker.costo_snapshot()
+        valor_usd, _, _ = _valuar_holdings(snapshot, f, precios_por_ticker, db, mep_cache, costos)
+        valor_ars, _, _ = _valuar_holdings_ars(snapshot, f, precios_por_ticker, db, mep_cache, costos)
+        valor_ars_real, _, _ = _valuar_holdings_ars_real(snapshot, f, precios_por_ticker, db, mep_cache, cer_cache, cer_hoy, costos)
+
+        while idx_capital < len(movs) and movs[idx_capital].fecha <= f:
+            mov = movs[idx_capital]
+            idx_capital += 1
+            if mov.tipo_movimiento == "compra":
+                signo = 1
+            elif mov.tipo_movimiento in ("venta", "amortizacion"):
+                signo = -1
+            elif mov.tipo_movimiento in TIPOS_INGRESO:
+                signo = 1
+            else:
+                continue
+
+            monto_usd = _monto_usd(mov, db, mep_cache)
+            if monto_usd is not None:
+                capital_usd += signo * monto_usd
+            monto_ars = _monto_ars(mov, db, mep_cache)
+            if monto_ars is not None:
+                capital_ars += signo * monto_ars
+            if capital_ars_real_valido:
+                monto_ars_real = _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy)
+                if monto_ars_real is not None:
+                    capital_ars_real += signo * monto_ars_real
+                else:
+                    capital_ars_real_valido = False
+
         puntos.append({
             "fecha": f,
             "valor_usd": round(valor_usd, 2),
             "valor_ars": round(valor_ars, 2),
             "valor_ars_real": round(valor_ars_real, 2) if valor_ars_real is not None else None,
+            "capital_aportado_usd": round(capital_usd, 2),
+            "capital_aportado_ars": round(capital_ars, 2),
+            "capital_aportado_ars_real": round(capital_ars_real, 2) if capital_ars_real_valido else None,
         })
 
     return {"puntos": puntos}

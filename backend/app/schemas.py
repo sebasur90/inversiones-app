@@ -105,6 +105,9 @@ class EvolucionPunto(BaseModel):
     valor_usd: float
     valor_ars: float
     valor_ars_real: Optional[float] = None
+    capital_aportado_usd: float = 0.0
+    capital_aportado_ars: float = 0.0
+    capital_aportado_ars_real: Optional[float] = None
 
 
 class EvolucionOut(BaseModel):

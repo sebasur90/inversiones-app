@@ -160,6 +160,9 @@ export interface EvolucionPunto {
   valor_usd: number
   valor_ars: number
   valor_ars_real: number | null
+  capital_aportado_usd: number
+  capital_aportado_ars: number
+  capital_aportado_ars_real: number | null
 }
 
 export interface EvolucionOut {
