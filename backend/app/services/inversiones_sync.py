@@ -4,8 +4,8 @@ from datetime import date, datetime
 from dateutil import parser as dateutil_parser
 from sqlalchemy.orm import Session
 
-from ..database import InstrumentoInversion, MovimientoInversion, PrecioInstrumento, IndiceMercado, ObjetivoInversion
-from .sheets_client import fetch_sheet_data, fetch_objetivos_tab
+from ..database import InstrumentoInversion, MovimientoInversion, PrecioInstrumento, IndiceMercado, ObjetivoInversion, RebalanceoObjetivo
+from .sheets_client import fetch_sheet_data, fetch_objetivos_tab, fetch_rebalanceo_tab
 
 # Estado en memoria del proceso: se resetea al reiniciar el backend.
 _ultimo_sync: datetime | None = None
@@ -24,6 +24,8 @@ TIPOS_MOVIMIENTO = {
 }
 
 MONEDAS_VALIDAS = ("ARS", "USD")
+
+EJES_REBALANCEO = {"cartera": "Cartera", "tipo": "Tipo", "sector": "Sector"}
 
 
 def _strip_accents(s: str) -> str:
@@ -95,6 +97,7 @@ def sync_from_sheet(db: Session) -> dict:
     movimientos_validos, cer_mep_movimientos = _validar_movimientos(data.get("Movimientos", []), tickers_conocidos, errores)
     precios_validos, cer_mep_precios = _validar_precios(data.get("Precios", []), errores)
     objetivos_validos = _validar_objetivos(fetch_objetivos_tab(), errores)
+    rebalanceo_validos = _validar_rebalanceo(fetch_rebalanceo_tab(), errores)
 
     indices_mercado, advertencias = _consolidar_indices_mercado(cer_mep_movimientos, cer_mep_precios, errores)
     errores.extend(advertencias)
@@ -104,6 +107,7 @@ def sync_from_sheet(db: Session) -> dict:
     db.query(InstrumentoInversion).delete()
     db.query(IndiceMercado).delete()
     db.query(ObjetivoInversion).delete()
+    db.query(RebalanceoObjetivo).delete()
     db.flush()
 
     for inst in instrumentos_validos:
@@ -131,6 +135,9 @@ def sync_from_sheet(db: Session) -> dict:
     for objetivo in objetivos_validos:
         db.add(ObjetivoInversion(**objetivo))
 
+    for rebalanceo in rebalanceo_validos:
+        db.add(RebalanceoObjetivo(**rebalanceo))
+
     db.commit()
 
     global _ultimo_sync
@@ -141,6 +148,7 @@ def sync_from_sheet(db: Session) -> dict:
         "instrumentos": len(instrumentos_validos),
         "precios": len(precios_validos),
         "objetivos": len(objetivos_validos),
+        "rebalanceo": len(rebalanceo_validos),
         "indices_mercado": len(indices_mercado),
         "errores": errores,
     }
@@ -460,5 +468,67 @@ def _validar_objetivos(rows: list[tuple[int, dict]], errores: list[dict]) -> lis
             "fecha_limite": fecha_limite,
         })
         carteras_vistas.add(cartera)
+
+    return validos
+
+
+def _validar_rebalanceo(rows: list[tuple[int, dict]], errores: list[dict]) -> list[dict]:
+    validos = []
+    seen: set[tuple[str | None, str, str]] = set()
+    sumas: dict[tuple[str | None, str], float] = {}
+
+    for row_num, row in rows:
+        cartera_raw = (row.get("Cartera") or "").strip()
+        cartera = None if not cartera_raw or _strip_accents(cartera_raw).lower() == "consolidado" else cartera_raw
+
+        eje_raw = (row.get("Eje") or "").strip()
+        eje = EJES_REBALANCEO.get(_strip_accents(eje_raw).lower())
+        if eje is None:
+            errores.append({"fila": row_num, "motivo": f"Eje desconocido en Rebalanceo: {eje_raw}"})
+            continue
+
+        if eje == "Cartera" and cartera is not None:
+            errores.append({
+                "fila": row_num,
+                "motivo": "El eje 'Cartera' solo aplica a nivel Consolidado; dejá la columna Cartera vacía o escribí 'Consolidado'",
+            })
+            continue
+
+        categoria = (row.get("Categoría") or row.get("Categoria") or "").strip()
+        if not categoria:
+            errores.append({"fila": row_num, "motivo": "Categoría vacía en Rebalanceo"})
+            continue
+
+        porcentaje_raw = (row.get("Porcentaje Objetivo") or "").strip()
+        porcentaje = _parse_numero(porcentaje_raw)
+        if porcentaje is None or porcentaje < 0 or porcentaje > 100:
+            errores.append({"fila": row_num, "motivo": f"Porcentaje Objetivo inválido: {porcentaje_raw}"})
+            continue
+
+        key = (cartera, eje, categoria)
+        if key in seen:
+            errores.append({
+                "fila": row_num,
+                "motivo": f"Objetivo de rebalanceo duplicado para {cartera or 'Consolidado'} / {eje} / {categoria}",
+            })
+            continue
+        seen.add(key)
+
+        grupo = (cartera, eje)
+        sumas[grupo] = sumas.get(grupo, 0.0) + porcentaje
+
+        validos.append({
+            "cartera": cartera,
+            "eje": eje,
+            "categoria": categoria,
+            "porcentaje_objetivo": porcentaje,
+        })
+
+    for (cartera, eje), suma in sumas.items():
+        if suma > 100.5:
+            errores.append({
+                "fila": 0,
+                "motivo": f"Advertencia: los objetivos de Rebalanceo para {cartera or 'Consolidado'} / {eje} suman {suma:.1f}% (>100%)",
+            })
 
     return validos

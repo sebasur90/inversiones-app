@@ -9,6 +9,7 @@ const ITEMS: { to: string; label: string; icon: IconName }[] = [
   { to: '/movimientos', label: 'Movim.', icon: 'list' },
   { to: '/precios', label: 'Precios', icon: 'trend' },
   { to: '/objetivo', label: 'Objetivo', icon: 'target' },
+  { to: '/rebalanceo', label: 'Rebal.', icon: 'scale' },
 ]
 
 export default function BottomNav() {

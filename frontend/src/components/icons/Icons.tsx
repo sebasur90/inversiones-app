@@ -19,6 +19,7 @@ export type IconName =
   | 'download'
   | 'trend'
   | 'info'
+  | 'scale'
 
 export function IconSprite() {
   return (
@@ -105,6 +106,13 @@ export function IconSprite() {
           <circle cx="12" cy="12" r="9" />
           <line x1="12" y1="11" x2="12" y2="16" />
           <line x1="12" y1="8" x2="12" y2="8.01" />
+        </symbol>
+        <symbol id="i-scale" viewBox="0 0 24 24">
+          <line x1="12" y1="3" x2="12" y2="21" />
+          <line x1="5" y1="7" x2="19" y2="7" />
+          <path d="M5 7l-3 6a3 3 0 006 0z" />
+          <path d="M19 7l-3 6a3 3 0 006 0z" />
+          <line x1="8" y1="21" x2="16" y2="21" />
         </symbol>
       </defs>
     </svg>

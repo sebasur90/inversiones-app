@@ -40,10 +40,12 @@ USE_LOCAL_SHEET=false
 ```
 inversiones-app/
 ├── sheet_local/
-│   └── sheet_inversiones.xlsx    # Datos locales (3 hojas)
+│   └── sheet_inversiones.xlsx    # Datos locales (3 hojas + opcionales)
 │       ├── Movimientos           # Transacciones
 │       ├── Instrumentos          # Metadata de tickers
-│       └── Precios               # Series históricas
+│       ├── Precios               # Series históricas
+│       ├── Objetivos             # Opcional: metas financieras por cartera
+│       └── Rebalanceo            # Opcional: % objetivo de asignación
 ├── credentials/
 │   └── google-service-account.json  # Para modo Google Sheets
 └── backend/
@@ -79,4 +81,24 @@ exactamente en el Google Sheet y en `sheet_local/sheet_inversiones.xlsx`:
 
 `Modo` y `Valor` deben completarse juntos (o dejarse ambos vacíos). Se ven en el detalle de
 cada ticker en la app, junto con el % que falta para alcanzarlos.
+
+## Rebalanceo de Cartera
+
+La pestaña opcional `Rebalanceo` define los porcentajes objetivo de asignación de la
+cartera, en 3 ejes independientes (cada uno suma 100% por su cuenta). Debe coincidir
+exactamente en el Google Sheet y en `sheet_local/sheet_inversiones.xlsx`. No es lo mismo
+que `Objetivo Modo/Valor` de `Instrumentos` (eso es el precio objetivo de venta de un
+ticker puntual, no tiene relación con esta pestaña).
+
+| Columna | Valores | Significado |
+|---|---|---|
+| `Cartera` | nombre de cartera, `Consolidado`, o vacío | A qué alcance aplica el objetivo. Vacío/`Consolidado` = patrimonio total. |
+| `Eje` | `Cartera`, `Tipo` o `Sector` | Qué se está repartiendo. `Cartera` solo es válido con `Cartera` vacío/`Consolidado`. |
+| `Categoría` | texto libre | Nombre de la cartera (eje `Cartera`), del Tipo Instrumento o del Sector, según corresponda. |
+| `Porcentaje Objetivo` | número 0-100 | % objetivo dentro de ese eje y ese alcance. |
+
+Si no se define una fila para una categoría con valor invertido real, esa categoría se
+muestra en la app como "Sin objetivo" (con su valor/% actual, sin comparación). Si la
+pestaña no existe todavía, la sincronización no falla — simplemente no hay objetivos
+cargados. Se ve en la pestaña "Rebal." del nav inferior.
 

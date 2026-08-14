@@ -4,7 +4,7 @@ import calendar
 from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
-from ..database import MovimientoInversion, InstrumentoInversion, PrecioInstrumento, IndiceMercado
+from ..database import MovimientoInversion, InstrumentoInversion, PrecioInstrumento, IndiceMercado, RebalanceoObjetivo
 from .cotizaciones import get_rates_for_date
 
 UMBRAL_APROXIMADO_DIAS = 45
@@ -716,6 +716,34 @@ def _agrupar(entries: list[tuple[str, float, float]]) -> list[dict]:
     ]
 
 
+def _agrupar_sobre_total(entries: list[tuple[str, float, float]], total_usd: float, total_ars: float) -> list[dict]:
+    """Igual que _agrupar, pero el % se calcula sobre un total dado (no sobre la suma de las entradas).
+
+    Se usa para ejes donde algunas entradas no tienen etiqueta (ej. Sector es opcional) y el
+    porcentaje debe reflejar el peso sobre el total real de la cartera, no sobre el subtotal
+    de lo que sí tiene etiqueta.
+    """
+    grupos_usd: dict[str, float] = {}
+    grupos_ars: dict[str, float] = {}
+    for etiqueta, valor_usd, valor_ars in entries:
+        if etiqueta is None:
+            continue
+        grupos_usd[etiqueta] = grupos_usd.get(etiqueta, 0.0) + valor_usd
+        grupos_ars[etiqueta] = grupos_ars.get(etiqueta, 0.0) + valor_ars
+    if total_usd <= EPS:
+        return []
+    items = sorted(grupos_usd.items(), key=lambda kv: -kv[1])
+    return [
+        {
+            "etiqueta": k,
+            "valor_usd": round(v, 2),
+            "valor_ars": round(grupos_ars[k], 2),
+            "porcentaje": round(v / total_usd * 100, 2),
+        }
+        for k, v in items
+    ]
+
+
 def _bucket_vencimiento(fecha_venc: date, hoy: date) -> str:
     anios = (fecha_venc - hoy).days / 365
     if anios < 1:
@@ -725,7 +753,14 @@ def _bucket_vencimiento(fecha_venc: date, hoy: date) -> str:
     return "Largo (>3 años)"
 
 
-def get_exposicion(cartera: str | None, db: Session) -> dict:
+def _clasificados_valorizados(cartera: str | None, db: Session) -> tuple[list[tuple], list[tuple], dict]:
+    """Holdings valorizados hoy, en el alcance pedido (una cartera o todas si cartera=None).
+
+    Devuelve (valores, clasificados, instrumentos):
+    - valores: [(cartera, ticker, valor_usd, valor_ars)] para todo holding con precio conocido.
+    - clasificados: igual, restringido a tickers con ficha en Instrumentos.
+    - instrumentos: {ticker: InstrumentoInversion}.
+    """
     movs = _movimientos_ordenados(db, None)  # necesitamos todas las carteras para el eje "por cartera"
     precios_por_ticker = _precios_por_ticker(db)
     instrumentos = {i.ticker: i for i in db.query(InstrumentoInversion).all()}
@@ -754,6 +789,13 @@ def get_exposicion(cartera: str | None, db: Session) -> dict:
         valores.append((cart, ticker, usd, ars))
 
     clasificados = [(cart, ticker, valor_usd, valor_ars) for cart, ticker, valor_usd, valor_ars in valores if ticker in instrumentos]
+
+    return valores, clasificados, instrumentos
+
+
+def get_exposicion(cartera: str | None, db: Session) -> dict:
+    valores, clasificados, instrumentos = _clasificados_valorizados(cartera, db)
+    hoy = date.today()
 
     ejes = []
 
@@ -793,6 +835,99 @@ def get_exposicion(cartera: str | None, db: Session) -> dict:
         por_cartera = _agrupar([(cart, v_usd, v_ars) for cart, _, v_usd, v_ars in valores])
         if por_cartera:
             ejes.append({"eje": "Cartera", "items": por_cartera})
+
+    return {"ejes": ejes}
+
+
+def _construir_eje_rebalanceo(
+    nombre_eje: str,
+    actual_items: list[dict],
+    targets: dict[str, float],
+    total_usd: float,
+    total_ars: float,
+) -> dict | None:
+    """Combina el % actual (salida de _agrupar/_agrupar_sobre_total) con los objetivos cargados.
+
+    Las categorías con objetivo pero sin holding actual también aparecen (en 0%), para que se
+    vea claramente qué falta comprar. Las categorías con holding pero sin objetivo cargado van
+    aparte, en "sin_objetivo".
+    """
+    actuales_por_etiqueta = {it["etiqueta"]: it for it in actual_items}
+
+    items = []
+    for categoria, porcentaje_objetivo in targets.items():
+        actual = actuales_por_etiqueta.get(categoria)
+        valor_actual_usd = actual["valor_usd"] if actual else 0.0
+        valor_actual_ars = actual["valor_ars"] if actual else 0.0
+        porcentaje_actual = actual["porcentaje"] if actual else 0.0
+        valor_objetivo_usd = round(total_usd * porcentaje_objetivo / 100, 2)
+        valor_objetivo_ars = round(total_ars * porcentaje_objetivo / 100, 2)
+        items.append({
+            "etiqueta": categoria,
+            "porcentaje_actual": porcentaje_actual,
+            "porcentaje_objetivo": porcentaje_objetivo,
+            "valor_actual_usd": valor_actual_usd,
+            "valor_actual_ars": valor_actual_ars,
+            "valor_objetivo_usd": valor_objetivo_usd,
+            "valor_objetivo_ars": valor_objetivo_ars,
+            "delta_pp": round(porcentaje_actual - porcentaje_objetivo, 2),
+            "delta_valor_usd": round(valor_actual_usd - valor_objetivo_usd, 2),
+            "delta_valor_ars": round(valor_actual_ars - valor_objetivo_ars, 2),
+        })
+    items.sort(key=lambda it: -it["porcentaje_objetivo"])
+
+    sin_objetivo = [it for it in actual_items if it["etiqueta"] not in targets]
+
+    if not items and not sin_objetivo:
+        return None
+
+    return {
+        "eje": nombre_eje,
+        "total_usd": round(total_usd, 2),
+        "total_ars": round(total_ars, 2),
+        "items": items,
+        "sin_objetivo": sin_objetivo,
+    }
+
+
+def get_rebalanceo(cartera: str | None, db: Session) -> dict:
+    valores, clasificados, instrumentos = _clasificados_valorizados(cartera, db)
+
+    total_usd = sum(v_usd for _, _, v_usd, _ in clasificados)
+    total_ars = sum(v_ars for _, _, _, v_ars in clasificados)
+
+    objetivos = db.query(RebalanceoObjetivo).all()
+
+    def _targets(eje: str) -> dict[str, float]:
+        # Filtrado en Python (no SQL) para que None == None matchee de forma directa.
+        return {
+            o.categoria: float(o.porcentaje_objetivo)
+            for o in objetivos
+            if o.eje == eje and o.cartera == cartera
+        }
+
+    ejes = []
+
+    if cartera is None:
+        total_usd_global = sum(v_usd for _, _, v_usd, _ in valores)
+        total_ars_global = sum(v_ars for _, _, _, v_ars in valores)
+        por_cartera = _agrupar([(cart, v_usd, v_ars) for cart, _, v_usd, v_ars in valores])
+        eje_cartera = _construir_eje_rebalanceo("Cartera", por_cartera, _targets("Cartera"), total_usd_global, total_ars_global)
+        if eje_cartera:
+            ejes.append(eje_cartera)
+
+    tipo = _agrupar([(instrumentos[t].tipo_instrumento, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados])
+    eje_tipo = _construir_eje_rebalanceo("Tipo", tipo, _targets("Tipo"), total_usd, total_ars)
+    if eje_tipo:
+        ejes.append(eje_tipo)
+
+    sector = _agrupar_sobre_total(
+        [(instrumentos[t].sector, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados],
+        total_usd, total_ars,
+    )
+    eje_sector = _construir_eje_rebalanceo("Sector", sector, _targets("Sector"), total_usd, total_ars)
+    if eje_sector:
+        ejes.append(eje_sector)
 
     return {"ejes": ejes}
 

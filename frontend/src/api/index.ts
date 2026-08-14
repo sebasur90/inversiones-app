@@ -16,6 +16,7 @@ export interface SyncResult {
   precios: number
   indices_mercado: number
   objetivos: number
+  rebalanceo: number
   errores: SyncErrorItem[]
 }
 
@@ -59,6 +60,31 @@ export interface ExposicionEje {
 
 export interface ExposicionOut {
   ejes: ExposicionEje[]
+}
+
+export interface RebalanceoItem {
+  etiqueta: string
+  porcentaje_actual: number
+  porcentaje_objetivo: number
+  valor_actual_usd: number
+  valor_actual_ars: number
+  valor_objetivo_usd: number
+  valor_objetivo_ars: number
+  delta_pp: number
+  delta_valor_usd: number
+  delta_valor_ars: number
+}
+
+export interface RebalanceoEje {
+  eje: string
+  total_usd: number
+  total_ars: number
+  items: RebalanceoItem[]
+  sin_objetivo: ExposicionItem[]
+}
+
+export interface RebalanceoOut {
+  ejes: RebalanceoEje[]
 }
 
 export interface MovimientoInversion {
@@ -119,6 +145,9 @@ export const getResumenInversiones = (cartera: string | null) =>
 
 export const getExposicionInversiones = (cartera: string | null) =>
   api.get<ExposicionOut>(`${carteraPath(cartera)}/exposicion`).then(r => r.data)
+
+export const getRebalanceoInversiones = (cartera: string | null) =>
+  api.get<RebalanceoOut>(`${carteraPath(cartera)}/rebalanceo`).then(r => r.data)
 
 export const getMovimientosInversion = (params: { cartera?: string; ticker?: string }) =>
   api.get<MovimientoInversion[]>('/inversiones/movimientos', { params }).then(r => r.data)

@@ -4,11 +4,13 @@ import {
   getCarterasInversion,
   getResumenInversiones,
   getExposicionInversiones,
+  getRebalanceoInversiones,
   getMovimientosInversion,
   getRendimientoPorTicker,
   type CarteraInfo,
   type InversionesResumen,
   type ExposicionOut,
+  type RebalanceoOut,
   type MovimientoInversion,
   type RendimientoPorTickerItem,
   type SyncResult,
@@ -20,6 +22,7 @@ export function useInversiones() {
   const [monedaSeleccionada, setMonedaSeleccionada] = useState<'USD' | 'ARS'>('USD')
   const [resumen, setResumen] = useState<InversionesResumen | null>(null)
   const [exposicion, setExposicion] = useState<ExposicionOut>({ ejes: [] })
+  const [rebalanceo, setRebalanceo] = useState<RebalanceoOut>({ ejes: [] })
   const [movimientos, setMovimientos] = useState<MovimientoInversion[]>([])
   const [rendimientoPorTicker, setRendimientoPorTicker] = useState<RendimientoPorTickerItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -36,14 +39,16 @@ export function useInversiones() {
     setLoading(true)
     setError(null)
     try {
-      const [r, ex, mv, rt] = await Promise.all([
+      const [r, ex, rb, mv, rt] = await Promise.all([
         getResumenInversiones(cartera),
         getExposicionInversiones(cartera),
+        getRebalanceoInversiones(cartera),
         getMovimientosInversion(cartera ? { cartera } : {}),
         getRendimientoPorTicker(cartera),
       ])
       setResumen(r)
       setExposicion(ex)
+      setRebalanceo(rb)
       setMovimientos(mv)
       setRendimientoPorTicker(rt)
     } catch {
@@ -89,6 +94,7 @@ export function useInversiones() {
     setMonedaSeleccionada,
     resumen,
     exposicion,
+    rebalanceo,
     movimientos,
     rendimientoPorTicker,
     loading,

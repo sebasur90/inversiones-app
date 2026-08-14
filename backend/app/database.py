@@ -83,6 +83,17 @@ class ObjetivoInversion(Base):
     fecha_limite = Column(Date, nullable=False)
 
 
+class RebalanceoObjetivo(Base):
+    __tablename__ = "rebalanceo_objetivos"
+    id = Column(Integer, primary_key=True, index=True)
+    cartera = Column(String, nullable=True, index=True)  # None = Consolidado
+    eje = Column(String, nullable=False)  # "Cartera" | "Tipo" | "Sector"
+    categoria = Column(String, nullable=False)
+    porcentaje_objetivo = Column(Numeric(6, 2), nullable=False)
+
+    __table_args__ = (UniqueConstraint("cartera", "eje", "categoria", name="uq_rebalanceo_objetivo"),)
+
+
 def get_db():
     db = SessionLocal()
     try:

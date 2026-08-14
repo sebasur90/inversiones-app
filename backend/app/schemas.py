@@ -15,6 +15,7 @@ class SyncResult(BaseModel):
     precios: int
     indices_mercado: int
     objetivos: int
+    rebalanceo: int
     errores: list[SyncErrorItem]
 
 
@@ -58,6 +59,31 @@ class ExposicionEje(BaseModel):
 
 class ExposicionOut(BaseModel):
     ejes: list[ExposicionEje]
+
+
+class RebalanceoItem(BaseModel):
+    etiqueta: str
+    porcentaje_actual: float
+    porcentaje_objetivo: float
+    valor_actual_usd: float
+    valor_actual_ars: float
+    valor_objetivo_usd: float
+    valor_objetivo_ars: float
+    delta_pp: float
+    delta_valor_usd: float
+    delta_valor_ars: float
+
+
+class RebalanceoEje(BaseModel):
+    eje: str
+    total_usd: float
+    total_ars: float
+    items: list[RebalanceoItem]
+    sin_objetivo: list[ExposicionItem]
+
+
+class RebalanceoOut(BaseModel):
+    ejes: list[RebalanceoEje]
 
 
 class MovimientoInversionOut(BaseModel):

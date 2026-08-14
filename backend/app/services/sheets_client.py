@@ -12,6 +12,8 @@ SHEET_TABS = ("Movimientos", "Instrumentos", "Precios")
 
 OBJETIVOS_TAB = "Objetivos"
 
+REBALANCEO_TAB = "Rebalanceo"
+
 
 class SheetsClientError(Exception):
     pass
@@ -152,6 +154,39 @@ def fetch_objetivos_tab() -> list[tuple[int, dict]]:
             service.spreadsheets()
             .values()
             .get(spreadsheetId=SPREADSHEET_ID, range=OBJETIVOS_TAB)
+            .execute()
+        )
+        return _rows_to_dicts(resp.get("values", []))
+    except Exception:
+        return []
+
+
+def fetch_rebalanceo_tab() -> list[tuple[int, dict]]:
+    """Lee la pestaña Rebalanceo de forma aislada del resto del Sheet.
+
+    Igual que fetch_objetivos_tab(): tolerante a que la pestaña todavía no exista,
+    devuelve [] en vez de romper el sync completo.
+    """
+    if _is_local_env():
+        excel_path = _get_excel_path()
+        if not os.path.isfile(excel_path):
+            return []
+        try:
+            excel_file = pd.ExcelFile(excel_path)
+            if REBALANCEO_TAB not in excel_file.sheet_names:
+                return []
+            df = pd.read_excel(excel_path, sheet_name=REBALANCEO_TAB)
+            values = [df.columns.tolist()] + df.values.tolist()
+            return _rows_to_dicts([[str(v) for v in row] for row in values])
+        except Exception:
+            return []
+
+    try:
+        service = _get_service()
+        resp = (
+            service.spreadsheets()
+            .values()
+            .get(spreadsheetId=SPREADSHEET_ID, range=REBALANCEO_TAB)
             .execute()
         )
         return _rows_to_dicts(resp.get("values", []))

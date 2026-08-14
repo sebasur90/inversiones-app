@@ -11,6 +11,7 @@ export type GlosarioKey =
   | 'mep'
   | 'objetivo'
   | 'stopLoss'
+  | 'rebalanceo'
 
 export const GLOSARIO: Record<GlosarioKey, { titulo: string; texto: string }> = {
   xirr: {
@@ -63,5 +64,9 @@ export const GLOSARIO: Record<GlosarioKey, { titulo: string; texto: string }> = 
   stopLoss: {
     titulo: 'Stop Loss',
     texto: 'El precio al que cortarías la pérdida y saldrías de la posición. Se define en el Sheet como % sobre tu precio promedio de compra o como precio fijo. Cuando el precio actual cae a ese nivel o por debajo, se marca como disparado.',
+  },
+  rebalanceo: {
+    titulo: 'Rebalanceo',
+    texto: 'Compara tu asignación actual contra los porcentajes objetivo que cargaste en la pestaña "Rebalanceo" del Sheet, en 3 ejes independientes (cada uno suma su propio 100%): Cartera (peso de cada cartera sobre el total), Tipo (CEDEAR, Bono, etc. dentro de una cartera) y Sector (dentro de una cartera). Lo que tiene valor invertido pero no tiene objetivo cargado aparece aparte, en "Sin objetivo".',
   },
 }

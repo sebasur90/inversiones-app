@@ -9,6 +9,7 @@ from ..schemas import (
     CarteraInfo,
     InversionesResumen,
     ExposicionOut,
+    RebalanceoOut,
     MovimientoInversionOut,
     RendimientoPorTickerItem,
     EvolucionOut,
@@ -26,6 +27,7 @@ from ..services.inversiones_analytics import (
     get_carteras,
     get_resumen,
     get_exposicion,
+    get_rebalanceo,
     get_evolucion,
     get_precios_ticker,
     get_tickers_con_precios,
@@ -81,6 +83,17 @@ def exposicion_cartera(nombre: str, db: Session = Depends(get_db)):
 @router.get("/consolidado/exposicion", response_model=ExposicionOut)
 def exposicion_consolidado(db: Session = Depends(get_db)):
     return get_exposicion(None, db)
+
+
+@router.get("/carteras/{nombre}/rebalanceo", response_model=RebalanceoOut)
+def rebalanceo_cartera(nombre: str, db: Session = Depends(get_db)):
+    _validar_cartera(nombre, db)
+    return get_rebalanceo(nombre, db)
+
+
+@router.get("/consolidado/rebalanceo", response_model=RebalanceoOut)
+def rebalanceo_consolidado(db: Session = Depends(get_db)):
+    return get_rebalanceo(None, db)
 
 
 @router.get("/movimientos", response_model=list[MovimientoInversionOut])
