@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useInversionesContext } from '../context/InversionesContext'
-import { getPnlRealizadoNoRealizado, type PnlRealizadoNoRealizadoOut } from '../api'
+import { getPnlRealizadoNoRealizado, getRendimientoMensual, type PnlRealizadoNoRealizadoOut, type RendimientoMensualOut } from '../api'
 import { formatARS, formatUSD, formatPctRatio } from '../utils'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
 import ComparacionChart from '../components/charts/ComparacionChart'
+import RendimientoHeatmap from '../components/charts/RendimientoHeatmap'
 import { Icon } from '../components/icons/Icons'
 import InfoTerm from '../components/ui/InfoTerm'
 import type { GlosarioKey } from '../data/glosario'
@@ -38,17 +39,24 @@ export default function Rendimiento() {
   const navigate = useNavigate()
   const { carteraSeleccionada, monedaSeleccionada, resumen } = useInversionesContext()
   const [pnl, setPnl] = useState<PnlRealizadoNoRealizadoOut | null>(null)
+  const [rendimientoMensual, setRendimientoMensual] = useState<RendimientoMensualOut | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelado = false
     setLoading(true)
-    getPnlRealizadoNoRealizado(carteraSeleccionada)
-      .then(data => {
-        if (!cancelado) setPnl(data)
+    Promise.all([getPnlRealizadoNoRealizado(carteraSeleccionada), getRendimientoMensual(carteraSeleccionada)])
+      .then(([pnlData, rendimientoData]) => {
+        if (!cancelado) {
+          setPnl(pnlData)
+          setRendimientoMensual(rendimientoData)
+        }
       })
       .catch(() => {
-        if (!cancelado) setPnl(null)
+        if (!cancelado) {
+          setPnl(null)
+          setRendimientoMensual(null)
+        }
       })
       .finally(() => {
         if (!cancelado) setLoading(false)
@@ -132,6 +140,15 @@ export default function Rendimiento() {
               </tbody>
             </table>
           </Card>
+
+          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">
+            <InfoTerm term="twr" label="Mapa de calor: rendimiento mensual" />
+          </h3>
+          {!rendimientoMensual || rendimientoMensual.meses.length === 0 ? (
+            <EmptyState title="Sin historial mensual" description="No hay suficientes meses de actividad para armar el mapa de calor." />
+          ) : (
+            <RendimientoHeatmap meses={rendimientoMensual.meses} anios={rendimientoMensual.anios} esARS={esARS} />
+          )}
 
           <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">
             <InfoTerm term="benchmark" label="Cartera vs. benchmarks (ARS)" />

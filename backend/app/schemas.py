@@ -114,6 +114,26 @@ class EvolucionOut(BaseModel):
     puntos: list[EvolucionPunto]
 
 
+class RendimientoMensualItem(BaseModel):
+    anio: int
+    mes: int
+    twr_ars: Optional[float] = None
+    twr_usd: Optional[float] = None
+    en_curso: bool = False
+
+
+class RendimientoAnualItem(BaseModel):
+    anio: int
+    twr_ars: Optional[float] = None
+    twr_usd: Optional[float] = None
+    en_curso: bool = False
+
+
+class RendimientoMensualOut(BaseModel):
+    meses: list[RendimientoMensualItem]
+    anios: list[RendimientoAnualItem]
+
+
 class PrecioPunto(BaseModel):
     fecha: date
     precio: float

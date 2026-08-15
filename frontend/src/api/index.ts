@@ -172,6 +172,29 @@ export interface EvolucionOut {
 export const getEvolucionInversiones = (cartera: string | null, desde?: string) =>
   api.get<EvolucionOut>(`${carteraPath(cartera)}/evolucion`, { params: desde ? { desde } : undefined }).then(r => r.data)
 
+export interface RendimientoMensualItem {
+  anio: number
+  mes: number
+  twr_ars: number | null
+  twr_usd: number | null
+  en_curso: boolean
+}
+
+export interface RendimientoAnualItem {
+  anio: number
+  twr_ars: number | null
+  twr_usd: number | null
+  en_curso: boolean
+}
+
+export interface RendimientoMensualOut {
+  meses: RendimientoMensualItem[]
+  anios: RendimientoAnualItem[]
+}
+
+export const getRendimientoMensual = (cartera: string | null) =>
+  api.get<RendimientoMensualOut>(`${carteraPath(cartera)}/rendimiento-mensual`).then(r => r.data)
+
 export interface PrecioPunto {
   fecha: string
   precio: number

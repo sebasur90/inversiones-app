@@ -713,6 +713,142 @@ def _calcular_twr_ars_real(
     return twr_total - 1, aproximado
 
 
+def _calcular_twr_mensual(
+    movs: list[MovimientoInversion],
+    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
+    db: Session,
+    mep_cache: dict,
+    hoy: date,
+    monto_fn,
+    valuar_fn,
+) -> dict[tuple[int, int], float | None]:
+    """TWR encadenado y agrupado por mes calendario. Devuelve {(anio, mes): twr_mensual},
+    sin entrada para meses sin tenencia (en vez de 0.0).
+
+    Reutiliza el mismo encadenamiento que `_calcular_twr`/`_calcular_twr_ars`, pero agrega los
+    fines de mes (`_fin_de_mes_range`) como bordes adicionales entre las fechas de cashflow. Por
+    identidad telescópica esto no altera el producto total del período (v_dm/v0 * (v1-flujo)/v_dm
+    = (v1-flujo)/v0), y permite atribuir cada sub-retorno al mes calendario exacto en que ocurre,
+    ya que ningún sub-período puede cruzar un fin de mes.
+    """
+    fechas_borde = sorted({m.fecha for m in movs if m.tipo_movimiento in TIPOS_QUE_CAMBIAN_TENENCIA})
+    if not fechas_borde:
+        return {}
+
+    primera_fecha = fechas_borde[0]
+    boundaries = sorted(set(fechas_borde) | set(_fin_de_mes_range(primera_fecha, hoy)))
+
+    cf_por_fecha: dict[date, float] = {}
+    for mov in movs:
+        if mov.tipo_movimiento not in TIPOS_QUE_CAMBIAN_TENENCIA:
+            continue
+        monto = monto_fn(mov, db, mep_cache)
+        if monto is None:
+            continue
+        signo = 1 if mov.tipo_movimiento == "compra" else -1
+        cf_por_fecha[mov.fecha] = cf_por_fecha.get(mov.fecha, 0.0) + signo * monto
+
+    tracker = _HoldingsTracker(movs)
+    valores: dict[date, float] = {}
+    for b in boundaries:
+        tracker.avanzar_a(b)
+        valor, _aprox, _falt = valuar_fn(tracker.snapshot(), b, precios_por_ticker, db, mep_cache, tracker.costo_snapshot())
+        valores[b] = valor
+
+    factores_por_mes: dict[tuple[int, int], list[float]] = {}
+    tuvo_tenencia: dict[tuple[int, int], bool] = {}
+
+    for i in range(1, len(boundaries)):
+        d0, d1 = boundaries[i - 1], boundaries[i]
+        v0, v1 = valores[d0], valores[d1]
+        key = (d1.year, d1.month)
+        if v0 > EPS or v1 > EPS:
+            tuvo_tenencia[key] = True
+        else:
+            tuvo_tenencia.setdefault(key, False)
+        if v0 <= EPS:
+            continue
+        flujo = cf_por_fecha.get(d1, 0.0)
+        r = (v1 - flujo) / v0 - 1
+        factores_por_mes.setdefault(key, []).append(1 + r)
+
+    resultado: dict[tuple[int, int], float | None] = {}
+    for key, tuvo in tuvo_tenencia.items():
+        factores = factores_por_mes.get(key)
+        if not tuvo or not factores:
+            resultado[key] = None
+            continue
+        total = 1.0
+        for f in factores:
+            total *= f
+        resultado[key] = total - 1
+    return resultado
+
+
+def get_rendimiento_mensual(cartera: str | None, db: Session) -> dict:
+    """Rendimiento (TWR) por mes calendario y por año, en ARS nominal y USD."""
+    movs = _movimientos_ordenados(db, cartera)
+    if not movs:
+        return {"meses": [], "anios": []}
+
+    precios_por_ticker = _precios_por_ticker(db)
+    mep_cache: dict = {}
+    hoy = date.today()
+
+    resultado_usd = _calcular_twr_mensual(movs, precios_por_ticker, db, mep_cache, hoy, _monto_usd, _valuar_holdings)
+    resultado_ars = _calcular_twr_mensual(movs, precios_por_ticker, db, mep_cache, hoy, _monto_ars, _valuar_holdings_ars)
+    if not resultado_usd and not resultado_ars:
+        return {"meses": [], "anios": []}
+
+    es_mes_cerrado = hoy.day == calendar.monthrange(hoy.year, hoy.month)[1]
+    claves = sorted(set(resultado_usd) | set(resultado_ars))
+
+    def _compuesto(vals: list[float]) -> float | None:
+        if not vals:
+            return None
+        total = 1.0
+        for v in vals:
+            total *= (1 + v)
+        return total - 1
+
+    meses: list[dict] = []
+    por_anio_usd: dict[int, list[float]] = {}
+    por_anio_ars: dict[int, list[float]] = {}
+    anios_en_curso: set[int] = set()
+
+    for anio, mes in claves:
+        r_usd = resultado_usd.get((anio, mes))
+        r_ars = resultado_ars.get((anio, mes))
+        en_curso = (anio, mes) == (hoy.year, hoy.month) and not es_mes_cerrado
+        if en_curso:
+            anios_en_curso.add(anio)
+        if r_usd is not None:
+            por_anio_usd.setdefault(anio, []).append(r_usd)
+        if r_ars is not None:
+            por_anio_ars.setdefault(anio, []).append(r_ars)
+        meses.append({
+            "anio": anio,
+            "mes": mes,
+            "twr_ars": round(r_ars, 4) if r_ars is not None else None,
+            "twr_usd": round(r_usd, 4) if r_usd is not None else None,
+            "en_curso": en_curso,
+        })
+
+    anios_todos = sorted(set(por_anio_usd) | set(por_anio_ars) | anios_en_curso)
+    anios = []
+    for anio in anios_todos:
+        c_ars = _compuesto(por_anio_ars.get(anio, []))
+        c_usd = _compuesto(por_anio_usd.get(anio, []))
+        anios.append({
+            "anio": anio,
+            "twr_ars": round(c_ars, 4) if c_ars is not None else None,
+            "twr_usd": round(c_usd, 4) if c_usd is not None else None,
+            "en_curso": anio in anios_en_curso,
+        })
+
+    return {"meses": meses, "anios": anios}
+
+
 # ── Evolución + benchmarks ───────────────────────────────────────────────────
 
 # ── Exposición ────────────────────────────────────────────────────────────

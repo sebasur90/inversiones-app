@@ -20,6 +20,7 @@ from ..schemas import (
     VencimientoItem,
     ComisionesOut,
     PnlRealizadoNoRealizadoOut,
+    RendimientoMensualOut,
 )
 from ..services.sheets_client import SheetsClientError
 from ..services.inversiones_sync import sync_from_sheet, get_ultimo_sync
@@ -36,6 +37,7 @@ from ..services.inversiones_analytics import (
     get_vencimientos,
     get_comisiones,
     get_pnl_realizado_no_realizado,
+    get_rendimiento_mensual,
 )
 
 router = APIRouter(prefix="/api/inversiones", tags=["inversiones"])
@@ -138,6 +140,17 @@ def evolucion_cartera(nombre: str, desde: Optional[date] = Query(None), db: Sess
 def evolucion_consolidado(desde: Optional[date] = Query(None), db: Session = Depends(get_db)):
     max_puntos = 180 if desde is not None else 24
     return get_evolucion(None, db, desde=desde, max_puntos=max_puntos)
+
+
+@router.get("/carteras/{nombre}/rendimiento-mensual", response_model=RendimientoMensualOut)
+def rendimiento_mensual_cartera(nombre: str, db: Session = Depends(get_db)):
+    _validar_cartera(nombre, db)
+    return get_rendimiento_mensual(nombre, db)
+
+
+@router.get("/consolidado/rendimiento-mensual", response_model=RendimientoMensualOut)
+def rendimiento_mensual_consolidado(db: Session = Depends(get_db)):
+    return get_rendimiento_mensual(None, db)
 
 
 @router.get("/ticker/{ticker}/precios", response_model=PrecioSerieOut)
