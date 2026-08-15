@@ -2,6 +2,7 @@ import type { EvolucionPunto, InversionesResumen } from '../../api'
 import { formatARS, formatPctRatio, formatUSD } from '../../utils'
 import { Icon } from '../icons/Icons'
 import Sparkline from '../charts/Sparkline'
+import InfoTerm from '../ui/InfoTerm'
 
 export default function HeroValorCard({
   resumen,
@@ -31,21 +32,26 @@ export default function HeroValorCard({
       {!esARS && resumen && <div className="font-mono text-[12px] text-app-text-dim mt-0.5 tabular-nums">≈ {formatARS(resumen.valor_actual_ars)}</div>}
 
       {resumen && rendimiento != null && (
-        <div className="flex items-center gap-2 mt-2.5">
-          <span
-            className={`inline-flex items-center gap-0.5 font-mono font-bold text-[12px] px-2 py-1 rounded-lg tabular-nums ${
-              positivo ? 'text-app-teal bg-app-teal-soft' : 'text-app-coral bg-app-coral-soft'
-            }`}
-          >
-            <Icon name={positivo ? 'up' : 'down'} className="w-3 h-3" />
-            {formatPctRatio(rendimiento)}
-          </span>
-          {deltaAbs != null && (
-            <span className="font-mono text-[11px] text-app-text-dim tabular-nums">
-              {deltaAbs >= 0 ? '+' : ''}
-              {formatMoneda(deltaAbs)} vs. invertido
+        <div className="mt-2.5">
+          <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
+            <InfoTerm term="simple" label="Rendimiento total" />
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-0.5 font-mono font-bold text-[12px] px-2 py-1 rounded-lg tabular-nums ${
+                positivo ? 'text-app-teal bg-app-teal-soft' : 'text-app-coral bg-app-coral-soft'
+              }`}
+            >
+              <Icon name={positivo ? 'up' : 'down'} className="w-3 h-3" />
+              {formatPctRatio(rendimiento)}
             </span>
-          )}
+            {deltaAbs != null && (
+              <span className="font-mono text-[11px] text-app-text-dim tabular-nums">
+                {deltaAbs >= 0 ? '+' : ''}
+                {formatMoneda(deltaAbs)} vs. invertido
+              </span>
+            )}
+          </div>
         </div>
       )}
 

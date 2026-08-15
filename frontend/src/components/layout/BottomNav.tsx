@@ -14,19 +14,19 @@ const ITEMS: { to: string; label: string; icon: IconName }[] = [
 
 export default function BottomNav() {
   return (
-    <nav className="flex border-t border-app-border bg-app-surface px-1.5 pt-2 safe-bottom shrink-0">
+    <nav className="flex border-t border-app-border bg-app-surface px-1 pt-2 safe-bottom shrink-0">
       {ITEMS.map(item => (
         <NavLink
           key={item.to}
           to={item.to}
           className={({ isActive }) =>
-            `flex-1 flex flex-col items-center gap-1 pb-2 text-[9.5px] font-semibold ${
+            `flex-1 flex flex-col items-center gap-0.5 pb-2 text-[8.5px] font-semibold ${
               isActive ? 'text-app-gold' : 'text-app-text-faint'
             }`
           }
         >
-          <Icon name={item.icon} />
-          <span>{item.label}</span>
+          <Icon name={item.icon} className="w-4 h-4" />
+          <span className="text-center leading-[1.1]">{item.label}</span>
         </NavLink>
       ))}
     </nav>

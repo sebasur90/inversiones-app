@@ -69,7 +69,12 @@ export default function ComparacionChart({ resumen }: { resumen: InversionesResu
             labelFormatter={() => 'Comparación'}
             cursor={{ fill: 'rgba(255,255,255,0.04)' }}
           />
-          <Legend wrapperStyle={{ fontSize: 11, color: '#8ca39b' }} />
+          <Legend
+            wrapperStyle={{ fontSize: 11, color: '#8ca39b' }}
+            formatter={(value: string) =>
+              value === 'Si comprabas USD' ? 'USD (MEP)' : value === 'Si ajustabas por CER' ? 'CER' : value
+            }
+          />
           <Bar dataKey="Invertido" fill={COLORS.Invertido} radius={[4, 4, 0, 0]} />
           <Bar dataKey="Valor actual" fill={COLORS['Valor actual']} label={renderCustomLabel as any} radius={[4, 4, 0, 0]} />
           <Bar dataKey="Si comprabas USD" fill={COLORS['Si comprabas USD']} label={renderCustomLabel as any} radius={[4, 4, 0, 0]}>
