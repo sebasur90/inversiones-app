@@ -1,5 +1,3 @@
-"""Shared severity badge component for data quality issues."""
-
 export type Severidad = 'critico' | 'advertencia' | 'info'
 
 const SEVERIDAD_CLASSES: Record<Severidad, string> = {
