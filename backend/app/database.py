@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Date, Numeric, ForeignKey, UniqueConstraint, text
+from sqlalchemy import create_engine, Column, Integer, String, Date, DateTime, Numeric, ForeignKey, UniqueConstraint, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 import os
 
@@ -113,6 +113,34 @@ class ConfiguracionCartera(Base):
     peso_maximo = Column(Numeric(6, 2), nullable=True)
     peso_minimo = Column(Numeric(6, 2), nullable=True)
     tolerancia = Column(Numeric(6, 2), nullable=True)
+
+
+class SyncRun(Base):
+    __tablename__ = "sync_runs"
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, nullable=False, index=True)
+    duration_ms = Column(Integer, nullable=False)
+    # filas_advertencia / filas_error cuentan ValidationIssue emitidos, no filas únicas
+    # (una fila puede generar más de un issue).
+    filas_procesadas = Column(Integer, nullable=False, default=0)
+    filas_validas = Column(Integer, nullable=False, default=0)
+    filas_advertencia = Column(Integer, nullable=False, default=0)
+    filas_error = Column(Integer, nullable=False, default=0)
+    health_score = Column(Integer, nullable=False)
+    resultado = Column(String, nullable=False)  # "ok" | "con_advertencias" | "con_errores"
+
+
+class SyncIssue(Base):
+    __tablename__ = "sync_issues"
+    id = Column(Integer, primary_key=True, index=True)
+    sync_run_id = Column(Integer, ForeignKey("sync_runs.id"), nullable=False, index=True)
+    tab = Column(String, nullable=False)
+    fila = Column(Integer, nullable=True)
+    campo = Column(String, nullable=True)
+    regla = Column(String, nullable=False)
+    severidad = Column(String, nullable=False)  # "critico" | "advertencia" | "info"
+    mensaje = Column(String, nullable=False)
+    impacto = Column(String, nullable=False)
 
 
 def get_db():

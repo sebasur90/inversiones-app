@@ -1,12 +1,21 @@
 """Lectura de las pestañas del Google Sheet de inversiones (cuenta de servicio) o Excel local."""
 import os
 import pandas as pd
+from dataclasses import dataclass
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
 SPREADSHEET_ID = "1c-dr1C793IVSNzfQZATf01kg2TCPO7nSjYoVKJBtxks"
+
+
+@dataclass
+class TabRaw:
+    presente: bool
+    header: list[str]
+    rows: list[tuple[int, dict]]
+    error_lectura: str | None = None
 
 SHEET_TABS = ("Movimientos", "Instrumentos", "Precios")
 
@@ -71,7 +80,7 @@ def _rows_to_dicts(values: list[list[str]]) -> list[tuple[int, dict]]:
     return rows
 
 
-def _fetch_from_excel() -> dict[str, list[tuple[int, dict]]]:
+def _fetch_from_excel() -> dict[str, TabRaw]:
     """Lee datos desde archivo Excel local."""
     excel_path = _get_excel_path()
     if not os.path.isfile(excel_path):
@@ -80,16 +89,35 @@ def _fetch_from_excel() -> dict[str, list[tuple[int, dict]]]:
             f"Coloca 'sheet_inversiones.xlsx' en la carpeta 'sheet_local/'."
         )
 
-    result: dict[str, list[tuple[int, dict]]] = {}
+    result: dict[str, TabRaw] = {}
     try:
         excel_file = pd.ExcelFile(excel_path)
         for tab in SHEET_TABS:
             if tab not in excel_file.sheet_names:
-                raise SheetsClientError(f"Pestaña '{tab}' no encontrada en Excel. Pestañas disponibles: {excel_file.sheet_names}")
+                result[tab] = TabRaw(presente=False, header=[], rows=[])
+            else:
+                try:
+                    df = pd.read_excel(excel_path, sheet_name=tab)
+                    values = [df.columns.tolist()] + df.values.tolist()
+                    rows = _rows_to_dicts([[str(v) for v in row] for row in values])
+                    header = df.columns.tolist() if hasattr(df, 'columns') else []
+                    result[tab] = TabRaw(presente=True, header=header, rows=rows)
+                except Exception as exc:
+                    result[tab] = TabRaw(presente=True, header=[], rows=[], error_lectura=str(exc))
 
-            df = pd.read_excel(excel_path, sheet_name=tab)
-            values = [df.columns.tolist()] + df.values.tolist()
-            result[tab] = _rows_to_dicts([[str(v) for v in row] for row in values])
+        # Agregar pestañas opcionales
+        for opt_tab in [OBJETIVOS_TAB, REBALANCEO_TAB, BENCHMARKS_TAB, CONFIGURACION_TAB]:
+            if opt_tab not in excel_file.sheet_names:
+                result[opt_tab] = TabRaw(presente=False, header=[], rows=[])
+            else:
+                try:
+                    df = pd.read_excel(excel_path, sheet_name=opt_tab)
+                    values = [df.columns.tolist()] + df.values.tolist()
+                    rows = _rows_to_dicts([[str(v) for v in row] for row in values])
+                    header = df.columns.tolist() if hasattr(df, 'columns') else []
+                    result[opt_tab] = TabRaw(presente=True, header=header, rows=rows)
+                except Exception as exc:
+                    result[opt_tab] = TabRaw(presente=True, header=[], rows=[], error_lectura=str(exc))
     except SheetsClientError:
         raise
     except Exception as exc:
@@ -98,22 +126,39 @@ def _fetch_from_excel() -> dict[str, list[tuple[int, dict]]]:
     return result
 
 
-def fetch_sheet_data() -> dict[str, list[tuple[int, dict]]]:
-    """Lee las 3 pestañas del Sheet (Excel local o Google Sheets) y devuelve {pestaña: [(nro_fila, fila_como_dict)]}."""
+def fetch_sheet_data() -> dict[str, TabRaw]:
+    """Lee las 3 pestañas obligatorias + 4 opcionales del Sheet (Excel o Google Sheets).
+
+    Devuelve {pestaña: TabRaw}. No lanza por una sola pestaña obligatoria faltante;
+    solo lanza por falla total (credenciales ausentes, archivo Excel ausente, error de servicio).
+    La distinción "presente vs error_lectura" permite detectar tab missing vs read failure.
+    """
     if _is_local_env():
         return _fetch_from_excel()
 
     service = _get_service()
-    result: dict[str, list[tuple[int, dict]]] = {}
+    result: dict[str, TabRaw] = {}
+
     try:
         for tab in SHEET_TABS:
-            resp = (
-                service.spreadsheets()
-                .values()
-                .get(spreadsheetId=SPREADSHEET_ID, range=tab)
-                .execute()
-            )
-            result[tab] = _rows_to_dicts(resp.get("values", []))
+            try:
+                resp = (
+                    service.spreadsheets()
+                    .values()
+                    .get(spreadsheetId=SPREADSHEET_ID, range=tab)
+                    .execute()
+                )
+                rows = _rows_to_dicts(resp.get("values", []))
+                header = resp.get("values", [None])[0] if resp.get("values") else []
+                result[tab] = TabRaw(presente=True, header=[str(h).strip() for h in header] if header else [], rows=rows)
+            except Exception as exc:
+                message = str(exc)
+                # Rango/tab inexistente típicamente da 400 con "Unable to parse range"
+                if "400" in message and "Unable to parse range" in message:
+                    result[tab] = TabRaw(presente=False, header=[], rows=[])
+                else:
+                    # Cualquier otro error (permisos, 5xx, red) → presente pero con error
+                    result[tab] = TabRaw(presente=True, header=[], rows=[], error_lectura=str(exc))
     except SheetsClientError:
         raise
     except Exception as exc:
@@ -125,32 +170,29 @@ def fetch_sheet_data() -> dict[str, list[tuple[int, dict]]]:
             ) from exc
         raise SheetsClientError(f"Error leyendo el Google Sheet: {exc}") from exc
 
-    faltantes = [tab for tab in SHEET_TABS if not result.get(tab)]
-    if len(faltantes) == len(SHEET_TABS):
-        raise SheetsClientError("El Sheet está vacío o no se encontraron las pestañas Movimientos/Instrumentos/Precios.")
-
     return result
 
 
-def fetch_objetivos_tab() -> list[tuple[int, dict]]:
+def fetch_objetivos_tab() -> TabRaw:
     """Lee la pestaña Objetivos de forma aislada del resto del Sheet.
 
-    A diferencia de fetch_sheet_data(), es tolerante a que la pestaña todavía no exista
-    (el usuario puede no haberla creado aún): devuelve [] en vez de romper el sync completo.
+    Devuelve TabRaw distinguiendo tab no presente vs error de lectura.
     """
     if _is_local_env():
         excel_path = _get_excel_path()
         if not os.path.isfile(excel_path):
-            return []
+            return TabRaw(presente=False, header=[], rows=[])
         try:
             excel_file = pd.ExcelFile(excel_path)
             if OBJETIVOS_TAB not in excel_file.sheet_names:
-                return []
+                return TabRaw(presente=False, header=[], rows=[])
             df = pd.read_excel(excel_path, sheet_name=OBJETIVOS_TAB)
             values = [df.columns.tolist()] + df.values.tolist()
-            return _rows_to_dicts([[str(v) for v in row] for row in values])
-        except Exception:
-            return []
+            rows = _rows_to_dicts([[str(v) for v in row] for row in values])
+            header = df.columns.tolist() if hasattr(df, 'columns') else []
+            return TabRaw(presente=True, header=header, rows=rows)
+        except Exception as exc:
+            return TabRaw(presente=True, header=[], rows=[], error_lectura=str(exc))
 
     try:
         service = _get_service()
@@ -160,30 +202,33 @@ def fetch_objetivos_tab() -> list[tuple[int, dict]]:
             .get(spreadsheetId=SPREADSHEET_ID, range=OBJETIVOS_TAB)
             .execute()
         )
-        return _rows_to_dicts(resp.get("values", []))
-    except Exception:
-        return []
+        rows = _rows_to_dicts(resp.get("values", []))
+        header = resp.get("values", [None])[0] if resp.get("values") else []
+        return TabRaw(presente=True, header=[str(h).strip() for h in header] if header else [], rows=rows)
+    except Exception as exc:
+        message = str(exc)
+        if "400" in message and "Unable to parse range" in message:
+            return TabRaw(presente=False, header=[], rows=[])
+        return TabRaw(presente=True, header=[], rows=[], error_lectura=str(exc))
 
 
-def fetch_rebalanceo_tab() -> list[tuple[int, dict]]:
-    """Lee la pestaña Rebalanceo de forma aislada del resto del Sheet.
-
-    Igual que fetch_objetivos_tab(): tolerante a que la pestaña todavía no exista,
-    devuelve [] en vez de romper el sync completo.
-    """
+def fetch_rebalanceo_tab() -> TabRaw:
+    """Lee la pestaña Rebalanceo de forma aislada del resto del Sheet."""
     if _is_local_env():
         excel_path = _get_excel_path()
         if not os.path.isfile(excel_path):
-            return []
+            return TabRaw(presente=False, header=[], rows=[])
         try:
             excel_file = pd.ExcelFile(excel_path)
             if REBALANCEO_TAB not in excel_file.sheet_names:
-                return []
+                return TabRaw(presente=False, header=[], rows=[])
             df = pd.read_excel(excel_path, sheet_name=REBALANCEO_TAB)
             values = [df.columns.tolist()] + df.values.tolist()
-            return _rows_to_dicts([[str(v) for v in row] for row in values])
-        except Exception:
-            return []
+            rows = _rows_to_dicts([[str(v) for v in row] for row in values])
+            header = df.columns.tolist() if hasattr(df, 'columns') else []
+            return TabRaw(presente=True, header=header, rows=rows)
+        except Exception as exc:
+            return TabRaw(presente=True, header=[], rows=[], error_lectura=str(exc))
 
     try:
         service = _get_service()
@@ -193,30 +238,33 @@ def fetch_rebalanceo_tab() -> list[tuple[int, dict]]:
             .get(spreadsheetId=SPREADSHEET_ID, range=REBALANCEO_TAB)
             .execute()
         )
-        return _rows_to_dicts(resp.get("values", []))
-    except Exception:
-        return []
+        rows = _rows_to_dicts(resp.get("values", []))
+        header = resp.get("values", [None])[0] if resp.get("values") else []
+        return TabRaw(presente=True, header=[str(h).strip() for h in header] if header else [], rows=rows)
+    except Exception as exc:
+        message = str(exc)
+        if "400" in message and "Unable to parse range" in message:
+            return TabRaw(presente=False, header=[], rows=[])
+        return TabRaw(presente=True, header=[], rows=[], error_lectura=str(exc))
 
 
-def fetch_benchmarks_tab() -> list[tuple[int, dict]]:
-    """Lee la pestaña Benchmarks (Fecha | Benchmark | Valor) de forma aislada del resto del Sheet.
-
-    Igual que fetch_objetivos_tab()/fetch_rebalanceo_tab(): tolerante a que la pestaña
-    todavía no exista, devuelve [] en vez de romper el sync completo.
-    """
+def fetch_benchmarks_tab() -> TabRaw:
+    """Lee la pestaña Benchmarks de forma aislada del resto del Sheet."""
     if _is_local_env():
         excel_path = _get_excel_path()
         if not os.path.isfile(excel_path):
-            return []
+            return TabRaw(presente=False, header=[], rows=[])
         try:
             excel_file = pd.ExcelFile(excel_path)
             if BENCHMARKS_TAB not in excel_file.sheet_names:
-                return []
+                return TabRaw(presente=False, header=[], rows=[])
             df = pd.read_excel(excel_path, sheet_name=BENCHMARKS_TAB)
             values = [df.columns.tolist()] + df.values.tolist()
-            return _rows_to_dicts([[str(v) for v in row] for row in values])
-        except Exception:
-            return []
+            rows = _rows_to_dicts([[str(v) for v in row] for row in values])
+            header = df.columns.tolist() if hasattr(df, 'columns') else []
+            return TabRaw(presente=True, header=header, rows=rows)
+        except Exception as exc:
+            return TabRaw(presente=True, header=[], rows=[], error_lectura=str(exc))
 
     try:
         service = _get_service()
@@ -226,31 +274,33 @@ def fetch_benchmarks_tab() -> list[tuple[int, dict]]:
             .get(spreadsheetId=SPREADSHEET_ID, range=BENCHMARKS_TAB)
             .execute()
         )
-        return _rows_to_dicts(resp.get("values", []))
-    except Exception:
-        return []
+        rows = _rows_to_dicts(resp.get("values", []))
+        header = resp.get("values", [None])[0] if resp.get("values") else []
+        return TabRaw(presente=True, header=[str(h).strip() for h in header] if header else [], rows=rows)
+    except Exception as exc:
+        message = str(exc)
+        if "400" in message and "Unable to parse range" in message:
+            return TabRaw(presente=False, header=[], rows=[])
+        return TabRaw(presente=True, header=[], rows=[], error_lectura=str(exc))
 
 
-def fetch_configuracion_tab() -> list[tuple[int, dict]]:
-    """Lee la pestaña Configuracion (Cartera | Benchmark | Rendimiento Objetivo | Peso Máximo |
-    Peso Mínimo | Tolerancia) de forma aislada del resto del Sheet.
-
-    Igual que fetch_objetivos_tab()/fetch_rebalanceo_tab()/fetch_benchmarks_tab(): tolerante a
-    que la pestaña todavía no exista, devuelve [] en vez de romper el sync completo.
-    """
+def fetch_configuracion_tab() -> TabRaw:
+    """Lee la pestaña Configuracion de forma aislada del resto del Sheet."""
     if _is_local_env():
         excel_path = _get_excel_path()
         if not os.path.isfile(excel_path):
-            return []
+            return TabRaw(presente=False, header=[], rows=[])
         try:
             excel_file = pd.ExcelFile(excel_path)
             if CONFIGURACION_TAB not in excel_file.sheet_names:
-                return []
+                return TabRaw(presente=False, header=[], rows=[])
             df = pd.read_excel(excel_path, sheet_name=CONFIGURACION_TAB)
             values = [df.columns.tolist()] + df.values.tolist()
-            return _rows_to_dicts([[str(v) for v in row] for row in values])
-        except Exception:
-            return []
+            rows = _rows_to_dicts([[str(v) for v in row] for row in values])
+            header = df.columns.tolist() if hasattr(df, 'columns') else []
+            return TabRaw(presente=True, header=header, rows=rows)
+        except Exception as exc:
+            return TabRaw(presente=True, header=[], rows=[], error_lectura=str(exc))
 
     try:
         service = _get_service()
@@ -260,6 +310,11 @@ def fetch_configuracion_tab() -> list[tuple[int, dict]]:
             .get(spreadsheetId=SPREADSHEET_ID, range=CONFIGURACION_TAB)
             .execute()
         )
-        return _rows_to_dicts(resp.get("values", []))
-    except Exception:
-        return []
+        rows = _rows_to_dicts(resp.get("values", []))
+        header = resp.get("values", [None])[0] if resp.get("values") else []
+        return TabRaw(presente=True, header=[str(h).strip() for h in header] if header else [], rows=rows)
+    except Exception as exc:
+        message = str(exc)
+        if "400" in message and "Unable to parse range" in message:
+            return TabRaw(presente=False, header=[], rows=[])
+        return TabRaw(presente=True, header=[], rows=[], error_lectura=str(exc))
