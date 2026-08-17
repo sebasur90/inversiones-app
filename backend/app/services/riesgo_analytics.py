@@ -7,7 +7,6 @@ import bisect
 from datetime import date
 from sqlalchemy.orm import Session
 
-from ..database import BenchmarkValor
 from . import risk_engine
 from .inversiones_analytics import (
     _movimientos_ordenados,
@@ -19,7 +18,6 @@ from .inversiones_analytics import (
     _valuar_holdings,
     _valuar_holdings_ars,
     _cer_indice,
-    _fin_de_mes_range,
 )
 
 MONEDAS_VALIDAS = ("ars_nominal", "ars_real", "usd")
@@ -30,41 +28,6 @@ def get_benchmarks_disponibles(db: Session) -> list[str]:
     return [r[0] for r in rows]
 
 
-def _benchmark_retornos_mensuales(benchmark: str, db: Session, hasta: date) -> dict[tuple[int, int], float]:
-    """Retornos mensuales de un benchmark, alineados por (año, mes) con los de cartera.
-
-    Toma el último valor conocido (carry-forward) en cada fin de mes y encadena la variación
-    porcentual mes a mes, con el mismo criterio de fin de mes (`_fin_de_mes_range`) que el TWR
-    mensual de cartera.
-    """
-    rows = (
-        db.query(BenchmarkValor)
-        .filter(BenchmarkValor.benchmark == benchmark)
-        .order_by(BenchmarkValor.fecha)
-        .all()
-    )
-    if not rows:
-        return {}
-
-    valores = [(r.fecha, float(r.valor)) for r in rows]
-    fechas = [v[0] for v in valores]
-    boundaries = _fin_de_mes_range(valores[0][0], hasta)
-
-    puntos: list[tuple[date, float]] = []
-    for b in boundaries:
-        idx = bisect.bisect_right(fechas, b) - 1
-        if idx < 0:
-            continue
-        puntos.append((b, valores[idx][1]))
-
-    resultado: dict[tuple[int, int], float] = {}
-    for i in range(1, len(puntos)):
-        d0, v0 = puntos[i - 1]
-        d1, v1 = puntos[i]
-        if v0 == 0:
-            continue
-        resultado[(d1.year, d1.month)] = v1 / v0 - 1
-    return resultado
 
 
 def get_riesgo(cartera: str | None, moneda: str, benchmark: str | None, db: Session) -> dict:
@@ -99,9 +62,14 @@ def get_riesgo(cartera: str | None, moneda: str, benchmark: str | None, db: Sess
     mejores_peores = risk_engine.mejores_peores_periodos(retornos_validos)
     frecuencia = risk_engine.frecuencia_positivos_negativos(retornos_lista)
 
+    benchmark_retorno_anualizado = None
     if benchmark:
+        from .benchmarks_analytics import _benchmark_retornos_mensuales
         retornos_benchmark = _benchmark_retornos_mensuales(benchmark, db, hoy)
         sharpe = risk_engine.calcular_sharpe_vs_benchmark(retornos_validos, retornos_benchmark, benchmark)
+        if retornos_benchmark:
+            indice_benchmark = risk_engine.construir_indice(retornos_benchmark)
+            benchmark_retorno_anualizado = risk_engine.calcular_retorno_anualizado(indice_benchmark)
     else:
         sharpe = {"estado": "sin_benchmark", "valor": None, "benchmark": None, "n_obs": 0}
 
@@ -115,6 +83,7 @@ def get_riesgo(cartera: str | None, moneda: str, benchmark: str | None, db: Sess
         "sharpe": sharpe,
         "sortino": sortino,
         "calmar": calmar,
+        "benchmark_retorno_anualizado": round(benchmark_retorno_anualizado, 4) if benchmark_retorno_anualizado is not None else None,
         "mejores_periodos": mejores_peores["mejores"],
         "peores_periodos": mejores_peores["peores"],
         "frecuencia_positivos_negativos": frecuencia,

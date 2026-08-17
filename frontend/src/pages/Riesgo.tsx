@@ -2,15 +2,16 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceDot, ResponsiveContainer } from 'recharts'
 import { useInversionesContext } from '../context/InversionesContext'
-import { getRiesgo, getBenchmarksDisponibles, getConfiguracionCartera, type RiesgoOut, type MonedaRiesgo, type PeriodoRetorno } from '../api'
+import { getRiesgo, type RiesgoOut, type MonedaRiesgo, type PeriodoRetorno } from '../api'
+import { useBenchmarkSeleccionado } from '../hooks/useBenchmarkSeleccionado'
 import { formatPctRatio } from '../utils'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
+import MetricCard from '../components/ui/MetricCard'
 import Segmented from '../components/ui/Segmented'
 import { Icon } from '../components/icons/Icons'
 import InfoTerm from '../components/ui/InfoTerm'
-import type { GlosarioKey } from '../data/glosario'
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
@@ -39,36 +40,6 @@ function toneClass(v: number | null | undefined): string {
   return v >= 0 ? 'text-app-teal' : 'text-app-coral'
 }
 
-function MetricCard({
-  label,
-  infoTerm,
-  value,
-  subtitulo,
-  insuficiente,
-  tone,
-}: {
-  label: string
-  infoTerm: GlosarioKey
-  value: string
-  subtitulo?: string
-  insuficiente?: boolean
-  tone?: string
-}) {
-  return (
-    <div className="bg-app-surface border border-app-border rounded-[13px] px-2.5 py-2.5">
-      <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
-        <InfoTerm term={infoTerm} label={label} />
-      </div>
-      {insuficiente ? (
-        <div className="text-[12px] text-app-text-faint">Datos insuficientes</div>
-      ) : (
-        <div className={`font-mono text-[14px] font-bold tabular-nums ${tone ?? 'text-app-text'}`}>{value}</div>
-      )}
-      {subtitulo && !insuficiente && <div className="text-[10px] text-app-text-dim mt-0.5">{subtitulo}</div>}
-    </div>
-  )
-}
-
 function PeriodoRow({ item }: { item: PeriodoRetorno }) {
   return (
     <div className="flex items-center justify-between bg-app-surface border border-app-border rounded-[13px] px-3.5 py-2 text-left">
@@ -82,27 +53,9 @@ export default function Riesgo() {
   const navigate = useNavigate()
   const { carteraSeleccionada } = useInversionesContext()
   const [vista, setVista] = useState<MonedaRiesgo>('usd')
-  const [benchmarks, setBenchmarks] = useState<string[]>([])
-  const [benchmarkSeleccionado, setBenchmarkSeleccionado] = useState<string | null>(null)
+  const { benchmarks, benchmarkSeleccionado, setBenchmarkSeleccionado } = useBenchmarkSeleccionado(carteraSeleccionada)
   const [riesgo, setRiesgo] = useState<RiesgoOut | null>(null)
   const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let cancelado = false
-    Promise.all([getBenchmarksDisponibles(), getConfiguracionCartera(carteraSeleccionada).catch(() => null)])
-      .then(([data, config]) => {
-        if (cancelado) return
-        setBenchmarks(data)
-        const preferido = config?.benchmark && data.includes(config.benchmark) ? config.benchmark : data[0] ?? null
-        setBenchmarkSeleccionado(prev => prev ?? preferido)
-      })
-      .catch(() => {
-        if (!cancelado) setBenchmarks([])
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [carteraSeleccionada])
 
   useEffect(() => {
     let cancelado = false

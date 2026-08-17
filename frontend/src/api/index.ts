@@ -509,6 +509,7 @@ export interface RiesgoOut {
   sharpe: SharpeOut
   sortino: SortinoOut
   calmar: CalmarOut
+  benchmark_retorno_anualizado: number | null
   mejores_periodos: PeriodoRetorno[]
   peores_periodos: PeriodoRetorno[]
   frecuencia_positivos_negativos: FrecuenciaOut
@@ -521,6 +522,40 @@ export const getRiesgo = (cartera: string | null, moneda: MonedaRiesgo, benchmar
   api
     .get<RiesgoOut>(`${carteraPath(cartera)}/riesgo`, { params: { moneda, benchmark: benchmark ?? undefined } })
     .then(r => r.data)
+
+export interface MetricaRelativa {
+  estado: string
+  valor: number | null
+  n_obs: number
+}
+
+export interface PerformanceRelativaPunto {
+  fecha: string
+  indice_cartera: number
+  indice_benchmark: number
+}
+
+export interface PerformanceRelativaOut {
+  estado: string
+  moneda: string
+  benchmark_usado: string | null
+  periodo_desde: string | null
+  periodo_hasta: string | null
+  n_meses_historia: number
+  retorno_cartera_pct: number | null
+  retorno_benchmark_pct: number | null
+  delta_pp: number | null
+  costo_oportunidad_pp: number | null
+  exceso_retorno: MetricaRelativa
+  alpha: MetricaRelativa
+  beta: MetricaRelativa
+  tracking_error: MetricaRelativa
+  information_ratio: MetricaRelativa
+  serie: PerformanceRelativaPunto[]
+}
+
+export const getPerformanceRelativa = (cartera: string | null, moneda: MonedaRiesgo, benchmark: string | null, desde?: string) =>
+  api.get<PerformanceRelativaOut>(`${carteraPath(cartera)}/performance-relativa`, { params: { moneda, benchmark: benchmark ?? undefined, desde: desde ?? undefined } }).then(r => r.data)
 
 // --- Contribución, concentración y correlaciones ---
 
@@ -576,3 +611,39 @@ export interface CorrelacionesOut {
 
 export const getCorrelaciones = (cartera: string | null, universo: UniversoCorrelacion = 'tenencias') =>
   api.get<CorrelacionesOut>(`${carteraPath(cartera)}/correlaciones`, { params: { universo } }).then(r => r.data)
+
+// --- Diagnóstico ---
+
+export interface HallazgoItem {
+  tipo: string
+  severidad: 'critico' | 'advertencia' | 'info'
+  titulo: string
+  explicacion: string
+  dato_disparador: Record<string, number | string | boolean | null>
+  pantalla: string
+  fecha_calculo: string
+}
+
+export interface DimensionScore {
+  nombre: 'riesgo' | 'concentracion' | 'diversificacion' | 'performance' | 'objetivo'
+  score: number | null
+  peso: number
+  estado: 'ok' | 'excluida'
+  detalle: string
+}
+
+export interface SaludCarteraOut {
+  score_total: number | null
+  dimensiones: DimensionScore[]
+  fecha_calculo: string
+}
+
+export interface DiagnosticoOut {
+  cartera: string | null
+  salud: SaludCarteraOut
+  hallazgos: HallazgoItem[]
+  fecha_calculo: string
+}
+
+export const getDiagnostico = (cartera: string | null) =>
+  api.get<DiagnosticoOut>(`${carteraPath(cartera)}/diagnostico`).then(r => r.data)

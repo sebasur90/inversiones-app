@@ -66,3 +66,17 @@ export const CHART_COLORS = [
   '#d8b14a', '#4fd1ae', '#5b8ba0', '#9c7aa0', '#7e9c90', '#e2665a',
   '#c9a53a', '#3fb599', '#4a7688', '#856787', '#6a877c', '#c9544a',
 ]
+
+export type PeriodoEvolucion = '1M' | '3M' | '6M' | '1Y' | 'YTD' | 'ALL'
+
+export function calcularDesde(periodo: PeriodoEvolucion): string | undefined {
+  const hoy = new Date()
+  if (periodo === 'ALL') return undefined
+  if (periodo === 'YTD') return `${hoy.getFullYear()}-01-01`
+  const d = new Date(hoy)
+  if (periodo === '1M') d.setMonth(d.getMonth() - 1)
+  if (periodo === '3M') d.setMonth(d.getMonth() - 3)
+  if (periodo === '6M') d.setMonth(d.getMonth() - 6)
+  if (periodo === '1Y') d.setFullYear(d.getFullYear() - 1)
+  return d.toISOString().slice(0, 10)
+}

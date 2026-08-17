@@ -436,9 +436,43 @@ class RiesgoOut(BaseModel):
     sharpe: SharpeOut
     sortino: SortinoOut
     calmar: CalmarOut
+    benchmark_retorno_anualizado: Optional[float] = None
     mejores_periodos: list[PeriodoRetorno]
     peores_periodos: list[PeriodoRetorno]
     frecuencia_positivos_negativos: FrecuenciaOut
+
+
+# --- Performance Relativa (vs Benchmark) ---
+
+class MetricaRelativaOut(BaseModel):
+    estado: str
+    valor: Optional[float] = None
+    n_obs: int = 0
+
+
+class PerformanceRelativaPunto(BaseModel):
+    fecha: date
+    indice_cartera: float
+    indice_benchmark: float
+
+
+class PerformanceRelativaOut(BaseModel):
+    estado: str
+    moneda: str
+    benchmark_usado: Optional[str] = None
+    periodo_desde: Optional[date] = None
+    periodo_hasta: Optional[date] = None
+    n_meses_historia: int
+    retorno_cartera_pct: Optional[float] = None
+    retorno_benchmark_pct: Optional[float] = None
+    delta_pp: Optional[float] = None
+    costo_oportunidad_pp: Optional[float] = None
+    exceso_retorno: MetricaRelativaOut
+    alpha: MetricaRelativaOut
+    beta: MetricaRelativaOut
+    tracking_error: MetricaRelativaOut
+    information_ratio: MetricaRelativaOut
+    serie: list[PerformanceRelativaPunto] = []
 
 
 # --- Contribución, concentración y correlaciones ---
@@ -486,3 +520,36 @@ class CorrelacionesOut(BaseModel):
     matriz: list[list[Optional[float]]]
     pares: list[CorrelacionParItem]
     advertencia_historial_corto: bool
+
+
+# --- Diagnóstico ---
+
+class HallazgoItem(BaseModel):
+    tipo: str
+    severidad: str
+    titulo: str
+    explicacion: str
+    dato_disparador: dict[str, float | int | str | bool | None]
+    pantalla: str
+    fecha_calculo: date
+
+
+class DimensionScore(BaseModel):
+    nombre: str
+    score: Optional[float] = None
+    peso: float
+    estado: str
+    detalle: str
+
+
+class SaludCarteraOut(BaseModel):
+    score_total: Optional[float] = None
+    dimensiones: list[DimensionScore]
+    fecha_calculo: date
+
+
+class DiagnosticoOut(BaseModel):
+    cartera: Optional[str] = None
+    salud: SaludCarteraOut
+    hallazgos: list[HallazgoItem]
+    fecha_calculo: date

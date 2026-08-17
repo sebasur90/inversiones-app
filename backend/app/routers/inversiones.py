@@ -25,8 +25,10 @@ from ..schemas import (
     PnlRealizadoNoRealizadoOut,
     RendimientoMensualOut,
     RiesgoOut,
+    PerformanceRelativaOut,
     ContribucionOut,
     CorrelacionesOut,
+    DiagnosticoOut,
 )
 from ..services.sheets_client import SheetsClientError
 from ..services.inversiones_sync import sync_from_sheet, get_ultimo_sync
@@ -48,7 +50,9 @@ from ..services.inversiones_analytics import (
     get_rendimiento_mensual,
 )
 from ..services.riesgo_analytics import get_riesgo, get_benchmarks_disponibles, MONEDAS_VALIDAS
+from ..services.benchmarks_analytics import get_performance_relativa
 from ..services.contribucion_analytics import get_contribucion, get_correlaciones, UNIVERSOS_VALIDOS
+from ..services.diagnostico_analytics import get_diagnostico
 
 router = APIRouter(prefix="/api/inversiones", tags=["inversiones"])
 
@@ -303,3 +307,38 @@ def correlaciones_cartera(nombre: str, universo: str = Query("tenencias"), db: S
 def correlaciones_consolidado(universo: str = Query("tenencias"), db: Session = Depends(get_db)):
     _validar_universo(universo)
     return get_correlaciones(None, db, universo)
+
+
+@router.get("/carteras/{nombre}/diagnostico", response_model=DiagnosticoOut)
+def diagnostico_cartera(nombre: str, db: Session = Depends(get_db)):
+    _validar_cartera(nombre, db)
+    return get_diagnostico(nombre, db)
+
+
+@router.get("/consolidado/diagnostico", response_model=DiagnosticoOut)
+def diagnostico_consolidado(db: Session = Depends(get_db)):
+    return get_diagnostico(None, db)
+
+
+@router.get("/carteras/{nombre}/performance-relativa", response_model=PerformanceRelativaOut)
+def performance_relativa_cartera(
+    nombre: str,
+    moneda: str = Query("usd"),
+    benchmark: Optional[str] = Query(None),
+    desde: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+):
+    _validar_cartera(nombre, db)
+    _validar_moneda(moneda)
+    return get_performance_relativa(nombre, moneda, benchmark, desde, db)
+
+
+@router.get("/consolidado/performance-relativa", response_model=PerformanceRelativaOut)
+def performance_relativa_consolidado(
+    moneda: str = Query("usd"),
+    benchmark: Optional[str] = Query(None),
+    desde: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+):
+    _validar_moneda(moneda)
+    return get_performance_relativa(None, moneda, benchmark, desde, db)

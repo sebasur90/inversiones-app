@@ -167,6 +167,69 @@ def calcular_sharpe_vs_benchmark(
     return {"estado": "ok", "valor": round(sharpe, 4), "benchmark": benchmark_nombre, "n_obs": n}
 
 
+def calcular_tracking_error(
+    retornos_por_mes: dict[tuple[int, int], float],
+    retornos_benchmark_por_mes: dict[tuple[int, int], float],
+) -> dict:
+    """Desvío estándar anualizado del exceso de retorno mensual (cartera - benchmark)."""
+    excesos = [
+        retornos_por_mes[k] - retornos_benchmark_por_mes[k]
+        for k in sorted(set(retornos_por_mes) & set(retornos_benchmark_por_mes))
+    ]
+    n = len(excesos)
+    if n < MIN_OBS_VOLATILIDAD:
+        return {"estado": "datos_insuficientes", "valor": None, "n_obs": n}
+
+    desvio = statistics.stdev(excesos)
+    return {"estado": "ok", "valor": round(desvio * math.sqrt(PERIODOS_POR_ANIO), 4), "n_obs": n}
+
+
+def calcular_information_ratio(
+    retornos_por_mes: dict[tuple[int, int], float],
+    retornos_benchmark_por_mes: dict[tuple[int, int], float],
+    benchmark_nombre: str | None,
+) -> dict:
+    """Ratio de información: media del exceso de retorno / tracking error, anualizado.
+
+    Matemáticamente idéntico a `calcular_sharpe_vs_benchmark` (que ya usa el exceso sobre el
+    benchmark, no una tasa libre de riesgo) — se reutiliza esa función en vez de recalcular la
+    misma media/desvío por separado, sólo se reempaqueta el resultado.
+    """
+    sharpe = calcular_sharpe_vs_benchmark(retornos_por_mes, retornos_benchmark_por_mes, benchmark_nombre)
+    return {"estado": sharpe["estado"], "valor": sharpe["valor"], "n_obs": sharpe["n_obs"]}
+
+
+def calcular_beta(
+    retornos_por_mes: dict[tuple[int, int], float],
+    retornos_benchmark_por_mes: dict[tuple[int, int], float],
+) -> dict:
+    """Beta de la cartera respecto del benchmark: cov(cartera, benchmark) / var(benchmark)."""
+    claves = sorted(set(retornos_por_mes) & set(retornos_benchmark_por_mes))
+    n = len(claves)
+    if n < MIN_OBS_VOLATILIDAD:
+        return {"estado": "datos_insuficientes", "valor": None, "n_obs": n}
+
+    cartera = [retornos_por_mes[k] for k in claves]
+    benchmark = [retornos_benchmark_por_mes[k] for k in claves]
+    varianza_benchmark = statistics.variance(benchmark)
+    if varianza_benchmark == 0:
+        return {"estado": "datos_insuficientes", "valor": None, "n_obs": n}
+
+    covarianza = statistics.covariance(cartera, benchmark)
+    return {"estado": "ok", "valor": round(covarianza / varianza_benchmark, 4), "n_obs": n}
+
+
+def calcular_alpha(
+    retorno_anualizado_cartera: float | None,
+    retorno_anualizado_benchmark: float | None,
+    beta: float | None,
+) -> dict:
+    """Alpha simple (tasa libre de riesgo = 0): cartera - beta * benchmark, ambos anualizados."""
+    if retorno_anualizado_cartera is None or retorno_anualizado_benchmark is None or beta is None:
+        return {"estado": "datos_insuficientes", "valor": None}
+    return {"estado": "ok", "valor": round(retorno_anualizado_cartera - beta * retorno_anualizado_benchmark, 4)}
+
+
 def calcular_sortino(retornos: list[float], mar: float = 0.0) -> dict:
     n = len(retornos)
     if n < MIN_OBS_VOLATILIDAD:

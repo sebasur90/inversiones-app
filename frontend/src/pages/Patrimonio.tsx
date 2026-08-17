@@ -10,8 +10,9 @@ import Segmented from '../components/ui/Segmented'
 import EmptyState from '../components/ui/EmptyState'
 import Modal from '../components/ui/Modal'
 import { Icon } from '../components/icons/Icons'
+import { calcularDesde, type PeriodoEvolucion } from '../utils'
 
-type Periodo = '1M' | '3M' | '1Y' | 'YTD' | 'ALL'
+type Periodo = PeriodoEvolucion
 type Vista = 'ars' | 'ars_real' | 'usd'
 type TipoEvento = 'aporte' | 'retiro' | 'ingreso'
 
@@ -26,6 +27,7 @@ interface EventoPunto {
 const OPCIONES_PERIODO: { value: Periodo; label: string }[] = [
   { value: '1M', label: '1M' },
   { value: '3M', label: '3M' },
+  { value: '6M', label: '6M' },
   { value: '1Y', label: '1Y' },
   { value: 'YTD', label: 'YTD' },
   { value: 'ALL', label: 'ALL' },
@@ -73,17 +75,6 @@ function valorPorVista(p: EvolucionPunto, vista: Vista): number | null {
 
 function capitalPorVista(p: EvolucionPunto, vista: Vista): number | null {
   return vista === 'ars' ? p.capital_aportado_ars : vista === 'usd' ? p.capital_aportado_usd : p.capital_aportado_ars_real
-}
-
-function calcularDesde(periodo: Periodo): string | undefined {
-  const hoy = new Date()
-  if (periodo === 'ALL') return undefined
-  if (periodo === 'YTD') return `${hoy.getFullYear()}-01-01`
-  const d = new Date(hoy)
-  if (periodo === '1M') d.setMonth(d.getMonth() - 1)
-  if (periodo === '3M') d.setMonth(d.getMonth() - 3)
-  if (periodo === '1Y') d.setFullYear(d.getFullYear() - 1)
-  return d.toISOString().slice(0, 10)
 }
 
 function formatCompact(v: number, esUSD: boolean): string {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useInversionesContext } from '../context/InversionesContext'
-import { getPnlRealizadoNoRealizado, getRendimientoMensual, type PnlRealizadoNoRealizadoOut, type RendimientoMensualOut } from '../api'
+import { getPnlRealizadoNoRealizado, getRendimientoMensual, getPerformanceRelativa, type PnlRealizadoNoRealizadoOut, type RendimientoMensualOut, type PerformanceRelativaOut } from '../api'
 import { formatARS, formatUSD, formatPctRatio } from '../utils'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
@@ -40,22 +40,30 @@ export default function Rendimiento() {
   const { carteraSeleccionada, monedaSeleccionada, resumen } = useInversionesContext()
   const [pnl, setPnl] = useState<PnlRealizadoNoRealizadoOut | null>(null)
   const [rendimientoMensual, setRendimientoMensual] = useState<RendimientoMensualOut | null>(null)
+  const [perfRelativa, setPerfRelativa] = useState<PerformanceRelativaOut | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelado = false
     setLoading(true)
-    Promise.all([getPnlRealizadoNoRealizado(carteraSeleccionada), getRendimientoMensual(carteraSeleccionada)])
-      .then(([pnlData, rendimientoData]) => {
+    const monedaBackend = monedaSeleccionada === 'ARS' ? 'ars_nominal' : 'usd'
+    Promise.all([
+      getPnlRealizadoNoRealizado(carteraSeleccionada),
+      getRendimientoMensual(carteraSeleccionada),
+      getPerformanceRelativa(carteraSeleccionada, monedaBackend, null),
+    ])
+      .then(([pnlData, rendimientoData, perfData]) => {
         if (!cancelado) {
           setPnl(pnlData)
           setRendimientoMensual(rendimientoData)
+          setPerfRelativa(perfData)
         }
       })
       .catch(() => {
         if (!cancelado) {
           setPnl(null)
           setRendimientoMensual(null)
+          setPerfRelativa(null)
         }
       })
       .finally(() => {
@@ -64,7 +72,7 @@ export default function Rendimiento() {
     return () => {
       cancelado = true
     }
-  }, [carteraSeleccionada])
+  }, [carteraSeleccionada, monedaSeleccionada])
 
   const esARS = monedaSeleccionada === 'ARS'
   const formatMoneda = esARS ? formatARS : formatUSD
@@ -151,6 +159,39 @@ export default function Rendimiento() {
             <EmptyState title="Sin historial mensual" description="No hay suficientes meses de actividad para armar el mapa de calor." />
           ) : (
             <RendimientoHeatmap meses={rendimientoMensual.meses} anios={rendimientoMensual.anios} esARS={esARS} />
+          )}
+
+          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">
+            <InfoTerm term="benchmark" label="Performance vs benchmark" />
+          </h3>
+          {perfRelativa?.estado === 'ok' ? (
+            <Card className="mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">Benchmark</div>
+                  <div className="text-[13px] font-semibold text-app-text">{perfRelativa.benchmark_usado}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">Cartera vs Benchmark</div>
+                  <div className={`font-mono font-bold text-[15px] tabular-nums ${(perfRelativa.delta_pp ?? 0) >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
+                    {(perfRelativa.delta_pp ?? 0) >= 0 ? '+' : ''}{perfRelativa.delta_pp?.toFixed(1)}%
+                  </div>
+                </div>
+              </div>
+              <div className="text-[11px] text-app-text-dim mb-3">
+                {(perfRelativa.retorno_cartera_pct ?? 0) >= (perfRelativa.retorno_benchmark_pct ?? 0) ? 'Superaste el benchmark' : 'Quedaste por debajo del benchmark'}
+              </div>
+              <button
+                onClick={() => navigate('/performance-relativa')}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim hover:text-app-text"
+              >
+                <Icon name="trend" className="w-3.5 h-3.5" /> Ver comparación completa
+              </button>
+            </Card>
+          ) : (
+            <Card className="mb-4">
+              <EmptyState title="Sin benchmark" description="No hay benchmark configurado para esta cartera." />
+            </Card>
           )}
 
           <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">

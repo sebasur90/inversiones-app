@@ -20,6 +20,11 @@ export type GlosarioKey =
   | 'hhi'
   | 'correlacion'
   | 'contribucion'
+  | 'alpha'
+  | 'beta'
+  | 'trackingError'
+  | 'informationRatio'
+  | 'costoOportunidad'
 
 export const GLOSARIO: Record<GlosarioKey, { titulo: string; texto: string }> = {
   xirr: {
@@ -108,5 +113,25 @@ export const GLOSARIO: Record<GlosarioKey, { titulo: string; texto: string }> = 
   contribucion: {
     titulo: 'Contribución al retorno',
     texto: 'Qué parte del resultado total de la cartera (en dólares) aportó cada posición, sector, tipo o mercado. Se calcula como el P&L de cada uno dividido por el costo total invertido en toda la cartera, así que la suma de todas las contribuciones coincide con el retorno simple total. No es lo mismo que el TWR/XIRR de la cartera: es una forma de repartir el resultado ya conocido entre sus componentes, no una tasa de retorno ajustada por tiempo.',
+  },
+  alpha: {
+    titulo: 'Alpha',
+    texto: 'Cuánto ganaste (o perdiste) por encima de lo que tu nivel de riesgo (beta) justificaría respecto al benchmark. Un alpha positivo significa que sacaste provecho de tu estrategia más allá de simplemente seguir el mercado. Se calcula como: retorno cartera − (beta × retorno benchmark).',
+  },
+  beta: {
+    titulo: 'Beta',
+    texto: 'Mide cuánto se mueve tu cartera en relación al benchmark: si beta=1 te movés igual que el benchmark; si >1, eres más volátil; si <1, eres más estable. Un beta de 1.5 significa que si el benchmark sube 10%, tu cartera sube ~15% (en promedio). Se calcula sobre retornos mensuales comunes.',
+  },
+  trackingError: {
+    titulo: 'Tracking error',
+    texto: 'Mide qué tan diferente fue tu rendimiento mes a mes respecto al benchmark, anualizado. Es la volatilidad del "exceso de retorno": si es bajo, tu cartera sigue de cerca al benchmark; si es alto, tuviste resultados muy distintos cada mes.',
+  },
+  informationRatio: {
+    titulo: 'Information Ratio',
+    texto: 'Compara tu exceso de retorno respecto al benchmark contra la volatilidad de ese exceso. Un ratio más alto significa que ganaste más que el benchmark sin que esa diferencia fuera muy errática mes a mes. Es útil para evaluar si un gestor activo agrega valor de forma consistente.',
+  },
+  costoOportunidad: {
+    titulo: 'Costo de oportunidad',
+    texto: 'La diferencia en rendimiento entre lo que ganó el benchmark y lo que ganó tu cartera. Un valor negativo indica que el benchmark rindió mejor. Esta métrica es solo informativa y no constituye una recomendación de inversión: los benchmarks pasados no garantizan resultados futuros, y la historia siempre se ve clara en retrospectiva.',
   },
 }

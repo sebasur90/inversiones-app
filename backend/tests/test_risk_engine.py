@@ -201,3 +201,90 @@ def test_frecuencia_positivos_negativos():
     assert resultado["pct_positivos"] == pytest.approx(0.4)
     assert resultado["pct_negativos"] == pytest.approx(0.4)
     assert resultado["n_obs"] == 5
+
+
+# ── calcular_tracking_error ──────────────────────────────────────────────────
+
+def test_tracking_error_calculo_manual():
+    # excesos: 0.01, 0.00, 0.02, -0.01, 0.01, 0.00 (media=0.005, var_muestral=0.00011)
+    # stdev_mensual = sqrt(0.00011), tracking_error_anualizado = sqrt(0.00011) * sqrt(12)
+    claves = [(2024, m) for m in range(1, 7)]
+    retornos_cartera = dict(zip(claves, [0.02, 0.01, 0.03, 0.00, 0.02, 0.01]))
+    retornos_benchmark = dict(zip(claves, [0.01] * 6))
+    resultado = risk_engine.calcular_tracking_error(retornos_cartera, retornos_benchmark)
+
+    stdev_esperado = math.sqrt(0.00011)
+    te_esperado = round(stdev_esperado * math.sqrt(12), 4)
+    assert resultado["estado"] == "ok"
+    assert resultado["valor"] == pytest.approx(te_esperado, abs=1e-3)
+    assert resultado["n_obs"] == 6
+
+
+def test_tracking_error_datos_insuficientes():
+    resultado = risk_engine.calcular_tracking_error({(2024, 1): 0.01}, {(2024, 1): 0.00})
+    assert resultado["estado"] == "datos_insuficientes"
+    assert resultado["valor"] is None
+
+
+# ── calcular_beta ───────────────────────────────────────────────────────────
+
+def test_beta_calculo_manual():
+    # cartera: 0.02, 0.01, 0.03, 0.00, 0.02, 0.01 (media=0.015)
+    # benchmark: 0.01, 0.01, 0.01, 0.01, 0.01, 0.01 (media=0.01, var=0)
+    # Pero si benchmark tiene variación: benchmark: 0.00, 0.01, 0.02, 0.01, 0.00, 0.01 (var=0.00067)
+    # cov(cartera, benchmark) = E[(cartera-mean_c)*(benchmark-mean_b)]
+    claves = [(2024, m) for m in range(1, 7)]
+    retornos_cartera = dict(zip(claves, [0.02, 0.01, 0.03, 0.00, 0.02, 0.01]))
+    retornos_benchmark = dict(zip(claves, [0.00, 0.01, 0.02, 0.01, 0.00, 0.01]))
+    resultado = risk_engine.calcular_beta(retornos_cartera, retornos_benchmark)
+
+    cartera_vals = [0.02, 0.01, 0.03, 0.00, 0.02, 0.01]
+    benchmark_vals = [0.00, 0.01, 0.02, 0.01, 0.00, 0.01]
+    var_benchmark = statistics.variance(benchmark_vals)
+    cov = statistics.covariance(cartera_vals, benchmark_vals)
+    beta_esperado = cov / var_benchmark
+    assert resultado["estado"] == "ok"
+    assert resultado["valor"] == pytest.approx(round(beta_esperado, 4), abs=1e-3)
+    assert resultado["n_obs"] == 6
+
+
+def test_beta_benchmark_sin_varianza():
+    # Benchmark constante -> var=0 -> datos insuficientes
+    claves = [(2024, m) for m in range(1, 7)]
+    retornos_cartera = dict(zip(claves, [0.02, 0.01, 0.03, 0.00, 0.02, 0.01]))
+    retornos_benchmark = dict(zip(claves, [0.01] * 6))
+    resultado = risk_engine.calcular_beta(retornos_cartera, retornos_benchmark)
+
+    assert resultado["estado"] == "datos_insuficientes"
+    assert resultado["valor"] is None
+
+
+# ── calcular_alpha ──────────────────────────────────────────────────────────
+
+def test_alpha_calculo_manual():
+    # cartera_anualizado = 0.20, benchmark_anualizado = 0.10, beta = 1.5
+    # alpha = 0.20 - 1.5*0.10 = 0.05 (5%)
+    resultado = risk_engine.calcular_alpha(retorno_anualizado_cartera=0.20, retorno_anualizado_benchmark=0.10, beta=1.5)
+    assert resultado["estado"] == "ok"
+    assert resultado["valor"] == pytest.approx(0.05)
+
+
+def test_alpha_datos_insuficientes_con_none():
+    resultado = risk_engine.calcular_alpha(retorno_anualizado_cartera=None, retorno_anualizado_benchmark=0.10, beta=1.5)
+    assert resultado["estado"] == "datos_insuficientes"
+    assert resultado["valor"] is None
+
+
+# ── calcular_information_ratio ──────────────────────────────────────────────
+
+def test_information_ratio_es_igual_a_sharpe_vs_benchmark():
+    # IR debería retornar exactamente lo mismo que Sharpe (ambos usan el exceso de retorno)
+    claves = [(2024, m) for m in range(1, 7)]
+    retornos = dict(zip(claves, [0.02, 0.01, 0.03, 0.00, 0.02, 0.01]))
+    benchmark = dict(zip(claves, [0.01] * 6))
+    sharpe = risk_engine.calcular_sharpe_vs_benchmark(retornos, benchmark, "MERVAL")
+    ir = risk_engine.calcular_information_ratio(retornos, benchmark, "MERVAL")
+
+    assert sharpe["estado"] == ir["estado"]
+    assert sharpe["valor"] == ir["valor"]
+    assert sharpe["n_obs"] == ir["n_obs"]
