@@ -647,3 +647,39 @@ export interface DiagnosticoOut {
 
 export const getDiagnostico = (cartera: string | null) =>
   api.get<DiagnosticoOut>(`${carteraPath(cartera)}/diagnostico`).then(r => r.data)
+
+// --- Descomposición FX ---
+
+export interface DescomposicionFxOut {
+  estado: 'ok' | 'datos_insuficientes' | 'mep_faltante'
+  periodo_desde: string | null
+  periodo_hasta: string | null
+  retorno_total_ars_pct: number | null
+  retorno_activo_pct: number | null
+  efecto_fx_pct: number | null
+  mep_inicio: number | null
+  mep_fin: number | null
+  mep_aproximado: boolean
+  identidad_verificada: boolean
+}
+
+export interface DescomposicionFxPosicionItem {
+  ticker: string
+  moneda: string
+  estado: 'ok' | 'datos_insuficientes' | 'mep_faltante' | 'moneda_desconocida'
+  rendimiento_simple_ars_pct: number | null
+  rendimiento_simple_usd_pct: number | null
+  efecto_fx_pct: number | null
+  retorno_activo_pct: number | null
+  aproximado: boolean
+}
+
+export interface DescomposicionFxPosicionOut {
+  posiciones: DescomposicionFxPosicionItem[]
+}
+
+export const getDescomposicionFx = (cartera: string | null, desde?: string) =>
+  api.get<DescomposicionFxOut>(`${carteraPath(cartera)}/descomposicion-fx`, { params: desde ? { desde } : undefined }).then(r => r.data)
+
+export const getDescomposicionFxPorPosicion = (cartera: string | null) =>
+  api.get<DescomposicionFxPosicionOut>(`${carteraPath(cartera)}/descomposicion-fx-por-posicion`).then(r => r.data)

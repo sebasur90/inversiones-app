@@ -29,6 +29,8 @@ from ..schemas import (
     ContribucionOut,
     CorrelacionesOut,
     DiagnosticoOut,
+    DescomposicionFxOut,
+    DescomposicionFxPosicionOut,
 )
 from ..services.sheets_client import SheetsClientError
 from ..services.inversiones_sync import sync_from_sheet, get_ultimo_sync
@@ -53,6 +55,10 @@ from ..services.riesgo_analytics import get_riesgo, get_benchmarks_disponibles, 
 from ..services.benchmarks_analytics import get_performance_relativa
 from ..services.contribucion_analytics import get_contribucion, get_correlaciones, UNIVERSOS_VALIDOS
 from ..services.diagnostico_analytics import get_diagnostico
+from ..services.fx_decomposition_analytics import (
+    get_descomposicion_fx,
+    get_descomposicion_fx_por_posicion,
+)
 
 router = APIRouter(prefix="/api/inversiones", tags=["inversiones"])
 
@@ -342,3 +348,37 @@ def performance_relativa_consolidado(
 ):
     _validar_moneda(moneda)
     return get_performance_relativa(None, moneda, benchmark, desde, db)
+
+
+@router.get("/carteras/{nombre}/descomposicion-fx", response_model=DescomposicionFxOut)
+def descomposicion_fx_cartera(
+    nombre: str,
+    desde: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+):
+    _validar_cartera(nombre, db)
+    return get_descomposicion_fx(nombre, desde, db)
+
+
+@router.get("/consolidado/descomposicion-fx", response_model=DescomposicionFxOut)
+def descomposicion_fx_consolidado(
+    desde: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+):
+    return get_descomposicion_fx(None, desde, db)
+
+
+@router.get("/carteras/{nombre}/descomposicion-fx-por-posicion", response_model=DescomposicionFxPosicionOut)
+def descomposicion_fx_por_posicion_cartera(
+    nombre: str,
+    db: Session = Depends(get_db),
+):
+    _validar_cartera(nombre, db)
+    return get_descomposicion_fx_por_posicion(nombre, db)
+
+
+@router.get("/consolidado/descomposicion-fx-por-posicion", response_model=DescomposicionFxPosicionOut)
+def descomposicion_fx_por_posicion_consolidado(
+    db: Session = Depends(get_db),
+):
+    return get_descomposicion_fx_por_posicion(None, db)

@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useInversionesContext } from '../context/InversionesContext'
-import { getPnlRealizadoNoRealizado, getRendimientoMensual, getPerformanceRelativa, type PnlRealizadoNoRealizadoOut, type RendimientoMensualOut, type PerformanceRelativaOut } from '../api'
+import { getPnlRealizadoNoRealizado, getRendimientoMensual, getPerformanceRelativa, getDescomposicionFx, type PnlRealizadoNoRealizadoOut, type RendimientoMensualOut, type PerformanceRelativaOut, type DescomposicionFxOut } from '../api'
 import { formatARS, formatUSD, formatPctRatio } from '../utils'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
 import ComparacionChart from '../components/charts/ComparacionChart'
 import RendimientoHeatmap from '../components/charts/RendimientoHeatmap'
+import DescomposicionFxChart from '../components/charts/DescomposicionFxChart'
 import { Icon } from '../components/icons/Icons'
 import InfoTerm from '../components/ui/InfoTerm'
 import type { GlosarioKey } from '../data/glosario'
@@ -41,6 +42,7 @@ export default function Rendimiento() {
   const [pnl, setPnl] = useState<PnlRealizadoNoRealizadoOut | null>(null)
   const [rendimientoMensual, setRendimientoMensual] = useState<RendimientoMensualOut | null>(null)
   const [perfRelativa, setPerfRelativa] = useState<PerformanceRelativaOut | null>(null)
+  const [descomposicionFx, setDescomposicionFx] = useState<DescomposicionFxOut | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -51,12 +53,14 @@ export default function Rendimiento() {
       getPnlRealizadoNoRealizado(carteraSeleccionada),
       getRendimientoMensual(carteraSeleccionada),
       getPerformanceRelativa(carteraSeleccionada, monedaBackend, null),
+      getDescomposicionFx(carteraSeleccionada),
     ])
-      .then(([pnlData, rendimientoData, perfData]) => {
+      .then(([pnlData, rendimientoData, perfData, fxData]) => {
         if (!cancelado) {
           setPnl(pnlData)
           setRendimientoMensual(rendimientoData)
           setPerfRelativa(perfData)
+          setDescomposicionFx(fxData)
         }
       })
       .catch(() => {
@@ -64,6 +68,7 @@ export default function Rendimiento() {
           setPnl(null)
           setRendimientoMensual(null)
           setPerfRelativa(null)
+          setDescomposicionFx(null)
         }
       })
       .finally(() => {
@@ -110,6 +115,69 @@ export default function Rendimiento() {
         <EmptyState title="Sin datos" description="No hay movimientos suficientes para calcular el rendimiento de esta cartera." />
       ) : (
         <>
+          {descomposicionFx && descomposicionFx.estado === 'ok' ? (
+            <>
+              <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">¿Ganaste por los activos o por el dólar?</h3>
+              <Card className="mb-4">
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  <PnlCard
+                    label="Retorno ARS"
+                    infoTerm="rendimiento_ars"
+                    value={formatPctRatio(descomposicionFx.retorno_total_ars_pct)}
+                    tone={toneFor(descomposicionFx.retorno_total_ars_pct)}
+                  />
+                  <PnlCard
+                    label="Retorno USD"
+                    infoTerm="rendimiento_usd"
+                    value={formatPctRatio(descomposicionFx.retorno_activo_pct)}
+                    tone={toneFor(descomposicionFx.retorno_activo_pct)}
+                  />
+                </div>
+                <DescomposicionFxChart
+                  retornoTotalArs={descomposicionFx.retorno_total_ars_pct}
+                  retornoActivo={descomposicionFx.retorno_activo_pct}
+                  efectoFx={descomposicionFx.efecto_fx_pct}
+                  esARS={esARS}
+                />
+                <div className="mt-4 p-3 bg-app-surface rounded-[9px] border border-app-border">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
+                    Efecto dólar
+                  </div>
+                  <div className={`font-mono text-[15px] font-bold tabular-nums mb-2 ${toneFor(descomposicionFx.efecto_fx_pct) === 'pos' ? 'text-app-teal' : 'text-app-coral'}`}>
+                    {descomposicionFx.efecto_fx_pct !== null ? (descomposicionFx.efecto_fx_pct >= 0 ? '+' : '') + formatPctRatio(descomposicionFx.efecto_fx_pct) : 'N/A'}
+                  </div>
+                  <div className="text-[11px] text-app-text-dim">
+                    Parte de la variación en ARS proviene del cambio del tipo de cambio.
+                  </div>
+                  {descomposicionFx.mep_aproximado && (
+                    <div className="mt-2 text-[10px] text-app-text-dim italic">
+                      ⚠ Datos de MEP desactualizados o estimados
+                    </div>
+                  )}
+                  {!descomposicionFx.identidad_verificada && (
+                    <div className="mt-2 text-[10px] text-app-text-dim italic">
+                      ⚠ La descomposición no se verifica exactamente (puede deberse a operaciones particulares)
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </>
+          ) : descomposicionFx ? (
+            <>
+              <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">Descomposición FX</h3>
+              <Card className="mb-4">
+                <EmptyState
+                  title="Descomposición no disponible"
+                  description={
+                    descomposicionFx.estado === 'mep_faltante'
+                      ? 'No hay datos de MEP suficientes para este período.'
+                      : 'No hay suficiente historial para descomponer el rendimiento.'
+                  }
+                />
+              </Card>
+            </>
+          ) : null}
+
           <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">P&amp;L realizado vs. no realizado</h3>
           <div className="grid grid-cols-2 gap-2 mb-2">
             <PnlCard label="Realizado (ventas)" infoTerm="realizado" value={formatMoneda(realizado)} tone={toneFor(realizado)} />

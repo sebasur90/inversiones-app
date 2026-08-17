@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, Navigate } from 'react-router-dom'
 import { useInversionesContext } from '../context/InversionesContext'
-import { getPreciosTicker, type PrecioPunto } from '../api'
+import { getPreciosTicker, getDescomposicionFxPorPosicion, type PrecioPunto, type DescomposicionFxPosicionItem } from '../api'
 import { formatARS, formatCantidad, formatPctRatio, formatPrecio, formatUSD } from '../utils'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Sparkline from '../components/charts/Sparkline'
@@ -13,8 +13,9 @@ import type { GlosarioKey } from '../data/glosario'
 export default function TickerDetalle() {
   const { ticker: tickerParam } = useParams<{ ticker: string }>()
   const navigate = useNavigate()
-  const { rendimientoPorTicker, monedaSeleccionada, loading } = useInversionesContext()
+  const { carteraSeleccionada, rendimientoPorTicker, monedaSeleccionada, loading } = useInversionesContext()
   const [precios, setPrecios] = useState<PrecioPunto[]>([])
+  const [descomposicionFxPorTicker, setDescomposicionFxPorTicker] = useState<DescomposicionFxPosicionItem | null>(null)
 
   const ticker = tickerParam ? decodeURIComponent(tickerParam) : ''
   const item = rendimientoPorTicker.find(i => i.ticker === ticker)
@@ -22,17 +23,27 @@ export default function TickerDetalle() {
   useEffect(() => {
     if (!ticker) return
     let cancelado = false
-    getPreciosTicker(ticker)
-      .then(out => {
-        if (!cancelado) setPrecios(out.puntos)
+    Promise.all([
+      getPreciosTicker(ticker),
+      getDescomposicionFxPorPosicion(carteraSeleccionada),
+    ])
+      .then(([preciosOut, fxData]) => {
+        if (!cancelado) {
+          setPrecios(preciosOut.puntos)
+          const fxPorTicker = fxData.posiciones.find(p => p.ticker === ticker)
+          setDescomposicionFxPorTicker(fxPorTicker || null)
+        }
       })
       .catch(() => {
-        if (!cancelado) setPrecios([])
+        if (!cancelado) {
+          setPrecios([])
+          setDescomposicionFxPorTicker(null)
+        }
       })
     return () => {
       cancelado = true
     }
-  }, [ticker])
+  }, [ticker, carteraSeleccionada])
 
   if (loading) {
     return (
@@ -113,6 +124,22 @@ export default function TickerDetalle() {
         <StatCell label="Rend. simple" infoTerm="simple" value={formatPctRatio(rendimiento)} tone={rendimiento == null ? undefined : positivo ? 'pos' : 'neg'} />
         {esARS && item.rendimiento_simple_ars_real != null && (
           <StatCell label="Rend. ARS real" value={formatPctRatio(item.rendimiento_simple_ars_real)} tone={item.rendimiento_simple_ars_real >= 0 ? 'pos' : 'neg'} />
+        )}
+        {descomposicionFxPorTicker && descomposicionFxPorTicker.estado === 'ok' && (
+          <>
+            <StatCell
+              label="Efecto FX"
+              infoTerm="efecto_fx"
+              value={formatPctRatio(descomposicionFxPorTicker.efecto_fx_pct)}
+              tone={descomposicionFxPorTicker.efecto_fx_pct == null ? undefined : descomposicionFxPorTicker.efecto_fx_pct >= 0 ? 'pos' : 'neg'}
+            />
+            <StatCell
+              label="Retorno activo"
+              infoTerm="retorno_activo"
+              value={formatPctRatio(descomposicionFxPorTicker.retorno_activo_pct)}
+              tone={descomposicionFxPorTicker.retorno_activo_pct == null ? undefined : descomposicionFxPorTicker.retorno_activo_pct >= 0 ? 'pos' : 'neg'}
+            />
+          </>
         )}
         {item.precio_objetivo != null && (
           <StatCell

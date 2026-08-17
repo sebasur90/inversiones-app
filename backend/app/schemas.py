@@ -553,3 +553,33 @@ class DiagnosticoOut(BaseModel):
     salud: SaludCarteraOut
     hallazgos: list[HallazgoItem]
     fecha_calculo: date
+
+
+# --- Descomposición FX ---
+
+class DescomposicionFxOut(BaseModel):
+    estado: str  # "ok" | "datos_insuficientes" | "mep_faltante"
+    periodo_desde: Optional[date] = None
+    periodo_hasta: Optional[date] = None
+    retorno_total_ars_pct: Optional[float] = None
+    retorno_activo_pct: Optional[float] = None
+    efecto_fx_pct: Optional[float] = None
+    mep_inicio: Optional[float] = None
+    mep_fin: Optional[float] = None
+    mep_aproximado: bool = False
+    identidad_verificada: bool = True
+
+
+class DescomposicionFxPosicionItem(BaseModel):
+    ticker: str
+    moneda: str
+    estado: str  # "ok" | "datos_insuficientes" | "mep_faltante" | "moneda_desconocida"
+    rendimiento_simple_ars_pct: Optional[float] = None
+    rendimiento_simple_usd_pct: Optional[float] = None
+    efecto_fx_pct: Optional[float] = None
+    retorno_activo_pct: Optional[float] = None
+    aproximado: bool = True
+
+
+class DescomposicionFxPosicionOut(BaseModel):
+    posiciones: list[DescomposicionFxPosicionItem]

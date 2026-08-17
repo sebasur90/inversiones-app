@@ -25,6 +25,10 @@ export type GlosarioKey =
   | 'trackingError'
   | 'informationRatio'
   | 'costoOportunidad'
+  | 'rendimiento_ars'
+  | 'rendimiento_usd'
+  | 'efecto_fx'
+  | 'retorno_activo'
 
 export const GLOSARIO: Record<GlosarioKey, { titulo: string; texto: string }> = {
   xirr: {
@@ -133,5 +137,21 @@ export const GLOSARIO: Record<GlosarioKey, { titulo: string; texto: string }> = 
   costoOportunidad: {
     titulo: 'Costo de oportunidad',
     texto: 'La diferencia en rendimiento entre lo que ganó el benchmark y lo que ganó tu cartera. Un valor negativo indica que el benchmark rindió mejor. Esta métrica es solo informativa y no constituye una recomendación de inversión: los benchmarks pasados no garantizan resultados futuros, y la historia siempre se ve clara en retrospectiva.',
+  },
+  rendimiento_ars: {
+    titulo: 'Rendimiento en ARS',
+    texto: 'Tu retorno medido en pesos argentinos, incluido el efecto del tipo de cambio. Si el dólar se depreció, este número será menor que el retorno en USD; si se aprenció, será mayor.',
+  },
+  rendimiento_usd: {
+    titulo: 'Rendimiento en USD',
+    texto: 'Tu retorno medido en dólares estadounidenses, sin efectos cambiarios. Representa el rendimiento puro de tus activos en dólares.',
+  },
+  efecto_fx: {
+    titulo: 'Efecto FX (tipo de cambio)',
+    texto: 'La porción del retorno en ARS que proviene de la variación del MEP (tipo de cambio). Si es positivo, el dólar se aprenció; si es negativo, se depreció. La relación es: Retorno ARS ≈ Retorno USD × (1 + Efecto FX).',
+  },
+  retorno_activo: {
+    titulo: 'Retorno del activo',
+    texto: 'Tu rendimiento puramente por la selección y evolución de los activos en tu cartera, medido en la moneda original de cada instrumento (sin efectos cambiarios).',
   },
 }
