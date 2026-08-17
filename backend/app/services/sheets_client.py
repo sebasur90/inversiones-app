@@ -99,7 +99,8 @@ def _fetch_from_excel() -> dict[str, TabRaw]:
                 try:
                     df = pd.read_excel(excel_path, sheet_name=tab)
                     values = [df.columns.tolist()] + df.values.tolist()
-                    rows = _rows_to_dicts([[str(v) for v in row] for row in values])
+                    # Convertir NaN a vacío para evitar 'nan' en string
+                    rows = _rows_to_dicts([['' if pd.isna(v) else str(v) for v in row] for row in values])
                     header = df.columns.tolist() if hasattr(df, 'columns') else []
                     result[tab] = TabRaw(presente=True, header=header, rows=rows)
                 except Exception as exc:
@@ -113,7 +114,7 @@ def _fetch_from_excel() -> dict[str, TabRaw]:
                 try:
                     df = pd.read_excel(excel_path, sheet_name=opt_tab)
                     values = [df.columns.tolist()] + df.values.tolist()
-                    rows = _rows_to_dicts([[str(v) for v in row] for row in values])
+                    rows = _rows_to_dicts([['' if pd.isna(v) else str(v) for v in row] for row in values])
                     header = df.columns.tolist() if hasattr(df, 'columns') else []
                     result[opt_tab] = TabRaw(presente=True, header=header, rows=rows)
                 except Exception as exc:
@@ -159,6 +160,25 @@ def fetch_sheet_data() -> dict[str, TabRaw]:
                 else:
                     # Cualquier otro error (permisos, 5xx, red) → presente pero con error
                     result[tab] = TabRaw(presente=True, header=[], rows=[], error_lectura=str(exc))
+
+        # Agregar pestañas opcionales
+        for opt_tab in [OBJETIVOS_TAB, REBALANCEO_TAB, BENCHMARKS_TAB, CONFIGURACION_TAB]:
+            try:
+                resp = (
+                    service.spreadsheets()
+                    .values()
+                    .get(spreadsheetId=SPREADSHEET_ID, range=opt_tab)
+                    .execute()
+                )
+                rows = _rows_to_dicts(resp.get("values", []))
+                header = resp.get("values", [None])[0] if resp.get("values") else []
+                result[opt_tab] = TabRaw(presente=True, header=[str(h).strip() for h in header] if header else [], rows=rows)
+            except Exception as exc:
+                message = str(exc)
+                if "400" in message and "Unable to parse range" in message:
+                    result[opt_tab] = TabRaw(presente=False, header=[], rows=[])
+                else:
+                    result[opt_tab] = TabRaw(presente=True, header=[], rows=[], error_lectura=str(exc))
     except SheetsClientError:
         raise
     except Exception as exc:
@@ -188,7 +208,7 @@ def fetch_objetivos_tab() -> TabRaw:
                 return TabRaw(presente=False, header=[], rows=[])
             df = pd.read_excel(excel_path, sheet_name=OBJETIVOS_TAB)
             values = [df.columns.tolist()] + df.values.tolist()
-            rows = _rows_to_dicts([[str(v) for v in row] for row in values])
+            rows = _rows_to_dicts([['' if pd.isna(v) else str(v) for v in row] for row in values])
             header = df.columns.tolist() if hasattr(df, 'columns') else []
             return TabRaw(presente=True, header=header, rows=rows)
         except Exception as exc:
@@ -224,7 +244,7 @@ def fetch_rebalanceo_tab() -> TabRaw:
                 return TabRaw(presente=False, header=[], rows=[])
             df = pd.read_excel(excel_path, sheet_name=REBALANCEO_TAB)
             values = [df.columns.tolist()] + df.values.tolist()
-            rows = _rows_to_dicts([[str(v) for v in row] for row in values])
+            rows = _rows_to_dicts([['' if pd.isna(v) else str(v) for v in row] for row in values])
             header = df.columns.tolist() if hasattr(df, 'columns') else []
             return TabRaw(presente=True, header=header, rows=rows)
         except Exception as exc:
@@ -260,7 +280,7 @@ def fetch_benchmarks_tab() -> TabRaw:
                 return TabRaw(presente=False, header=[], rows=[])
             df = pd.read_excel(excel_path, sheet_name=BENCHMARKS_TAB)
             values = [df.columns.tolist()] + df.values.tolist()
-            rows = _rows_to_dicts([[str(v) for v in row] for row in values])
+            rows = _rows_to_dicts([['' if pd.isna(v) else str(v) for v in row] for row in values])
             header = df.columns.tolist() if hasattr(df, 'columns') else []
             return TabRaw(presente=True, header=header, rows=rows)
         except Exception as exc:
@@ -296,7 +316,7 @@ def fetch_configuracion_tab() -> TabRaw:
                 return TabRaw(presente=False, header=[], rows=[])
             df = pd.read_excel(excel_path, sheet_name=CONFIGURACION_TAB)
             values = [df.columns.tolist()] + df.values.tolist()
-            rows = _rows_to_dicts([[str(v) for v in row] for row in values])
+            rows = _rows_to_dicts([['' if pd.isna(v) else str(v) for v in row] for row in values])
             header = df.columns.tolist() if hasattr(df, 'columns') else []
             return TabRaw(presente=True, header=header, rows=rows)
         except Exception as exc:
