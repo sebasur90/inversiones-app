@@ -91,6 +91,9 @@ export default function Rendimiento() {
         <button onClick={() => navigate('/patrimonio')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
           <Icon name="trend" className="w-3.5 h-3.5" /> Ver evolución del patrimonio
         </button>
+        <button onClick={() => navigate('/riesgo')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+          <Icon name="alert" className="w-3.5 h-3.5" /> Ver métricas de riesgo
+        </button>
       </div>
 
       {loading ? (

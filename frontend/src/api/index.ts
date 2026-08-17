@@ -17,6 +17,7 @@ export interface SyncResult {
   indices_mercado: number
   objetivos: number
   rebalanceo: number
+  benchmarks: number
   errores: SyncErrorItem[]
 }
 
@@ -381,3 +382,85 @@ export const getObjetivoInversion = async (cartera: string): Promise<ObjetivoInv
 
 export const getAportesHistoricos = (cartera: string) =>
   api.get<AportesHistoricosOut>(`/inversiones/carteras/${encodeURIComponent(cartera)}/aportes-historicos`).then(r => r.data)
+
+// --- Riesgo ---
+
+export type MonedaRiesgo = 'ars_nominal' | 'ars_real' | 'usd'
+
+export interface DrawdownPunto {
+  fecha: string
+  drawdown: number
+}
+
+export interface DrawdownOut {
+  estado: 'ok' | 'datos_insuficientes'
+  actual: number | null
+  maximo: number | null
+  fecha_pico: string | null
+  fecha_valle: string | null
+  en_recuperacion: boolean | null
+  tiempo_recuperacion_meses: number | null
+  serie: DrawdownPunto[]
+}
+
+export interface VolatilidadOut {
+  estado: 'ok' | 'datos_insuficientes'
+  mensual: number | null
+  anualizada: number | null
+  n_obs: number
+}
+
+export interface SharpeOut {
+  estado: 'ok' | 'datos_insuficientes' | 'sin_benchmark'
+  valor: number | null
+  benchmark: string | null
+  n_obs: number
+}
+
+export interface SortinoOut {
+  estado: 'ok' | 'datos_insuficientes'
+  valor: number | null
+  n_obs: number
+}
+
+export interface CalmarOut {
+  estado: 'ok' | 'datos_insuficientes'
+  valor: number | null
+  retorno_anualizado: number | null
+}
+
+export interface PeriodoRetorno {
+  anio: number
+  mes: number
+  retorno: number
+}
+
+export interface FrecuenciaOut {
+  estado: 'ok' | 'datos_insuficientes'
+  pct_positivos: number | null
+  pct_negativos: number | null
+  n_obs: number
+}
+
+export interface RiesgoOut {
+  frecuencia: string
+  moneda: MonedaRiesgo
+  benchmark_usado: string | null
+  n_meses_historia: number
+  drawdown: DrawdownOut
+  volatilidad: VolatilidadOut
+  sharpe: SharpeOut
+  sortino: SortinoOut
+  calmar: CalmarOut
+  mejores_periodos: PeriodoRetorno[]
+  peores_periodos: PeriodoRetorno[]
+  frecuencia_positivos_negativos: FrecuenciaOut
+}
+
+export const getBenchmarksDisponibles = () =>
+  api.get<string[]>('/inversiones/benchmarks').then(r => r.data)
+
+export const getRiesgo = (cartera: string | null, moneda: MonedaRiesgo, benchmark: string | null) =>
+  api
+    .get<RiesgoOut>(`${carteraPath(cartera)}/riesgo`, { params: { moneda, benchmark: benchmark ?? undefined } })
+    .then(r => r.data)

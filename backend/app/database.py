@@ -73,6 +73,16 @@ class IndiceMercado(Base):
     mep = Column(Numeric(18, 6), nullable=True)
 
 
+class BenchmarkValor(Base):
+    __tablename__ = "benchmarks_mercado"
+    id = Column(Integer, primary_key=True, index=True)
+    fecha = Column(Date, nullable=False)
+    benchmark = Column(String, nullable=False)
+    valor = Column(Numeric(18, 6), nullable=False)
+
+    __table_args__ = (UniqueConstraint("fecha", "benchmark", name="uq_benchmark_valor"),)
+
+
 class ObjetivoInversion(Base):
     __tablename__ = "objetivos_inversion"
     id = Column(Integer, primary_key=True, index=True)

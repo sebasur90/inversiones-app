@@ -785,6 +785,83 @@ def _calcular_twr_mensual(
     return resultado
 
 
+def _calcular_twr_mensual_ars_real(
+    movs: list[MovimientoInversion],
+    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
+    db: Session,
+    mep_cache: dict,
+    cer_cache: dict,
+    cer_hoy: float | None,
+    hoy: date,
+) -> dict[tuple[int, int], float | None]:
+    """TWR mensual encadenado en ARS real (deflactado por CER). Ver `_calcular_twr_mensual`.
+
+    Duplica el encadenamiento de `_calcular_twr_mensual` (en vez de reusarla vía closures)
+    porque, a diferencia de USD/ARS nominal, una valuación en ARS real puede ser `None` cuando
+    falta CER para una fecha puntual — igual que `_calcular_twr_ars_real`, abortamos devolviendo
+    {} en ese caso en vez de propagar `None` a una comparación numérica.
+    """
+    if cer_hoy is None:
+        return {}
+
+    fechas_borde = sorted({m.fecha for m in movs if m.tipo_movimiento in TIPOS_QUE_CAMBIAN_TENENCIA})
+    if not fechas_borde:
+        return {}
+
+    primera_fecha = fechas_borde[0]
+    boundaries = sorted(set(fechas_borde) | set(_fin_de_mes_range(primera_fecha, hoy)))
+
+    cf_por_fecha: dict[date, float] = {}
+    for mov in movs:
+        if mov.tipo_movimiento not in TIPOS_QUE_CAMBIAN_TENENCIA:
+            continue
+        monto = _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy)
+        if monto is None:
+            return {}
+        signo = 1 if mov.tipo_movimiento == "compra" else -1
+        cf_por_fecha[mov.fecha] = cf_por_fecha.get(mov.fecha, 0.0) + signo * monto
+
+    tracker = _HoldingsTracker(movs)
+    valores: dict[date, float] = {}
+    for b in boundaries:
+        tracker.avanzar_a(b)
+        valor, _aprox, _falt = _valuar_holdings_ars_real(
+            tracker.snapshot(), b, precios_por_ticker, db, mep_cache, cer_cache, cer_hoy, tracker.costo_snapshot()
+        )
+        if valor is None:
+            return {}
+        valores[b] = valor
+
+    factores_por_mes: dict[tuple[int, int], list[float]] = {}
+    tuvo_tenencia: dict[tuple[int, int], bool] = {}
+
+    for i in range(1, len(boundaries)):
+        d0, d1 = boundaries[i - 1], boundaries[i]
+        v0, v1 = valores[d0], valores[d1]
+        key = (d1.year, d1.month)
+        if v0 > EPS or v1 > EPS:
+            tuvo_tenencia[key] = True
+        else:
+            tuvo_tenencia.setdefault(key, False)
+        if v0 <= EPS:
+            continue
+        flujo = cf_por_fecha.get(d1, 0.0)
+        r = (v1 - flujo) / v0 - 1
+        factores_por_mes.setdefault(key, []).append(1 + r)
+
+    resultado: dict[tuple[int, int], float | None] = {}
+    for key, tuvo in tuvo_tenencia.items():
+        factores = factores_por_mes.get(key)
+        if not tuvo or not factores:
+            resultado[key] = None
+            continue
+        total = 1.0
+        for f in factores:
+            total *= f
+        resultado[key] = total - 1
+    return resultado
+
+
 def get_rendimiento_mensual(cartera: str | None, db: Session) -> dict:
     """Rendimiento (TWR) por mes calendario y por año, en ARS nominal y USD."""
     movs = _movimientos_ordenados(db, cartera)

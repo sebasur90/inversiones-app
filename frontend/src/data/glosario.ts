@@ -12,6 +12,11 @@ export type GlosarioKey =
   | 'objetivo'
   | 'stopLoss'
   | 'rebalanceo'
+  | 'drawdown'
+  | 'volatilidad'
+  | 'sharpe'
+  | 'sortino'
+  | 'calmar'
 
 export const GLOSARIO: Record<GlosarioKey, { titulo: string; texto: string }> = {
   xirr: {
@@ -68,5 +73,25 @@ export const GLOSARIO: Record<GlosarioKey, { titulo: string; texto: string }> = 
   rebalanceo: {
     titulo: 'Rebalanceo',
     texto: 'Compara tu asignación actual contra los porcentajes objetivo que cargaste en la pestaña "Rebalanceo" del Sheet, en 3 ejes independientes (cada uno suma su propio 100%): Cartera (peso de cada cartera sobre el total), Tipo (CEDEAR, Bono, etc. dentro de una cartera) y Sector (dentro de una cartera). Lo que tiene valor invertido pero no tiene objetivo cargado aparece aparte, en "Sin objetivo".',
+  },
+  drawdown: {
+    titulo: 'Drawdown',
+    texto: 'Cuánto cayó tu cartera desde su punto más alto (máximo histórico) hasta hoy o hasta el peor momento registrado. El "drawdown máximo" es la peor caída que sufriste alguna vez; el "actual" es cuánto estás por debajo del último máximo ahora mismo.',
+  },
+  volatilidad: {
+    titulo: 'Volatilidad',
+    texto: 'Qué tan bruscos son los altibajos mensuales de tu cartera. Se calcula sobre retornos mensuales y se anualiza (× √12) para comparar contra otras métricas anuales. Más volatilidad no es necesariamente malo, pero implica un camino más incómodo.',
+  },
+  sharpe: {
+    titulo: 'Sharpe (vs. benchmark)',
+    texto: 'Compara el retorno de tu cartera contra un benchmark elegido, ajustado por lo volátil que fue esa diferencia. Un Sharpe más alto significa que ganaste más que el benchmark sin asumir demasiada volatilidad extra para lograrlo.',
+  },
+  sortino: {
+    titulo: 'Sortino',
+    texto: 'Parecido al Sharpe, pero solo penaliza la volatilidad "mala" (los meses negativos), ignorando los meses buenos. Es útil porque a nadie le molesta la volatilidad hacia arriba.',
+  },
+  calmar: {
+    titulo: 'Calmar',
+    texto: 'Compara tu retorno anualizado contra el peor drawdown que sufriste. Un Calmar alto significa que ganaste mucho en relación a lo doloroso que fue el peor momento de la cartera.',
   },
 }

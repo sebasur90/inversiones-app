@@ -4,8 +4,8 @@ from datetime import date, datetime
 from dateutil import parser as dateutil_parser
 from sqlalchemy.orm import Session
 
-from ..database import InstrumentoInversion, MovimientoInversion, PrecioInstrumento, IndiceMercado, ObjetivoInversion, RebalanceoObjetivo
-from .sheets_client import fetch_sheet_data, fetch_objetivos_tab, fetch_rebalanceo_tab
+from ..database import InstrumentoInversion, MovimientoInversion, PrecioInstrumento, IndiceMercado, ObjetivoInversion, RebalanceoObjetivo, BenchmarkValor
+from .sheets_client import fetch_sheet_data, fetch_objetivos_tab, fetch_rebalanceo_tab, fetch_benchmarks_tab
 
 # Estado en memoria del proceso: se resetea al reiniciar el backend.
 _ultimo_sync: datetime | None = None
@@ -98,6 +98,7 @@ def sync_from_sheet(db: Session) -> dict:
     precios_validos, cer_mep_precios = _validar_precios(data.get("Precios", []), errores)
     objetivos_validos = _validar_objetivos(fetch_objetivos_tab(), errores)
     rebalanceo_validos = _validar_rebalanceo(fetch_rebalanceo_tab(), errores)
+    benchmarks_validos = _validar_benchmarks(fetch_benchmarks_tab(), errores)
 
     indices_mercado, advertencias = _consolidar_indices_mercado(cer_mep_movimientos, cer_mep_precios, errores)
     errores.extend(advertencias)
@@ -108,6 +109,7 @@ def sync_from_sheet(db: Session) -> dict:
     db.query(IndiceMercado).delete()
     db.query(ObjetivoInversion).delete()
     db.query(RebalanceoObjetivo).delete()
+    db.query(BenchmarkValor).delete()
     db.flush()
 
     for inst in instrumentos_validos:
@@ -138,6 +140,9 @@ def sync_from_sheet(db: Session) -> dict:
     for rebalanceo in rebalanceo_validos:
         db.add(RebalanceoObjetivo(**rebalanceo))
 
+    for benchmark in benchmarks_validos:
+        db.add(BenchmarkValor(**benchmark))
+
     db.commit()
 
     global _ultimo_sync
@@ -150,6 +155,7 @@ def sync_from_sheet(db: Session) -> dict:
         "objetivos": len(objetivos_validos),
         "rebalanceo": len(rebalanceo_validos),
         "indices_mercado": len(indices_mercado),
+        "benchmarks": len(benchmarks_validos),
         "errores": errores,
     }
 
@@ -390,6 +396,38 @@ def _validar_precios(rows: list[tuple[int, dict]], errores: list[dict]) -> tuple
         validos.append({"fecha": fecha, "ticker": ticker, "precio": precio, "moneda": moneda})
 
     return validos, cer_mep_datos
+
+
+def _validar_benchmarks(rows: list[tuple[int, dict]], errores: list[dict]) -> list[dict]:
+    validos = []
+    vistos: set[tuple[date, str]] = set()
+    for row_num, row in rows:
+        fecha_raw = (row.get("Fecha") or "").strip()
+        fecha = _parse_fecha(fecha_raw)
+        if fecha is None:
+            errores.append({"fila": row_num, "motivo": f"Fecha inválida: {fecha_raw}"})
+            continue
+
+        benchmark = (row.get("Benchmark") or "").strip()
+        if not benchmark:
+            errores.append({"fila": row_num, "motivo": "Benchmark vacío"})
+            continue
+
+        valor_raw = (row.get("Valor") or "").strip()
+        valor = _parse_numero(valor_raw)
+        if valor is None:
+            errores.append({"fila": row_num, "motivo": f"Valor inválido: {valor_raw}"})
+            continue
+
+        key = (fecha, benchmark)
+        if key in vistos:
+            errores.append({"fila": row_num, "motivo": f"Valor duplicado para {benchmark} en {fecha.isoformat()}"})
+            continue
+        vistos.add(key)
+
+        validos.append({"fecha": fecha, "benchmark": benchmark, "valor": valor})
+
+    return validos
 
 
 def _consolidar_indices_mercado(cer_mep_movimientos: list[dict], cer_mep_precios: list[dict], errores: list[dict]) -> tuple[list[dict], list[dict]]:

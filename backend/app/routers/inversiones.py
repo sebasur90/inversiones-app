@@ -21,6 +21,7 @@ from ..schemas import (
     ComisionesOut,
     PnlRealizadoNoRealizadoOut,
     RendimientoMensualOut,
+    RiesgoOut,
 )
 from ..services.sheets_client import SheetsClientError
 from ..services.inversiones_sync import sync_from_sheet, get_ultimo_sync
@@ -39,6 +40,7 @@ from ..services.inversiones_analytics import (
     get_pnl_realizado_no_realizado,
     get_rendimiento_mensual,
 )
+from ..services.riesgo_analytics import get_riesgo, get_benchmarks_disponibles, MONEDAS_VALIDAS
 
 router = APIRouter(prefix="/api/inversiones", tags=["inversiones"])
 
@@ -210,3 +212,35 @@ def pnl_realizado_cartera(nombre: str, db: Session = Depends(get_db)):
 @router.get("/consolidado/pnl-realizado", response_model=PnlRealizadoNoRealizadoOut)
 def pnl_realizado_consolidado(db: Session = Depends(get_db)):
     return get_pnl_realizado_no_realizado(None, db)
+
+
+@router.get("/benchmarks", response_model=list[str])
+def benchmarks_disponibles(db: Session = Depends(get_db)):
+    return get_benchmarks_disponibles(db)
+
+
+def _validar_moneda(moneda: str) -> None:
+    if moneda not in MONEDAS_VALIDAS:
+        raise HTTPException(status_code=422, detail=f"moneda inválida: {moneda}. Válidas: {MONEDAS_VALIDAS}")
+
+
+@router.get("/carteras/{nombre}/riesgo", response_model=RiesgoOut)
+def riesgo_cartera(
+    nombre: str,
+    moneda: str = Query("usd"),
+    benchmark: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    _validar_cartera(nombre, db)
+    _validar_moneda(moneda)
+    return get_riesgo(nombre, moneda, benchmark, db)
+
+
+@router.get("/consolidado/riesgo", response_model=RiesgoOut)
+def riesgo_consolidado(
+    moneda: str = Query("usd"),
+    benchmark: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    _validar_moneda(moneda)
+    return get_riesgo(None, moneda, benchmark, db)

@@ -20,6 +20,7 @@ import Comisiones from './pages/Comisiones'
 import Patrimonio from './pages/Patrimonio'
 import Rendimiento from './pages/Rendimiento'
 import Rebalanceo from './pages/Rebalanceo'
+import Riesgo from './pages/Riesgo'
 
 function SyncResultModal() {
   const { syncSheetOpen, closeSyncSheet, syncErrors, syncWarnings, syncResumenTexto } = useInversionesContext()
@@ -102,6 +103,7 @@ function Root() {
             <Route path="patrimonio" element={<Patrimonio />} />
             <Route path="rendimiento" element={<Rendimiento />} />
             <Route path="rebalanceo" element={<Rebalanceo />} />
+            <Route path="riesgo" element={<Riesgo />} />
             <Route path="*" element={<Navigate to="/resumen" replace />} />
           </Route>
         </Routes>

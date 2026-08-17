@@ -16,6 +16,7 @@ class SyncResult(BaseModel):
     indices_mercado: int
     objetivos: int
     rebalanceo: int
+    benchmarks: int
     errores: list[SyncErrorItem]
 
 
@@ -317,3 +318,75 @@ class PnlPorTickerItem(BaseModel):
 class PnlRealizadoNoRealizadoOut(BaseModel):
     consolidado: PnlConsolidado
     por_ticker: list[PnlPorTickerItem]
+
+
+# --- Riesgo ---
+
+class DrawdownPunto(BaseModel):
+    fecha: date
+    drawdown: float
+
+
+class DrawdownOut(BaseModel):
+    estado: str
+    actual: Optional[float] = None
+    maximo: Optional[float] = None
+    fecha_pico: Optional[date] = None
+    fecha_valle: Optional[date] = None
+    en_recuperacion: Optional[bool] = None
+    tiempo_recuperacion_meses: Optional[int] = None
+    serie: list[DrawdownPunto] = []
+
+
+class VolatilidadOut(BaseModel):
+    estado: str
+    mensual: Optional[float] = None
+    anualizada: Optional[float] = None
+    n_obs: int
+
+
+class SharpeOut(BaseModel):
+    estado: str
+    valor: Optional[float] = None
+    benchmark: Optional[str] = None
+    n_obs: int
+
+
+class SortinoOut(BaseModel):
+    estado: str
+    valor: Optional[float] = None
+    n_obs: int
+
+
+class CalmarOut(BaseModel):
+    estado: str
+    valor: Optional[float] = None
+    retorno_anualizado: Optional[float] = None
+
+
+class PeriodoRetorno(BaseModel):
+    anio: int
+    mes: int
+    retorno: float
+
+
+class FrecuenciaOut(BaseModel):
+    estado: str
+    pct_positivos: Optional[float] = None
+    pct_negativos: Optional[float] = None
+    n_obs: int
+
+
+class RiesgoOut(BaseModel):
+    frecuencia: str = "mensual"
+    moneda: str
+    benchmark_usado: Optional[str] = None
+    n_meses_historia: int
+    drawdown: DrawdownOut
+    volatilidad: VolatilidadOut
+    sharpe: SharpeOut
+    sortino: SortinoOut
+    calmar: CalmarOut
+    mejores_periodos: list[PeriodoRetorno]
+    peores_periodos: list[PeriodoRetorno]
+    frecuencia_positivos_negativos: FrecuenciaOut
