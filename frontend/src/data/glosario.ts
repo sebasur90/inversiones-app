@@ -17,6 +17,9 @@ export type GlosarioKey =
   | 'sharpe'
   | 'sortino'
   | 'calmar'
+  | 'hhi'
+  | 'correlacion'
+  | 'contribucion'
 
 export const GLOSARIO: Record<GlosarioKey, { titulo: string; texto: string }> = {
   xirr: {
@@ -93,5 +96,17 @@ export const GLOSARIO: Record<GlosarioKey, { titulo: string; texto: string }> = 
   calmar: {
     titulo: 'Calmar',
     texto: 'Compara tu retorno anualizado contra el peor drawdown que sufriste. Un Calmar alto significa que ganaste mucho en relación a lo doloroso que fue el peor momento de la cartera.',
+  },
+  hhi: {
+    titulo: 'HHI (Índice de concentración)',
+    texto: 'Mide qué tan concentrada está tu cartera en pocas posiciones: se suma el cuadrado del peso % de cada componente. Un valor bajo (cerca de 0) indica diversificación; uno alto (cerca de 10.000, el máximo si todo está en una sola posición) indica alta concentración. El "N efectivo" traduce ese número a algo más intuitivo: cuántas posiciones de igual tamaño equivalen a tu nivel de concentración actual.',
+  },
+  correlacion: {
+    titulo: 'Correlación',
+    texto: 'Mide qué tan parecido se mueve un activo respecto a otro, en una escala de -1 a +1. Cerca de +1 significa que suben y bajan casi juntos (poca diversificación real entre ellos); cerca de -1 significa que se mueven en sentido contrario; cerca de 0 significa que no hay relación clara. Se calcula sobre retornos mensuales en USD, así que necesita varios meses de historial de precios para ser confiable.',
+  },
+  contribucion: {
+    titulo: 'Contribución al retorno',
+    texto: 'Qué parte del resultado total de la cartera (en dólares) aportó cada posición, sector, tipo o mercado. Se calcula como el P&L de cada uno dividido por el costo total invertido en toda la cartera, así que la suma de todas las contribuciones coincide con el retorno simple total. No es lo mismo que el TWR/XIRR de la cartera: es una forma de repartir el resultado ya conocido entre sus componentes, no una tasa de retorno ajustada por tiempo.',
   },
 }

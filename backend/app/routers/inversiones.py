@@ -22,6 +22,8 @@ from ..schemas import (
     PnlRealizadoNoRealizadoOut,
     RendimientoMensualOut,
     RiesgoOut,
+    ContribucionOut,
+    CorrelacionesOut,
 )
 from ..services.sheets_client import SheetsClientError
 from ..services.inversiones_sync import sync_from_sheet, get_ultimo_sync
@@ -41,6 +43,7 @@ from ..services.inversiones_analytics import (
     get_rendimiento_mensual,
 )
 from ..services.riesgo_analytics import get_riesgo, get_benchmarks_disponibles, MONEDAS_VALIDAS
+from ..services.contribucion_analytics import get_contribucion, get_correlaciones, UNIVERSOS_VALIDOS
 
 router = APIRouter(prefix="/api/inversiones", tags=["inversiones"])
 
@@ -244,3 +247,32 @@ def riesgo_consolidado(
 ):
     _validar_moneda(moneda)
     return get_riesgo(None, moneda, benchmark, db)
+
+
+@router.get("/carteras/{nombre}/contribucion", response_model=ContribucionOut)
+def contribucion_cartera(nombre: str, db: Session = Depends(get_db)):
+    _validar_cartera(nombre, db)
+    return get_contribucion(nombre, db)
+
+
+@router.get("/consolidado/contribucion", response_model=ContribucionOut)
+def contribucion_consolidado(db: Session = Depends(get_db)):
+    return get_contribucion(None, db)
+
+
+def _validar_universo(universo: str) -> None:
+    if universo not in UNIVERSOS_VALIDOS:
+        raise HTTPException(status_code=422, detail=f"universo inválido: {universo}. Válidos: {UNIVERSOS_VALIDOS}")
+
+
+@router.get("/carteras/{nombre}/correlaciones", response_model=CorrelacionesOut)
+def correlaciones_cartera(nombre: str, universo: str = Query("tenencias"), db: Session = Depends(get_db)):
+    _validar_cartera(nombre, db)
+    _validar_universo(universo)
+    return get_correlaciones(nombre, db, universo)
+
+
+@router.get("/consolidado/correlaciones", response_model=CorrelacionesOut)
+def correlaciones_consolidado(universo: str = Query("tenencias"), db: Session = Depends(get_db)):
+    _validar_universo(universo)
+    return get_correlaciones(None, db, universo)

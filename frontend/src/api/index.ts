@@ -464,3 +464,58 @@ export const getRiesgo = (cartera: string | null, moneda: MonedaRiesgo, benchmar
   api
     .get<RiesgoOut>(`${carteraPath(cartera)}/riesgo`, { params: { moneda, benchmark: benchmark ?? undefined } })
     .then(r => r.data)
+
+// --- Contribución, concentración y correlaciones ---
+
+export interface ContribucionItem {
+  etiqueta: string
+  peso_promedio_pct: number
+  pnl_usd: number
+  costo_total_usd: number
+  rentabilidad_pct: number | null
+  contribucion_pct: number
+}
+
+export interface ContribucionEje {
+  eje: string
+  items: ContribucionItem[]
+}
+
+export interface ConcentracionItem {
+  eje: string
+  estado: 'ok' | 'sin_datos'
+  hhi: number | null
+  hhi_normalizado: number | null
+  effective_n: number | null
+  n_componentes: number
+}
+
+export interface ContribucionOut {
+  contribucion: ContribucionEje[]
+  concentracion: ConcentracionItem[]
+}
+
+export const getContribucion = (cartera: string | null) =>
+  api.get<ContribucionOut>(`${carteraPath(cartera)}/contribucion`).then(r => r.data)
+
+export type UniversoCorrelacion = 'tenencias' | 'todos'
+
+export interface CorrelacionParItem {
+  ticker_a: string
+  ticker_b: string
+  valor: number | null
+  n_obs: number
+  estado: 'ok' | 'datos_insuficientes'
+}
+
+export interface CorrelacionesOut {
+  universo: UniversoCorrelacion
+  n_tickers: number
+  tickers: string[]
+  matriz: (number | null)[][]
+  pares: CorrelacionParItem[]
+  advertencia_historial_corto: boolean
+}
+
+export const getCorrelaciones = (cartera: string | null, universo: UniversoCorrelacion = 'tenencias') =>
+  api.get<CorrelacionesOut>(`${carteraPath(cartera)}/correlaciones`, { params: { universo } }).then(r => r.data)

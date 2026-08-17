@@ -132,6 +132,9 @@ export default function Riesgo() {
         <button onClick={() => navigate('/rendimiento')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
           <Icon name="trend" className="w-3.5 h-3.5" /> Ver rendimiento detallado
         </button>
+        <button onClick={() => navigate('/contribucion')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+          <Icon name="scale" className="w-3.5 h-3.5" /> Ver contribución y concentración
+        </button>
       </div>
 
       <div className="mb-3">

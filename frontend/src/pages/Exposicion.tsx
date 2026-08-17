@@ -48,9 +48,14 @@ export default function Exposicion() {
     <div className="pb-4">
       <ScreenHeader title="Exposición" />
 
-      <button onClick={() => navigate('/vencimientos')} className="mb-3 inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
-        <Icon name="target" className="w-3.5 h-3.5" /> Ver calendario de vencimientos
-      </button>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
+        <button onClick={() => navigate('/vencimientos')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+          <Icon name="target" className="w-3.5 h-3.5" /> Ver calendario de vencimientos
+        </button>
+        <button onClick={() => navigate('/contribucion')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+          <Icon name="scale" className="w-3.5 h-3.5" /> Ver contribución y concentración
+        </button>
+      </div>
 
       {loading ? (
         <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>

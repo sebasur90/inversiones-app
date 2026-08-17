@@ -390,3 +390,50 @@ class RiesgoOut(BaseModel):
     mejores_periodos: list[PeriodoRetorno]
     peores_periodos: list[PeriodoRetorno]
     frecuencia_positivos_negativos: FrecuenciaOut
+
+
+# --- Contribución, concentración y correlaciones ---
+
+class ContribucionItem(BaseModel):
+    etiqueta: str
+    peso_promedio_pct: float
+    pnl_usd: float
+    costo_total_usd: float
+    rentabilidad_pct: Optional[float] = None
+    contribucion_pct: float
+
+
+class ContribucionEje(BaseModel):
+    eje: str
+    items: list[ContribucionItem]
+
+
+class ConcentracionItem(BaseModel):
+    eje: str
+    estado: str
+    hhi: Optional[float] = None
+    hhi_normalizado: Optional[float] = None
+    effective_n: Optional[float] = None
+    n_componentes: int
+
+
+class ContribucionOut(BaseModel):
+    contribucion: list[ContribucionEje]
+    concentracion: list[ConcentracionItem]
+
+
+class CorrelacionParItem(BaseModel):
+    ticker_a: str
+    ticker_b: str
+    valor: Optional[float] = None
+    n_obs: int
+    estado: str
+
+
+class CorrelacionesOut(BaseModel):
+    universo: str
+    n_tickers: int
+    tickers: list[str]
+    matriz: list[list[Optional[float]]]
+    pares: list[CorrelacionParItem]
+    advertencia_historial_corto: bool
