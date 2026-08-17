@@ -24,38 +24,61 @@ import Riesgo from './pages/Riesgo'
 import PerformanceRelativa from './pages/PerformanceRelativa'
 import Contribucion from './pages/Contribucion'
 import Diagnostico from './pages/Diagnostico'
+import CalidadDatos from './pages/CalidadDatos'
 
 function SyncResultModal() {
-  const { syncSheetOpen, closeSyncSheet, syncErrors, syncWarnings, syncResumenTexto } = useInversionesContext()
-  const titulo = syncErrors.length > 0 ? `Sincronización con ${syncErrors.length} fila${syncErrors.length > 1 ? 's' : ''} inválida${syncErrors.length > 1 ? 's' : ''}` : 'Sincronización completada'
+  const { syncSheetOpen, closeSyncSheet, syncIssues, syncHealthScore, syncResultado, syncResumenTexto } = useInversionesContext()
+  const navigate = useNavigate()
+
+  const titulo =
+    syncResultado === 'con_errores'
+      ? 'Sincronización con errores'
+      : syncResultado === 'con_advertencias'
+        ? 'Sincronización con advertencias'
+        : 'Sincronización completada'
+
+  const criticalCount = syncIssues.filter(i => i.severidad === 'critico').length
+  const warningCount = syncIssues.filter(i => i.severidad === 'advertencia').length
 
   return (
     <Modal open={syncSheetOpen} onClose={closeSyncSheet} title={titulo}>
-      <p className="text-[13px] text-app-text mb-4">
+      <p className="text-[13px] text-app-text mb-3">
         Se cargaron: <strong>{syncResumenTexto}</strong>
       </p>
-      {syncErrors.length > 0 && (
-        <div className="mb-4">
-          <div className="text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2">Filas con errores</div>
-          <ul className="flex flex-col gap-1.5">
-            {syncErrors.map((e, i) => (
-              <li key={i} className="text-[12.5px] text-app-text bg-app-coral-soft rounded-lg px-3 py-2">
-                <strong>Fila {e.fila}:</strong> {e.motivo}
-              </li>
-            ))}
-          </ul>
+      {syncHealthScore !== null && (
+        <div className="mb-4 p-3 bg-app-surface-2 rounded-lg">
+          <div className="text-[12px] font-semibold text-app-text">
+            Calidad: <span className="text-[18px]">{syncHealthScore}</span>/100
+          </div>
+          {syncResultado !== 'ok' && (
+            <div className="text-[11px] text-app-text-dim mt-1">
+              {criticalCount > 0 && <div>{criticalCount} error(es) crítico(s)</div>}
+              {warningCount > 0 && <div>{warningCount} advertencia(s)</div>}
+            </div>
+          )}
         </div>
       )}
-      {syncWarnings.length > 0 && (
-        <div>
-          <div className="text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2">Advertencias</div>
-          <ul className="flex flex-col gap-1.5">
-            {syncWarnings.map((e, i) => (
-              <li key={i} className="text-[12.5px] text-app-text bg-app-gold-soft rounded-lg px-3 py-2">
-                {e.motivo}
-              </li>
+      {syncIssues.length > 0 && (
+        <div className="mb-4">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2">Problemas detectados</div>
+          <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+            {syncIssues.slice(0, 8).map((issue, i) => (
+              <div key={i} className="text-[12px] text-app-text bg-app-surface-2 rounded-lg px-3 py-2">
+                <strong>{issue.tab}</strong> {issue.fila && `/ fila ${issue.fila}`}: {issue.mensaje}
+              </div>
             ))}
-          </ul>
+          </div>
+          {syncIssues.length > 8 && (
+            <button
+              onClick={() => {
+                closeSyncSheet()
+                navigate('/calidad-datos')
+              }}
+              className="mt-2 text-[12px] text-app-link hover:underline"
+            >
+              Ver detalle completo ({syncIssues.length - 8} más) →
+            </button>
+          )}
         </div>
       )}
     </Modal>
@@ -110,6 +133,7 @@ function Root() {
             <Route path="performance-relativa" element={<PerformanceRelativa />} />
             <Route path="contribucion" element={<Contribucion />} />
             <Route path="diagnostico" element={<Diagnostico />} />
+            <Route path="calidad-datos" element={<CalidadDatos />} />
             <Route path="*" element={<Navigate to="/resumen" replace />} />
           </Route>
         </Routes>

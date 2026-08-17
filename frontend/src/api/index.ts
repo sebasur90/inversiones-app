@@ -4,10 +4,15 @@ const api = axios.create({ baseURL: '/api' })
 
 export default api
 
-// ---- Inversiones ----
-export interface SyncErrorItem {
-  fila: number
-  motivo: string
+// ---- Inversiones: Sincronización ----
+export interface SyncIssueOut {
+  tab: string
+  fila: number | null
+  campo: string | null
+  regla: string
+  severidad: string
+  mensaje: string
+  impacto: string
 }
 
 export interface SyncResult {
@@ -19,7 +24,29 @@ export interface SyncResult {
   rebalanceo: number
   benchmarks: number
   configuracion: number
-  errores: SyncErrorItem[]
+  health_score: number
+  resultado: string
+  duration_ms: number
+  timestamp: string
+  issues: SyncIssueOut[]
+}
+
+export interface SyncRunResumenOut {
+  id: number
+  timestamp: string
+  duration_ms: number
+  filas_procesadas: number
+  filas_validas: number
+  filas_advertencia: number
+  filas_error: number
+  health_score: number
+  resultado: string
+}
+
+export interface CalidadDatosOut {
+  ultimo_sync: SyncRunResumenOut | null
+  issues: SyncIssueOut[]
+  issues_por_tab: Record<string, SyncIssueOut[]>
 }
 
 export interface CarteraInfo {
@@ -188,6 +215,9 @@ const carteraPath = (cartera: string | null) =>
 
 export const syncInversiones = () =>
   api.post<SyncResult>('/inversiones/sync').then(r => r.data)
+
+export const getCalidadDatos = () =>
+  api.get<CalidadDatosOut>('/inversiones/calidad-datos').then(r => r.data)
 
 export const getCarterasInversion = () =>
   api.get<CarteraInfo[]>('/inversiones/carteras').then(r => r.data)

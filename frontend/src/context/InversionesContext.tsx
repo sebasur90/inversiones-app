@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
 import { useInversiones } from '../hooks/useInversiones'
-import type { SyncErrorItem } from '../api'
+import type { SyncIssueOut } from '../api'
 
 interface ToastState {
   message: string
@@ -14,8 +14,9 @@ interface InversionesContextValue extends ReturnType<typeof useInversiones> {
   dismissToast: () => void
   syncSheetOpen: boolean
   closeSyncSheet: () => void
-  syncErrors: SyncErrorItem[]
-  syncWarnings: SyncErrorItem[]
+  syncIssues: SyncIssueOut[]
+  syncHealthScore: number | null
+  syncResultado: string
   syncResumenTexto: string
 }
 
@@ -25,20 +26,20 @@ export function InversionesProvider({ children }: { children: ReactNode }) {
   const inversiones = useInversiones()
   const [toast, setToast] = useState<ToastState | null>(null)
   const [syncSheetOpen, setSyncSheetOpen] = useState(false)
-  const [syncErrors, setSyncErrors] = useState<SyncErrorItem[]>([])
-  const [syncWarnings, setSyncWarnings] = useState<SyncErrorItem[]>([])
+  const [syncIssues, setSyncIssues] = useState<SyncIssueOut[]>([])
+  const [syncHealthScore, setSyncHealthScore] = useState<number | null>(null)
+  const [syncResultado, setSyncResultado] = useState('')
   const [syncResumenTexto, setSyncResumenTexto] = useState('')
 
   const triggerSync = useCallback(async () => {
     try {
       const resultado = await inversiones.sincronizar()
-      const advertencias = resultado.errores.filter(e => e.motivo.startsWith('Advertencia:'))
-      const errores = resultado.errores.filter(e => !e.motivo.startsWith('Advertencia:'))
-      const resumenTexto = `${resultado.movimientos} movimientos, ${resultado.instrumentos} instrumentos, ${resultado.precios} precios, ${resultado.indices_mercado} fechas con CER/MEP`
-      setSyncErrors(errores)
-      setSyncWarnings(advertencias)
+      const resumenTexto = `${resultado.movimientos} movimientos, ${resultado.instrumentos} instrumentos, ${resultado.precios} precios`
+      setSyncIssues(resultado.issues)
+      setSyncHealthScore(resultado.health_score)
+      setSyncResultado(resultado.resultado)
       setSyncResumenTexto(resumenTexto)
-      if (errores.length > 0 || advertencias.length > 0) {
+      if (resultado.issues.length > 0) {
         setSyncSheetOpen(true)
       } else {
         setToast({ message: `Sincronizado: ${resumenTexto}.`, tone: 'success' })
@@ -57,8 +58,9 @@ export function InversionesProvider({ children }: { children: ReactNode }) {
     dismissToast: () => setToast(null),
     syncSheetOpen,
     closeSyncSheet: () => setSyncSheetOpen(false),
-    syncErrors,
-    syncWarnings,
+    syncIssues,
+    syncHealthScore,
+    syncResultado,
     syncResumenTexto,
   }
 
