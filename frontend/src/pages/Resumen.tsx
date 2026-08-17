@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useInversionesContext } from '../context/InversionesContext'
-import { getEvolucionInversiones, getDiagnostico, type EvolucionPunto, type DiagnosticoOut } from '../api'
+import { getEvolucionInversiones, getDiagnostico, getCalidadDatos, type EvolucionPunto, type DiagnosticoOut, type CalidadDatosOut } from '../api'
 import { Icon } from '../components/icons/Icons'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import HeroValorCard from '../components/inversiones/HeroValorCard'
@@ -19,6 +19,7 @@ export default function Resumen() {
     useInversionesContext()
   const [evolucion, setEvolucion] = useState<EvolucionPunto[]>([])
   const [diagnostico, setDiagnostico] = useState<DiagnosticoOut | null>(null)
+  const [calidad, setCalidad] = useState<CalidadDatosOut | null>(null)
 
   useEffect(() => {
     let cancelado = false
@@ -48,6 +49,20 @@ export default function Resumen() {
     }
   }, [carteraSeleccionada])
 
+  useEffect(() => {
+    let cancelado = false
+    getCalidadDatos()
+      .then(c => {
+        if (!cancelado) setCalidad(c)
+      })
+      .catch(() => {
+        if (!cancelado) setCalidad(null)
+      })
+    return () => {
+      cancelado = true
+    }
+  }, [])
+
   const topPosiciones = rendimientoPorTicker.slice(0, 5)
 
   return (
@@ -76,6 +91,27 @@ export default function Resumen() {
               <div className="text-right">
                 <div className="text-[11.5px] font-semibold text-app-text-dim">
                   {diagnostico.hallazgos.length} hallazgo{diagnostico.hallazgos.length !== 1 ? 's' : ''}
+                </div>
+                <Icon name="chevron" className="w-4 h-4 text-app-text-dim inline-block mt-1" />
+              </div>
+            </button>
+          )}
+
+          {calidad?.ultimo_sync && (
+            <button
+              onClick={() => navigate('/calidad-datos')}
+              className="w-full text-left bg-app-surface border border-app-border rounded-2xl p-3.5 mb-4 flex items-center justify-between gap-3 hover:border-app-border-soft transition-colors"
+            >
+              <div>
+                <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-0.5">Calidad de datos</div>
+                <div className="font-display text-[22px] font-semibold text-app-text">
+                  {calidad.ultimo_sync.health_score}
+                  <span className="text-[13px] text-app-text-dim">/100</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[11.5px] font-semibold text-app-text-dim">
+                  {calidad.issues.length} problema{calidad.issues.length !== 1 ? 's' : ''}
                 </div>
                 <Icon name="chevron" className="w-4 h-4 text-app-text-dim inline-block mt-1" />
               </div>
