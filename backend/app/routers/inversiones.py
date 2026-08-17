@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db, MovimientoInversion, InstrumentoInversion
 from ..schemas import (
     SyncResult,
+    CalidadDatosOut,
     CarteraInfo,
     InversionesResumen,
     ExposicionOut,
@@ -33,7 +34,8 @@ from ..schemas import (
     DescomposicionFxPosicionOut,
 )
 from ..services.sheets_client import SheetsClientError
-from ..services.inversiones_sync import sync_from_sheet, get_ultimo_sync
+from ..services.inversiones_sync import sync_from_sheet
+from ..services.calidad_datos import get_calidad_datos
 from ..services.inversiones_analytics import (
     get_carteras,
     get_resumen,
@@ -74,8 +76,9 @@ def sync(db: Session = Depends(get_db)):
 
 @router.get("/carteras", response_model=list[CarteraInfo])
 def list_carteras(db: Session = Depends(get_db)):
-    ultimo_sync = get_ultimo_sync()
-    ultimo_sync_str = ultimo_sync.isoformat() if ultimo_sync else None
+    from ..database import SyncRun
+    ultimo_sync = db.query(SyncRun).order_by(SyncRun.timestamp.desc()).first()
+    ultimo_sync_str = ultimo_sync.timestamp.isoformat() if ultimo_sync else None
     return [CarteraInfo(nombre=nombre, ultimo_sync=ultimo_sync_str) for nombre in get_carteras(db)]
 
 
@@ -382,3 +385,9 @@ def descomposicion_fx_por_posicion_consolidado(
     db: Session = Depends(get_db),
 ):
     return get_descomposicion_fx_por_posicion(None, db)
+
+
+@router.get("/calidad-datos", response_model=CalidadDatosOut)
+def calidad_datos(db: Session = Depends(get_db)):
+    """Obtiene el estado de calidad de datos del último sync."""
+    return get_calidad_datos(db)

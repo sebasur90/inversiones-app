@@ -1,12 +1,17 @@
 from pydantic import BaseModel
 from typing import Optional
-from datetime import date
+from datetime import date, datetime
 
-# --- Inversiones ---
+# --- Inversiones: Sincronización ---
 
-class SyncErrorItem(BaseModel):
-    fila: int
-    motivo: str
+class SyncIssueOut(BaseModel):
+    tab: str
+    fila: Optional[int] = None
+    campo: Optional[str] = None
+    regla: str
+    severidad: str
+    mensaje: str
+    impacto: str
 
 
 class SyncResult(BaseModel):
@@ -18,7 +23,29 @@ class SyncResult(BaseModel):
     rebalanceo: int
     benchmarks: int
     configuracion: int
-    errores: list[SyncErrorItem]
+    health_score: int
+    resultado: str
+    duration_ms: int
+    timestamp: datetime
+    issues: list[SyncIssueOut]
+
+
+class SyncRunResumenOut(BaseModel):
+    id: int
+    timestamp: datetime
+    duration_ms: int
+    filas_procesadas: int
+    filas_validas: int
+    filas_advertencia: int
+    filas_error: int
+    health_score: int
+    resultado: str
+
+
+class CalidadDatosOut(BaseModel):
+    ultimo_sync: Optional[SyncRunResumenOut] = None
+    issues: list[SyncIssueOut]
+    issues_por_tab: dict[str, list[SyncIssueOut]]
 
 
 class CarteraInfo(BaseModel):
