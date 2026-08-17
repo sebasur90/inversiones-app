@@ -97,11 +97,22 @@ class RebalanceoObjetivo(Base):
     __tablename__ = "rebalanceo_objetivos"
     id = Column(Integer, primary_key=True, index=True)
     cartera = Column(String, nullable=True, index=True)  # None = Consolidado
-    eje = Column(String, nullable=False)  # "Cartera" | "Tipo" | "Sector"
+    eje = Column(String, nullable=False)  # "Cartera" | "Tipo" | "Sector" | "Ticker"
     categoria = Column(String, nullable=False)
     porcentaje_objetivo = Column(Numeric(6, 2), nullable=False)
 
     __table_args__ = (UniqueConstraint("cartera", "eje", "categoria", name="uq_rebalanceo_objetivo"),)
+
+
+class ConfiguracionCartera(Base):
+    __tablename__ = "configuracion_carteras"
+    id = Column(Integer, primary_key=True, index=True)
+    cartera = Column(String, nullable=True, unique=True, index=True)  # None = default/Consolidado
+    benchmark = Column(String, nullable=True)
+    rendimiento_objetivo = Column(Numeric(6, 2), nullable=True)
+    peso_maximo = Column(Numeric(6, 2), nullable=True)
+    peso_minimo = Column(Numeric(6, 2), nullable=True)
+    tolerancia = Column(Numeric(6, 2), nullable=True)
 
 
 def get_db():

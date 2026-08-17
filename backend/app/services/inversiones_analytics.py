@@ -4,8 +4,11 @@ import calendar
 from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
-from ..database import MovimientoInversion, InstrumentoInversion, PrecioInstrumento, IndiceMercado, RebalanceoObjetivo
+from ..database import MovimientoInversion, InstrumentoInversion, PrecioInstrumento, IndiceMercado, RebalanceoObjetivo, ConfiguracionCartera
 from .cotizaciones import get_rates_for_date
+from . import rebalanceo_engine
+
+DEFAULT_TOLERANCIA_PP = 2.0
 
 UMBRAL_APROXIMADO_DIAS = 45
 EPS = 1e-9
@@ -1142,6 +1145,15 @@ def _construir_eje_rebalanceo(
     }
 
 
+def _targets_por_eje(eje: str, cartera: str | None, objetivos: list[RebalanceoObjetivo]) -> dict[str, float]:
+    # Filtrado en Python (no SQL) para que None == None matchee de forma directa.
+    return {
+        o.categoria: float(o.porcentaje_objetivo)
+        for o in objetivos
+        if o.eje == eje and o.cartera == cartera
+    }
+
+
 def get_rebalanceo(cartera: str | None, db: Session) -> dict:
     valores, clasificados, instrumentos = _clasificados_valorizados(cartera, db)
 
@@ -1150,26 +1162,18 @@ def get_rebalanceo(cartera: str | None, db: Session) -> dict:
 
     objetivos = db.query(RebalanceoObjetivo).all()
 
-    def _targets(eje: str) -> dict[str, float]:
-        # Filtrado en Python (no SQL) para que None == None matchee de forma directa.
-        return {
-            o.categoria: float(o.porcentaje_objetivo)
-            for o in objetivos
-            if o.eje == eje and o.cartera == cartera
-        }
-
     ejes = []
 
     if cartera is None:
         total_usd_global = sum(v_usd for _, _, v_usd, _ in valores)
         total_ars_global = sum(v_ars for _, _, _, v_ars in valores)
         por_cartera = _agrupar([(cart, v_usd, v_ars) for cart, _, v_usd, v_ars in valores])
-        eje_cartera = _construir_eje_rebalanceo("Cartera", por_cartera, _targets("Cartera"), total_usd_global, total_ars_global)
+        eje_cartera = _construir_eje_rebalanceo("Cartera", por_cartera, _targets_por_eje("Cartera", cartera, objetivos), total_usd_global, total_ars_global)
         if eje_cartera:
             ejes.append(eje_cartera)
 
     tipo = _agrupar([(instrumentos[t].tipo_instrumento, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados])
-    eje_tipo = _construir_eje_rebalanceo("Tipo", tipo, _targets("Tipo"), total_usd, total_ars)
+    eje_tipo = _construir_eje_rebalanceo("Tipo", tipo, _targets_por_eje("Tipo", cartera, objetivos), total_usd, total_ars)
     if eje_tipo:
         ejes.append(eje_tipo)
 
@@ -1177,11 +1181,142 @@ def get_rebalanceo(cartera: str | None, db: Session) -> dict:
         [(instrumentos[t].sector, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados],
         total_usd, total_ars,
     )
-    eje_sector = _construir_eje_rebalanceo("Sector", sector, _targets("Sector"), total_usd, total_ars)
+    eje_sector = _construir_eje_rebalanceo("Sector", sector, _targets_por_eje("Sector", cartera, objetivos), total_usd, total_ars)
     if eje_sector:
         ejes.append(eje_sector)
 
+    ticker = _agrupar([(t, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados])
+    eje_ticker = _construir_eje_rebalanceo("Ticker", ticker, _targets_por_eje("Ticker", cartera, objetivos), total_usd, total_ars)
+    if eje_ticker:
+        ejes.append(eje_ticker)
+
     return {"ejes": ejes}
+
+
+def get_configuracion_cartera(cartera: str | None, db: Session) -> dict:
+    """Configuración de tolerancia/pesos/benchmark de una cartera, con fallback a la fila
+    default (cartera vacía/Consolidado en el Sheet) y, si tampoco hay tolerancia cargada ahí,
+    al valor que hoy está hardcodeado en el frontend (2pp) para no cambiar el comportamiento
+    de una cartera sin fila de Configuración."""
+    fila = None
+    if cartera is not None:
+        fila = db.query(ConfiguracionCartera).filter(ConfiguracionCartera.cartera == cartera).first()
+    if fila is None:
+        fila = db.query(ConfiguracionCartera).filter(ConfiguracionCartera.cartera.is_(None)).first()
+
+    return {
+        "cartera": cartera,
+        "benchmark": fila.benchmark if fila else None,
+        "rendimiento_objetivo": float(fila.rendimiento_objetivo) if fila and fila.rendimiento_objetivo is not None else None,
+        "peso_maximo": float(fila.peso_maximo) if fila and fila.peso_maximo is not None else None,
+        "peso_minimo": float(fila.peso_minimo) if fila and fila.peso_minimo is not None else None,
+        "tolerancia": float(fila.tolerancia) if fila and fila.tolerancia is not None else DEFAULT_TOLERANCIA_PP,
+    }
+
+
+def _tasa_comision_promedio(cartera: str | None, db: Session) -> float | None:
+    """Tasa de comisión (%) histórica promedio de compra/venta, ponderada por monto operado.
+    None si no hay movimientos con comisión cargada (no hay base para estimar)."""
+    movs = _movimientos_ordenados(db, cartera)
+    mep_cache: dict = {}
+    total_comision_usd = 0.0
+    total_monto_usd = 0.0
+    for mov in movs:
+        if mov.tipo_movimiento not in ("compra", "venta"):
+            continue
+        comision = float(mov.comision or 0)
+        if comision <= 0:
+            continue
+        monto_bruto_usd = _to_usd(_monto_bruto(mov), mov.moneda, mov.fecha, db, mep_cache)
+        if monto_bruto_usd is None or monto_bruto_usd <= EPS:
+            continue
+        comision_usd = _comision_usd(mov, db, mep_cache)
+        if comision_usd is None:
+            continue
+        total_monto_usd += monto_bruto_usd
+        total_comision_usd += comision_usd
+    if total_monto_usd <= EPS:
+        return None
+    return round(total_comision_usd / total_monto_usd * 100, 4)
+
+
+def _categoria_para_eje(eje: str, cart: str, ticker: str, instrumentos: dict) -> str | None:
+    if eje == "Cartera":
+        return cart
+    if eje == "Ticker":
+        return ticker
+    inst = instrumentos.get(ticker)
+    if inst is None:
+        return None
+    if eje == "Tipo":
+        return inst.tipo_instrumento
+    if eje == "Sector":
+        return inst.sector
+    return None
+
+
+def simular_rebalanceo(
+    cartera: str | None,
+    db: Session,
+    eje: str,
+    modo: str,
+    aporte_usd: float,
+    tasa_comision_pct: float | None,
+) -> dict:
+    """Genera la propuesta de compra/venta para un eje de rebalanceo. No persiste nada: es
+    puro cálculo sobre las posiciones actuales y los objetivos ya cargados."""
+    valores, clasificados, instrumentos = _clasificados_valorizados(cartera, db)
+    entradas = valores if eje == "Cartera" else clasificados
+    total_usd = sum(v_usd for _, _, v_usd, _ in entradas)
+
+    posiciones = []
+    for cart, ticker, v_usd, _ in entradas:
+        categoria = _categoria_para_eje(eje, cart, ticker, instrumentos)
+        if categoria is None:
+            continue
+        posiciones.append(rebalanceo_engine.PosicionActual(ticker=ticker, categoria=categoria, valor_usd=v_usd))
+
+    objetivos = db.query(RebalanceoObjetivo).all()
+    objetivos_categoria = _targets_por_eje(eje, cartera, objetivos)
+    objetivos_ticker = objetivos_categoria if eje == "Ticker" else _targets_por_eje("Ticker", cartera, objetivos)
+
+    config = get_configuracion_cartera(cartera, db)
+    tasa = tasa_comision_pct if tasa_comision_pct is not None else (_tasa_comision_promedio(cartera, db) or 0.0)
+
+    resultado = rebalanceo_engine.generar_propuesta(
+        posiciones=posiciones,
+        objetivos_categoria=objetivos_categoria,
+        objetivos_ticker=objetivos_ticker,
+        eje=eje,
+        total_usd=total_usd,
+        tolerancia_pp=config["tolerancia"],
+        peso_maximo_pp=config["peso_maximo"],
+        peso_minimo_pp=config["peso_minimo"],
+        modo=modo,
+        aporte_usd=aporte_usd,
+        tasa_comision_pct=tasa,
+    )
+
+    items = resultado.items
+    total_comprar = sum(it.importe_sugerido_usd for it in items if it.accion == "comprar")
+    total_vender = sum(-it.importe_sugerido_usd for it in items if it.accion == "vender")
+    total_comision = sum(it.comision_estimada_usd for it in items)
+
+    return {
+        "eje": eje,
+        "modo": modo,
+        "total_usd": round(total_usd, 2),
+        "aporte_usd": round(aporte_usd, 2),
+        "tasa_comision_pct": tasa,
+        "tolerancia_pp": config["tolerancia"],
+        "peso_maximo_pp": config["peso_maximo"],
+        "peso_minimo_pp": config["peso_minimo"],
+        "items": [it.__dict__ for it in items],
+        "total_comision_estimada_usd": round(total_comision, 2),
+        "total_a_comprar_usd": round(total_comprar, 2),
+        "total_a_vender_usd": round(total_vender, 2),
+        "sobrante_usd": resultado.sobrante_usd,
+    }
 
 
 # ── Rendimiento por ticker ─────────────────────────────────────────────────────

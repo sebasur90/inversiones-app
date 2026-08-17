@@ -1,13 +1,19 @@
 import type { RebalanceoItem } from '../../api'
 import { formatARS, formatPct, formatUSD } from '../../utils'
 
-const TOLERANCIA_PP = 2
-
-export default function RebalanceoRow({ item, moneda }: { item: RebalanceoItem; moneda: 'USD' | 'ARS' }) {
+export default function RebalanceoRow({
+  item,
+  moneda,
+  toleranciaPp,
+}: {
+  item: RebalanceoItem
+  moneda: 'USD' | 'ARS'
+  toleranciaPp: number
+}) {
   const esARS = moneda === 'ARS'
   const formatMoneda = esARS ? formatARS : formatUSD
   const valorActual = esARS ? item.valor_actual_ars : item.valor_actual_usd
-  const dentroDeTolerancia = Math.abs(item.delta_pp) <= TOLERANCIA_PP
+  const dentroDeTolerancia = Math.abs(item.delta_pp) <= toleranciaPp
 
   return (
     <div>

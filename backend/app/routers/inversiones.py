@@ -10,6 +10,9 @@ from ..schemas import (
     InversionesResumen,
     ExposicionOut,
     RebalanceoOut,
+    ConfiguracionCarteraOut,
+    RebalanceoSimulacionRequest,
+    RebalanceoSimulacionOut,
     MovimientoInversionOut,
     RendimientoPorTickerItem,
     EvolucionOut,
@@ -32,6 +35,8 @@ from ..services.inversiones_analytics import (
     get_resumen,
     get_exposicion,
     get_rebalanceo,
+    get_configuracion_cartera,
+    simular_rebalanceo,
     get_evolucion,
     get_precios_ticker,
     get_tickers_con_precios,
@@ -101,6 +106,28 @@ def rebalanceo_cartera(nombre: str, db: Session = Depends(get_db)):
 @router.get("/consolidado/rebalanceo", response_model=RebalanceoOut)
 def rebalanceo_consolidado(db: Session = Depends(get_db)):
     return get_rebalanceo(None, db)
+
+
+@router.get("/carteras/{nombre}/configuracion", response_model=ConfiguracionCarteraOut)
+def configuracion_cartera(nombre: str, db: Session = Depends(get_db)):
+    _validar_cartera(nombre, db)
+    return get_configuracion_cartera(nombre, db)
+
+
+@router.get("/consolidado/configuracion", response_model=ConfiguracionCarteraOut)
+def configuracion_consolidado(db: Session = Depends(get_db)):
+    return get_configuracion_cartera(None, db)
+
+
+@router.post("/carteras/{nombre}/rebalanceo/simular", response_model=RebalanceoSimulacionOut)
+def simular_rebalanceo_cartera(nombre: str, body: RebalanceoSimulacionRequest, db: Session = Depends(get_db)):
+    _validar_cartera(nombre, db)
+    return simular_rebalanceo(nombre, db, body.eje, body.modo, body.aporte_usd, body.tasa_comision_pct)
+
+
+@router.post("/consolidado/rebalanceo/simular", response_model=RebalanceoSimulacionOut)
+def simular_rebalanceo_consolidado(body: RebalanceoSimulacionRequest, db: Session = Depends(get_db)):
+    return simular_rebalanceo(None, db, body.eje, body.modo, body.aporte_usd, body.tasa_comision_pct)
 
 
 @router.get("/movimientos", response_model=list[MovimientoInversionOut])

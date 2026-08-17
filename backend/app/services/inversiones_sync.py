@@ -4,8 +4,8 @@ from datetime import date, datetime
 from dateutil import parser as dateutil_parser
 from sqlalchemy.orm import Session
 
-from ..database import InstrumentoInversion, MovimientoInversion, PrecioInstrumento, IndiceMercado, ObjetivoInversion, RebalanceoObjetivo, BenchmarkValor
-from .sheets_client import fetch_sheet_data, fetch_objetivos_tab, fetch_rebalanceo_tab, fetch_benchmarks_tab
+from ..database import InstrumentoInversion, MovimientoInversion, PrecioInstrumento, IndiceMercado, ObjetivoInversion, RebalanceoObjetivo, BenchmarkValor, ConfiguracionCartera
+from .sheets_client import fetch_sheet_data, fetch_objetivos_tab, fetch_rebalanceo_tab, fetch_benchmarks_tab, fetch_configuracion_tab
 
 # Estado en memoria del proceso: se resetea al reiniciar el backend.
 _ultimo_sync: datetime | None = None
@@ -25,7 +25,7 @@ TIPOS_MOVIMIENTO = {
 
 MONEDAS_VALIDAS = ("ARS", "USD")
 
-EJES_REBALANCEO = {"cartera": "Cartera", "tipo": "Tipo", "sector": "Sector"}
+EJES_REBALANCEO = {"cartera": "Cartera", "tipo": "Tipo", "sector": "Sector", "ticker": "Ticker"}
 
 
 def _strip_accents(s: str) -> str:
@@ -97,8 +97,9 @@ def sync_from_sheet(db: Session) -> dict:
     movimientos_validos, cer_mep_movimientos = _validar_movimientos(data.get("Movimientos", []), tickers_conocidos, errores)
     precios_validos, cer_mep_precios = _validar_precios(data.get("Precios", []), errores)
     objetivos_validos = _validar_objetivos(fetch_objetivos_tab(), errores)
-    rebalanceo_validos = _validar_rebalanceo(fetch_rebalanceo_tab(), errores)
+    rebalanceo_validos = _validar_rebalanceo(fetch_rebalanceo_tab(), errores, tickers_conocidos)
     benchmarks_validos = _validar_benchmarks(fetch_benchmarks_tab(), errores)
+    configuracion_validos = _validar_configuracion(fetch_configuracion_tab(), errores)
 
     indices_mercado, advertencias = _consolidar_indices_mercado(cer_mep_movimientos, cer_mep_precios, errores)
     errores.extend(advertencias)
@@ -110,6 +111,7 @@ def sync_from_sheet(db: Session) -> dict:
     db.query(ObjetivoInversion).delete()
     db.query(RebalanceoObjetivo).delete()
     db.query(BenchmarkValor).delete()
+    db.query(ConfiguracionCartera).delete()
     db.flush()
 
     for inst in instrumentos_validos:
@@ -143,6 +145,9 @@ def sync_from_sheet(db: Session) -> dict:
     for benchmark in benchmarks_validos:
         db.add(BenchmarkValor(**benchmark))
 
+    for configuracion in configuracion_validos:
+        db.add(ConfiguracionCartera(**configuracion))
+
     db.commit()
 
     global _ultimo_sync
@@ -156,6 +161,7 @@ def sync_from_sheet(db: Session) -> dict:
         "rebalanceo": len(rebalanceo_validos),
         "indices_mercado": len(indices_mercado),
         "benchmarks": len(benchmarks_validos),
+        "configuracion": len(configuracion_validos),
         "errores": errores,
     }
 
@@ -510,7 +516,7 @@ def _validar_objetivos(rows: list[tuple[int, dict]], errores: list[dict]) -> lis
     return validos
 
 
-def _validar_rebalanceo(rows: list[tuple[int, dict]], errores: list[dict]) -> list[dict]:
+def _validar_rebalanceo(rows: list[tuple[int, dict]], errores: list[dict], tickers_conocidos: set[str]) -> list[dict]:
     validos = []
     seen: set[tuple[str | None, str, str]] = set()
     sumas: dict[tuple[str | None, str], float] = {}
@@ -535,6 +541,10 @@ def _validar_rebalanceo(rows: list[tuple[int, dict]], errores: list[dict]) -> li
         categoria = (row.get("Categoría") or row.get("Categoria") or "").strip()
         if not categoria:
             errores.append({"fila": row_num, "motivo": "Categoría vacía en Rebalanceo"})
+            continue
+
+        if eje == "Ticker" and categoria not in tickers_conocidos:
+            errores.append({"fila": row_num, "motivo": f"Ticker desconocido en Rebalanceo: {categoria}"})
             continue
 
         porcentaje_raw = (row.get("Porcentaje Objetivo") or "").strip()
@@ -568,5 +578,69 @@ def _validar_rebalanceo(rows: list[tuple[int, dict]], errores: list[dict]) -> li
                 "fila": 0,
                 "motivo": f"Advertencia: los objetivos de Rebalanceo para {cartera or 'Consolidado'} / {eje} suman {suma:.1f}% (>100%)",
             })
+
+    return validos
+
+
+def _validar_configuracion(rows: list[tuple[int, dict]], errores: list[dict]) -> list[dict]:
+    """Valida la pestaña Configuracion (Cartera | Benchmark | Rendimiento Objetivo |
+    Peso Máximo | Peso Mínimo | Tolerancia). Todos los campos salvo Cartera son opcionales:
+    una fila puede tener sólo alguno de ellos completo ("no obligar a completar campos
+    innecesarios")."""
+    validos = []
+    carteras_vistas: set[str | None] = set()
+
+    for row_num, row in rows:
+        cartera_raw = (row.get("Cartera") or "").strip()
+        cartera = None if not cartera_raw or _strip_accents(cartera_raw).lower() == "consolidado" else cartera_raw
+
+        if cartera in carteras_vistas:
+            errores.append({
+                "fila": row_num,
+                "motivo": f"Configuración duplicada para cartera: {cartera or 'Consolidado'}",
+            })
+            continue
+
+        benchmark = (row.get("Benchmark") or "").strip() or None
+
+        def _campo_opcional(nombre_col: str, nombre_error: str) -> tuple[float | None, bool]:
+            raw = (row.get(nombre_col) or "").strip()
+            if not raw:
+                return None, True
+            valor = _parse_numero(raw)
+            if valor is None:
+                errores.append({"fila": row_num, "motivo": f"{nombre_error} inválido: {raw}"})
+                return None, False
+            return valor, True
+
+        rendimiento_objetivo, ok1 = _campo_opcional("Rendimiento Objetivo", "Rendimiento Objetivo")
+        peso_maximo, ok2 = _campo_opcional("Peso Máximo", "Peso Máximo")
+        peso_minimo, ok3 = _campo_opcional("Peso Mínimo", "Peso Mínimo")
+        tolerancia, ok4 = _campo_opcional("Tolerancia", "Tolerancia")
+        if not (ok1 and ok2 and ok3 and ok4):
+            continue
+
+        if peso_maximo is not None and not (0 <= peso_maximo <= 100):
+            errores.append({"fila": row_num, "motivo": f"Peso Máximo fuera de rango [0,100]: {peso_maximo}"})
+            continue
+        if peso_minimo is not None and not (0 <= peso_minimo <= 100):
+            errores.append({"fila": row_num, "motivo": f"Peso Mínimo fuera de rango [0,100]: {peso_minimo}"})
+            continue
+        if peso_maximo is not None and peso_minimo is not None and peso_minimo > peso_maximo:
+            errores.append({"fila": row_num, "motivo": f"Peso Mínimo ({peso_minimo}) mayor que Peso Máximo ({peso_maximo})"})
+            continue
+        if tolerancia is not None and tolerancia < 0:
+            errores.append({"fila": row_num, "motivo": f"Tolerancia negativa: {tolerancia}"})
+            continue
+
+        validos.append({
+            "cartera": cartera,
+            "benchmark": benchmark,
+            "rendimiento_objetivo": rendimiento_objetivo,
+            "peso_maximo": peso_maximo,
+            "peso_minimo": peso_minimo,
+            "tolerancia": tolerancia,
+        })
+        carteras_vistas.add(cartera)
 
     return validos

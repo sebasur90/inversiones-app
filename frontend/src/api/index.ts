@@ -18,6 +18,7 @@ export interface SyncResult {
   objetivos: number
   rebalanceo: number
   benchmarks: number
+  configuracion: number
   errores: SyncErrorItem[]
 }
 
@@ -88,6 +89,56 @@ export interface RebalanceoOut {
   ejes: RebalanceoEje[]
 }
 
+export interface ConfiguracionCartera {
+  cartera: string | null
+  benchmark: string | null
+  rendimiento_objetivo: number | null
+  peso_maximo: number | null
+  peso_minimo: number | null
+  tolerancia: number
+}
+
+export type ModoSimulacion = 'completo' | 'solo_aportes'
+
+export interface RebalanceoSimulacionRequest {
+  eje: string
+  modo: ModoSimulacion
+  aporte_usd: number
+  tasa_comision_pct: number | null
+}
+
+export interface PropuestaRebalanceoItem {
+  tipo: 'ticker' | 'categoria_sin_instrumento'
+  posicion: string | null
+  categoria: string
+  peso_actual_pct: number
+  peso_objetivo_pct: number
+  delta_pp: number
+  valor_actual_usd: number
+  valor_objetivo_usd: number
+  importe_sugerido_usd: number
+  accion: 'comprar' | 'vender' | 'mantener'
+  necesidad: 'necesario' | 'opcional'
+  comision_estimada_usd: number
+  motivo: string
+}
+
+export interface RebalanceoSimulacionOut {
+  eje: string
+  modo: ModoSimulacion
+  total_usd: number
+  aporte_usd: number
+  tasa_comision_pct: number
+  tolerancia_pp: number
+  peso_maximo_pp: number | null
+  peso_minimo_pp: number | null
+  items: PropuestaRebalanceoItem[]
+  total_comision_estimada_usd: number
+  total_a_comprar_usd: number
+  total_a_vender_usd: number
+  sobrante_usd: number
+}
+
 export interface MovimientoInversion {
   id: number
   fecha: string
@@ -149,6 +200,12 @@ export const getExposicionInversiones = (cartera: string | null) =>
 
 export const getRebalanceoInversiones = (cartera: string | null) =>
   api.get<RebalanceoOut>(`${carteraPath(cartera)}/rebalanceo`).then(r => r.data)
+
+export const getConfiguracionCartera = (cartera: string | null) =>
+  api.get<ConfiguracionCartera>(`${carteraPath(cartera)}/configuracion`).then(r => r.data)
+
+export const simularRebalanceo = (cartera: string | null, body: RebalanceoSimulacionRequest) =>
+  api.post<RebalanceoSimulacionOut>(`${carteraPath(cartera)}/rebalanceo/simular`, body).then(r => r.data)
 
 export const getMovimientosInversion = (params: { cartera?: string; ticker?: string }) =>
   api.get<MovimientoInversion[]>('/inversiones/movimientos', { params }).then(r => r.data)

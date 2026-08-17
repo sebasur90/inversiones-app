@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceDot, ResponsiveContainer } from 'recharts'
 import { useInversionesContext } from '../context/InversionesContext'
-import { getRiesgo, getBenchmarksDisponibles, type RiesgoOut, type MonedaRiesgo, type PeriodoRetorno } from '../api'
+import { getRiesgo, getBenchmarksDisponibles, getConfiguracionCartera, type RiesgoOut, type MonedaRiesgo, type PeriodoRetorno } from '../api'
 import { formatPctRatio } from '../utils'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
@@ -89,11 +89,12 @@ export default function Riesgo() {
 
   useEffect(() => {
     let cancelado = false
-    getBenchmarksDisponibles()
-      .then(data => {
+    Promise.all([getBenchmarksDisponibles(), getConfiguracionCartera(carteraSeleccionada).catch(() => null)])
+      .then(([data, config]) => {
         if (cancelado) return
         setBenchmarks(data)
-        setBenchmarkSeleccionado(prev => prev ?? data[0] ?? null)
+        const preferido = config?.benchmark && data.includes(config.benchmark) ? config.benchmark : data[0] ?? null
+        setBenchmarkSeleccionado(prev => prev ?? preferido)
       })
       .catch(() => {
         if (!cancelado) setBenchmarks([])
@@ -101,7 +102,7 @@ export default function Riesgo() {
     return () => {
       cancelado = true
     }
-  }, [])
+  }, [carteraSeleccionada])
 
   useEffect(() => {
     let cancelado = false

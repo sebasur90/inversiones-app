@@ -17,6 +17,7 @@ class SyncResult(BaseModel):
     objetivos: int
     rebalanceo: int
     benchmarks: int
+    configuracion: int
     errores: list[SyncErrorItem]
 
 
@@ -85,6 +86,54 @@ class RebalanceoEje(BaseModel):
 
 class RebalanceoOut(BaseModel):
     ejes: list[RebalanceoEje]
+
+
+class ConfiguracionCarteraOut(BaseModel):
+    cartera: Optional[str] = None
+    benchmark: Optional[str] = None
+    rendimiento_objetivo: Optional[float] = None
+    peso_maximo: Optional[float] = None
+    peso_minimo: Optional[float] = None
+    tolerancia: float  # ya resuelto con fallback (nunca None)
+
+
+class RebalanceoSimulacionRequest(BaseModel):
+    eje: str  # "Cartera" | "Tipo" | "Sector" | "Ticker"
+    modo: str = "completo"  # "completo" | "solo_aportes"
+    aporte_usd: float = 0.0
+    tasa_comision_pct: Optional[float] = None  # None => usar estimación histórica
+
+
+class PropuestaRebalanceoItem(BaseModel):
+    tipo: str  # "ticker" | "categoria_sin_instrumento"
+    posicion: Optional[str] = None
+    categoria: str
+    peso_actual_pct: float
+    peso_objetivo_pct: float
+    delta_pp: float
+    valor_actual_usd: float
+    valor_objetivo_usd: float
+    importe_sugerido_usd: float
+    accion: str  # "comprar" | "vender" | "mantener"
+    necesidad: str  # "necesario" | "opcional"
+    comision_estimada_usd: float
+    motivo: str
+
+
+class RebalanceoSimulacionOut(BaseModel):
+    eje: str
+    modo: str
+    total_usd: float
+    aporte_usd: float
+    tasa_comision_pct: float
+    tolerancia_pp: float
+    peso_maximo_pp: Optional[float] = None
+    peso_minimo_pp: Optional[float] = None
+    items: list[PropuestaRebalanceoItem]
+    total_comision_estimada_usd: float
+    total_a_comprar_usd: float
+    total_a_vender_usd: float
+    sobrante_usd: float = 0.0
 
 
 class MovimientoInversionOut(BaseModel):

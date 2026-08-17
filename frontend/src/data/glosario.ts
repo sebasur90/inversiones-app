@@ -75,7 +75,7 @@ export const GLOSARIO: Record<GlosarioKey, { titulo: string; texto: string }> = 
   },
   rebalanceo: {
     titulo: 'Rebalanceo',
-    texto: 'Compara tu asignación actual contra los porcentajes objetivo que cargaste en la pestaña "Rebalanceo" del Sheet, en 3 ejes independientes (cada uno suma su propio 100%): Cartera (peso de cada cartera sobre el total), Tipo (CEDEAR, Bono, etc. dentro de una cartera) y Sector (dentro de una cartera). Lo que tiene valor invertido pero no tiene objetivo cargado aparece aparte, en "Sin objetivo".',
+    texto: 'Compara tu asignación actual contra los porcentajes objetivo que cargaste en la pestaña "Rebalanceo" del Sheet, en 4 ejes independientes (cada uno suma su propio 100%): Cartera (peso de cada cartera sobre el total), Tipo (CEDEAR, Bono, etc. dentro de una cartera), Sector (dentro de una cartera) y Ticker (objetivo por instrumento puntual). Lo que tiene valor invertido pero no tiene objetivo cargado aparece aparte, en "Sin objetivo". Desde "Simular rebalanceo" podés ver una propuesta de compra/venta sin registrar ningún movimiento real.',
   },
   drawdown: {
     titulo: 'Drawdown',
