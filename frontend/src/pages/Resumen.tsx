@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useInversionesContext } from '../context/InversionesContext'
-import { getEvolucionInversiones, type EvolucionPunto } from '../api'
+import { getEvolucionInversiones, getDiagnostico, type EvolucionPunto, type DiagnosticoOut } from '../api'
+import { Icon } from '../components/icons/Icons'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import HeroValorCard from '../components/inversiones/HeroValorCard'
 import KpiGrid from '../components/inversiones/KpiGrid'
@@ -17,6 +18,7 @@ export default function Resumen() {
   const { carteras, carteraSeleccionada, setCarteraSeleccionada, monedaSeleccionada, resumen, rendimientoPorTicker, loading } =
     useInversionesContext()
   const [evolucion, setEvolucion] = useState<EvolucionPunto[]>([])
+  const [diagnostico, setDiagnostico] = useState<DiagnosticoOut | null>(null)
 
   useEffect(() => {
     let cancelado = false
@@ -26,6 +28,20 @@ export default function Resumen() {
       })
       .catch(() => {
         if (!cancelado) setEvolucion([])
+      })
+    return () => {
+      cancelado = true
+    }
+  }, [carteraSeleccionada])
+
+  useEffect(() => {
+    let cancelado = false
+    getDiagnostico(carteraSeleccionada)
+      .then(d => {
+        if (!cancelado) setDiagnostico(d)
+      })
+      .catch(() => {
+        if (!cancelado) setDiagnostico(null)
       })
     return () => {
       cancelado = true
@@ -44,6 +60,27 @@ export default function Resumen() {
         <>
           <HeroValorCard resumen={resumen} moneda={monedaSeleccionada} evolucion={evolucion} />
           <KpiGrid resumen={resumen} moneda={monedaSeleccionada} />
+
+          {diagnostico && (
+            <button
+              onClick={() => navigate('/diagnostico')}
+              className="w-full text-left bg-app-surface border border-app-border rounded-2xl p-3.5 mb-4 mt-1 flex items-center justify-between gap-3 hover:border-app-border-soft transition-colors"
+            >
+              <div>
+                <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-0.5">Salud de cartera</div>
+                <div className="font-display text-[22px] font-semibold text-app-text">
+                  {diagnostico.salud.score_total !== null ? Math.round(diagnostico.salud.score_total) : '—'}
+                  <span className="text-[13px] text-app-text-dim">/100</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[11.5px] font-semibold text-app-text-dim">
+                  {diagnostico.hallazgos.length} hallazgo{diagnostico.hallazgos.length !== 1 ? 's' : ''}
+                </div>
+                <Icon name="chevron" className="w-4 h-4 text-app-text-dim inline-block mt-1" />
+              </div>
+            </button>
+          )}
 
           <div className="flex items-center justify-between mb-2.5 mt-1">
             <h3 className="text-[13.5px] font-bold text-app-text">Carteras</h3>
