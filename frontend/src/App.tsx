@@ -26,6 +26,7 @@ import Contribucion from './pages/Contribucion'
 import Diagnostico from './pages/Diagnostico'
 import CalidadDatos from './pages/CalidadDatos'
 import Simulador from './pages/Simulador'
+import BenchmarksComparacion from './pages/BenchmarksComparacion'
 
 function SyncResultModal() {
   const { syncSheetOpen, closeSyncSheet, syncIssues, syncHealthScore, syncResultado, syncResumenTexto } = useInversionesContext()
@@ -136,6 +137,7 @@ function Root() {
             <Route path="diagnostico" element={<Diagnostico />} />
             <Route path="calidad-datos" element={<CalidadDatos />} />
             <Route path="simulador" element={<Simulador />} />
+            <Route path="benchmarks-comparacion" element={<BenchmarksComparacion />} />
             <Route path="*" element={<Navigate to="/resumen" replace />} />
           </Route>
         </Routes>

@@ -587,6 +587,78 @@ export interface PerformanceRelativaOut {
 export const getPerformanceRelativa = (cartera: string | null, moneda: MonedaRiesgo, benchmark: string | null, desde?: string) =>
   api.get<PerformanceRelativaOut>(`${carteraPath(cartera)}/performance-relativa`, { params: { moneda, benchmark: benchmark ?? undefined, desde: desde ?? undefined } }).then(r => r.data)
 
+export interface ComparacionBenchmarkOut {
+  fuente: string
+  tipo: string
+  estado: string
+  retorno_pct: number | null
+  delta_pp: number | null
+  valor_final_equivalente_usd: number | null
+  valor_final_equivalente_ars: number | null
+  ranking: number | null
+  n_meses_historia: number
+}
+
+export interface PerformanceCompareOut {
+  estado: string
+  moneda: string
+  periodo_desde: string | null
+  periodo_hasta: string | null
+  filas: ComparacionBenchmarkOut[]
+  serie: Record<string, any>[]
+}
+
+export const getPerformanceCompare = (
+  cartera: string | null,
+  moneda: MonedaRiesgo,
+  desde?: string,
+  benchmarks?: string[],
+  tickers?: string[]
+) =>
+  api
+    .get<PerformanceCompareOut>(`${carteraPath(cartera)}/performance/compare`, {
+      params: {
+        moneda,
+        desde: desde ?? undefined,
+        benchmarks: benchmarks?.join(',') ?? undefined,
+        tickers: tickers?.join(',') ?? undefined,
+      },
+    })
+    .then(r => r.data)
+
+export interface OpportunityCostPosicionOut {
+  ticker: string
+  nombre: string
+  valor_actual_usd: number
+  valor_shadow_usd: number
+  costo_oportunidad_usd: number
+  costo_oportunidad_ars: number
+}
+
+export interface OpportunityCostOut {
+  estado: string
+  benchmark_usado: string | null
+  moneda_nativa_benchmark: string | null
+  valor_actual_usd: number | null
+  valor_actual_ars: number | null
+  valor_shadow_usd: number | null
+  valor_shadow_ars: number | null
+  costo_oportunidad_usd: number | null
+  costo_oportunidad_ars: number | null
+  por_posicion: OpportunityCostPosicionOut[]
+}
+
+export const getOpportunityCost = (
+  cartera: string | null,
+  benchmark?: string,
+  desde?: string
+) =>
+  api
+    .get<OpportunityCostOut>(`${carteraPath(cartera)}/opportunity-cost`, {
+      params: { benchmark: benchmark ?? undefined, desde: desde ?? undefined },
+    })
+    .then(r => r.data)
+
 // --- Contribución, concentración y correlaciones ---
 
 export interface ContribucionItem {

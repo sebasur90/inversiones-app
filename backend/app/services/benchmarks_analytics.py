@@ -4,11 +4,10 @@ Reúne la comparación de cartera contra benchmarks, normalizando la TWR mensual
 a un rango común y computando métricas de relative performance (alpha, beta, tracking error,
 information ratio).
 """
-import bisect
 from datetime import date
 from sqlalchemy.orm import Session
 
-from ..database import BenchmarkValor
+from ..database import BenchmarkValor, IndiceMercado, InstrumentoInversion, PrecioInstrumento
 from . import risk_engine
 from .inversiones_analytics import (
     _movimientos_ordenados,
@@ -21,19 +20,18 @@ from .inversiones_analytics import (
     _valuar_holdings,
     _valuar_holdings_ars,
     _cer_indice,
+    _retornos_mensuales_ticker,
     get_configuracion_cartera,
 )
 
 MONEDAS_VALIDAS = ("ars_nominal", "ars_real", "usd")
 
+BENCHMARK_DOLAR = "Dólar (MEP)"
+BENCHMARK_INFLACION = "Inflación (CER)"
+BENCHMARK_MONEDA_NATIVA = {"S&P 500": "usd"}
+
 
 def _benchmark_retornos_mensuales(benchmark: str, db: Session, hasta: date) -> dict[tuple[int, int], float]:
-    """Retornos mensuales de un benchmark, alineados por (año, mes) con los de cartera.
-
-    Toma el último valor conocido (carry-forward) en cada fin de mes y encadena la variación
-    porcentual mes a mes, con el mismo criterio de fin de mes (`_fin_de_mes_range`) que el TWR
-    mensual de cartera.
-    """
     rows = (
         db.query(BenchmarkValor)
         .filter(BenchmarkValor.benchmark == benchmark)
@@ -43,25 +41,50 @@ def _benchmark_retornos_mensuales(benchmark: str, db: Session, hasta: date) -> d
     if not rows:
         return {}
 
-    valores = [(r.fecha, float(r.valor)) for r in rows]
-    fechas = [v[0] for v in valores]
-    boundaries = _fin_de_mes_range(valores[0][0], hasta)
+    niveles = [(r.fecha, float(r.valor)) for r in rows]
+    boundaries = _fin_de_mes_range(niveles[0][0], hasta)
+    return risk_engine.serie_retornos_mensuales_desde_niveles(niveles, boundaries)
 
-    puntos: list[tuple[date, float]] = []
-    for b in boundaries:
-        idx = bisect.bisect_right(fechas, b) - 1
-        if idx < 0:
-            continue
-        puntos.append((b, valores[idx][1]))
 
-    resultado: dict[tuple[int, int], float] = {}
-    for i in range(1, len(puntos)):
-        d0, v0 = puntos[i - 1]
-        d1, v1 = puntos[i]
-        if v0 == 0:
-            continue
-        resultado[(d1.year, d1.month)] = v1 / v0 - 1
-    return resultado
+def _indice_mercado_retornos_mensuales(campo: str, db: Session, hasta: date) -> dict[tuple[int, int], float]:
+    rows = (
+        db.query(IndiceMercado)
+        .filter(getattr(IndiceMercado, campo).isnot(None))
+        .order_by(IndiceMercado.fecha)
+        .all()
+    )
+    if not rows:
+        return {}
+
+    niveles = [(r.fecha, float(getattr(r, campo))) for r in rows]
+    boundaries = _fin_de_mes_range(niveles[0][0], hasta)
+    return risk_engine.serie_retornos_mensuales_desde_niveles(niveles, boundaries)
+
+
+def _ticker_retornos_mensuales(ticker: str, db: Session, hasta: date) -> dict[tuple[int, int], float]:
+    rows = (
+        db.query(PrecioInstrumento)
+        .filter(PrecioInstrumento.ticker == ticker)
+        .order_by(PrecioInstrumento.fecha)
+        .all()
+    )
+    if not rows:
+        return {}
+
+    niveles = [(r.fecha, float(r.precio)) for r in rows]
+    boundaries = _fin_de_mes_range(niveles[0][0], hasta)
+    return risk_engine.serie_retornos_mensuales_desde_niveles(niveles, boundaries)
+
+
+def _resolver_fuente(nombre: str, db: Session, hasta: date) -> dict[tuple[int, int], float]:
+    if nombre == BENCHMARK_DOLAR:
+        return _indice_mercado_retornos_mensuales("mep", db, hasta)
+    elif nombre == BENCHMARK_INFLACION:
+        return _indice_mercado_retornos_mensuales("cer", db, hasta)
+    elif db.query(InstrumentoInversion).filter(InstrumentoInversion.ticker == nombre).first():
+        return _ticker_retornos_mensuales(nombre, db, hasta)
+    else:
+        return _benchmark_retornos_mensuales(nombre, db, hasta)
 
 
 def _twr_mensual_por_moneda(moneda: str, movs: list, precios_por_ticker: dict, db: Session, mep_cache: dict, cer_cache: dict, hoy: date) -> dict:
@@ -214,5 +237,141 @@ def _performance_relativa_sobre_movs(movs: list, moneda: str, benchmark: str | N
         "beta": beta,
         "tracking_error": exceso_retorno,
         "information_ratio": ir,
+        "serie": serie,
+    }
+
+
+def get_performance_compare(
+    cartera: str | None,
+    moneda: str,
+    desde: date | None,
+    benchmarks: list[str] | None,
+    tickers: list[str] | None,
+    db: Session
+) -> dict:
+    if moneda not in MONEDAS_VALIDAS:
+        raise ValueError(f"moneda inválida: {moneda}")
+
+    movs = _movimientos_ordenados(db, cartera)
+    precios_por_ticker = _precios_por_ticker(db)
+    mep_cache: dict = {}
+    cer_cache: dict = {}
+    hoy = date.today()
+
+    retornos_cartera = _twr_mensual_por_moneda(moneda, movs, precios_por_ticker, db, mep_cache, cer_cache, hoy)
+    retornos_cartera = _filtrar_desde(retornos_cartera, desde)
+    indice_cartera_completo = risk_engine.construir_indice(retornos_cartera, base=100.0) if retornos_cartera else []
+
+    fuentes = []
+    if benchmarks:
+        fuentes.extend(benchmarks)
+    if tickers:
+        fuentes.extend(tickers)
+
+    if not fuentes:
+        return {
+            "estado": "sin_datos",
+            "moneda": moneda,
+            "periodo_desde": None,
+            "periodo_hasta": None,
+            "filas": [],
+            "serie": [],
+        }
+
+    filas = []
+    indices_by_fuente = {}
+    fechas_globales = set(retornos_cartera.keys()) if retornos_cartera else set()
+
+    for fuente in fuentes:
+        retornos_fuente = _resolver_fuente(fuente, db, hoy)
+        retornos_fuente = _filtrar_desde(retornos_fuente, desde)
+
+        claves_comunes = sorted(set(retornos_cartera) & set(retornos_fuente)) if retornos_cartera and retornos_fuente else []
+
+        if not claves_comunes:
+            es_benchmark_virtual = fuente in (BENCHMARK_DOLAR, BENCHMARK_INFLACION)
+            es_ticker = bool(db.query(InstrumentoInversion).filter(InstrumentoInversion.ticker == fuente).first())
+            filas.append({
+                "fuente": fuente,
+                "tipo": "benchmark" if es_benchmark_virtual else ("ticker" if es_ticker else "benchmark"),
+                "estado": "datos_insuficientes",
+                "retorno_pct": None,
+                "delta_pp": None,
+                "valor_final_equivalente_usd": None,
+                "valor_final_equivalente_ars": None,
+                "ranking": None,
+                "n_meses_historia": 0,
+            })
+            continue
+
+        indice_fuente = risk_engine.construir_indice({k: retornos_fuente[k] for k in claves_comunes}, base=100.0)
+        indices_by_fuente[fuente] = indice_fuente
+
+        retorno_fuente_pct = (indice_fuente[-1][1] / 100.0) - 1 if indice_fuente else None
+        retorno_cartera_pct = None
+        if indice_cartera_completo:
+            cartera_at_end = next((v for f, v in indice_cartera_completo if f == indice_fuente[-1][0]), None)
+            if cartera_at_end:
+                retorno_cartera_pct = (cartera_at_end / 100.0) - 1
+
+        delta_pp = (retorno_cartera_pct - retorno_fuente_pct) * 100 if (retorno_cartera_pct is not None and retorno_fuente_pct is not None) else None
+
+        fechas_globales.update(claves_comunes)
+
+        es_benchmark_virtual = fuente in (BENCHMARK_DOLAR, BENCHMARK_INFLACION)
+        es_ticker = bool(db.query(InstrumentoInversion).filter(InstrumentoInversion.ticker == fuente).first())
+        filas.append({
+            "fuente": fuente,
+            "tipo": "benchmark" if es_benchmark_virtual else ("ticker" if es_ticker else "benchmark"),
+            "estado": "ok",
+            "retorno_pct": round(retorno_fuente_pct, 4) if retorno_fuente_pct is not None else None,
+            "delta_pp": round(delta_pp, 2) if delta_pp is not None else None,
+            "valor_final_equivalente_usd": None,
+            "valor_final_equivalente_ars": None,
+            "ranking": None,
+            "n_meses_historia": len(claves_comunes),
+        })
+
+    filas_ok = [f for f in filas if f["estado"] == "ok"]
+    if filas_ok:
+        sorted_filas = sorted(filas_ok, key=lambda x: x["retorno_pct"] or float('-inf'), reverse=True)
+        for i, fila in enumerate(sorted_filas, 1):
+            for f in filas:
+                if f["fuente"] == fila["fuente"]:
+                    f["ranking"] = i
+                    break
+
+    serie = []
+    for fecha_key in sorted(fechas_globales):
+        punto = {"fecha": date(fecha_key[0], fecha_key[1], 1)}
+
+        cartera_val = None
+        for f, v in indice_cartera_completo:
+            if f == punto["fecha"]:
+                cartera_val = v
+                break
+        punto["cartera"] = round(cartera_val, 2) if cartera_val is not None else None
+
+        for fuente, indice in indices_by_fuente.items():
+            fuente_val = None
+            for f, v in indice:
+                if f == punto["fecha"]:
+                    fuente_val = v
+                    break
+            punto[fuente] = round(fuente_val, 2) if fuente_val is not None else None
+
+        serie.append(punto)
+
+    periodo_desde = min(fechas_globales) if fechas_globales else None
+    periodo_hasta = max(fechas_globales) if fechas_globales else None
+    periodo_desde_date = date(periodo_desde[0], periodo_desde[1], 1) if periodo_desde else None
+    periodo_hasta_date = date(periodo_hasta[0], periodo_hasta[1], 1) if periodo_hasta else None
+
+    return {
+        "estado": "ok" if filas_ok else "datos_insuficientes",
+        "moneda": moneda,
+        "periodo_desde": periodo_desde_date,
+        "periodo_hasta": periodo_hasta_date,
+        "filas": filas,
         "serie": serie,
     }

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Any
 from datetime import date, datetime
 
 # --- Inversiones: Sincronización ---
@@ -757,3 +757,48 @@ class TickerRiesgoOut(RiesgoOut):
 class TickerPerformanceRelativaOut(PerformanceRelativaOut):
     """Response del endpoint /ticker/{ticker}/performance-relativa (lazy). Reusa PerformanceRelativaOut tal cual."""
     pass
+
+
+# --- Comparación de Benchmarks y Costo de Oportunidad ---
+
+class ComparacionBenchmarkOut(BaseModel):
+    fuente: str
+    tipo: str
+    estado: str
+    retorno_pct: Optional[float] = None
+    delta_pp: Optional[float] = None
+    valor_final_equivalente_usd: Optional[float] = None
+    valor_final_equivalente_ars: Optional[float] = None
+    ranking: Optional[int] = None
+    n_meses_historia: int = 0
+
+
+class PerformanceCompareOut(BaseModel):
+    estado: str
+    moneda: str
+    periodo_desde: Optional[date] = None
+    periodo_hasta: Optional[date] = None
+    filas: list[ComparacionBenchmarkOut] = []
+    serie: list[dict[str, Any]] = []
+
+
+class OpportunityCostPosicionOut(BaseModel):
+    ticker: str
+    nombre: str
+    valor_actual_usd: float
+    valor_shadow_usd: float
+    costo_oportunidad_usd: float
+    costo_oportunidad_ars: float
+
+
+class OpportunityCostOut(BaseModel):
+    estado: str
+    benchmark_usado: Optional[str] = None
+    moneda_nativa_benchmark: Optional[str] = None
+    valor_actual_usd: Optional[float] = None
+    valor_actual_ars: Optional[float] = None
+    valor_shadow_usd: Optional[float] = None
+    valor_shadow_ars: Optional[float] = None
+    costo_oportunidad_usd: Optional[float] = None
+    costo_oportunidad_ars: Optional[float] = None
+    por_posicion: list[OpportunityCostPosicionOut] = []

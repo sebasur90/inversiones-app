@@ -249,12 +249,20 @@ export default function Rendimiento() {
               <div className="text-[11px] text-app-text-dim mb-3">
                 {(perfRelativa.retorno_cartera_pct ?? 0) >= (perfRelativa.retorno_benchmark_pct ?? 0) ? 'Superaste el benchmark' : 'Quedaste por debajo del benchmark'}
               </div>
-              <button
-                onClick={() => navigate('/performance-relativa')}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim hover:text-app-text"
-              >
-                <Icon name="trend" className="w-3.5 h-3.5" /> Ver comparación completa
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => navigate('/performance-relativa')}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim hover:text-app-text"
+                >
+                  <Icon name="trend" className="w-3.5 h-3.5" /> Ver comparación completa
+                </button>
+                <button
+                  onClick={() => navigate('/benchmarks-comparacion')}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim hover:text-app-text"
+                >
+                  <Icon name="trend" className="w-3.5 h-3.5" /> Comparar benchmarks
+                </button>
+              </div>
             </Card>
           ) : (
             <Card className="mb-4">

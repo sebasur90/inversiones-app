@@ -27,6 +27,8 @@ from ..schemas import (
     RendimientoMensualOut,
     RiesgoOut,
     PerformanceRelativaOut,
+    PerformanceCompareOut,
+    OpportunityCostOut,
     ContribucionOut,
     CorrelacionesOut,
     DiagnosticoOut,
@@ -60,7 +62,8 @@ from ..services.inversiones_analytics import (
     get_rendimiento_mensual,
 )
 from ..services.riesgo_analytics import get_riesgo, get_benchmarks_disponibles, MONEDAS_VALIDAS
-from ..services.benchmarks_analytics import get_performance_relativa
+from ..services.benchmarks_analytics import get_performance_relativa, get_performance_compare
+from ..services.opportunity_cost_analytics import get_opportunity_cost
 from ..services.contribucion_analytics import get_contribucion, get_correlaciones, UNIVERSOS_VALIDOS
 from ..services.diagnostico_analytics import get_diagnostico
 from ..services.fx_decomposition_analytics import (
@@ -364,6 +367,56 @@ def performance_relativa_consolidado(
 ):
     _validar_moneda(moneda)
     return get_performance_relativa(None, moneda, benchmark, desde, db)
+
+
+@router.get("/carteras/{nombre}/performance/compare", response_model=PerformanceCompareOut)
+def performance_compare_cartera(
+    nombre: str,
+    moneda: str = Query("usd"),
+    desde: Optional[date] = Query(None),
+    benchmarks: Optional[str] = Query(None),
+    tickers: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    _validar_cartera(nombre, db)
+    _validar_moneda(moneda)
+    benchmarks_list = benchmarks.split(",") if benchmarks else []
+    tickers_list = tickers.split(",") if tickers else []
+    return get_performance_compare(nombre, moneda, desde, benchmarks_list, tickers_list, db)
+
+
+@router.get("/consolidado/performance/compare", response_model=PerformanceCompareOut)
+def performance_compare_consolidado(
+    moneda: str = Query("usd"),
+    desde: Optional[date] = Query(None),
+    benchmarks: Optional[str] = Query(None),
+    tickers: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    _validar_moneda(moneda)
+    benchmarks_list = benchmarks.split(",") if benchmarks else []
+    tickers_list = tickers.split(",") if tickers else []
+    return get_performance_compare(None, moneda, desde, benchmarks_list, tickers_list, db)
+
+
+@router.get("/carteras/{nombre}/opportunity-cost", response_model=OpportunityCostOut)
+def opportunity_cost_cartera(
+    nombre: str,
+    benchmark: Optional[str] = Query(None),
+    desde: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+):
+    _validar_cartera(nombre, db)
+    return get_opportunity_cost(nombre, benchmark, desde, db)
+
+
+@router.get("/consolidado/opportunity-cost", response_model=OpportunityCostOut)
+def opportunity_cost_consolidado(
+    benchmark: Optional[str] = Query(None),
+    desde: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+):
+    return get_opportunity_cost(None, benchmark, desde, db)
 
 
 @router.get("/carteras/{nombre}/descomposicion-fx", response_model=DescomposicionFxOut)

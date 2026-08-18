@@ -3,12 +3,12 @@
 Reutiliza las funciones privadas de `inversiones_analytics` (holdings, valuación, TWR mensual
 encadenado, conversión de moneda/CER) en vez de reimplementar la valuación de cartera.
 """
-import bisect
 from datetime import date
 from sqlalchemy.orm import Session
 
-from ..database import BenchmarkValor
+from ..database import BenchmarkValor, IndiceMercado
 from . import risk_engine
+from .benchmarks_analytics import BENCHMARK_DOLAR, BENCHMARK_INFLACION
 from .inversiones_analytics import (
     _movimientos_ordenados,
     _precios_por_ticker,
@@ -25,8 +25,18 @@ MONEDAS_VALIDAS = ("ars_nominal", "ars_real", "usd")
 
 
 def get_benchmarks_disponibles(db: Session) -> list[str]:
+    benchmarks = []
+
+    if db.query(IndiceMercado).filter(IndiceMercado.mep.isnot(None)).first():
+        benchmarks.append(BENCHMARK_DOLAR)
+
+    if db.query(IndiceMercado).filter(IndiceMercado.cer.isnot(None)).first():
+        benchmarks.append(BENCHMARK_INFLACION)
+
     rows = db.query(BenchmarkValor.benchmark).distinct().order_by(BenchmarkValor.benchmark).all()
-    return [r[0] for r in rows]
+    benchmarks.extend([r[0] for r in rows])
+
+    return benchmarks
 
 
 
