@@ -92,12 +92,14 @@ export default function EscenarioConfigPanel({
           <input
             type="number"
             step="0.1"
+            min="-90"
+            max="500"
             value={params.variacion_dolar_pct}
             onChange={(e) => onChangeParam('variacion_dolar_pct', parseFloat(e.target.value) || 0)}
             className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
             disabled={escenario.tipo_preset !== 'personalizado'}
           />
-          <div className="text-[10px] text-app-text-secondary mt-0.5">%</div>
+          <div className="text-[10px] text-app-text-secondary mt-0.5">% (-90 a 500)</div>
         </div>
 
         {/* Variación por defecto */}

@@ -314,13 +314,19 @@ def simular_escenario(
 
     # ─── Descomposición efecto mercado vs efecto dólar ───────────────────
 
-    # Correr el motor dos veces: una sin shock de dólar, otra con el shock real
-    # La diferencia es efecto_dolar_usd.
-    resultado_sin_fx = simular_escenario(
-        snapshot,
-        EscenarioParams(
+    patrimonio_final = valor_total
+    patrimonio_inicial = snapshot.valor_total_usd
+
+    # Si hay shock de dólar, descomponer corriendo el motor sin FX
+    # (pero SIN recursión: esta rama ya NO hace descomposición)
+    efecto_dolar_usd = 0.0
+    if params.variacion_dolar_pct != 0 and len(snapshot.posiciones) > 0:
+        # Correr el motor SIN shock de dólar para calcular efecto FX
+        # Usamos los mismos parámetros pero con variacion_dolar_pct=0
+        # IMPORTANTE: esto no triggea descomposición porque variacion_dolar_pct=0
+        params_sin_fx = EscenarioParams(
             horizonte_meses=params.horizonte_meses,
-            variacion_dolar_pct=0.0,  # Sin shock de dólar
+            variacion_dolar_pct=0.0,
             variacion_por_instrumento=params.variacion_por_instrumento,
             variacion_por_defecto_pct=params.variacion_por_defecto_pct,
             aporte_mensual_usd=params.aporte_mensual_usd,
@@ -330,17 +336,10 @@ def simular_escenario(
             dividend_yield_anual_pct=params.dividend_yield_anual_pct,
             pct_dividendo_reinvertido=params.pct_dividendo_reinvertido,
             comision_pct=params.comision_pct,
-            inflacion_anual_pct=None,  # Sin inflación en la descomposición
+            inflacion_anual_pct=None,
         )
-    ) if params.variacion_dolar_pct != 0 else None
-
-    patrimonio_final = valor_total
-    patrimonio_inicial = snapshot.valor_total_usd
-
-    if resultado_sin_fx is not None:
+        resultado_sin_fx = simular_escenario(snapshot, params_sin_fx)
         efecto_dolar_usd = patrimonio_final - resultado_sin_fx.patrimonio_final_usd
-    else:
-        efecto_dolar_usd = 0.0
 
     ganancia_perdida = patrimonio_final - capital_aportado_acum
     efecto_mercado = ganancia_perdida - efecto_dolar_usd - dividendos_acum
