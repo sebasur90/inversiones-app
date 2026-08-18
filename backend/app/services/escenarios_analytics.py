@@ -197,8 +197,8 @@ def simular_escenario_cartera(
                 "mes": p.mes,
                 "fecha": p.fecha,
                 "valor_usd": p.valor_usd,
-                "capital_aportado_acum_usd": p.capital_aportado_acum,
-                "dividendos_acum_usd": p.dividendos_acum,
+                "capital_aportado_acum_usd": p.capital_aportado_acum_usd,
+                "dividendos_acum_usd": p.dividendos_acum_usd,
             }
             for p in resultado_engine.puntos
         ]
