@@ -16,4 +16,4 @@ CREDENTIALS.md
 .env.local
 .env.*.local
 .env.corporate
-.env.example
+# .env.example IS committed as template for reference
