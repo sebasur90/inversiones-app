@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import date, datetime
 
@@ -129,6 +129,84 @@ class RebalanceoSimulacionRequest(BaseModel):
     modo: str = "completo"  # "completo" | "solo_aportes"
     aporte_usd: float = 0.0
     tasa_comision_pct: Optional[float] = None  # None => usar estimación histórica
+
+
+# ─── Escenarios (Simulador) ───────────────────────────────────────────────
+
+class EscenarioParamsIn(BaseModel):
+    horizonte_meses: int = Field(..., ge=1, le=600)
+    variacion_dolar_pct: float = Field(0.0, ge=-90.0, le=500.0)
+    variacion_por_instrumento: dict[str, float] = Field(default_factory=dict)
+    variacion_por_defecto_pct: float = Field(0.0, ge=-95.0, le=500.0)
+    aporte_mensual_usd: float = Field(0.0, ge=0.0)
+    crecimiento_aporte_anual_pct: float = Field(0.0, ge=-50.0, le=100.0)
+    retiro_mensual_usd: float = Field(0.0, ge=0.0)
+    modo_dividendos: str = Field("reinvertir_total")
+    dividend_yield_anual_pct: float = Field(0.0, ge=0.0, le=50.0)
+    pct_dividendo_reinvertido: Optional[float] = Field(None, ge=0.0, le=100.0)
+    comision_pct: float = Field(0.0, ge=0.0, le=10.0)
+    inflacion_anual_pct: Optional[float] = Field(None, ge=0.0, le=1000.0)
+
+
+class EscenarioSimulacionItem(BaseModel):
+    tipo_preset: str
+    nombre: Optional[str] = None
+    parametros: Optional[EscenarioParamsIn] = None
+
+
+class EscenarioSimulacionRequest(BaseModel):
+    escenarios: list[EscenarioSimulacionItem] = Field(..., min_length=1, max_length=5)
+
+
+class EscenarioPuntoOut(BaseModel):
+    mes: int
+    fecha: date
+    valor_usd: float
+    capital_aportado_acum_usd: float
+    dividendos_acum_usd: float
+
+
+class EscenarioResultadoOut(BaseModel):
+    nombre: str
+    tipo_preset: str
+    puntos: list[EscenarioPuntoOut]
+    patrimonio_inicial_usd: float
+    patrimonio_final_usd: float
+    ganancia_perdida_usd: float
+    rendimiento_pct: float
+    capital_aportado_usd: float
+    efecto_mercado_usd: float
+    efecto_dolar_usd: float
+    dividendos_usd: float
+    comisiones_usd: float
+    patrimonio_final_real_usd: Optional[float] = None
+    diferencia_vs_actual_usd: float
+    es_simulado: bool = True
+
+
+class EscenarioSimulacionOut(BaseModel):
+    cartera: Optional[str]
+    fecha_simulacion: datetime
+    actual_valor_usd: float
+    resultados: list[EscenarioResultadoOut]
+    advertencias: list[str] = Field(default_factory=list)
+
+
+class EscenarioGuardarRequest(BaseModel):
+    cartera: Optional[str] = None
+    nombre: str = Field(..., min_length=1, max_length=80)
+    tipo_preset: str
+    parametros: EscenarioParamsIn
+
+
+class EscenarioOut(BaseModel):
+    id: int
+    cartera: Optional[str]
+    nombre: str
+    tipo_preset: str
+    parametros: EscenarioParamsIn
+    fecha_creacion: datetime
+    fecha_actualizacion: datetime
 
 
 class PropuestaRebalanceoItem(BaseModel):

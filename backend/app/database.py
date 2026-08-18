@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Date, DateTime, Numeric, ForeignKey, UniqueConstraint, text
+from sqlalchemy import create_engine, Column, Integer, String, Date, DateTime, Numeric, ForeignKey, UniqueConstraint, text, JSON
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 import os
 
@@ -141,6 +141,17 @@ class SyncIssue(Base):
     severidad = Column(String, nullable=False)  # "critico" | "advertencia" | "info"
     mensaje = Column(String, nullable=False)
     impacto = Column(String, nullable=False)
+
+
+class EscenarioSimulacion(Base):
+    __tablename__ = "escenarios_simulacion"
+    id = Column(Integer, primary_key=True, index=True)
+    cartera = Column(String, nullable=True, index=True)  # None = Consolidado
+    nombre = Column(String, nullable=False)
+    tipo_preset = Column(String, nullable=False)  # "alcista" | "bajista" | "crisis" | "personalizado"
+    fecha_creacion = Column(DateTime, nullable=False)
+    fecha_actualizacion = Column(DateTime, nullable=False)
+    parametros = Column(JSON, nullable=False)  # Payload completo de EscenarioParamsIn
 
 
 def get_db():

@@ -86,6 +86,11 @@ def _mep_sheet(fecha: date, db: Session, cache: dict) -> float | None:
     return valor
 
 
+def get_mep_actual(db: Session) -> float | None:
+    """Retorna el MEP actual (hoy), con fallbacks."""
+    return _mep_sheet(date.today(), db, {})
+
+
 # ── Montos de movimientos ────────────────────────────────────────────────────
 
 def _monto_bruto(mov: MovimientoInversion) -> float:

@@ -783,3 +783,96 @@ export const getHistoricoTicker = (ticker: string, cartera: string | null = null
 
 export const getPerformanceRelativaTicker = (ticker: string, cartera: string | null = null, moneda: MonedaRiesgo = 'usd', benchmark: string | null = null, desde?: string) =>
   api.get<TickerPerformanceRelativaOut>(`/inversiones/ticker/${encodeURIComponent(ticker)}/performance-relativa`, { params: { ...(cartera && { cartera }), moneda, ...(benchmark && { benchmark }), ...(desde && { desde }) } }).then(r => r.data)
+
+// ── Escenarios (Simulador) ──────────────────────────────────────────────
+
+export interface EscenarioParamsIn {
+  horizonte_meses: number
+  variacion_dolar_pct: number
+  variacion_por_instrumento: Record<string, number>
+  variacion_por_defecto_pct: number
+  aporte_mensual_usd: number
+  crecimiento_aporte_anual_pct: number
+  retiro_mensual_usd: number
+  modo_dividendos: 'reinvertir_total' | 'reinvertir_parcial' | 'retirar'
+  dividend_yield_anual_pct: number
+  pct_dividendo_reinvertido?: number | null
+  comision_pct: number
+  inflacion_anual_pct?: number | null
+}
+
+export interface EscenarioSimulacionItem {
+  tipo_preset: 'alcista' | 'bajista' | 'crisis' | 'personalizado'
+  nombre?: string
+  parametros?: EscenarioParamsIn
+}
+
+export interface EscenarioSimulacionRequest {
+  escenarios: EscenarioSimulacionItem[]
+}
+
+export interface EscenarioPunto {
+  mes: number
+  fecha: string
+  valor_usd: number
+  capital_aportado_acum_usd: number
+  dividendos_acum_usd: number
+}
+
+export interface EscenarioResultado {
+  nombre: string
+  tipo_preset: string
+  puntos: EscenarioPunto[]
+  patrimonio_inicial_usd: number
+  patrimonio_final_usd: number
+  ganancia_perdida_usd: number
+  rendimiento_pct: number
+  capital_aportado_usd: number
+  efecto_mercado_usd: number
+  efecto_dolar_usd: number
+  dividendos_usd: number
+  comisiones_usd: number
+  patrimonio_final_real_usd?: number | null
+  diferencia_vs_actual_usd: number
+  es_simulado: boolean
+}
+
+export interface EscenarioSimulacionOut {
+  cartera: string | null
+  fecha_simulacion: string
+  actual_valor_usd: number
+  resultados: EscenarioResultado[]
+  advertencias: string[]
+}
+
+export interface EscenarioGuardarRequest {
+  cartera?: string | null
+  nombre: string
+  tipo_preset: string
+  parametros: EscenarioParamsIn
+}
+
+export interface Escenario {
+  id: number
+  cartera: string | null
+  nombre: string
+  tipo_preset: string
+  parametros: EscenarioParamsIn
+  fecha_creacion: string
+  fecha_actualizacion: string
+}
+
+export const simularEscenarios = (cartera: string | null, body: EscenarioSimulacionRequest) =>
+  api.post<EscenarioSimulacionOut>(`/inversiones/scenarios/simulate${cartera ? `?cartera=${encodeURIComponent(cartera)}` : ''}`, body).then(r => r.data)
+
+export const listarEscenarios = (cartera: string | null) =>
+  api.get<Escenario[]>('/inversiones/scenarios', { params: cartera ? { cartera } : {} }).then(r => r.data)
+
+export const guardarEscenario = (body: EscenarioGuardarRequest) =>
+  api.post<Escenario>('/inversiones/scenarios', body).then(r => r.data)
+
+export const duplicarEscenario = (id: number, nuevoNombre?: string) =>
+  api.post<Escenario>(`/inversiones/scenarios/${id}/duplicate`, null, { params: nuevoNombre ? { nuevo_nombre: nuevoNombre } : {} }).then(r => r.data)
+
+export const eliminarEscenario = (id: number) =>
+  api.delete(`/inversiones/scenarios/${id}`).then(() => undefined)

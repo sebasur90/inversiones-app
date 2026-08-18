@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from .database import init_db, SessionLocal
 from .services.cotizaciones import fetch_and_cache_today
-from .routers import inversiones, objetivos_inversion
+from .routers import inversiones, objetivos_inversion, escenarios
 
 
 @asynccontextmanager
@@ -37,6 +37,7 @@ app.add_middleware(
 
 app.include_router(inversiones.router)
 app.include_router(objetivos_inversion.router)
+app.include_router(escenarios.router)
 
 
 @app.get("/health")
