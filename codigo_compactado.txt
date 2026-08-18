@@ -1,0 +1,5158 @@
+================================================================================
+CÓDIGO COMPACTADO DEL PROYECTO
+================================================================================
+
+ESTRUCTURA DE DIRECTORIOS:
+--------------------------------------------------------------------------------
+├── backend/
+│   ├── app/
+│   │   ├── routers/
+│   │   │   ├── __init__.py
+│   │   │   ├── inversiones.py
+│   │   │   └── objetivos_inversion.py
+│   │   ├── services/
+│   │   │   ├── __init__.py
+│   │   │   ├── cotizaciones.py
+│   │   │   ├── inversiones_analytics.py
+│   │   │   ├── inversiones_sync.py
+│   │   │   └── sheets_client.py
+│   │   ├── __init__.py
+│   │   ├── database.py
+│   │   ├── main.py
+│   │   └── schemas.py
+│   ├── .dockerignore
+│   ├── Dockerfile
+│   └── requirements.txt
+├── frontend/
+│   ├── public/
+│   │   ├── icons/
+│   │   │   ├── apple-touch-icon.png
+│   │   │   ├── icon-192.png
+│   │   │   └── icon-512.png
+│   │   ├── manifest.webmanifest
+│   │   └── sw.js
+│   ├── src/
+│   │   ├── api/
+│   │   │   └── index.ts
+│   │   ├── components/
+│   │   │   ├── charts/
+│   │   │   │   ├── AportesChart.tsx
+│   │   │   │   ├── ComparacionChart.tsx
+│   │   │   │   ├── Donut.tsx
+│   │   │   │   └── Sparkline.tsx
+│   │   │   ├── icons/
+│   │   │   │   └── Icons.tsx
+│   │   │   ├── inversiones/
+│   │   │   │   ├── CarterasScroll.tsx
+│   │   │   │   ├── HeroValorCard.tsx
+│   │   │   │   ├── KpiGrid.tsx
+│   │   │   │   ├── MovimientoRow.tsx
+│   │   │   │   ├── ObjetivoModal.tsx
+│   │   │   │   └── PosicionRow.tsx
+│   │   │   ├── layout/
+│   │   │   │   ├── AppShell.tsx
+│   │   │   │   ├── BottomNav.tsx
+│   │   │   │   ├── ScreenHeader.tsx
+│   │   │   │   └── Splash.tsx
+│   │   │   └── ui/
+│   │   │       ├── Button.tsx
+│   │   │       ├── Card.tsx
+│   │   │       ├── Chip.tsx
+│   │   │       ├── EmptyState.tsx
+│   │   │       ├── IconButton.tsx
+│   │   │       ├── Modal.tsx
+│   │   │       ├── Pill.tsx
+│   │   │       ├── Segmented.tsx
+│   │   │       └── Toast.tsx
+│   │   ├── context/
+│   │   │   └── InversionesContext.tsx
+│   │   ├── hooks/
+│   │   │   ├── useInversiones.ts
+│   │   │   └── useObjetivoInversion.ts
+│   │   ├── pages/
+│   │   │   ├── Exposicion.tsx
+│   │   │   ├── Movimientos.tsx
+│   │   │   ├── Objetivo.tsx
+│   │   │   ├── Posiciones.tsx
+│   │   │   ├── Resumen.tsx
+│   │   │   └── TickerDetalle.tsx
+│   │   ├── App.tsx
+│   │   ├── index.css
+│   │   ├── main.tsx
+│   │   ├── utils.ts
+│   │   └── vite-env.d.ts
+│   ├── Dockerfile
+│   ├── index.html
+│   ├── nginx.conf
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── tsconfig.node.json
+│   └── vite.config.ts
+├── sheet_local/
+│   └── sheet_inversiones.xlsx
+├── .dockerignore
+├── .gitignore
+├── CLEANUP_SUMMARY.md
+├── DESARROLLO.md
+├── README.md
+├── codigo_compactado.txt
+├── compactar_codigo.py
+└── docker-compose.yml
+
+================================================================================
+
+ARCHIVOS INCLUIDOS: 53
+================================================================================
+
+
+################################################################################
+# ARCHIVO 1/53: backend/app/__init__.py
+################################################################################
+
+
+
+
+################################################################################
+# ARCHIVO 2/53: backend/app/database.py
+################################################################################
+
+from sqlalchemy import create_engine, Column, Integer, String, Date, Numeric, ForeignKey, UniqueConstraint, text
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
+import os
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "data.db")
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+
+engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class TipoCambio(Base):
+    __tablename__ = "tipos_cambio"
+    id = Column(Integer, primary_key=True, index=True)
+    fecha = Column(Date, nullable=False)
+    tipo = Column(String, nullable=False)
+    compra = Column(Numeric(18, 4), nullable=True)
+    venta = Column(Numeric(18, 4), nullable=True)
+
+    __table_args__ = (UniqueConstraint("fecha", "tipo", name="uq_tipo_cambio"),)
+
+
+class InstrumentoInversion(Base):
+    __tablename__ = "instrumentos_inversion"
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String, unique=True, nullable=False)
+    nombre = Column(String, nullable=False)
+    tipo_instrumento = Column(String, nullable=False)
+    mercado = Column(String, nullable=False)
+    moneda = Column(String, nullable=False)
+    pais = Column(String, nullable=True)
+    sector = Column(String, nullable=True)
+    fecha_vencimiento = Column(Date, nullable=True)
+
+
+class MovimientoInversion(Base):
+    __tablename__ = "movimientos_inversion"
+    id = Column(Integer, primary_key=True, index=True)
+    fecha = Column(Date, nullable=False)
+    cartera = Column(String, nullable=False)
+    ticker = Column(String, ForeignKey("instrumentos_inversion.ticker"), nullable=False)
+    tipo_movimiento = Column(String, nullable=False)  # compra, venta, dividendo, cupon, amortizacion
+    cantidad = Column(Numeric(18, 6), nullable=True)
+    precio = Column(Numeric(18, 6), nullable=False)
+    moneda = Column(String, nullable=False)
+    comision = Column(Numeric(18, 2), nullable=False, default=0)
+
+
+class PrecioInstrumento(Base):
+    __tablename__ = "precios_instrumento"
+    id = Column(Integer, primary_key=True, index=True)
+    fecha = Column(Date, nullable=False)
+    ticker = Column(String, ForeignKey("instrumentos_inversion.ticker"), nullable=False)
+    precio = Column(Numeric(18, 6), nullable=False)
+    moneda = Column(String, nullable=False)
+
+    __table_args__ = (UniqueConstraint("fecha", "ticker", name="uq_precio_instrumento"),)
+
+
+class IndiceMercado(Base):
+    __tablename__ = "indices_mercado"
+    id = Column(Integer, primary_key=True, index=True)
+    fecha = Column(Date, nullable=False, unique=True)
+    cer = Column(Numeric(18, 6), nullable=True)
+    mep = Column(Numeric(18, 6), nullable=True)
+
+
+class ObjetivoInversion(Base):
+    __tablename__ = "objetivos_inversion"
+    id = Column(Integer, primary_key=True, index=True)
+    cartera = Column(String, unique=True, nullable=False)
+    nombre = Column(String, nullable=False)
+    icono = Column(String, nullable=False, default="🎯")
+    monto_usd = Column(Numeric(18, 2), nullable=False)
+    fecha_limite = Column(Date, nullable=False)
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def init_db():
+    Base.metadata.create_all(bind=engine)
+
+    # sqlite create_all no agrega columnas nuevas en tablas existentes.
+    # aseguramos compatibilidad con DB antiguas que no tenían es_jubilacion.
+    with engine.connect() as conn:
+        result = conn.execute(text("PRAGMA table_info(objetivos_inversion)"))
+        cols = [row[1] for row in result.fetchall()]
+        if 'es_jubilacion' not in cols:
+            conn.execute(text("ALTER TABLE objetivos_inversion ADD COLUMN es_jubilacion INTEGER NOT NULL DEFAULT 0"))
+            conn.commit()
+
+
+################################################################################
+# ARCHIVO 3/53: backend/app/main.py
+################################################################################
+
+import os
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+
+from .database import init_db, SessionLocal
+from .services.cotizaciones import fetch_and_cache_today
+from .routers import inversiones, objetivos_inversion
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    init_db()
+    db = SessionLocal()
+    try:
+        await fetch_and_cache_today(db)
+    finally:
+        db.close()
+    yield
+
+
+app = FastAPI(title="Inversiones API", version="1.0.0", lifespan=lifespan)
+
+_cors_origins = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:5173,http://127.0.0.1:5173,http://localhost,http://localhost:80",
+).split(",")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(inversiones.router)
+app.include_router(objetivos_inversion.router)
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+################################################################################
+# ARCHIVO 4/53: backend/app/routers/__init__.py
+################################################################################
+
+
+
+
+################################################################################
+# ARCHIVO 5/53: backend/app/routers/inversiones.py
+################################################################################
+
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+
+from ..database import get_db, MovimientoInversion, InstrumentoInversion
+from ..schemas import (
+    SyncResult,
+    CarteraInfo,
+    InversionesResumen,
+    ExposicionOut,
+    MovimientoInversionOut,
+    RendimientoPorTickerItem,
+    EvolucionOut,
+    PrecioSerieOut,
+)
+from ..services.sheets_client import SheetsClientError
+from ..services.inversiones_sync import sync_from_sheet, get_ultimo_sync
+from ..services.inversiones_analytics import (
+    get_carteras,
+    get_resumen,
+    get_exposicion,
+    get_evolucion,
+    get_precios_ticker,
+)
+
+router = APIRouter(prefix="/api/inversiones", tags=["inversiones"])
+
+
+@router.post("/sync", response_model=SyncResult)
+def sync(db: Session = Depends(get_db)):
+    try:
+        result = sync_from_sheet(db)
+    except SheetsClientError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return result
+
+
+@router.get("/carteras", response_model=list[CarteraInfo])
+def list_carteras(db: Session = Depends(get_db)):
+    ultimo_sync = get_ultimo_sync()
+    ultimo_sync_str = ultimo_sync.isoformat() if ultimo_sync else None
+    return [CarteraInfo(nombre=nombre, ultimo_sync=ultimo_sync_str) for nombre in get_carteras(db)]
+
+
+def _validar_cartera(nombre: str, db: Session) -> None:
+    existe = db.query(MovimientoInversion).filter(MovimientoInversion.cartera == nombre).first()
+    if not existe:
+        raise HTTPException(status_code=404, detail=f"Cartera '{nombre}' no encontrada")
+
+
+@router.get("/carteras/{nombre}/resumen", response_model=InversionesResumen)
+def resumen_cartera(nombre: str, db: Session = Depends(get_db)):
+    _validar_cartera(nombre, db)
+    return get_resumen(nombre, db)
+
+
+@router.get("/consolidado/resumen", response_model=InversionesResumen)
+def resumen_consolidado(db: Session = Depends(get_db)):
+    return get_resumen(None, db)
+
+
+@router.get("/carteras/{nombre}/exposicion", response_model=ExposicionOut)
+def exposicion_cartera(nombre: str, db: Session = Depends(get_db)):
+    _validar_cartera(nombre, db)
+    return get_exposicion(nombre, db)
+
+
+@router.get("/consolidado/exposicion", response_model=ExposicionOut)
+def exposicion_consolidado(db: Session = Depends(get_db)):
+    return get_exposicion(None, db)
+
+
+@router.get("/movimientos", response_model=list[MovimientoInversionOut])
+def list_movimientos(
+    cartera: Optional[str] = Query(None),
+    ticker: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    q = db.query(MovimientoInversion)
+    if cartera:
+        q = q.filter(MovimientoInversion.cartera == cartera)
+    if ticker:
+        q = q.filter(MovimientoInversion.ticker == ticker)
+    return q.order_by(MovimientoInversion.fecha.desc(), MovimientoInversion.id.desc()).all()
+
+
+@router.get("/carteras/{nombre}/rendimiento-por-ticker", response_model=list[RendimientoPorTickerItem])
+def rendimiento_por_ticker(nombre: str, db: Session = Depends(get_db)):
+    """Rendimiento individual por ticker en una cartera."""
+    from ..services.inversiones_analytics import get_rendimiento_por_ticker
+
+    _validar_cartera(nombre, db)
+    return get_rendimiento_por_ticker(nombre, db)
+
+
+@router.get("/consolidado/rendimiento-por-ticker", response_model=list[RendimientoPorTickerItem])
+def rendimiento_por_ticker_consolidado(db: Session = Depends(get_db)):
+    """Rendimiento individual por ticker consolidado."""
+    from ..services.inversiones_analytics import get_rendimiento_por_ticker
+
+    return get_rendimiento_por_ticker(None, db)
+
+
+@router.get("/carteras/{nombre}/evolucion", response_model=EvolucionOut)
+def evolucion_cartera(nombre: str, db: Session = Depends(get_db)):
+    _validar_cartera(nombre, db)
+    return get_evolucion(nombre, db)
+
+
+@router.get("/consolidado/evolucion", response_model=EvolucionOut)
+def evolucion_consolidado(db: Session = Depends(get_db)):
+    return get_evolucion(None, db)
+
+
+@router.get("/ticker/{ticker}/precios", response_model=PrecioSerieOut)
+def precios_ticker(ticker: str, dias: int = Query(365, ge=1, le=3650), db: Session = Depends(get_db)):
+    existe = db.query(InstrumentoInversion).filter(InstrumentoInversion.ticker == ticker).first()
+    if not existe:
+        raise HTTPException(status_code=404, detail=f"Ticker '{ticker}' no encontrado")
+    return get_precios_ticker(ticker, dias, db)
+
+
+################################################################################
+# ARCHIVO 6/53: backend/app/routers/objetivos_inversion.py
+################################################################################
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+
+from ..database import get_db, ObjetivoInversion
+from ..schemas import ObjetivoInversionCreate, ObjetivoInversionUpdate, ObjetivoInversionOut, AportesHistoricosOut
+from ..services.inversiones_analytics import get_aportes_historicos, get_progreso_objetivo
+
+router = APIRouter(prefix="/api/inversiones", tags=["inversiones"])
+
+
+@router.get("/carteras/{nombre}/aportes-historicos", response_model=AportesHistoricosOut)
+def fetch_aportes_historicos(nombre: str, db: Session = Depends(get_db)):
+    """Obtiene el histórico de aportes netos acumulados para una cartera."""
+    return get_aportes_historicos(nombre, db)
+
+
+@router.get("/carteras/{nombre}/objetivo", response_model=ObjetivoInversionOut)
+def fetch_objetivo(nombre: str, db: Session = Depends(get_db)):
+    """Obtiene el objetivo de inversión de una cartera, incluyendo progreso."""
+    objetivo = db.query(ObjetivoInversion).filter(ObjetivoInversion.cartera == nombre).first()
+    if not objetivo:
+        raise HTTPException(status_code=404, detail="No existe un objetivo para esta cartera")
+
+    progreso = get_progreso_objetivo(nombre, objetivo.id, db)
+    if not progreso:
+        raise HTTPException(status_code=404, detail="No existe un objetivo para esta cartera")
+
+    return ObjetivoInversionOut(
+        id=objetivo.id,
+        cartera=objetivo.cartera,
+        nombre=objetivo.nombre,
+        icono=objetivo.icono,
+        monto_usd=float(objetivo.monto_usd),
+        fecha_limite=objetivo.fecha_limite,
+        valor_actual_usd=progreso["valor_actual_usd"],
+        aporte_mensual_promedio_usd=progreso["aporte_mensual_promedio_usd"],
+        aporte_mensual_necesario_usd=progreso["aporte_mensual_necesario_usd"],
+        meses_restantes=progreso["meses_restantes"],
+        proyeccion_usd=progreso["proyeccion_usd"],
+        alcanzable=progreso["alcanzable"],
+        deficit_usd=progreso["deficit_usd"],
+    )
+
+
+@router.post("/carteras/{nombre}/objetivo", response_model=ObjetivoInversionOut)
+def crear_objetivo(nombre: str, payload: ObjetivoInversionCreate, db: Session = Depends(get_db)):
+    """Crea un nuevo objetivo de inversión para una cartera."""
+    existente = db.query(ObjetivoInversion).filter(ObjetivoInversion.cartera == nombre).first()
+    if existente:
+        raise HTTPException(status_code=400, detail="Ya existe un objetivo para esta cartera")
+
+    objetivo = ObjetivoInversion(
+        cartera=nombre,
+        nombre=payload.nombre,
+        icono=payload.icono,
+        monto_usd=payload.monto_usd,
+        fecha_limite=payload.fecha_limite,
+    )
+    db.add(objetivo)
+    db.commit()
+    db.refresh(objetivo)
+
+    progreso = get_progreso_objetivo(nombre, objetivo.id, db)
+    if not progreso:
+        raise HTTPException(status_code=500, detail="Error calculando progreso")
+
+    return ObjetivoInversionOut(
+        id=objetivo.id,
+        cartera=objetivo.cartera,
+        nombre=objetivo.nombre,
+        icono=objetivo.icono,
+        monto_usd=float(objetivo.monto_usd),
+        fecha_limite=objetivo.fecha_limite,
+        valor_actual_usd=progreso["valor_actual_usd"],
+        aporte_mensual_promedio_usd=progreso["aporte_mensual_promedio_usd"],
+        aporte_mensual_necesario_usd=progreso["aporte_mensual_necesario_usd"],
+        meses_restantes=progreso["meses_restantes"],
+        proyeccion_usd=progreso["proyeccion_usd"],
+        alcanzable=progreso["alcanzable"],
+        deficit_usd=progreso["deficit_usd"],
+    )
+
+
+@router.put("/objetivos-inversion/{objetivo_id}", response_model=ObjetivoInversionOut)
+def editar_objetivo(objetivo_id: int, payload: ObjetivoInversionUpdate, db: Session = Depends(get_db)):
+    """Edita un objetivo de inversión existente."""
+    objetivo = db.query(ObjetivoInversion).filter(ObjetivoInversion.id == objetivo_id).first()
+    if not objetivo:
+        raise HTTPException(status_code=404, detail="Objetivo no encontrado")
+
+    objetivo.nombre = payload.nombre
+    objetivo.icono = payload.icono
+    objetivo.monto_usd = payload.monto_usd
+    objetivo.fecha_limite = payload.fecha_limite
+    db.commit()
+    db.refresh(objetivo)
+
+    progreso = get_progreso_objetivo(objetivo.cartera, objetivo.id, db)
+    if not progreso:
+        raise HTTPException(status_code=500, detail="Error calculando progreso")
+
+    return ObjetivoInversionOut(
+        id=objetivo.id,
+        cartera=objetivo.cartera,
+        nombre=objetivo.nombre,
+        icono=objetivo.icono,
+        monto_usd=float(objetivo.monto_usd),
+        fecha_limite=objetivo.fecha_limite,
+        valor_actual_usd=progreso["valor_actual_usd"],
+        aporte_mensual_promedio_usd=progreso["aporte_mensual_promedio_usd"],
+        aporte_mensual_necesario_usd=progreso["aporte_mensual_necesario_usd"],
+        meses_restantes=progreso["meses_restantes"],
+        proyeccion_usd=progreso["proyeccion_usd"],
+        alcanzable=progreso["alcanzable"],
+        deficit_usd=progreso["deficit_usd"],
+    )
+
+
+@router.delete("/objetivos-inversion/{objetivo_id}")
+def eliminar_objetivo(objetivo_id: int, db: Session = Depends(get_db)):
+    """Elimina un objetivo de inversión."""
+    objetivo = db.query(ObjetivoInversion).filter(ObjetivoInversion.id == objetivo_id).first()
+    if not objetivo:
+        raise HTTPException(status_code=404, detail="Objetivo no encontrado")
+
+    db.delete(objetivo)
+    db.commit()
+    return {"mensaje": "Objetivo eliminado correctamente"}
+
+
+################################################################################
+# ARCHIVO 7/53: backend/app/schemas.py
+################################################################################
+
+from pydantic import BaseModel
+from typing import Optional
+from datetime import date
+
+# --- Inversiones ---
+
+class SyncErrorItem(BaseModel):
+    fila: int
+    motivo: str
+
+
+class SyncResult(BaseModel):
+    movimientos: int
+    instrumentos: int
+    precios: int
+    indices_mercado: int
+    errores: list[SyncErrorItem]
+
+
+class CarteraInfo(BaseModel):
+    nombre: str
+    ultimo_sync: Optional[str] = None
+
+
+class InversionesResumen(BaseModel):
+    valor_actual_usd: float
+    valor_actual_ars: float
+    total_invertido_usd: float
+    total_invertido_ars: float
+    total_invertido_ars_real: Optional[float] = None
+    ingresos_recibidos_usd: float
+    ingresos_recibidos_ars: float
+    rendimiento_simple_usd: Optional[float] = None
+    rendimiento_simple_ars: Optional[float] = None
+    rendimiento_simple_ars_real: Optional[float] = None
+    xirr_usd: Optional[float] = None
+    xirr_ars: Optional[float] = None
+    xirr_ars_real: Optional[float] = None
+    twr_usd: Optional[float] = None
+    twr_ars: Optional[float] = None
+    twr_ars_real: Optional[float] = None
+    valor_benchmark_usd_ars: Optional[float] = None
+    tiene_precios_desactualizados: bool = False
+
+
+class ExposicionItem(BaseModel):
+    etiqueta: str
+    valor_usd: float
+    valor_ars: float
+    porcentaje: float
+
+
+class ExposicionEje(BaseModel):
+    eje: str
+    items: list[ExposicionItem]
+
+
+class ExposicionOut(BaseModel):
+    ejes: list[ExposicionEje]
+
+
+class MovimientoInversionOut(BaseModel):
+    id: int
+    fecha: date
+    cartera: str
+    ticker: str
+    tipo_movimiento: str
+    cantidad: Optional[float] = None
+    precio: float
+    moneda: str
+    comision: float
+
+    model_config = {"from_attributes": True}
+
+
+class EvolucionPunto(BaseModel):
+    fecha: date
+    valor_usd: float
+    valor_ars: float
+
+
+class EvolucionOut(BaseModel):
+    puntos: list[EvolucionPunto]
+
+
+class PrecioPunto(BaseModel):
+    fecha: date
+    precio: float
+    moneda: str
+
+
+class PrecioSerieOut(BaseModel):
+    ticker: str
+    puntos: list[PrecioPunto]
+
+
+class RendimientoPorTickerItem(BaseModel):
+    ticker: str
+    nombre: str
+    tipo_instrumento: str
+    mercado: str
+    moneda: str
+    pais: Optional[str] = None
+    sector: Optional[str] = None
+    cantidad_actual: float
+    precio_promedio: float
+    precio_actual: float
+    valor_invertido_usd: float
+    valor_actual_usd: float
+    valor_invertido_ars: float
+    valor_actual_ars: float
+    rendimiento_simple_usd: Optional[float] = None
+    rendimiento_simple_ars: Optional[float] = None
+    rendimiento_simple_ars_real: Optional[float] = None
+    precio_promedio_ars_ajustado_cer: Optional[float] = None
+    precio_actual_ars_ajustado_cer: Optional[float] = None
+
+
+# --- Objetivos de Inversión ---
+
+class ObjetivoInversionBase(BaseModel):
+    nombre: str
+    icono: str = "🎯"
+    monto_usd: float
+    fecha_limite: date
+
+
+class ObjetivoInversionCreate(ObjetivoInversionBase):
+    pass
+
+
+class ObjetivoInversionUpdate(ObjetivoInversionBase):
+    pass
+
+
+class ObjetivoInversionOut(ObjetivoInversionBase):
+    id: int
+    cartera: str
+    valor_actual_usd: float
+    aporte_mensual_promedio_usd: float
+    aporte_mensual_necesario_usd: Optional[float]
+    meses_restantes: int
+    proyeccion_usd: float
+    alcanzable: bool
+    deficit_usd: float
+
+    model_config = {"from_attributes": True}
+
+
+class AportePunto(BaseModel):
+    mes: str
+    aportes_netos_acumulados: float
+
+
+class AportesHistoricosOut(BaseModel):
+    curva: list[AportePunto]
+    valor_actual_usd: float
+
+
+################################################################################
+# ARCHIVO 8/53: backend/app/services/__init__.py
+################################################################################
+
+
+
+
+################################################################################
+# ARCHIVO 9/53: backend/app/services/cotizaciones.py
+################################################################################
+
+"""Fetch USD exchange rates from dolarapi.com (used as fallback for MEP lookups)."""
+import httpx
+from datetime import date
+from sqlalchemy.orm import Session
+
+
+DOLAR_API_URL = "https://dolarapi.com/v1/dolares"
+
+TYPE_MAP = {
+    "oficial": "oficial",
+    "blue": "blue",
+    "bolsa": "mep",
+    "contadoconliqui": "mep",
+    "mayorista": "mayorista",
+}
+
+
+async def fetch_and_cache_today(db: Session) -> bool:
+    """Validate connection to dolarapi.com on startup."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(DOLAR_API_URL)
+            resp.raise_for_status()
+        return True
+    except Exception:
+        return False
+
+
+def get_rates_for_date(target_date: date, db: Session) -> dict:
+    """Get rates for a given date. Currently unused (MEP comes from IndiceMercado)."""
+    return {}
+
+
+################################################################################
+# ARCHIVO 10/53: backend/app/services/inversiones_analytics.py
+################################################################################
+
+"""Valuación, XIRR, TWR, exposición y benchmarks para la página de Inversiones."""
+import bisect
+import calendar
+from datetime import date, timedelta
+from sqlalchemy.orm import Session
+
+from ..database import MovimientoInversion, InstrumentoInversion, PrecioInstrumento, IndiceMercado
+from .cotizaciones import get_rates_for_date
+
+UMBRAL_APROXIMADO_DIAS = 45
+EPS = 1e-9
+
+TIPOS_QUE_CAMBIAN_TENENCIA = ("compra", "venta", "amortizacion")
+TIPOS_INGRESO = ("dividendo", "cupon")
+
+
+# ── Conversión de monedas / índices ──────────────────────────────────────────
+
+def _mep_venta(fecha: date, db: Session, cache: dict) -> float | None:
+    if fecha in cache:
+        return cache[fecha]
+    rates = get_rates_for_date(fecha, db)
+    mep = rates.get("mep")
+    valor = float(mep["venta"]) if mep and mep.get("venta") else None
+    cache[fecha] = valor
+    return valor
+
+
+def _to_usd(monto: float, moneda: str, fecha: date, db: Session, mep_cache: dict) -> float | None:
+    if moneda == "USD":
+        return monto
+    mep = _mep_sheet(fecha, db, mep_cache)
+    if not mep:
+        return None
+    return monto / mep
+
+
+def _convertir(monto: float, moneda_origen: str, moneda_destino: str, fecha: date, db: Session, mep_cache: dict) -> float | None:
+    """Conversión genérica entre ARS y USD usando MEP del Sheet (con fallback)."""
+    if moneda_origen == moneda_destino:
+        return monto
+    if moneda_origen == "ARS" and moneda_destino == "USD":
+        return _to_usd(monto, "ARS", fecha, db, mep_cache)
+    if moneda_origen == "USD" and moneda_destino == "ARS":
+        mep = _mep_sheet(fecha, db, mep_cache)
+        if not mep:
+            return None
+        return monto * mep
+    return None
+
+
+def _cer_indice(fecha: date, db: Session, cache: dict) -> float | None:
+    """Lookup de CER con carry-forward: último valor con fecha ≤ fecha_buscada."""
+    if fecha in cache:
+        return cache[fecha]
+    row = (
+        db.query(IndiceMercado)
+        .filter(IndiceMercado.cer.isnot(None), IndiceMercado.fecha <= fecha)
+        .order_by(IndiceMercado.fecha.desc())
+        .first()
+    )
+    valor = float(row.cer) if row else None
+    cache[fecha] = valor
+    return valor
+
+
+def _mep_sheet(fecha: date, db: Session, cache: dict) -> float | None:
+    """Lookup de MEP del Sheet con carry-forward; fallback a TipoCambio auto-fetched."""
+    if fecha in cache:
+        return cache[fecha]
+    row = (
+        db.query(IndiceMercado)
+        .filter(IndiceMercado.mep.isnot(None), IndiceMercado.fecha <= fecha)
+        .order_by(IndiceMercado.fecha.desc())
+        .first()
+    )
+    if row:
+        valor = float(row.mep)
+    else:
+        # Fallback a TipoCambio auto-fetched
+        valor = _mep_venta(fecha, db, {})
+    cache[fecha] = valor
+    return valor
+
+
+# ── Montos de movimientos ────────────────────────────────────────────────────
+
+def _monto_bruto(mov: MovimientoInversion) -> float:
+    if mov.tipo_movimiento in TIPOS_INGRESO:
+        return float(mov.precio)
+    return float(mov.precio) * float(mov.cantidad or 0)
+
+
+def _monto_ajustado(mov: MovimientoInversion) -> float:
+    """Monto en la moneda original del movimiento, con la comisión aplicada."""
+    bruto = _monto_bruto(mov)
+    comision = float(mov.comision or 0)
+    return bruto + comision if mov.tipo_movimiento == "compra" else bruto - comision
+
+
+def _monto_usd(mov: MovimientoInversion, db: Session, mep_cache: dict) -> float | None:
+    return _to_usd(_monto_ajustado(mov), mov.moneda, mov.fecha, db, mep_cache)
+
+
+def _monto_ars(mov: MovimientoInversion, db: Session, mep_cache: dict) -> float | None:
+    """Monto en ARS nominal (sin ajuste por inflación)."""
+    monto_ajustado = _monto_ajustado(mov)
+    return _convertir(monto_ajustado, mov.moneda, "ARS", mov.fecha, db, mep_cache)
+
+
+def _monto_ars_real(mov: MovimientoInversion, db: Session, cer_cache: dict, mep_cache: dict, cer_hoy: float | None) -> float | None:
+    """Monto en ARS real (deflactado por CER). Devuelve None si falta CER para el período."""
+    if cer_hoy is None:
+        return None
+    monto_ars = _monto_ars(mov, db, mep_cache)
+    if monto_ars is None:
+        return None
+    cer_fecha = _cer_indice(mov.fecha, db, cer_cache)
+    if cer_fecha is None:
+        return None
+    return monto_ars * (cer_hoy / cer_fecha)
+
+
+# ── Tenencias y valuación ────────────────────────────────────────────────────
+
+class _HoldingsTracker:
+    """Avanza cronológicamente sobre movimientos (ordenados por fecha) acumulando tenencia por ticker."""
+
+    def __init__(self, movimientos: list[MovimientoInversion]):
+        self.movs = movimientos
+        self.idx = 0
+        self.tenencias: dict[str, float] = {}
+
+    def avanzar_a(self, fecha: date) -> None:
+        while self.idx < len(self.movs) and self.movs[self.idx].fecha <= fecha:
+            mov = self.movs[self.idx]
+            cant = float(mov.cantidad or 0)
+            if mov.tipo_movimiento == "compra":
+                self.tenencias[mov.ticker] = self.tenencias.get(mov.ticker, 0.0) + cant
+            elif mov.tipo_movimiento in ("venta", "amortizacion"):
+                self.tenencias[mov.ticker] = self.tenencias.get(mov.ticker, 0.0) - cant
+            self.idx += 1
+
+    def snapshot(self) -> dict[str, float]:
+        return dict(self.tenencias)
+
+
+def _precios_por_ticker(db: Session) -> dict[str, list[tuple[date, float, str]]]:
+    rows = db.query(PrecioInstrumento).order_by(PrecioInstrumento.ticker, PrecioInstrumento.fecha).all()
+    result: dict[str, list[tuple[date, float, str]]] = {}
+    for row in rows:
+        result.setdefault(row.ticker, []).append((row.fecha, float(row.precio), row.moneda))
+    return result
+
+
+def _precio_conocido(precios_sorted: list[tuple[date, float, str]], fecha: date) -> tuple[date, float, str] | None:
+    fechas = [p[0] for p in precios_sorted]
+    idx = bisect.bisect_right(fechas, fecha) - 1
+    if idx < 0:
+        return None
+    return precios_sorted[idx]
+
+
+def _valuar_holdings(
+    holdings: dict[str, float],
+    fecha: date,
+    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
+    db: Session,
+    mep_cache: dict,
+) -> tuple[float, bool, bool]:
+    """Devuelve (valor_usd, aproximado, tiene_precio_faltante)."""
+    total_usd = 0.0
+    aproximado = False
+    precio_faltante = False
+    for ticker, cantidad in holdings.items():
+        if abs(cantidad) < EPS:
+            continue
+        precios_sorted = precios_por_ticker.get(ticker)
+        info = _precio_conocido(precios_sorted, fecha) if precios_sorted else None
+        if info is None:
+            precio_faltante = True
+            continue
+        fecha_precio, precio, moneda = info
+        if (fecha - fecha_precio).days > UMBRAL_APROXIMADO_DIAS:
+            aproximado = True
+        usd = _to_usd(precio * cantidad, moneda, fecha, db, mep_cache)
+        if usd is None:
+            precio_faltante = True
+            continue
+        total_usd += usd
+    return total_usd, aproximado, precio_faltante
+
+
+def _valuar_holdings_ars(
+    holdings: dict[str, float],
+    fecha: date,
+    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
+    db: Session,
+    mep_cache: dict,
+) -> tuple[float, bool, bool]:
+    """Devuelve (valor_ars, aproximado, tiene_precio_faltante)."""
+    total_ars = 0.0
+    aproximado = False
+    precio_faltante = False
+    for ticker, cantidad in holdings.items():
+        if abs(cantidad) < EPS:
+            continue
+        precios_sorted = precios_por_ticker.get(ticker)
+        info = _precio_conocido(precios_sorted, fecha) if precios_sorted else None
+        if info is None:
+            precio_faltante = True
+            continue
+        fecha_precio, precio, moneda = info
+        if (fecha - fecha_precio).days > UMBRAL_APROXIMADO_DIAS:
+            aproximado = True
+        ars = _convertir(precio * cantidad, moneda, "ARS", fecha, db, mep_cache)
+        if ars is None:
+            precio_faltante = True
+            continue
+        total_ars += ars
+    return total_ars, aproximado, precio_faltante
+
+
+def _valuar_holdings_ars_real(
+    holdings: dict[str, float],
+    fecha: date,
+    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
+    db: Session,
+    mep_cache: dict,
+    cer_cache: dict,
+    cer_hoy: float | None,
+) -> tuple[float | None, bool, bool]:
+    """Devuelve (valor_ars_real, aproximado, tiene_precio_faltante). None si falta CER."""
+    if cer_hoy is None:
+        return None, False, False
+    total_ars_real = 0.0
+    aproximado = False
+    precio_faltante = False
+    for ticker, cantidad in holdings.items():
+        if abs(cantidad) < EPS:
+            continue
+        precios_sorted = precios_por_ticker.get(ticker)
+        info = _precio_conocido(precios_sorted, fecha) if precios_sorted else None
+        if info is None:
+            precio_faltante = True
+            continue
+        fecha_precio, precio, moneda = info
+        if (fecha - fecha_precio).days > UMBRAL_APROXIMADO_DIAS:
+            aproximado = True
+        ars = _convertir(precio * cantidad, moneda, "ARS", fecha, db, mep_cache)
+        if ars is None:
+            precio_faltante = True
+            continue
+        cer_fecha = _cer_indice(fecha, db, cer_cache)
+        if cer_fecha is None:
+            # Falta CER para este período, marcar como incalculable
+            return None, aproximado, True
+        ars_real = ars * (cer_hoy / cer_fecha)
+        total_ars_real += ars_real
+    return total_ars_real, aproximado, precio_faltante
+
+
+def _movimientos_ordenados(db: Session, cartera: str | None) -> list[MovimientoInversion]:
+    q = db.query(MovimientoInversion)
+    if cartera is not None:
+        q = q.filter(MovimientoInversion.cartera == cartera)
+    return q.order_by(MovimientoInversion.fecha, MovimientoInversion.id).all()
+
+
+# ── Carteras ──────────────────────────────────────────────────────────────
+
+def get_carteras(db: Session) -> list[str]:
+    rows = db.query(MovimientoInversion.cartera).distinct().order_by(MovimientoInversion.cartera).all()
+    return [r[0] for r in rows]
+
+
+# ── Resumen ───────────────────────────────────────────────────────────────
+
+def get_resumen(cartera: str | None, db: Session) -> dict:
+    movs = _movimientos_ordenados(db, cartera)
+    precios_por_ticker = _precios_por_ticker(db)
+    mep_cache: dict = {}
+    cer_cache: dict = {}
+    hoy = date.today()
+
+    # CER de hoy (para deflactación en modo real)
+    cer_hoy = _cer_indice(hoy, db, cer_cache)
+
+    # === USD ===
+    tracker = _HoldingsTracker(movs)
+    tracker.avanzar_a(hoy)
+    valor_actual_usd, aproximado, _precio_faltante = _valuar_holdings(
+        tracker.snapshot(), hoy, precios_por_ticker, db, mep_cache
+    )
+
+    total_invertido_usd = 0.0
+    ingresos_recibidos_usd = 0.0
+    hubo_compra = False
+    flujos_xirr_usd: list[tuple[date, float]] = []
+
+    # === ARS nominal y real ===
+    total_invertido_ars = 0.0
+    ingresos_recibidos_ars = 0.0
+    total_invertido_ars_real = 0.0
+    ingresos_recibidos_ars_real = 0.0
+    tiene_cer_faltante = False
+
+    for mov in movs:
+        monto_usd = _monto_usd(mov, db, mep_cache)
+        if monto_usd is None:
+            continue
+
+        monto_ars = _monto_ars(mov, db, mep_cache)
+        monto_ars_real = _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy)
+        if monto_ars_real is None and (mov.tipo_movimiento in ("compra", "venta", "amortizacion") or mov.tipo_movimiento in TIPOS_INGRESO):
+            tiene_cer_faltante = True
+
+        if mov.tipo_movimiento == "compra":
+            total_invertido_usd += monto_usd
+            hubo_compra = True
+            flujos_xirr_usd.append((mov.fecha, -monto_usd))
+            if monto_ars is not None:
+                total_invertido_ars += monto_ars
+            if monto_ars_real is not None:
+                total_invertido_ars_real += monto_ars_real
+        elif mov.tipo_movimiento == "venta":
+            total_invertido_usd -= monto_usd
+            flujos_xirr_usd.append((mov.fecha, monto_usd))
+            if monto_ars is not None:
+                total_invertido_ars -= monto_ars
+            if monto_ars_real is not None:
+                total_invertido_ars_real -= monto_ars_real
+        elif mov.tipo_movimiento in TIPOS_INGRESO:
+            ingresos_recibidos_usd += monto_usd
+            flujos_xirr_usd.append((mov.fecha, monto_usd))
+            if monto_ars is not None:
+                ingresos_recibidos_ars += monto_ars
+            if monto_ars_real is not None:
+                ingresos_recibidos_ars_real += monto_ars_real
+        elif mov.tipo_movimiento == "amortizacion":
+            flujos_xirr_usd.append((mov.fecha, monto_usd))
+            if monto_ars is not None:
+                pass  # No afecta invertido/ingresos en amortización
+
+    # Cálculo de métricas USD
+    rendimiento_simple_usd = (
+        (valor_actual_usd + ingresos_recibidos_usd - total_invertido_usd) / total_invertido_usd
+        if abs(total_invertido_usd) > EPS
+        else None
+    )
+
+    xirr_usd = None
+    if hubo_compra:
+        flujos_xirr_usd.append((hoy, valor_actual_usd))
+        xirr_usd = _calcular_xirr(flujos_xirr_usd)
+
+    twr_usd = None
+    twr_aproximado = False
+    if hubo_compra:
+        twr_usd, twr_aproximado = _calcular_twr(movs, precios_por_ticker, db, mep_cache, hoy)
+
+    # === ARS nominal ===
+    # Recalcular valor actual en ARS
+    tracker = _HoldingsTracker(movs)
+    tracker.avanzar_a(hoy)
+    valor_actual_ars, _, _ = _valuar_holdings_ars(tracker.snapshot(), hoy, precios_por_ticker, db, mep_cache)
+
+    rendimiento_simple_ars = (
+        (valor_actual_ars + ingresos_recibidos_ars - total_invertido_ars) / total_invertido_ars
+        if abs(total_invertido_ars) > EPS
+        else None
+    )
+
+    xirr_ars = None
+    if hubo_compra:
+        flujos_xirr_ars: list[tuple[date, float]] = []
+        for mov in movs:
+            monto_ars = _monto_ars(mov, db, mep_cache)
+            if monto_ars is None:
+                continue
+            if mov.tipo_movimiento == "compra":
+                flujos_xirr_ars.append((mov.fecha, -monto_ars))
+            elif mov.tipo_movimiento == "venta":
+                flujos_xirr_ars.append((mov.fecha, monto_ars))
+            elif mov.tipo_movimiento in TIPOS_INGRESO:
+                flujos_xirr_ars.append((mov.fecha, monto_ars))
+            elif mov.tipo_movimiento == "amortizacion":
+                flujos_xirr_ars.append((mov.fecha, monto_ars))
+        flujos_xirr_ars.append((hoy, valor_actual_ars))
+        xirr_ars = _calcular_xirr(flujos_xirr_ars)
+
+    twr_ars = None
+    if hubo_compra:
+        twr_ars, _ = _calcular_twr_ars(movs, precios_por_ticker, db, mep_cache, hoy)
+
+    # === ARS real (deflactado por CER) ===
+    rendimiento_simple_ars_real = None
+    xirr_ars_real = None
+    twr_ars_real = None
+
+    if cer_hoy and not tiene_cer_faltante:
+        # Valor actual en ARS real
+        tracker = _HoldingsTracker(movs)
+        tracker.avanzar_a(hoy)
+        valor_actual_ars_real, _, _ = _valuar_holdings_ars_real(
+            tracker.snapshot(), hoy, precios_por_ticker, db, mep_cache, cer_cache, cer_hoy
+        )
+
+        if valor_actual_ars_real is not None:
+            rendimiento_simple_ars_real = (
+                (valor_actual_ars_real + ingresos_recibidos_ars_real - total_invertido_ars_real) / total_invertido_ars_real
+                if abs(total_invertido_ars_real) > EPS
+                else None
+            )
+
+            if hubo_compra:
+                flujos_xirr_ars_real: list[tuple[date, float]] = []
+                for mov in movs:
+                    monto_ars_real = _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy)
+                    if monto_ars_real is None:
+                        tiene_cer_faltante = True
+                        break
+                    if mov.tipo_movimiento == "compra":
+                        flujos_xirr_ars_real.append((mov.fecha, -monto_ars_real))
+                    elif mov.tipo_movimiento == "venta":
+                        flujos_xirr_ars_real.append((mov.fecha, monto_ars_real))
+                    elif mov.tipo_movimiento in TIPOS_INGRESO:
+                        flujos_xirr_ars_real.append((mov.fecha, monto_ars_real))
+                    elif mov.tipo_movimiento == "amortizacion":
+                        flujos_xirr_ars_real.append((mov.fecha, monto_ars_real))
+
+                if not tiene_cer_faltante:
+                    flujos_xirr_ars_real.append((hoy, valor_actual_ars_real))
+                    xirr_ars_real = _calcular_xirr(flujos_xirr_ars_real)
+                    twr_ars_real, _ = _calcular_twr_ars_real(movs, precios_por_ticker, db, mep_cache, cer_cache, cer_hoy, hoy)
+
+    # Cálculo de valor_benchmark_usd_ars (Si comprabas USD)
+    mep_hoy = _mep_sheet(hoy, db, mep_cache)
+    valor_benchmark_usd_ars = (
+        total_invertido_usd * mep_hoy if mep_hoy is not None else None
+    )
+
+    return {
+        "valor_actual_usd": round(valor_actual_usd, 2),
+        "valor_actual_ars": round(valor_actual_ars, 2),
+        "total_invertido_usd": round(total_invertido_usd, 2),
+        "total_invertido_ars": round(total_invertido_ars, 2),
+        "total_invertido_ars_real": round(total_invertido_ars_real, 2) if total_invertido_ars_real is not None else None,
+        "ingresos_recibidos_usd": round(ingresos_recibidos_usd, 2),
+        "ingresos_recibidos_ars": round(ingresos_recibidos_ars, 2),
+        "rendimiento_simple_usd": round(rendimiento_simple_usd, 4) if rendimiento_simple_usd is not None else None,
+        "rendimiento_simple_ars": round(rendimiento_simple_ars, 4) if rendimiento_simple_ars is not None else None,
+        "rendimiento_simple_ars_real": round(rendimiento_simple_ars_real, 4) if rendimiento_simple_ars_real is not None else None,
+        "xirr_usd": round(xirr_usd, 4) if xirr_usd is not None else None,
+        "xirr_ars": round(xirr_ars, 4) if xirr_ars is not None else None,
+        "xirr_ars_real": round(xirr_ars_real, 4) if xirr_ars_real is not None else None,
+        "twr_usd": round(twr_usd, 4) if twr_usd is not None else None,
+        "twr_ars": round(twr_ars, 4) if twr_ars is not None else None,
+        "twr_ars_real": round(twr_ars_real, 4) if twr_ars_real is not None else None,
+        "valor_benchmark_usd_ars": round(valor_benchmark_usd_ars, 2) if valor_benchmark_usd_ars is not None else None,
+        "tiene_precios_desactualizados": aproximado or twr_aproximado,
+    }
+
+
+def _calcular_xirr(flujos: list[tuple[date, float]]) -> float | None:
+    if len(flujos) < 2:
+        return None
+    base_date = min(f for f, _ in flujos)
+
+    def npv(r: float) -> float:
+        total = 0.0
+        for fecha, monto in flujos:
+            dias = (fecha - base_date).days
+            total += monto / ((1 + r) ** (dias / 365))
+        return total
+
+    lo, hi = -0.999, 10.0
+    f_lo, f_hi = npv(lo), npv(hi)
+    if f_lo * f_hi > 0:
+        hi = 100.0
+        f_hi = npv(hi)
+        if f_lo * f_hi > 0:
+            return None
+
+    mid = (lo + hi) / 2
+    for _ in range(200):
+        mid = (lo + hi) / 2
+        f_mid = npv(mid)
+        if abs(f_mid) < 1e-6:
+            break
+        if f_lo * f_mid < 0:
+            hi, f_hi = mid, f_mid
+        else:
+            lo, f_lo = mid, f_mid
+    return mid
+
+
+def _calcular_twr(
+    movs: list[MovimientoInversion],
+    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
+    db: Session,
+    mep_cache: dict,
+    hoy: date,
+) -> tuple[float | None, bool]:
+    fechas_borde = sorted({m.fecha for m in movs if m.tipo_movimiento in TIPOS_QUE_CAMBIAN_TENENCIA})
+    if not fechas_borde:
+        return None, False
+
+    boundaries = list(fechas_borde)
+    if boundaries[-1] < hoy:
+        boundaries.append(hoy)
+    if len(boundaries) < 1:
+        return None, False
+
+    # Si solo hay un boundary (una sola compra/venta), agregar hoy como segundo punto
+    if len(boundaries) == 1:
+        boundaries.append(hoy)
+
+    cf_por_fecha: dict[date, float] = {}
+    for mov in movs:
+        if mov.tipo_movimiento not in TIPOS_QUE_CAMBIAN_TENENCIA:
+            continue
+        monto = _monto_usd(mov, db, mep_cache)
+        if monto is None:
+            continue
+        signo = 1 if mov.tipo_movimiento == "compra" else -1
+        cf_por_fecha[mov.fecha] = cf_por_fecha.get(mov.fecha, 0.0) + signo * monto
+
+    tracker = _HoldingsTracker(movs)
+    valores: dict[date, float] = {}
+    aproximado = False
+    for b in boundaries:
+        tracker.avanzar_a(b)
+        valor, aprox, _ = _valuar_holdings(tracker.snapshot(), b, precios_por_ticker, db, mep_cache)
+        valores[b] = valor
+        aproximado = aproximado or aprox
+
+    twr_total = 1.0
+    for i in range(1, len(boundaries)):
+        d0, d1 = boundaries[i - 1], boundaries[i]
+        v0, v1 = valores[d0], valores[d1]
+        if v0 <= EPS:
+            continue
+        flujo = cf_por_fecha.get(d1, 0.0)
+        r = (v1 - flujo) / v0 - 1
+        twr_total *= (1 + r)
+
+    return twr_total - 1, aproximado
+
+
+def _calcular_twr_ars(
+    movs: list[MovimientoInversion],
+    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
+    db: Session,
+    mep_cache: dict,
+    hoy: date,
+) -> tuple[float | None, bool]:
+    """TWR en ARS nominal."""
+    fechas_borde = sorted({m.fecha for m in movs if m.tipo_movimiento in TIPOS_QUE_CAMBIAN_TENENCIA})
+    if not fechas_borde:
+        return None, False
+
+    boundaries = list(fechas_borde)
+    if boundaries[-1] < hoy:
+        boundaries.append(hoy)
+    if len(boundaries) < 1:
+        return None, False
+
+    # Si solo hay un boundary (una sola compra/venta), agregar hoy como segundo punto
+    if len(boundaries) == 1:
+        boundaries.append(hoy)
+
+    cf_por_fecha: dict[date, float] = {}
+    for mov in movs:
+        if mov.tipo_movimiento not in TIPOS_QUE_CAMBIAN_TENENCIA:
+            continue
+        monto = _monto_ars(mov, db, mep_cache)
+        if monto is None:
+            continue
+        signo = 1 if mov.tipo_movimiento == "compra" else -1
+        cf_por_fecha[mov.fecha] = cf_por_fecha.get(mov.fecha, 0.0) + signo * monto
+
+    tracker = _HoldingsTracker(movs)
+    valores: dict[date, float] = {}
+    aproximado = False
+    for b in boundaries:
+        tracker.avanzar_a(b)
+        valor, aprox, _ = _valuar_holdings_ars(tracker.snapshot(), b, precios_por_ticker, db, mep_cache)
+        valores[b] = valor
+        aproximado = aproximado or aprox
+
+    twr_total = 1.0
+    for i in range(1, len(boundaries)):
+        d0, d1 = boundaries[i - 1], boundaries[i]
+        v0, v1 = valores[d0], valores[d1]
+        if v0 <= EPS:
+            continue
+        flujo = cf_por_fecha.get(d1, 0.0)
+        r = (v1 - flujo) / v0 - 1
+        twr_total *= (1 + r)
+
+    return twr_total - 1, aproximado
+
+
+def _calcular_twr_ars_real(
+    movs: list[MovimientoInversion],
+    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
+    db: Session,
+    mep_cache: dict,
+    cer_cache: dict,
+    cer_hoy: float,
+    hoy: date,
+) -> tuple[float | None, bool]:
+    """TWR en ARS real (deflactado por CER)."""
+    fechas_borde = sorted({m.fecha for m in movs if m.tipo_movimiento in TIPOS_QUE_CAMBIAN_TENENCIA})
+    if not fechas_borde:
+        return None, False
+
+    boundaries = list(fechas_borde)
+    if boundaries[-1] < hoy:
+        boundaries.append(hoy)
+    if len(boundaries) < 1:
+        return None, False
+
+    # Si solo hay un boundary (una sola compra/venta), agregar hoy como segundo punto
+    if len(boundaries) == 1:
+        boundaries.append(hoy)
+
+    cf_por_fecha: dict[date, float] = {}
+    for mov in movs:
+        if mov.tipo_movimiento not in TIPOS_QUE_CAMBIAN_TENENCIA:
+            continue
+        monto = _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy)
+        if monto is None:
+            return None, False
+        signo = 1 if mov.tipo_movimiento == "compra" else -1
+        cf_por_fecha[mov.fecha] = cf_por_fecha.get(mov.fecha, 0.0) + signo * monto
+
+    tracker = _HoldingsTracker(movs)
+    valores: dict[date, float] = {}
+    aproximado = False
+    for b in boundaries:
+        tracker.avanzar_a(b)
+        valor, aprox, _ = _valuar_holdings_ars_real(tracker.snapshot(), b, precios_por_ticker, db, mep_cache, cer_cache, cer_hoy)
+        if valor is None:
+            return None, False
+        valores[b] = valor
+        aproximado = aproximado or aprox
+
+    twr_total = 1.0
+    for i in range(1, len(boundaries)):
+        d0, d1 = boundaries[i - 1], boundaries[i]
+        v0, v1 = valores[d0], valores[d1]
+        if v0 <= EPS:
+            continue
+        flujo = cf_por_fecha.get(d1, 0.0)
+        r = (v1 - flujo) / v0 - 1
+        twr_total *= (1 + r)
+
+    return twr_total - 1, aproximado
+
+
+# ── Evolución + benchmarks ───────────────────────────────────────────────────
+
+# ── Exposición ────────────────────────────────────────────────────────────
+
+def _holdings_por_cartera_ticker(movs: list[MovimientoInversion], hasta: date) -> dict[tuple[str, str], float]:
+    result: dict[tuple[str, str], float] = {}
+    for mov in movs:
+        if mov.fecha > hasta:
+            continue
+        key = (mov.cartera, mov.ticker)
+        cant = float(mov.cantidad or 0)
+        if mov.tipo_movimiento == "compra":
+            result[key] = result.get(key, 0.0) + cant
+        elif mov.tipo_movimiento in ("venta", "amortizacion"):
+            result[key] = result.get(key, 0.0) - cant
+    return result
+
+
+def _agrupar(entries: list[tuple[str, float, float]]) -> list[dict]:
+    """Agrupa entradas (etiqueta, valor_usd, valor_ars) y calcula porcentajes."""
+    grupos_usd: dict[str, float] = {}
+    grupos_ars: dict[str, float] = {}
+    for etiqueta, valor_usd, valor_ars in entries:
+        if etiqueta is None:
+            continue
+        grupos_usd[etiqueta] = grupos_usd.get(etiqueta, 0.0) + valor_usd
+        grupos_ars[etiqueta] = grupos_ars.get(etiqueta, 0.0) + valor_ars
+    total = sum(grupos_usd.values())
+    if total <= EPS:
+        return []
+    items = sorted(grupos_usd.items(), key=lambda kv: -kv[1])
+    return [
+        {
+            "etiqueta": k,
+            "valor_usd": round(v, 2),
+            "valor_ars": round(grupos_ars[k], 2),
+            "porcentaje": round(v / total * 100, 2)
+        }
+        for k, v in items
+    ]
+
+
+def _bucket_vencimiento(fecha_venc: date, hoy: date) -> str:
+    anios = (fecha_venc - hoy).days / 365
+    if anios < 1:
+        return "Corto (<1 año)"
+    if anios <= 3:
+        return "Mediano (1-3 años)"
+    return "Largo (>3 años)"
+
+
+def get_exposicion(cartera: str | None, db: Session) -> dict:
+    movs = _movimientos_ordenados(db, None)  # necesitamos todas las carteras para el eje "por cartera"
+    precios_por_ticker = _precios_por_ticker(db)
+    instrumentos = {i.ticker: i for i in db.query(InstrumentoInversion).all()}
+    mep_cache: dict = {}
+    hoy = date.today()
+
+    holdings = _holdings_por_cartera_ticker(movs, hoy)
+
+    valores: list[tuple[str, str, float, float]] = []  # (cartera, ticker, valor_usd, valor_ars)
+    for (cart, ticker), cantidad in holdings.items():
+        if abs(cantidad) < EPS:
+            continue
+        if cartera is not None and cart != cartera:
+            continue
+        precios_sorted = precios_por_ticker.get(ticker)
+        info = _precio_conocido(precios_sorted, hoy) if precios_sorted else None
+        if info is None:
+            continue
+        _fecha_precio, precio, moneda = info
+        usd = _to_usd(precio * cantidad, moneda, hoy, db, mep_cache)
+        if usd is None:
+            continue
+        ars = _convertir(precio * cantidad, moneda, "ARS", hoy, db, mep_cache)
+        if ars is None:
+            ars = 0.0
+        valores.append((cart, ticker, usd, ars))
+
+    clasificados = [(cart, ticker, valor_usd, valor_ars) for cart, ticker, valor_usd, valor_ars in valores if ticker in instrumentos]
+
+    ejes = []
+
+    mercado = _agrupar([(instrumentos[t].mercado, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados])
+    if mercado:
+        ejes.append({"eje": "Mercado", "items": mercado})
+
+    moneda = _agrupar([(instrumentos[t].moneda, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados])
+    if moneda:
+        ejes.append({"eje": "Moneda", "items": moneda})
+
+    tipo = _agrupar([(instrumentos[t].tipo_instrumento, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados])
+    if tipo:
+        ejes.append({"eje": "Tipo de instrumento", "items": tipo})
+
+    ticker_eje = _agrupar([(t, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados])
+    if ticker_eje:
+        ejes.append({"eje": "Ticker", "items": ticker_eje})
+
+    sector = _agrupar([(instrumentos[t].sector, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados if instrumentos[t].sector])
+    if sector:
+        ejes.append({"eje": "Sector", "items": sector})
+
+    pais = _agrupar([(instrumentos[t].pais, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados if instrumentos[t].pais])
+    if pais:
+        ejes.append({"eje": "País", "items": pais})
+
+    vencimiento = _agrupar([
+        (_bucket_vencimiento(instrumentos[t].fecha_vencimiento, hoy), v_usd, v_ars)
+        for _, t, v_usd, v_ars in clasificados
+        if instrumentos[t].fecha_vencimiento
+    ])
+    if vencimiento:
+        ejes.append({"eje": "Vencimiento", "items": vencimiento})
+
+    if cartera is None:
+        por_cartera = _agrupar([(cart, v_usd, v_ars) for cart, _, v_usd, v_ars in valores])
+        if por_cartera:
+            ejes.append({"eje": "Cartera", "items": por_cartera})
+
+    return {"ejes": ejes}
+
+
+# ── Rendimiento por ticker ─────────────────────────────────────────────────────
+
+def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
+    """Rendimiento individual por ticker con análisis por moneda."""
+    movs = _movimientos_ordenados(db, cartera)
+    if not movs:
+        return []
+
+    precios_por_ticker = _precios_por_ticker(db)
+    instrumentos = {i.ticker: i for i in db.query(InstrumentoInversion).all()}
+    mep_cache: dict = {}
+    cer_cache: dict = {}
+    hoy = date.today()
+    cer_hoy = _cer_indice(hoy, db, cer_cache)
+
+    # Agrupar movimientos por ticker
+    movimientos_por_ticker: dict[str, list[MovimientoInversion]] = {}
+    for mov in movs:
+        movimientos_por_ticker.setdefault(mov.ticker, []).append(mov)
+
+    resultado = []
+
+    for ticker, movs_ticker in movimientos_por_ticker.items():
+        # Calcular tenencia actual
+        tenencia = 0.0
+        inversion_total_usd = 0.0
+        inversion_total_ars = 0.0
+        precio_promedio_compra = 0.0
+        precio_promedio_compra_cantidad = 0.0
+        primera_compra_fecha = None
+
+        for mov in movs_ticker:
+            if mov.tipo_movimiento == "compra":
+                cant = float(mov.cantidad or 0)
+                precio = float(mov.precio)
+                tenencia += cant
+                precio_promedio_compra_cantidad += cant
+                precio_promedio_compra += cant * precio
+                if primera_compra_fecha is None:
+                    primera_compra_fecha = mov.fecha
+
+                monto_usd = _monto_usd(mov, db, mep_cache)
+                if monto_usd is not None:
+                    inversion_total_usd += monto_usd
+                monto_ars = _monto_ars(mov, db, mep_cache)
+                if monto_ars is not None:
+                    inversion_total_ars += monto_ars
+            elif mov.tipo_movimiento == "venta":
+                tenencia -= float(mov.cantidad or 0)
+            elif mov.tipo_movimiento == "amortizacion":
+                tenencia -= float(mov.cantidad or 0)
+
+        if abs(tenencia) < EPS:
+            continue
+
+        if precio_promedio_compra_cantidad > 0:
+            precio_promedio_compra /= precio_promedio_compra_cantidad
+        else:
+            precio_promedio_compra = 0.0
+
+        # Obtener precio actual
+        precios_sorted = precios_por_ticker.get(ticker)
+        precio_info = _precio_conocido(precios_sorted, hoy) if precios_sorted else None
+        if precio_info is None:
+            continue
+
+        _fecha_precio, precio_actual, moneda = precio_info
+
+        # Calcular valor actual
+        valor_actual_usd = _to_usd(precio_actual * tenencia, moneda, hoy, db, mep_cache) or 0.0
+        valor_actual_ars = _convertir(precio_actual * tenencia, moneda, "ARS", hoy, db, mep_cache) or 0.0
+
+        # Calcular rendimiento simple
+        rendimiento_simple_usd = None
+        if abs(inversion_total_usd) > EPS:
+            rendimiento_simple_usd = (valor_actual_usd - inversion_total_usd) / inversion_total_usd
+
+        rendimiento_simple_ars = None
+        if abs(inversion_total_ars) > EPS:
+            rendimiento_simple_ars = (valor_actual_ars - inversion_total_ars) / inversion_total_ars
+
+        # Rendimiento en ARS real (ajustado por CER) - solo si es en ARS
+        rendimiento_simple_ars_real = None
+        precio_promedio_ars_ajustado_cer = None
+        precio_actual_ars_ajustado_cer = None
+
+        if moneda == "ARS" and cer_hoy is not None and primera_compra_fecha is not None:
+            cer_compra = _cer_indice(primera_compra_fecha, db, cer_cache)
+            if cer_compra is not None:
+                # Precio promedio de compra ajustado por inflación
+                precio_promedio_ars_ajustado_cer = precio_promedio_compra * (cer_hoy / cer_compra)
+                # Precio actual no se ajusta (es el precio de hoy)
+                precio_actual_ars_ajustado_cer = precio_actual
+
+                if abs(precio_promedio_ars_ajustado_cer) > EPS:
+                    rendimiento_simple_ars_real = (precio_actual_ars_ajustado_cer - precio_promedio_ars_ajustado_cer) / precio_promedio_ars_ajustado_cer
+
+        instrumento = instrumentos.get(ticker, None)
+        nombre = instrumento.nombre if instrumento else ticker
+
+        resultado.append({
+            "ticker": ticker,
+            "nombre": nombre,
+            "tipo_instrumento": instrumento.tipo_instrumento if instrumento else "—",
+            "mercado": instrumento.mercado if instrumento else "—",
+            "moneda": instrumento.moneda if instrumento else moneda,
+            "pais": instrumento.pais if instrumento else None,
+            "sector": instrumento.sector if instrumento else None,
+            "cantidad_actual": round(tenencia, 8),
+            "precio_promedio": round(precio_promedio_compra, 6),
+            "precio_actual": round(precio_actual, 6),
+            "valor_invertido_usd": round(inversion_total_usd, 2),
+            "valor_actual_usd": round(valor_actual_usd, 2),
+            "valor_invertido_ars": round(inversion_total_ars, 2),
+            "valor_actual_ars": round(valor_actual_ars, 2),
+            "rendimiento_simple_usd": round(rendimiento_simple_usd, 4) if rendimiento_simple_usd is not None else None,
+            "rendimiento_simple_ars": round(rendimiento_simple_ars, 4) if rendimiento_simple_ars is not None else None,
+            "rendimiento_simple_ars_real": round(rendimiento_simple_ars_real, 4) if rendimiento_simple_ars_real is not None else None,
+            "precio_promedio_ars_ajustado_cer": round(precio_promedio_ars_ajustado_cer, 6) if precio_promedio_ars_ajustado_cer is not None else None,
+            "precio_actual_ars_ajustado_cer": round(precio_actual_ars_ajustado_cer, 6) if precio_actual_ars_ajustado_cer is not None else None,
+        })
+
+    return sorted(resultado, key=lambda x: -abs(x["valor_actual_usd"]))
+
+
+# ── Evolución histórica (sparklines) ─────────────────────────────────────────
+
+def _fin_de_mes_range(desde: date, hasta: date) -> list[date]:
+    """Último día de cada mes entre `desde` y `hasta`, con `hasta` siempre como último punto."""
+    fechas: list[date] = []
+    cursor = date(desde.year, desde.month, 1)
+    while cursor <= hasta:
+        ultimo_dia = calendar.monthrange(cursor.year, cursor.month)[1]
+        fin_mes = min(date(cursor.year, cursor.month, ultimo_dia), hasta)
+        fechas.append(fin_mes)
+        if cursor.month == 12:
+            cursor = date(cursor.year + 1, 1, 1)
+        else:
+            cursor = date(cursor.year, cursor.month + 1, 1)
+    if not fechas or fechas[-1] != hasta:
+        fechas.append(hasta)
+    return fechas
+
+
+def get_evolucion(cartera: str | None, db: Session, max_puntos: int = 24) -> dict:
+    """Serie histórica (mensual) del valor de la cartera, para sparklines."""
+    movs = _movimientos_ordenados(db, cartera)
+    if not movs:
+        return {"puntos": []}
+
+    precios_por_ticker = _precios_por_ticker(db)
+    mep_cache: dict = {}
+    hoy = date.today()
+
+    fechas = _fin_de_mes_range(movs[0].fecha, hoy)
+    if len(fechas) > max_puntos:
+        paso = len(fechas) / max_puntos
+        muestreadas = [fechas[int(i * paso)] for i in range(max_puntos - 1)]
+        fechas = muestreadas + [fechas[-1]]
+
+    tracker = _HoldingsTracker(movs)
+    puntos = []
+    for f in fechas:
+        tracker.avanzar_a(f)
+        snapshot = tracker.snapshot()
+        valor_usd, _, _ = _valuar_holdings(snapshot, f, precios_por_ticker, db, mep_cache)
+        valor_ars, _, _ = _valuar_holdings_ars(snapshot, f, precios_por_ticker, db, mep_cache)
+        puntos.append({"fecha": f, "valor_usd": round(valor_usd, 2), "valor_ars": round(valor_ars, 2)})
+
+    return {"puntos": puntos}
+
+
+def get_precios_ticker(ticker: str, dias: int, db: Session) -> dict:
+    """Serie histórica de precio de un ticker (directo de PrecioInstrumento), para sparklines."""
+    desde = date.today() - timedelta(days=dias)
+    rows = (
+        db.query(PrecioInstrumento)
+        .filter(PrecioInstrumento.ticker == ticker, PrecioInstrumento.fecha >= desde)
+        .order_by(PrecioInstrumento.fecha)
+        .all()
+    )
+    return {
+        "ticker": ticker,
+        "puntos": [
+            {"fecha": r.fecha, "precio": float(r.precio), "moneda": r.moneda}
+            for r in rows
+        ],
+    }
+
+
+# ── Objetivos de inversión ──────────────────────────────────────────────────
+
+def get_aportes_historicos(cartera: str, db: Session) -> dict:
+    """Histórico de aportes netos acumulados mes a mes, con valor actual de mercado hoy."""
+    movs = _movimientos_ordenados(db, cartera)
+    if not movs:
+        # Sin movimientos, devolver estructura vacía pero con valor_actual_usd
+        resumen = get_resumen(cartera, db)
+        return {
+            "curva": [],
+            "valor_actual_usd": resumen["valor_actual_usd"],
+        }
+
+    mep_cache: dict = {}
+    aportes_por_mes: dict[str, float] = {}
+
+    for mov in movs:
+        monto_usd = _monto_usd(mov, db, mep_cache)
+        if monto_usd is None:
+            continue
+
+        mes_key = mov.fecha.strftime("%Y-%m")
+        aporte_neto = 0.0
+        if mov.tipo_movimiento == "compra":
+            aporte_neto = monto_usd
+        elif mov.tipo_movimiento == "venta":
+            aporte_neto = -monto_usd
+        elif mov.tipo_movimiento in TIPOS_INGRESO:
+            aporte_neto = monto_usd
+        elif mov.tipo_movimiento == "amortizacion":
+            aporte_neto = -monto_usd
+
+        aportes_por_mes[mes_key] = aportes_por_mes.get(mes_key, 0.0) + aporte_neto
+
+    # Construir curva acumulada mes a mes, manteniendo acumulado plano en meses sin movimiento
+    if not aportes_por_mes:
+        resumen = get_resumen(cartera, db)
+        return {
+            "curva": [],
+            "valor_actual_usd": resumen["valor_actual_usd"],
+        }
+
+    meses_ordenados = sorted(aportes_por_mes.keys())
+    curva = []
+    acumulado = 0.0
+    mes_anterior = None
+
+    for mes in meses_ordenados:
+        acumulado += aportes_por_mes[mes]
+        curva.append({
+            "mes": mes,
+            "aportes_netos_acumulados": round(acumulado, 2),
+        })
+        mes_anterior = mes
+
+    # Obtener valor actual de mercado de hoy
+    resumen = get_resumen(cartera, db)
+    valor_actual_usd = resumen["valor_actual_usd"]
+
+    return {
+        "curva": curva,
+        "valor_actual_usd": valor_actual_usd,
+    }
+
+
+def get_progreso_objetivo(cartera: str, objetivo_id: int, db: Session) -> dict | None:
+    """Calcula progreso del objetivo: proyección, aporte promedio, déficit, etc."""
+    from ..database import ObjetivoInversion
+
+    objetivo = db.query(ObjetivoInversion).filter(ObjetivoInversion.id == objetivo_id).first()
+    if not objetivo:
+        return None
+
+    # Obtener aportes históricos
+    aportes_hist = get_aportes_historicos(cartera, db)
+    curva = aportes_hist["curva"]
+    valor_actual_usd = aportes_hist["valor_actual_usd"]
+
+    # Calcular promedio de aporte mensual (últimos 12 meses o todo si menos)
+    hoy = date.today()
+    hace_12_meses = date(hoy.year - 1, hoy.month, 1)
+
+    aportes_ultimos_12 = [punto for punto in curva if punto["mes"] >= hace_12_meses.strftime("%Y-%m")]
+    if not aportes_ultimos_12:
+        aportes_ultimos_12 = curva
+
+    aporte_mensual_promedio = 0.0
+    if len(aportes_ultimos_12) > 0:
+        meses_considerados = len(aportes_ultimos_12)
+        if meses_considerados == 1:
+            aporte_mensual_promedio = aportes_ultimos_12[0]["aportes_netos_acumulados"]
+        else:
+            # Diferencia entre el último y el anterior al primero (que es el acumulado antes)
+            acumulado_final = aportes_ultimos_12[-1]["aportes_netos_acumulados"]
+            acumulado_anterior = 0.0
+            # Si hay puntos antes del período de 12 meses, restar el acumulado
+            if len(curva) > len(aportes_ultimos_12):
+                idx_first = curva.index(aportes_ultimos_12[0])
+                if idx_first > 0:
+                    acumulado_anterior = curva[idx_first - 1]["aportes_netos_acumulados"]
+            aporte_total_12 = acumulado_final - acumulado_anterior
+            aporte_mensual_promedio = aporte_total_12 / meses_considerados
+
+    # Calcular meses restantes
+    monto_objetivo = float(objetivo.monto_usd)
+    fecha_limite = objetivo.fecha_limite
+    dias_restantes = (fecha_limite - hoy).days
+    meses_restantes_float = dias_restantes / 30.44  # Aproximado 30.44 días/mes
+    meses_restantes = max(0, int(round(meses_restantes_float)))
+
+    # Proyección
+    if meses_restantes_float > 0:
+        proyeccion_usd = valor_actual_usd + aporte_mensual_promedio * meses_restantes_float
+        aporte_mensual_necesario = max(0, (monto_objetivo - valor_actual_usd) / meses_restantes_float) if meses_restantes_float > 0 else None
+    else:
+        proyeccion_usd = valor_actual_usd
+        aporte_mensual_necesario = None
+
+    alcanzable = proyeccion_usd >= monto_objetivo
+    deficit_usd = max(0, monto_objetivo - proyeccion_usd)
+
+    return {
+        "valor_actual_usd": round(valor_actual_usd, 2),
+        "aporte_mensual_promedio_usd": round(aporte_mensual_promedio, 2),
+        "aporte_mensual_necesario_usd": round(aporte_mensual_necesario, 2) if aporte_mensual_necesario is not None else None,
+        "meses_restantes": meses_restantes,
+        "proyeccion_usd": round(proyeccion_usd, 2),
+        "alcanzable": alcanzable,
+        "deficit_usd": round(deficit_usd, 2),
+    }
+
+
+################################################################################
+# ARCHIVO 11/53: backend/app/services/inversiones_sync.py
+################################################################################
+
+"""Valida las filas del Google Sheet de inversiones y reemplaza las tablas espejo."""
+import unicodedata
+from datetime import date, datetime
+from dateutil import parser as dateutil_parser
+from sqlalchemy.orm import Session
+
+from ..database import InstrumentoInversion, MovimientoInversion, PrecioInstrumento, IndiceMercado
+from .sheets_client import fetch_sheet_data
+
+# Estado en memoria del proceso: se resetea al reiniciar el backend.
+_ultimo_sync: datetime | None = None
+
+
+def get_ultimo_sync() -> datetime | None:
+    return _ultimo_sync
+
+TIPOS_MOVIMIENTO = {
+    "compra": "compra",
+    "venta": "venta",
+    "dividendo": "dividendo",
+    "cupon": "cupon",
+    "renta": "dividendo",
+    "amortizacion": "amortizacion",
+}
+
+MONEDAS_VALIDAS = ("ARS", "USD")
+
+
+def _strip_accents(s: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
+
+
+def _normalize_tipo_movimiento(raw: str) -> str | None:
+    key = _strip_accents(raw).strip().lower()
+    return TIPOS_MOVIMIENTO.get(key)
+
+
+def _parse_fecha(raw: str) -> date | None:
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        pass
+    try:
+        return dateutil_parser.parse(raw, dayfirst=True).date()
+    except (ValueError, OverflowError):
+        return None
+
+
+def _parse_numero(raw: str, es_indice: bool = False) -> float | None:
+    """Parsea un número admitiendo notación ARS ("1.234,56") o US ("1,234.56").
+
+    Cuando el número trae un único separador ("," o "."), es ambiguo: puede ser decimal
+    ("1,5") o separador de miles ("1.519" = 1519). Con un solo "," se asume separador de
+    miles si todos los grupos después tienen 3 dígitos (ej. "1,234" = 1234), igual para
+    todos los campos. Con un solo "." eso solo se asume para CER/MEP (es_indice=True), ya
+    que el Sheet los carga sin decimales (ej. "1.519" = 1519); para Cantidad/Precio/Comisión
+    un "." aislado siempre se toma como decimal, porque esos campos pueden llevar
+    legítimamente 3 decimales (ej. "1519.384").
+    """
+    s = (raw or "").strip()
+    if not s:
+        return None
+    s = s.replace(" ", "").replace("$", "").replace("US$", "").replace("USD", "").replace("ARS", "")
+    try:
+        if "," in s and "." in s:
+            if s.rfind(",") > s.rfind("."):
+                s = s.replace(".", "").replace(",", ".")
+            else:
+                s = s.replace(",", "")
+        elif "," in s:
+            partes = s.split(",")
+            if len(partes) > 1 and all(len(p) == 3 for p in partes[1:]):
+                s = s.replace(",", "")
+            else:
+                s = s.replace(",", ".")
+        elif "." in s:
+            partes = s.split(".")
+            if es_indice and len(partes) > 1 and all(len(p) == 3 for p in partes[1:]):
+                s = s.replace(".", "")
+        return float(s)
+    except ValueError:
+        return None
+
+
+def sync_from_sheet(db: Session) -> dict:
+    """Trae el Sheet completo y reemplaza las 3 tablas espejo. No toca la DB si falla la lectura."""
+    data = fetch_sheet_data()
+
+    errores: list[dict] = []
+
+    instrumentos_validos, tickers_conocidos = _validar_instrumentos(data.get("Instrumentos", []), errores)
+    movimientos_validos, cer_mep_movimientos = _validar_movimientos(data.get("Movimientos", []), tickers_conocidos, errores)
+    precios_validos, cer_mep_precios = _validar_precios(data.get("Precios", []), errores)
+
+    indices_mercado, advertencias = _consolidar_indices_mercado(cer_mep_movimientos, cer_mep_precios, errores)
+    errores.extend(advertencias)
+
+    db.query(MovimientoInversion).delete()
+    db.query(PrecioInstrumento).delete()
+    db.query(InstrumentoInversion).delete()
+    db.query(IndiceMercado).delete()
+    db.flush()
+
+    for inst in instrumentos_validos:
+        db.add(InstrumentoInversion(**inst))
+    db.flush()
+
+    for mov in movimientos_validos:
+        db.add(MovimientoInversion(
+            fecha=mov["fecha"],
+            cartera=mov["cartera"],
+            ticker=mov["ticker"],
+            tipo_movimiento=mov["tipo_movimiento"],
+            cantidad=mov["cantidad"],
+            precio=mov["precio"],
+            moneda=mov["moneda"],
+            comision=mov["comision"],
+        ))
+
+    for precio in precios_validos:
+        db.add(PrecioInstrumento(**precio))
+
+    for indice in indices_mercado:
+        db.add(IndiceMercado(**indice))
+
+    db.commit()
+
+    global _ultimo_sync
+    _ultimo_sync = datetime.utcnow()
+
+    return {
+        "movimientos": len(movimientos_validos),
+        "instrumentos": len(instrumentos_validos),
+        "precios": len(precios_validos),
+        "indices_mercado": len(indices_mercado),
+        "errores": errores,
+    }
+
+
+def _validar_instrumentos(rows: list[tuple[int, dict]], errores: list[dict]) -> tuple[list[dict], set[str]]:
+    validos = []
+    tickers = set()
+    for row_num, row in rows:
+        ticker = (row.get("Ticker") or "").strip()
+        if not ticker:
+            errores.append({"fila": row_num, "motivo": "Ticker vacío en Instrumentos"})
+            continue
+        if ticker in tickers:
+            errores.append({"fila": row_num, "motivo": f"Ticker duplicado en Instrumentos: {ticker}"})
+            continue
+
+        fecha_venc = None
+        fecha_venc_raw = (row.get("Fecha Vencimiento") or "").strip()
+        if fecha_venc_raw and fecha_venc_raw.lower() != "nan":
+            fecha_venc = _parse_fecha(fecha_venc_raw)
+            if fecha_venc is None:
+                errores.append({"fila": row_num, "motivo": f"Fecha Vencimiento inválida: {fecha_venc_raw}"})
+                continue
+
+        validos.append({
+            "ticker": ticker,
+            "nombre": row.get("Nombre") or ticker,
+            "tipo_instrumento": row.get("Tipo Instrumento") or "",
+            "mercado": row.get("Mercado") or "",
+            "moneda": (row.get("Moneda") or "").strip().upper(),
+            "pais": row.get("País") or row.get("Pais") or None,
+            "sector": row.get("Sector") or None,
+            "fecha_vencimiento": fecha_venc,
+        })
+        tickers.add(ticker)
+    return validos, tickers
+
+
+def _validar_movimientos(rows: list[tuple[int, dict]], tickers_conocidos: set[str], errores: list[dict]) -> tuple[list[dict], list[dict]]:
+    parsed = []
+    cer_mep_datos = []
+    for row_num, row in rows:
+        fecha_raw = (row.get("Fecha") or "").strip()
+        fecha = _parse_fecha(fecha_raw)
+        if fecha is None:
+            errores.append({"fila": row_num, "motivo": f"Fecha inválida: {fecha_raw}"})
+            continue
+
+        cartera = (row.get("Cartera") or "").strip()
+        if not cartera:
+            errores.append({"fila": row_num, "motivo": "Cartera vacía"})
+            continue
+
+        ticker = (row.get("Ticker") or "").strip()
+        if not ticker:
+            errores.append({"fila": row_num, "motivo": "Ticker vacío"})
+            continue
+
+        tipo_raw = (row.get("Tipo Movimiento") or "").strip()
+        tipo = _normalize_tipo_movimiento(tipo_raw)
+        if tipo is None:
+            errores.append({"fila": row_num, "motivo": f"Tipo Movimiento inválido: {tipo_raw}"})
+            continue
+
+        cantidad_raw = (row.get("Cantidad") or "").strip()
+        cantidad = None
+        if cantidad_raw:
+            cantidad = _parse_numero(cantidad_raw)
+            if cantidad is None:
+                errores.append({"fila": row_num, "motivo": f"Cantidad inválida: {cantidad_raw}"})
+                continue
+        elif tipo in ("compra", "venta", "amortizacion"):
+            errores.append({"fila": row_num, "motivo": "Cantidad requerida para este tipo de movimiento"})
+            continue
+
+        precio_raw = (row.get("Precio") or "").strip()
+        precio = _parse_numero(precio_raw)
+        if precio is None:
+            errores.append({"fila": row_num, "motivo": f"Precio inválido: {precio_raw}"})
+            continue
+
+        moneda = (row.get("Moneda") or "").strip().upper()
+        if moneda not in MONEDAS_VALIDAS:
+            errores.append({"fila": row_num, "motivo": f"Moneda inválida: {moneda}"})
+            continue
+
+        comision_raw = (row.get("Comisión") or row.get("Comision") or "").strip()
+        comision = 0.0
+        if comision_raw:
+            parsed_comision = _parse_numero(comision_raw)
+            if parsed_comision is None:
+                errores.append({"fila": row_num, "motivo": f"Comisión inválida: {comision_raw}"})
+                continue
+            comision = parsed_comision
+
+        cer_raw = (row.get("CER") or "").strip()
+        cer = None
+        if cer_raw:
+            cer = _parse_numero(cer_raw, es_indice=True)
+
+        mep_raw = (row.get("MEP") or "").strip()
+        mep = None
+        if mep_raw:
+            mep = _parse_numero(mep_raw, es_indice=True)
+
+        if cer or mep:
+            cer_mep_datos.append({"fecha": fecha, "cer": cer, "mep": mep})
+
+        if ticker not in tickers_conocidos:
+            errores.append({"fila": row_num, "motivo": f"Advertencia: ticker '{ticker}' sin ficha en Instrumentos, queda sin clasificar"})
+
+        parsed.append({
+            "row_num": row_num,
+            "fecha": fecha,
+            "cartera": cartera,
+            "ticker": ticker,
+            "tipo_movimiento": tipo,
+            "cantidad": cantidad,
+            "precio": precio,
+            "moneda": moneda,
+            "comision": comision,
+        })
+
+    # Validar tenencia no negativa procesando en orden cronológico por (cartera, ticker)
+    parsed.sort(key=lambda m: (m["fecha"], m["row_num"]))
+    tenencias: dict[tuple[str, str], float] = {}
+    validos = []
+    for mov in parsed:
+        key = (mov["cartera"], mov["ticker"])
+        actual = tenencias.get(key, 0.0)
+        if mov["tipo_movimiento"] == "compra":
+            actual += mov["cantidad"] or 0.0
+        elif mov["tipo_movimiento"] in ("venta", "amortizacion"):
+            cant = mov["cantidad"] or 0.0
+            if cant - actual > 1e-6:
+                errores.append({
+                    "fila": mov["row_num"],
+                    "motivo": (
+                        f"Tenencia insuficiente para {mov['tipo_movimiento']} de {mov['ticker']} "
+                        f"en '{mov['cartera']}' ({cant} > {actual})"
+                    ),
+                })
+                continue
+            actual -= cant
+        tenencias[key] = actual
+        validos.append(mov)
+
+    return validos, cer_mep_datos
+
+
+def _validar_precios(rows: list[tuple[int, dict]], errores: list[dict]) -> tuple[list[dict], list[dict]]:
+    validos = []
+    vistos: set[tuple[date, str]] = set()
+    cer_mep_datos = []
+    for row_num, row in rows:
+        fecha_raw = (row.get("Fecha") or "").strip()
+        fecha = _parse_fecha(fecha_raw)
+        if fecha is None:
+            errores.append({"fila": row_num, "motivo": f"Fecha inválida: {fecha_raw}"})
+            continue
+
+        ticker = (row.get("Ticker") or "").strip()
+        if not ticker:
+            errores.append({"fila": row_num, "motivo": "Ticker vacío en Precios"})
+            continue
+
+        precio_raw = (row.get("Precio") or "").strip()
+        precio = _parse_numero(precio_raw)
+        if precio is None:
+            errores.append({"fila": row_num, "motivo": f"Precio inválido: {precio_raw}"})
+            continue
+
+        moneda = (row.get("Moneda") or "").strip().upper()
+        if moneda not in MONEDAS_VALIDAS:
+            errores.append({"fila": row_num, "motivo": f"Moneda inválida: {moneda}"})
+            continue
+
+        cer_raw = (row.get("CER") or "").strip()
+        cer = None
+        if cer_raw:
+            cer = _parse_numero(cer_raw, es_indice=True)
+
+        mep_raw = (row.get("MEP") or "").strip()
+        mep = None
+        if mep_raw:
+            mep = _parse_numero(mep_raw, es_indice=True)
+
+        if cer or mep:
+            cer_mep_datos.append({"fecha": fecha, "cer": cer, "mep": mep})
+
+        key = (fecha, ticker)
+        if key in vistos:
+            errores.append({"fila": row_num, "motivo": f"Precio duplicado para {ticker} en {fecha.isoformat()}"})
+            continue
+        vistos.add(key)
+
+        validos.append({"fecha": fecha, "ticker": ticker, "precio": precio, "moneda": moneda})
+
+    return validos, cer_mep_datos
+
+
+def _consolidar_indices_mercado(cer_mep_movimientos: list[dict], cer_mep_precios: list[dict], errores: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Consolida CER/MEP de Movimientos y Precios por fecha, resolviendo conflictos."""
+    indices_por_fecha: dict[date, dict] = {}
+    advertencias: list[dict] = []
+
+    # Procesar Movimientos primero, luego Precios
+    for item in cer_mep_movimientos + cer_mep_precios:
+        fecha = item["fecha"]
+        cer = item.get("cer")
+        mep = item.get("mep")
+
+        if fecha not in indices_por_fecha:
+            indices_por_fecha[fecha] = {"fecha": fecha, "cer": cer, "mep": mep}
+        else:
+            existente = indices_por_fecha[fecha]
+            # Si hay conflicto en CER, usar el último y advertir
+            if cer is not None and existente["cer"] is not None and abs(cer - existente["cer"]) > 1e-6:
+                advertencias.append({
+                    "fila": 0,  # No tenemos número de fila aquí
+                    "motivo": f"CER inconsistente para {fecha.isoformat()}, se usó el último valor cargado"
+                })
+            if cer is not None:
+                existente["cer"] = cer
+
+            # Si hay conflicto en MEP, usar el último y advertir
+            if mep is not None and existente["mep"] is not None and abs(mep - existente["mep"]) > 1e-6:
+                advertencias.append({
+                    "fila": 0,
+                    "motivo": f"MEP inconsistente para {fecha.isoformat()}, se usó el último valor cargado"
+                })
+            if mep is not None:
+                existente["mep"] = mep
+
+    return list(indices_por_fecha.values()), advertencias
+
+
+################################################################################
+# ARCHIVO 12/53: backend/app/services/sheets_client.py
+################################################################################
+
+"""Lectura de las pestañas del Google Sheet de inversiones (cuenta de servicio) o Excel local."""
+import os
+import pandas as pd
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+
+SPREADSHEET_ID = "1c-dr1C793IVSNzfQZATf01kg2TCPO7nSjYoVKJBtxks"
+
+SHEET_TABS = ("Movimientos", "Instrumentos", "Precios")
+
+
+class SheetsClientError(Exception):
+    pass
+
+
+def _credentials_path() -> str:
+    return os.getenv(
+        "GOOGLE_SERVICE_ACCOUNT_FILE",
+        os.path.join(os.path.dirname(__file__), "..", "..", "data", "google-service-account.json"),
+    )
+
+
+def _get_service():
+    path = _credentials_path()
+    if not os.path.isfile(path):
+        raise SheetsClientError(
+            f"No se encontraron las credenciales de la cuenta de servicio en '{path}'. "
+            "Configurá GOOGLE_SERVICE_ACCOUNT_FILE o colocá el archivo en backend/data/google-service-account.json."
+        )
+    try:
+        credentials = service_account.Credentials.from_service_account_file(path, scopes=SCOPES)
+        return build("sheets", "v4", credentials=credentials)
+    except Exception as exc:
+        raise SheetsClientError(f"Credenciales de Google inválidas: {exc}") from exc
+
+
+def _is_local_env() -> bool:
+    """Detecta si se debe usar archivo Excel local en lugar de Google Sheets."""
+    use_local = os.getenv("USE_LOCAL_SHEET", "false").lower() in ("true", "1", "yes")
+    return use_local
+
+
+def _get_excel_path() -> str:
+    """Retorna la ruta del archivo Excel local."""
+    return os.path.join(os.path.dirname(__file__), "..", "..", "sheet_local", "sheet_inversiones.xlsx")
+
+
+def _rows_to_dicts(values: list[list[str]]) -> list[tuple[int, dict]]:
+    """Devuelve [(nro_fila_planilla, fila_como_dict)], saltando filas totalmente vacías."""
+    if not values:
+        return []
+    header = [h.strip() for h in values[0]]
+    rows = []
+    for offset, raw_row in enumerate(values[1:]):
+        row = {}
+        for i, col in enumerate(header):
+            cell = raw_row[i] if i < len(raw_row) else ""
+            row[col] = cell.strip() if isinstance(cell, str) else cell
+        if any(str(v).strip() for v in row.values()):
+            rows.append((offset + 2, row))
+    return rows
+
+
+def _fetch_from_excel() -> dict[str, list[tuple[int, dict]]]:
+    """Lee datos desde archivo Excel local."""
+    excel_path = _get_excel_path()
+    if not os.path.isfile(excel_path):
+        raise SheetsClientError(
+            f"Archivo Excel no encontrado en '{excel_path}'. "
+            f"Coloca 'sheet_inversiones.xlsx' en la carpeta 'sheet_local/'."
+        )
+
+    result: dict[str, list[tuple[int, dict]]] = {}
+    try:
+        excel_file = pd.ExcelFile(excel_path)
+        for tab in SHEET_TABS:
+            if tab not in excel_file.sheet_names:
+                raise SheetsClientError(f"Pestaña '{tab}' no encontrada en Excel. Pestañas disponibles: {excel_file.sheet_names}")
+
+            df = pd.read_excel(excel_path, sheet_name=tab)
+            values = [df.columns.tolist()] + df.values.tolist()
+            result[tab] = _rows_to_dicts([[str(v) for v in row] for row in values])
+    except SheetsClientError:
+        raise
+    except Exception as exc:
+        raise SheetsClientError(f"Error leyendo Excel: {exc}") from exc
+
+    return result
+
+
+def fetch_sheet_data() -> dict[str, list[tuple[int, dict]]]:
+    """Lee las 3 pestañas del Sheet (Excel local o Google Sheets) y devuelve {pestaña: [(nro_fila, fila_como_dict)]}."""
+    if _is_local_env():
+        return _fetch_from_excel()
+
+    service = _get_service()
+    result: dict[str, list[tuple[int, dict]]] = {}
+    try:
+        for tab in SHEET_TABS:
+            resp = (
+                service.spreadsheets()
+                .values()
+                .get(spreadsheetId=SPREADSHEET_ID, range=tab)
+                .execute()
+            )
+            result[tab] = _rows_to_dicts(resp.get("values", []))
+    except SheetsClientError:
+        raise
+    except Exception as exc:
+        message = str(exc)
+        if "PERMISSION_DENIED" in message or "403" in message:
+            raise SheetsClientError(
+                "El Sheet no está compartido con la cuenta de servicio. "
+                "Compartilo (acceso de lectura) con el email que figura en el archivo de credenciales."
+            ) from exc
+        raise SheetsClientError(f"Error leyendo el Google Sheet: {exc}") from exc
+
+    faltantes = [tab for tab in SHEET_TABS if not result.get(tab)]
+    if len(faltantes) == len(SHEET_TABS):
+        raise SheetsClientError("El Sheet está vacío o no se encontraron las pestañas Movimientos/Instrumentos/Precios.")
+
+    return result
+
+
+################################################################################
+# ARCHIVO 13/53: compactar_codigo.py
+################################################################################
+
+#!/usr/bin/env python3
+import os
+from pathlib import Path
+
+# Carpetas a excluir
+EXCLUDE_DIRS = {
+    '.claude',
+    '.git',
+    '.github',
+    '.pytest_cache',
+    '.vscode',
+    '.superpowers',
+    '__pycache__',
+    'node_modules',
+    '.env',
+    'dist',
+    'build',
+    '.venv',
+    'venv',
+    'env',
+    '.turbo',
+    'credentials',
+}
+
+# Extensiones de archivo a incluir
+INCLUDE_EXTENSIONS = {'.py', '.ts', '.tsx', '.js', '.jsx'}
+
+def should_exclude(path):
+    """Verifica si una ruta debe ser excluida"""
+    path_parts = Path(path).parts
+    return any(part in EXCLUDE_DIRS for part in path_parts)
+
+def get_directory_tree(root_path, prefix="", exclude_dirs=None):
+    """Genera un árbol de directorios como string"""
+    if exclude_dirs is None:
+        exclude_dirs = EXCLUDE_DIRS
+
+    tree = ""
+    try:
+        items = sorted(os.listdir(root_path))
+    except PermissionError:
+        return tree
+
+    dirs = []
+    files = []
+
+    for item in items:
+        item_path = os.path.join(root_path, item)
+        if should_exclude(item_path):
+            continue
+        if os.path.isdir(item_path):
+            dirs.append(item)
+        else:
+            files.append(item)
+
+    # Mostrar directorios primero
+    for i, dir_name in enumerate(dirs):
+        is_last = (i == len(dirs) - 1 and len(files) == 0)
+        tree += f"{prefix}{'└── ' if is_last else '├── '}{dir_name}/\n"
+
+        new_prefix = prefix + ("    " if is_last else "│   ")
+        dir_path = os.path.join(root_path, dir_name)
+        tree += get_directory_tree(dir_path, new_prefix, exclude_dirs)
+
+    # Luego archivos
+    for i, file_name in enumerate(files):
+        is_last = (i == len(files) - 1)
+        tree += f"{prefix}{'└── ' if is_last else '├── '}{file_name}\n"
+
+    return tree
+
+def compact_code(root_path, output_path):
+    """Compacta todo el código (Python, TypeScript, JavaScript) en un archivo .txt"""
+
+    source_files = []
+
+    # Buscar todos los archivos de código
+    for root, dirs, files in os.walk(root_path):
+        # Filtrar directorios excluidos
+        dirs[:] = [d for d in dirs if not should_exclude(os.path.join(root, d))]
+
+        for file in files:
+            if any(file.endswith(ext) for ext in INCLUDE_EXTENSIONS):
+                file_path = os.path.join(root, file)
+                if not should_exclude(file_path):
+                    source_files.append(file_path)
+
+    source_files.sort()
+
+    # Crear el archivo de salida
+    output_dir = os.path.dirname(output_path)
+    os.makedirs(output_dir, exist_ok=True)
+
+    with open(output_path, 'w', encoding='utf-8') as out_file:
+        # Encabezado
+        out_file.write("=" * 80 + "\n")
+        out_file.write("CÓDIGO COMPACTADO DEL PROYECTO\n")
+        out_file.write("=" * 80 + "\n\n")
+
+        # Árbol de directorios
+        out_file.write("ESTRUCTURA DE DIRECTORIOS:\n")
+        out_file.write("-" * 80 + "\n")
+        tree = get_directory_tree(root_path)
+        out_file.write(tree)
+        out_file.write("\n" + "=" * 80 + "\n\n")
+
+        # Contenido de archivos
+        out_file.write(f"ARCHIVOS INCLUIDOS: {len(source_files)}\n")
+        out_file.write("=" * 80 + "\n\n")
+
+        for i, file_path in enumerate(source_files, 1):
+            rel_path = os.path.relpath(file_path, root_path)
+            out_file.write(f"\n{'#' * 80}\n")
+            out_file.write(f"# ARCHIVO {i}/{len(source_files)}: {rel_path}\n")
+            out_file.write(f"{'#' * 80}\n\n")
+
+            try:
+                with open(file_path, 'r', encoding='utf-8') as py_file:
+                    content = py_file.read()
+                    out_file.write(content)
+                    if not content.endswith('\n'):
+                        out_file.write('\n')
+            except Exception as e:
+                out_file.write(f"ERROR al leer archivo: {e}\n")
+
+            out_file.write("\n")
+
+    print(f"✓ Código compactado en: {output_path}")
+    print(f"✓ Total de archivos incluidos: {len(source_files)}")
+
+if __name__ == "__main__":
+    root = os.path.dirname(os.path.abspath(__file__))
+    output = os.path.join(root, "codigo_compactado.txt")
+    compact_code(root, output)
+
+
+################################################################################
+# ARCHIVO 14/53: frontend/public/sw.js
+################################################################################
+
+const CACHE_NAME = 'inversiones-shell-v1'
+const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png']
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)))
+  self.skipWaiting()
+})
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim())
+  )
+})
+
+self.addEventListener('fetch', (event) => {
+  const { request } = event
+  if (request.method !== 'GET' || new URL(request.url).pathname.startsWith('/api/')) return
+
+  event.respondWith(
+    caches.match(request).then((cached) => {
+      const network = fetch(request)
+        .then((response) => {
+          const copy = response.clone()
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy))
+          return response
+        })
+        .catch(() => cached)
+      return cached || network
+    })
+  )
+})
+
+
+################################################################################
+# ARCHIVO 15/53: frontend/src/App.tsx
+################################################################################
+
+import { useEffect, useRef } from 'react'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { InversionesProvider, useInversionesContext } from './context/InversionesContext'
+import { IconSprite } from './components/icons/Icons'
+import Splash from './components/layout/Splash'
+import AppShell from './components/layout/AppShell'
+import Toast from './components/ui/Toast'
+import Modal from './components/ui/Modal'
+import Resumen from './pages/Resumen'
+import Exposicion from './pages/Exposicion'
+import Movimientos from './pages/Movimientos'
+import Posiciones from './pages/Posiciones'
+import TickerDetalle from './pages/TickerDetalle'
+import Objetivo from './pages/Objetivo'
+
+function SyncResultModal() {
+  const { syncSheetOpen, closeSyncSheet, syncErrors, syncWarnings, syncResumenTexto } = useInversionesContext()
+  const titulo = syncErrors.length > 0 ? `Sincronización con ${syncErrors.length} fila${syncErrors.length > 1 ? 's' : ''} inválida${syncErrors.length > 1 ? 's' : ''}` : 'Sincronización completada'
+
+  return (
+    <Modal open={syncSheetOpen} onClose={closeSyncSheet} title={titulo}>
+      <p className="text-[13px] text-app-text mb-4">
+        Se cargaron: <strong>{syncResumenTexto}</strong>
+      </p>
+      {syncErrors.length > 0 && (
+        <div className="mb-4">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2">Filas con errores</div>
+          <ul className="flex flex-col gap-1.5">
+            {syncErrors.map((e, i) => (
+              <li key={i} className="text-[12.5px] text-app-text bg-app-coral-soft rounded-lg px-3 py-2">
+                <strong>Fila {e.fila}:</strong> {e.motivo}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {syncWarnings.length > 0 && (
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2">Advertencias</div>
+          <ul className="flex flex-col gap-1.5">
+            {syncWarnings.map((e, i) => (
+              <li key={i} className="text-[12.5px] text-app-text bg-app-gold-soft rounded-lg px-3 py-2">
+                {e.motivo}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+function useVolverAInicioAlReabrir() {
+  const navigate = useNavigate()
+  const salioDeLaApp = useRef(false)
+
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState === 'hidden') {
+        salioDeLaApp.current = true
+      } else if (document.visibilityState === 'visible' && salioDeLaApp.current) {
+        salioDeLaApp.current = false
+        navigate('/resumen', { replace: true })
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
+  }, [navigate])
+}
+
+function Root() {
+  const { sinDatos, toast, dismissToast } = useInversionesContext()
+  useVolverAInicioAlReabrir()
+
+  return (
+    <>
+      {sinDatos ? (
+        <Splash />
+      ) : (
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route index element={<Navigate to="/resumen" replace />} />
+            <Route path="resumen" element={<Resumen />} />
+            <Route path="exposicion" element={<Exposicion />} />
+            <Route path="movimientos" element={<Movimientos />} />
+            <Route path="posiciones" element={<Posiciones />} />
+            <Route path="ticker/:ticker" element={<TickerDetalle />} />
+            <Route path="objetivo" element={<Objetivo />} />
+            <Route path="*" element={<Navigate to="/resumen" replace />} />
+          </Route>
+        </Routes>
+      )}
+      <Toast message={toast?.message ?? null} tone={toast?.tone} onDone={dismissToast} />
+      <SyncResultModal />
+    </>
+  )
+}
+
+export default function App() {
+  return (
+    <InversionesProvider>
+      <IconSprite />
+      <Root />
+    </InversionesProvider>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 16/53: frontend/src/api/index.ts
+################################################################################
+
+import axios from 'axios'
+
+const api = axios.create({ baseURL: '/api' })
+
+export default api
+
+// ---- Inversiones ----
+export interface SyncErrorItem {
+  fila: number
+  motivo: string
+}
+
+export interface SyncResult {
+  movimientos: number
+  instrumentos: number
+  precios: number
+  indices_mercado: number
+  errores: SyncErrorItem[]
+}
+
+export interface CarteraInfo {
+  nombre: string
+  ultimo_sync: string | null
+}
+
+export interface InversionesResumen {
+  valor_actual_usd: number
+  valor_actual_ars: number
+  total_invertido_usd: number
+  total_invertido_ars: number
+  total_invertido_ars_real: number | null
+  ingresos_recibidos_usd: number
+  ingresos_recibidos_ars: number
+  rendimiento_simple_usd: number | null
+  rendimiento_simple_ars: number | null
+  rendimiento_simple_ars_real: number | null
+  xirr_usd: number | null
+  xirr_ars: number | null
+  xirr_ars_real: number | null
+  twr_usd: number | null
+  twr_ars: number | null
+  twr_ars_real: number | null
+  valor_benchmark_usd_ars: number | null
+  tiene_precios_desactualizados: boolean
+}
+
+export interface ExposicionItem {
+  etiqueta: string
+  valor_usd: number
+  valor_ars: number
+  porcentaje: number
+}
+
+export interface ExposicionEje {
+  eje: string
+  items: ExposicionItem[]
+}
+
+export interface ExposicionOut {
+  ejes: ExposicionEje[]
+}
+
+export interface MovimientoInversion {
+  id: number
+  fecha: string
+  cartera: string
+  ticker: string
+  tipo_movimiento: string
+  cantidad: number | null
+  precio: number
+  moneda: string
+  comision: number
+}
+
+export interface RendimientoPorTickerItem {
+  ticker: string
+  nombre: string
+  tipo_instrumento: string
+  mercado: string
+  moneda: string
+  pais: string | null
+  sector: string | null
+  cantidad_actual: number
+  precio_promedio: number
+  precio_actual: number
+  valor_invertido_usd: number
+  valor_actual_usd: number
+  valor_invertido_ars: number
+  valor_actual_ars: number
+  rendimiento_simple_usd: number | null
+  rendimiento_simple_ars: number | null
+  rendimiento_simple_ars_real: number | null
+  precio_promedio_ars_ajustado_cer: number | null
+  precio_actual_ars_ajustado_cer: number | null
+}
+
+const carteraPath = (cartera: string | null) =>
+  cartera ? `/inversiones/carteras/${encodeURIComponent(cartera)}` : '/inversiones/consolidado'
+
+export const syncInversiones = () =>
+  api.post<SyncResult>('/inversiones/sync').then(r => r.data)
+
+export const getCarterasInversion = () =>
+  api.get<CarteraInfo[]>('/inversiones/carteras').then(r => r.data)
+
+export const getResumenInversiones = (cartera: string | null) =>
+  api.get<InversionesResumen>(`${carteraPath(cartera)}/resumen`).then(r => r.data)
+
+export const getExposicionInversiones = (cartera: string | null) =>
+  api.get<ExposicionOut>(`${carteraPath(cartera)}/exposicion`).then(r => r.data)
+
+export const getMovimientosInversion = (params: { cartera?: string; ticker?: string }) =>
+  api.get<MovimientoInversion[]>('/inversiones/movimientos', { params }).then(r => r.data)
+
+export const getRendimientoPorTicker = (cartera: string | null) =>
+  api.get<RendimientoPorTickerItem[]>(`${carteraPath(cartera)}/rendimiento-por-ticker`).then(r => r.data)
+
+export interface EvolucionPunto {
+  fecha: string
+  valor_usd: number
+  valor_ars: number
+}
+
+export interface EvolucionOut {
+  puntos: EvolucionPunto[]
+}
+
+export const getEvolucionInversiones = (cartera: string | null) =>
+  api.get<EvolucionOut>(`${carteraPath(cartera)}/evolucion`).then(r => r.data)
+
+export interface PrecioPunto {
+  fecha: string
+  precio: number
+  moneda: string
+}
+
+export interface PrecioSerieOut {
+  ticker: string
+  puntos: PrecioPunto[]
+}
+
+export const getPreciosTicker = (ticker: string, dias = 365) =>
+  api.get<PrecioSerieOut>(`/inversiones/ticker/${encodeURIComponent(ticker)}/precios`, { params: { dias } }).then(r => r.data)
+
+// --- Objetivos de Inversión ---
+
+export interface AportePunto {
+  mes: string
+  aportes_netos_acumulados: number
+}
+
+export interface AportesHistoricosOut {
+  curva: AportePunto[]
+  valor_actual_usd: number
+}
+
+export interface ObjetivoInversion {
+  id: number
+  cartera: string
+  nombre: string
+  icono: string
+  monto_usd: number
+  fecha_limite: string
+  valor_actual_usd: number
+  aporte_mensual_promedio_usd: number
+  aporte_mensual_necesario_usd: number | null
+  meses_restantes: number
+  proyeccion_usd: number
+  alcanzable: boolean
+  deficit_usd: number
+}
+
+export interface ObjetivoInversionPayload {
+  nombre: string
+  icono: string
+  monto_usd: number
+  fecha_limite: string
+}
+
+export const getObjetivoInversion = async (cartera: string): Promise<ObjetivoInversion | null> => {
+  try {
+    const response = await api.get<ObjetivoInversion>(`/inversiones/carteras/${encodeURIComponent(cartera)}/objetivo`)
+    return response.data
+  } catch (err: any) {
+    if (err.response?.status === 404) {
+      return null
+    }
+    throw err
+  }
+}
+
+export const getAportesHistoricos = (cartera: string) =>
+  api.get<AportesHistoricosOut>(`/inversiones/carteras/${encodeURIComponent(cartera)}/aportes-historicos`).then(r => r.data)
+
+export const crearObjetivoInversion = (cartera: string, payload: ObjetivoInversionPayload) =>
+  api.post<ObjetivoInversion>(`/inversiones/carteras/${encodeURIComponent(cartera)}/objetivo`, payload).then(r => r.data)
+
+export const editarObjetivoInversion = (objetivoId: number, payload: ObjetivoInversionPayload) =>
+  api.put<ObjetivoInversion>(`/inversiones/objetivos-inversion/${objetivoId}`, payload).then(r => r.data)
+
+export const eliminarObjetivoInversion = (objetivoId: number) =>
+  api.delete(`/inversiones/objetivos-inversion/${objetivoId}`).then(r => r.data)
+
+
+################################################################################
+# ARCHIVO 17/53: frontend/src/components/charts/AportesChart.tsx
+################################################################################
+
+import {
+  XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer, ComposedChart, Area, Scatter,
+} from 'recharts'
+import dayjs from 'dayjs'
+import type { AportesHistoricosOut } from '../../api'
+import { formatUSD } from '../../utils'
+
+export default function AportesChart({
+  aportesHistoricos,
+  montoObjetivo,
+}: {
+  aportesHistoricos: AportesHistoricosOut | null
+  montoObjetivo?: number | null
+}) {
+  if (!aportesHistoricos || aportesHistoricos.curva.length === 0) {
+    return <div className="text-center py-8 text-app-text-dim text-[12.5px]">Sin movimientos en esta cartera</div>
+  }
+
+  const data = aportesHistoricos.curva.map(punto => ({ ...punto, mes_label: punto.mes }))
+  const acumuladoFinal = data[data.length - 1]?.aportes_netos_acumulados ?? 0
+  const rendimientoAcumulado = aportesHistoricos.valor_actual_usd - acumuladoFinal
+  const rendimientoPct = acumuladoFinal > 0 ? (rendimientoAcumulado / acumuladoFinal) * 100 : 0
+
+  return (
+    <div>
+      <ResponsiveContainer width="100%" height={220}>
+        <ComposedChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 4 }}>
+          <defs>
+            <linearGradient id="aportesFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#d8b14a" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="#d8b14a" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="#223028" />
+          <XAxis
+            dataKey="mes_label"
+            tick={{ fill: '#8ca39b', fontSize: 10 }}
+            tickFormatter={v => dayjs(`${v}-01`).format('MMM YY')}
+            interval="preserveStartEnd"
+          />
+          <YAxis tick={{ fill: '#8ca39b', fontSize: 10 }} tickFormatter={v => `$${((v as number) / 1000).toFixed(0)}k`} width={42} />
+          <Tooltip
+            contentStyle={{ background: '#17221e', border: '1px solid #223028', borderRadius: 10, fontSize: 12 }}
+            labelStyle={{ color: '#edf2ef' }}
+            labelFormatter={v => dayjs(`${v}-01`).format('MMMM YYYY')}
+            formatter={(v: number, name: string) => (name === 'aportes_netos_acumulados' ? [formatUSD(v), 'Aportes acumulados'] : [v, name])}
+          />
+          {montoObjetivo && (
+            <ReferenceLine y={montoObjetivo} stroke="#4fd1ae" strokeDasharray="6 3" label={{ value: 'Meta', fill: '#4fd1ae', fontSize: 11 }} />
+          )}
+          <Area type="monotone" dataKey="aportes_netos_acumulados" stroke="#d8b14a" strokeWidth={2} fill="url(#aportesFill)" dot={false} />
+          <Scatter
+            name="Valor actual (hoy)"
+            dataKey="__valor_actual"
+            fill="#4fd1ae"
+            shape="circle"
+            data={[{ __valor_actual: aportesHistoricos.valor_actual_usd, mes_label: data[data.length - 1]?.mes_label || '' }]}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+      <div className="mt-3 text-[11px] text-app-text-dim space-y-1">
+        <div>Últimos aportes netos acumulados: <strong className="text-app-text">{formatUSD(acumuladoFinal)}</strong></div>
+        <div>Valor actual (hoy): <strong className="text-app-text">{formatUSD(aportesHistoricos.valor_actual_usd)}</strong></div>
+        <div>
+          Rendimiento acumulado:{' '}
+          <strong className={rendimientoAcumulado >= 0 ? 'text-app-teal' : 'text-app-coral'}>
+            {rendimientoAcumulado >= 0 ? '+' : ''}{formatUSD(rendimientoAcumulado)} ({rendimientoPct >= 0 ? '+' : ''}{rendimientoPct.toFixed(1)}%)
+          </strong>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 18/53: frontend/src/components/charts/ComparacionChart.tsx
+################################################################################
+
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell,
+} from 'recharts'
+import type { InversionesResumen } from '../../api'
+import { formatARS } from '../../utils'
+
+interface BarData {
+  name: string
+  Invertido: number
+  'Valor actual': number
+  'Si comprabas USD': number | null
+  'Si ajustabas por CER': number | null
+}
+
+const COLORS = {
+  Invertido: '#5e736a',
+  'Valor actual': '#d8b14a',
+  'Si comprabas USD': '#4fd1ae',
+  'Si ajustabas por CER': '#9c7aa0',
+}
+
+const renderCustomLabel = (props: any): React.ReactElement | null => {
+  const { payload, x, y, width, dataKey } = props
+  const isInvertido = dataKey === 'Invertido'
+  const value = payload?.[dataKey]
+  const invertido = payload?.Invertido ?? 0
+
+  if (isInvertido || value === null || invertido === 0 || value === 0) {
+    return null
+  }
+
+  const delta = ((value - invertido) / invertido) * 100
+  const isPositive = delta > 0
+  const color = isPositive ? '#4fd1ae' : '#e2665a'
+
+  return (
+    <text x={x + width / 2} y={y - 8} fill={color} textAnchor="middle" fontSize={12} fontWeight="bold">
+      {isPositive ? '+' : ''}{delta.toFixed(1)}%
+    </text>
+  )
+}
+
+export default function ComparacionChart({ resumen }: { resumen: InversionesResumen | null }) {
+  if (!resumen) {
+    return <div className="text-center py-10 text-app-text-dim text-[12.5px]">Sin datos de comparación</div>
+  }
+
+  const data: BarData[] = [
+    {
+      name: 'Comparación',
+      Invertido: resumen.total_invertido_ars,
+      'Valor actual': resumen.valor_actual_ars,
+      'Si comprabas USD': resumen.valor_benchmark_usd_ars ?? null,
+      'Si ajustabas por CER': resumen.total_invertido_ars_real ?? null,
+    },
+  ]
+
+  return (
+    <div>
+      <ResponsiveContainer width="100%" height={320}>
+        <BarChart data={data} margin={{ top: 44, right: 4, left: 4, bottom: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#223028" />
+          <XAxis dataKey="name" stroke="#8ca39b" tick={{ fontSize: 11, fill: '#8ca39b' }} />
+          <YAxis stroke="#8ca39b" tick={{ fontSize: 10, fill: '#8ca39b' }} tickFormatter={v => `$${v.toLocaleString('es-AR')}`} width={64} />
+          <Tooltip
+            contentStyle={{ background: '#17221e', border: '1px solid #223028', borderRadius: 10, fontSize: 12 }}
+            labelStyle={{ color: '#edf2ef' }}
+            formatter={(v: any) => (v !== null ? formatARS(v) : 'N/A')}
+            labelFormatter={() => 'Comparación'}
+            cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+          />
+          <Legend wrapperStyle={{ fontSize: 11, color: '#8ca39b' }} />
+          <Bar dataKey="Invertido" fill={COLORS.Invertido} radius={[4, 4, 0, 0]} />
+          <Bar dataKey="Valor actual" fill={COLORS['Valor actual']} label={renderCustomLabel as any} radius={[4, 4, 0, 0]} />
+          <Bar dataKey="Si comprabas USD" fill={COLORS['Si comprabas USD']} label={renderCustomLabel as any} radius={[4, 4, 0, 0]}>
+            {data.map((entry, index) => (
+              <Cell key={`cell-${index}-2`} fill={entry['Si comprabas USD'] === null ? '#334339' : COLORS['Si comprabas USD']} />
+            ))}
+          </Bar>
+          <Bar dataKey="Si ajustabas por CER" fill={COLORS['Si ajustabas por CER']} label={renderCustomLabel as any} radius={[4, 4, 0, 0]}>
+            {data.map((entry, index) => (
+              <Cell key={`cell-${index}-3`} fill={entry['Si ajustabas por CER'] === null ? '#334339' : COLORS['Si ajustabas por CER']} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+      <div className="mt-3 text-[11px] text-app-text-dim space-y-0.5">
+        {resumen.valor_benchmark_usd_ars === null && <div>⚠ Sin MEP disponible para hoy</div>}
+        {resumen.total_invertido_ars_real === null && <div>⚠ Sin CER disponible para algunos períodos</div>}
+      </div>
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 19/53: frontend/src/components/charts/Donut.tsx
+################################################################################
+
+import { CHART_COLORS } from '../../utils'
+
+export interface DonutSlice {
+  etiqueta: string
+  porcentaje: number
+}
+
+export default function Donut({
+  slices,
+  centerLabel,
+  centerValue,
+}: {
+  slices: DonutSlice[]
+  centerLabel: string
+  centerValue: string
+}) {
+  let acc = 0
+  const stops = slices.map((s, i) => {
+    const from = acc
+    acc += s.porcentaje
+    return `${CHART_COLORS[i % CHART_COLORS.length]} ${from}% ${acc}%`
+  })
+  const gradient = `conic-gradient(${stops.join(', ')})`
+
+  return (
+    <div className="flex items-center gap-4">
+      <div className="relative w-[112px] h-[112px] shrink-0 rounded-full" style={{ background: gradient }}>
+        <div className="absolute inset-5 rounded-full bg-app-surface flex flex-col items-center justify-center">
+          <b className="font-mono text-[15px] text-app-text tabular-nums">{centerValue}</b>
+          <span className="text-[8px] uppercase tracking-wide text-app-text-dim mt-0.5">{centerLabel}</span>
+        </div>
+      </div>
+      <div className="flex-1 flex flex-col gap-2 min-w-0">
+        {slices.map((s, i) => (
+          <div key={s.etiqueta} className="flex items-center gap-2 text-[11.5px]">
+            <i className="w-2.5 h-2.5 rounded-[3px] shrink-0" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+            <span className="flex-1 text-app-text-dim truncate">{s.etiqueta}</span>
+            <span className="font-mono font-bold text-app-text tabular-nums">{s.porcentaje.toFixed(0)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 20/53: frontend/src/components/charts/Sparkline.tsx
+################################################################################
+
+import { useId } from 'react'
+
+const W = 280
+const H = 56
+
+export default function Sparkline({
+  data,
+  color = '#d8b14a',
+  className = 'w-full h-14',
+}: {
+  data: number[]
+  color?: string
+  className?: string
+}) {
+  const gradientId = useId()
+
+  if (data.length < 2) {
+    return (
+      <svg viewBox={`0 0 ${W} ${H}`} className={className} preserveAspectRatio="none">
+        <line x1={0} y1={H / 2} x2={W} y2={H / 2} stroke={color} strokeOpacity={0.3} strokeWidth={2} strokeDasharray="4 5" />
+      </svg>
+    )
+  }
+
+  const min = Math.min(...data)
+  const max = Math.max(...data)
+  const span = max - min || 1
+  const step = W / (data.length - 1)
+  const points = data.map((v, i) => {
+    const x = i * step
+    const y = H - 6 - ((v - min) / span) * (H - 12)
+    return [x, y] as const
+  })
+
+  const line = points.map(([x, y]) => `${x},${y}`).join(' ')
+  const area = `0,${H} ${line} ${W},${H}`
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className={className} preserveAspectRatio="none">
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={color} stopOpacity={0.32} />
+          <stop offset="1" stopColor={color} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <polygon points={area} fill={`url(#${gradientId})`} />
+      <polyline points={line} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 21/53: frontend/src/components/icons/Icons.tsx
+################################################################################
+
+export type IconName =
+  | 'home'
+  | 'pie'
+  | 'list'
+  | 'target'
+  | 'sync'
+  | 'search'
+  | 'chevron'
+  | 'up'
+  | 'down'
+  | 'close'
+  | 'back'
+  | 'edit'
+  | 'trash'
+  | 'plus'
+  | 'lock'
+  | 'check'
+  | 'alert'
+  | 'download'
+
+export function IconSprite() {
+  return (
+    <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
+      <defs>
+        <symbol id="i-home" viewBox="0 0 24 24">
+          <path d="M4 11L12 4l8 7" />
+          <path d="M6 10v9h5v-6h2v6h5v-9" />
+        </symbol>
+        <symbol id="i-pie" viewBox="0 0 24 24">
+          <path d="M12 3v9l7 4A9 9 0 1 0 12 3z" />
+        </symbol>
+        <symbol id="i-list" viewBox="0 0 24 24">
+          <line x1="4" y1="6" x2="20" y2="6" />
+          <line x1="4" y1="12" x2="20" y2="12" />
+          <line x1="4" y1="18" x2="20" y2="18" />
+        </symbol>
+        <symbol id="i-target" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="8" />
+          <circle cx="12" cy="12" r="4.5" />
+          <circle cx="12" cy="12" r="1" />
+        </symbol>
+        <symbol id="i-sync" viewBox="0 0 24 24">
+          <path d="M4 4v6h6" />
+          <path d="M20 20v-6h-6" />
+          <path d="M5.5 15a8 8 0 0013.5 3.5M18.5 9A8 8 0 005 5.5" />
+        </symbol>
+        <symbol id="i-search" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="6.5" />
+          <line x1="20" y1="20" x2="16" y2="16" />
+        </symbol>
+        <symbol id="i-chevron" viewBox="0 0 24 24">
+          <path d="M6 9l6 6 6-6" />
+        </symbol>
+        <symbol id="i-up" viewBox="0 0 24 24">
+          <path d="M7 17L17 7" />
+          <path d="M7 7h10v10" />
+        </symbol>
+        <symbol id="i-down" viewBox="0 0 24 24">
+          <path d="M7 7l10 10" />
+          <path d="M17 7v10H7" />
+        </symbol>
+        <symbol id="i-close" viewBox="0 0 24 24">
+          <line x1="6" y1="6" x2="18" y2="18" />
+          <line x1="18" y1="6" x2="6" y2="18" />
+        </symbol>
+        <symbol id="i-back" viewBox="0 0 24 24">
+          <path d="M15 5l-7 7 7 7" />
+        </symbol>
+        <symbol id="i-edit" viewBox="0 0 24 24">
+          <path d="M4 20h4L18.5 9.5a2.1 2.1 0 00-3-3L5 17v3z" />
+        </symbol>
+        <symbol id="i-trash" viewBox="0 0 24 24">
+          <path d="M5 7h14" />
+          <path d="M9 7V5h6v2" />
+          <path d="M7 7l1 13h8l1-13" />
+        </symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </symbol>
+        <symbol id="i-lock" viewBox="0 0 24 24">
+          <rect x="5" y="11" width="14" height="9" rx="2" />
+          <path d="M8 11V7a4 4 0 018 0v4" />
+        </symbol>
+        <symbol id="i-check" viewBox="0 0 24 24">
+          <path d="M5 13l4 4L19 7" />
+        </symbol>
+        <symbol id="i-alert" viewBox="0 0 24 24">
+          <path d="M12 4l9 16H3z" />
+          <line x1="12" y1="10" x2="12" y2="14" />
+          <line x1="12" y1="17" x2="12" y2="17.01" />
+        </symbol>
+        <symbol id="i-download" viewBox="0 0 24 24">
+          <path d="M12 4v11" />
+          <path d="M7 11l5 5 5-5" />
+          <path d="M5 20h14" />
+        </symbol>
+      </defs>
+    </svg>
+  )
+}
+
+export function Icon({ name, className = 'w-[18px] h-[18px]' }: { name: IconName; className?: string }) {
+  return (
+    <svg
+      className={`${className} stroke-current fill-none shrink-0`}
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <use href={`#i-${name}`} />
+    </svg>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 22/53: frontend/src/components/inversiones/CarterasScroll.tsx
+################################################################################
+
+import type { CarteraInfo } from '../../api'
+
+export default function CarterasScroll({
+  carteras,
+  seleccionada,
+  onSelect,
+}: {
+  carteras: CarteraInfo[]
+  seleccionada: string | null
+  onSelect: (nombre: string) => void
+}) {
+  if (carteras.length === 0) return null
+  return (
+    <div className="flex gap-2.5 overflow-x-auto no-scrollbar pb-1 -mx-0.5 px-0.5">
+      {carteras.map(c => (
+        <button
+          key={c.nombre}
+          onClick={() => onSelect(c.nombre)}
+          className={`shrink-0 w-[132px] text-left rounded-[14px] p-3 border transition-colors ${
+            seleccionada === c.nombre ? 'bg-app-gold-soft border-app-gold/40' : 'bg-app-surface border-app-border'
+          }`}
+        >
+          <div className="text-[11.5px] font-bold text-app-text-dim mb-1.5 truncate">{c.nombre}</div>
+          <div className="font-mono text-[11px] text-app-text-faint tabular-nums">
+            {c.ultimo_sync ? `sync ${new Date(c.ultimo_sync).toLocaleDateString('es-AR')}` : 'sin sync'}
+          </div>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 23/53: frontend/src/components/inversiones/HeroValorCard.tsx
+################################################################################
+
+import type { EvolucionPunto, InversionesResumen } from '../../api'
+import { formatARS, formatPctRatio, formatUSD } from '../../utils'
+import { Icon } from '../icons/Icons'
+import Sparkline from '../charts/Sparkline'
+
+export default function HeroValorCard({
+  resumen,
+  moneda,
+  evolucion,
+}: {
+  resumen: InversionesResumen | null
+  moneda: 'USD' | 'ARS'
+  evolucion: EvolucionPunto[]
+}) {
+  const esARS = moneda === 'ARS'
+  const valorActual = esARS ? resumen?.valor_actual_ars : resumen?.valor_actual_usd
+  const totalInvertido = esARS ? resumen?.total_invertido_ars : resumen?.total_invertido_usd
+  const rendimiento = esARS ? resumen?.rendimiento_simple_ars : resumen?.rendimiento_simple_usd
+  const formatMoneda = esARS ? formatARS : formatUSD
+  const deltaAbs = valorActual != null && totalInvertido != null ? valorActual - totalInvertido : null
+  const positivo = (rendimiento ?? 0) >= 0
+
+  const serie = evolucion.map(p => (esARS ? p.valor_ars : p.valor_usd))
+
+  return (
+    <div className="bg-gradient-to-br from-app-surface to-app-surface-2 border border-app-border rounded-[18px] p-[18px] mb-3.5">
+      <div className="text-[10.5px] font-bold uppercase tracking-wide text-app-text-dim mb-1.5">Valor actual</div>
+      <div className="font-mono text-[32px] font-semibold tracking-tight tabular-nums text-app-text">
+        {resumen ? formatMoneda(valorActual) : '—'}
+      </div>
+      {!esARS && resumen && <div className="font-mono text-[12px] text-app-text-dim mt-0.5 tabular-nums">≈ {formatARS(resumen.valor_actual_ars)}</div>}
+
+      {resumen && rendimiento != null && (
+        <div className="flex items-center gap-2 mt-2.5">
+          <span
+            className={`inline-flex items-center gap-0.5 font-mono font-bold text-[12px] px-2 py-1 rounded-lg tabular-nums ${
+              positivo ? 'text-app-teal bg-app-teal-soft' : 'text-app-coral bg-app-coral-soft'
+            }`}
+          >
+            <Icon name={positivo ? 'up' : 'down'} className="w-3 h-3" />
+            {formatPctRatio(rendimiento)}
+          </span>
+          {deltaAbs != null && (
+            <span className="font-mono text-[11px] text-app-text-dim tabular-nums">
+              {deltaAbs >= 0 ? '+' : ''}
+              {formatMoneda(deltaAbs)} vs. invertido
+            </span>
+          )}
+        </div>
+      )}
+
+      <Sparkline data={serie} color={positivo ? '#4fd1ae' : '#e2665a'} className="w-full h-13 mt-2.5" />
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 24/53: frontend/src/components/inversiones/KpiGrid.tsx
+################################################################################
+
+import type { InversionesResumen } from '../../api'
+import { formatPctRatio } from '../../utils'
+
+function Kpi({ label, value, tone }: { label: string; value: string; tone?: 'pos' | 'neg' }) {
+  return (
+    <div className="bg-app-surface border border-app-border rounded-[13px] px-2.5 py-2.5">
+      <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">{label}</div>
+      <div className={`font-mono text-[15px] font-bold tabular-nums ${tone === 'pos' ? 'text-app-teal' : tone === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
+        {value}
+      </div>
+    </div>
+  )
+}
+
+function toneFor(v: number | null | undefined): 'pos' | 'neg' | undefined {
+  if (v == null) return undefined
+  return v >= 0 ? 'pos' : 'neg'
+}
+
+export default function KpiGrid({ resumen, moneda }: { resumen: InversionesResumen | null; moneda: 'USD' | 'ARS' }) {
+  const esARS = moneda === 'ARS'
+  const invertido = esARS ? resumen?.total_invertido_ars : resumen?.total_invertido_usd
+  const xirr = esARS ? resumen?.xirr_ars ?? null : resumen?.xirr_usd ?? null
+  const twr = esARS ? resumen?.twr_ars ?? null : resumen?.twr_usd ?? null
+
+  return (
+    <div className="grid grid-cols-3 gap-2 mb-3.5">
+      <Kpi label="Invertido" value={invertido != null ? (esARS ? `$${Math.round(invertido).toLocaleString('es-AR')}` : `$${Math.round(invertido).toLocaleString('en-US')}`) : '—'} />
+      <Kpi label="XIRR" value={formatPctRatio(xirr)} tone={toneFor(xirr)} />
+      <Kpi label="TWR" value={formatPctRatio(twr)} tone={toneFor(twr)} />
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 25/53: frontend/src/components/inversiones/MovimientoRow.tsx
+################################################################################
+
+import type { MovimientoInversion } from '../../api'
+import { formatUSD } from '../../utils'
+
+const TIPO_LABELS: Record<string, string> = {
+  compra: 'Compra',
+  venta: 'Venta',
+  dividendo: 'Dividendo',
+  cupon: 'Cupón',
+  amortizacion: 'Amortización',
+}
+
+const TIPO_BADGE_CLASSES: Record<string, string> = {
+  compra: 'bg-app-steel/15 text-app-steel',
+  venta: 'bg-app-plum/15 text-app-plum',
+  dividendo: 'bg-app-teal-soft text-app-teal',
+  cupon: 'bg-app-teal-soft text-app-teal',
+  amortizacion: 'bg-app-plum/15 text-app-plum',
+}
+
+const MOVIMIENTOS_INGRESO = ['dividendo', 'cupon']
+
+function formatMonto(mov: MovimientoInversion): string {
+  const monto = mov.cantidad != null ? mov.cantidad * mov.precio : mov.precio
+  const prefijo = MOVIMIENTOS_INGRESO.includes(mov.tipo_movimiento) ? '+' : mov.tipo_movimiento === 'compra' ? '−' : '+'
+  const valor = mov.moneda === 'USD' ? formatUSD(Math.abs(monto)) : `$${Math.abs(monto).toLocaleString('es-AR')}`
+  return `${prefijo}${valor}`
+}
+
+export default function MovimientoRow({ mov }: { mov: MovimientoInversion }) {
+  const esIngreso = MOVIMIENTOS_INGRESO.includes(mov.tipo_movimiento)
+  const detalle = mov.cantidad != null ? `${mov.cantidad.toLocaleString('es-AR', { maximumFractionDigits: 8 })} @ ${mov.precio.toLocaleString('es-AR', { maximumFractionDigits: 6 })} ${mov.moneda}` : mov.moneda
+
+  return (
+    <div className="flex items-center gap-2.5 py-2.5 border-b border-app-border-soft last:border-b-0">
+      <div className="w-9 h-9 rounded-[11px] bg-app-surface-2 border border-app-border flex items-center justify-center font-mono text-[10px] font-bold text-app-text shrink-0">
+        {mov.ticker.slice(0, 4)}
+      </div>
+      <div className="flex-1 min-w-0">
+        <span className={`inline-block font-bold text-[9.5px] tracking-wide px-1.5 py-0.5 rounded-[6px] ${TIPO_BADGE_CLASSES[mov.tipo_movimiento] ?? 'bg-app-surface-2 text-app-text-dim'}`}>
+          {(TIPO_LABELS[mov.tipo_movimiento] ?? mov.tipo_movimiento).toUpperCase()}
+        </span>
+        <div className="text-[10.5px] text-app-text-dim mt-1 truncate">{detalle}</div>
+      </div>
+      <div className={`font-mono text-[12.5px] font-bold tabular-nums shrink-0 ${esIngreso ? 'text-app-teal' : 'text-app-text'}`}>{formatMonto(mov)}</div>
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 26/53: frontend/src/components/inversiones/ObjetivoModal.tsx
+################################################################################
+
+import { useEffect, useState } from 'react'
+import type { ObjetivoInversion, ObjetivoInversionPayload } from '../../api'
+import Modal from '../ui/Modal'
+import Button from '../ui/Button'
+
+const EMOJIS = ['🎯', '🚗', '🪑', '🏠', '✈️', '💻', '📱', '🎓', '🏖️', '💰', '🛒', '🏋️', '🎸', '📷', '🚀']
+
+export default function ObjetivoModal({
+  open,
+  objetivo,
+  onGuardar,
+  onCancelar,
+}: {
+  open: boolean
+  objetivo: ObjetivoInversion | null
+  onGuardar: (payload: ObjetivoInversionPayload) => Promise<void>
+  onCancelar: () => void
+}) {
+  const [icono, setIcono] = useState('🎯')
+  const [nombre, setNombre] = useState('')
+  const [montoUsd, setMontoUsd] = useState('')
+  const [mes, setMes] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [errorNombre, setErrorNombre] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    setIcono(objetivo?.icono ?? '🎯')
+    setNombre(objetivo?.nombre ?? '')
+    setMontoUsd(objetivo ? String(objetivo.monto_usd) : '')
+    setMes(objetivo ? objetivo.fecha_limite.slice(0, 7) : '')
+    setErrorNombre(false)
+  }, [open, objetivo])
+
+  const handleSubmit = async () => {
+    if (!nombre.trim() || !montoUsd || !mes) {
+      setErrorNombre(!nombre.trim())
+      return
+    }
+    setLoading(true)
+    try {
+      await onGuardar({
+        nombre: nombre.trim(),
+        icono,
+        monto_usd: Number(montoUsd),
+        fecha_limite: `${mes}-01`,
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onCancelar} title={objetivo ? 'Editar objetivo' : 'Nuevo objetivo'}>
+      <div className="flex flex-col gap-4">
+        <div>
+          <label className="block text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2">Ícono</label>
+          <div className="flex flex-wrap gap-1.5">
+            {EMOJIS.map(e => (
+              <button
+                key={e}
+                type="button"
+                onClick={() => setIcono(e)}
+                className={`w-9 h-9 rounded-lg text-[19px] flex items-center justify-center border ${
+                  icono === e ? 'bg-app-gold-soft border-app-gold/50' : 'border-transparent'
+                }`}
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2">Nombre</label>
+          <input
+            value={nombre}
+            onChange={e => setNombre(e.target.value)}
+            placeholder="ej: Fondo de emergencia"
+            className={`w-full h-11 rounded-xl bg-app-surface-2 border px-3.5 text-[13.5px] text-app-text outline-none focus:border-app-gold/60 ${
+              errorNombre ? 'border-app-coral' : 'border-app-border'
+            }`}
+          />
+          {errorNombre && <p className="text-[11px] text-app-coral mt-1">Ingresá un nombre</p>}
+        </div>
+
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="block text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2">Monto (USD)</label>
+            <input
+              type="number"
+              min={1}
+              value={montoUsd}
+              onChange={e => setMontoUsd(e.target.value)}
+              className="w-full h-11 rounded-xl bg-app-surface-2 border border-app-border px-3.5 text-[13.5px] text-app-text outline-none focus:border-app-gold/60 tabular-nums"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="block text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2">Fecha límite</label>
+            <input
+              type="month"
+              value={mes}
+              onChange={e => setMes(e.target.value)}
+              className="w-full h-11 rounded-xl bg-app-surface-2 border border-app-border px-3.5 text-[13.5px] text-app-text outline-none focus:border-app-gold/60"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2 mt-1">
+          <Button variant="outline" onClick={onCancelar} className="flex-1">
+            Cancelar
+          </Button>
+          <Button onClick={handleSubmit} loading={loading} className="flex-1">
+            Guardar
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 27/53: frontend/src/components/inversiones/PosicionRow.tsx
+################################################################################
+
+import type { RendimientoPorTickerItem } from '../../api'
+import { formatARS, formatPctRatio, formatUSD } from '../../utils'
+import { Icon } from '../icons/Icons'
+
+export default function PosicionRow({
+  item,
+  moneda,
+  onClick,
+}: {
+  item: RendimientoPorTickerItem
+  moneda: 'USD' | 'ARS'
+  onClick: () => void
+}) {
+  const esARS = moneda === 'ARS'
+  const valor = esARS ? item.valor_actual_ars : item.valor_actual_usd
+  const rendimiento = esARS ? item.rendimiento_simple_ars : item.rendimiento_simple_usd
+  const formatMoneda = esARS ? formatARS : formatUSD
+  const positivo = (rendimiento ?? 0) >= 0
+
+  return (
+    <button onClick={onClick} className="w-full flex items-center gap-2.5 py-2.5 border-b border-app-border-soft last:border-b-0 text-left">
+      <div className="w-9 h-9 rounded-[11px] bg-app-surface-2 border border-app-border flex items-center justify-center font-mono text-[10px] font-bold text-app-text shrink-0">
+        {item.ticker.slice(0, 4)}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[12.5px] font-bold text-app-text truncate">{item.nombre}</div>
+        <div className="text-[10.5px] text-app-text-dim mt-0.5 truncate">
+          {item.tipo_instrumento} · {item.mercado}
+        </div>
+      </div>
+      <div className="text-right shrink-0">
+        <div className="font-mono text-[12.5px] font-bold text-app-text tabular-nums">{formatMoneda(valor)}</div>
+        {rendimiento != null && (
+          <div className={`inline-flex items-center gap-0.5 font-mono text-[11px] font-bold mt-0.5 tabular-nums ${positivo ? 'text-app-teal' : 'text-app-coral'}`}>
+            <Icon name={positivo ? 'up' : 'down'} className="w-2.5 h-2.5" />
+            {formatPctRatio(rendimiento)}
+          </div>
+        )}
+      </div>
+    </button>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 28/53: frontend/src/components/layout/AppShell.tsx
+################################################################################
+
+import { Outlet } from 'react-router-dom'
+import BottomNav from './BottomNav'
+
+export default function AppShell() {
+  return (
+    <div className="h-screen flex justify-center bg-app-bg">
+      <div className="w-full max-w-md flex flex-col h-full">
+        <div className="flex-1 overflow-y-auto px-4 pt-4 safe-top">
+          <Outlet />
+        </div>
+        <BottomNav />
+      </div>
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 29/53: frontend/src/components/layout/BottomNav.tsx
+################################################################################
+
+import { NavLink } from 'react-router-dom'
+import { Icon, type IconName } from '../icons/Icons'
+
+const ITEMS: { to: string; label: string; icon: IconName }[] = [
+  { to: '/resumen', label: 'Resumen', icon: 'home' },
+  { to: '/exposicion', label: 'Exposición', icon: 'pie' },
+  { to: '/movimientos', label: 'Movim.', icon: 'list' },
+  { to: '/objetivo', label: 'Objetivo', icon: 'target' },
+]
+
+export default function BottomNav() {
+  return (
+    <nav className="flex border-t border-app-border bg-app-surface px-1.5 pt-2 safe-bottom shrink-0">
+      {ITEMS.map(item => (
+        <NavLink
+          key={item.to}
+          to={item.to}
+          className={({ isActive }) =>
+            `flex-1 flex flex-col items-center gap-1 pb-2 text-[9.5px] font-semibold ${
+              isActive ? 'text-app-gold' : 'text-app-text-faint'
+            }`
+          }
+        >
+          <Icon name={item.icon} />
+          <span>{item.label}</span>
+        </NavLink>
+      ))}
+    </nav>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 30/53: frontend/src/components/layout/ScreenHeader.tsx
+################################################################################
+
+import { useState } from 'react'
+import { useInversionesContext } from '../../context/InversionesContext'
+import { Icon } from '../icons/Icons'
+import IconButton from '../ui/IconButton'
+import Pill from '../ui/Pill'
+import Modal from '../ui/Modal'
+
+export default function ScreenHeader({ title, onBack }: { title: string; onBack?: () => void }) {
+  const { carteras, carteraSeleccionada, setCarteraSeleccionada, monedaSeleccionada, setMonedaSeleccionada, syncing, triggerSync } =
+    useInversionesContext()
+  const [carteraModalOpen, setCarteraModalOpen] = useState(false)
+
+  if (onBack) {
+    return (
+      <div className="flex items-center gap-3 mb-3.5">
+        <IconButton onClick={onBack} aria-label="Volver">
+          <Icon name="back" />
+        </IconButton>
+        <h1 className="font-display text-[19px] font-semibold text-app-text truncate">{title}</h1>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-2 mb-3.5">
+        <div className="flex items-center gap-2 min-w-0">
+          <Pill onClick={() => setCarteraModalOpen(true)} className="max-w-[160px]">
+            <span className="truncate">{carteraSeleccionada ?? 'Consolidado'}</span>
+            <Icon name="chevron" className="w-3.5 h-3.5 text-app-text-dim" />
+          </Pill>
+          <div className="flex bg-app-surface border border-app-border rounded-[11px] p-[3px]">
+            {(['USD', 'ARS'] as const).map(m => (
+              <button
+                key={m}
+                onClick={() => setMonedaSeleccionada(m)}
+                className={`px-2.5 py-1.5 rounded-lg text-[11.5px] font-bold ${
+                  monedaSeleccionada === m ? 'bg-app-gold-soft text-app-gold' : 'text-app-text-dim'
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
+        <IconButton accent onClick={triggerSync} aria-label="Sincronizar">
+          <Icon name="sync" className={`w-[18px] h-[18px] ${syncing ? 'animate-spin' : ''}`} />
+        </IconButton>
+      </div>
+
+      <Modal open={carteraModalOpen} onClose={() => setCarteraModalOpen(false)} title="Elegir cartera">
+        <div className="flex flex-col gap-1.5">
+          <button
+            onClick={() => {
+              setCarteraSeleccionada(null)
+              setCarteraModalOpen(false)
+            }}
+            className={`text-left px-3.5 py-3 rounded-xl text-[13.5px] font-semibold ${
+              carteraSeleccionada === null ? 'bg-app-gold-soft text-app-gold' : 'text-app-text bg-app-surface-2'
+            }`}
+          >
+            Consolidado
+          </button>
+          {carteras.map(c => (
+            <button
+              key={c.nombre}
+              onClick={() => {
+                setCarteraSeleccionada(c.nombre)
+                setCarteraModalOpen(false)
+              }}
+              className={`text-left px-3.5 py-3 rounded-xl text-[13.5px] font-semibold ${
+                carteraSeleccionada === c.nombre ? 'bg-app-gold-soft text-app-gold' : 'text-app-text bg-app-surface-2'
+              }`}
+            >
+              {c.nombre}
+            </button>
+          ))}
+        </div>
+      </Modal>
+    </>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 31/53: frontend/src/components/layout/Splash.tsx
+################################################################################
+
+import { useInversionesContext } from '../../context/InversionesContext'
+import { Icon } from '../icons/Icons'
+import Button from '../ui/Button'
+
+const BARS = [
+  { x: 24, h: 26, color: '#5b8ba0', delay: '0s' },
+  { x: 35, h: 36, color: '#7e9c90', delay: '0.18s' },
+  { x: 46, h: 46, color: '#4fd1ae', delay: '0.36s' },
+  { x: 57, h: 54, color: '#d8b14a', delay: '0.54s' },
+]
+
+export default function Splash() {
+  const { syncing, error, triggerSync } = useInversionesContext()
+
+  return (
+    <div className="h-screen flex flex-col items-center justify-center gap-0 px-8 text-center bg-app-bg relative overflow-hidden">
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ background: 'radial-gradient(120% 60% at 50% -10%, rgba(216,177,74,0.14), transparent 60%)' }}
+      />
+
+      <div className="relative w-[92px] h-[92px] mb-7">
+        <svg viewBox="0 0 88 88" className="w-full h-full overflow-visible">
+          <circle
+            className="motion-safe:animate-spin-slow origin-[44px_44px]"
+            cx="44"
+            cy="44"
+            r="40"
+            fill="none"
+            stroke="#223028"
+            strokeWidth={1.5}
+            strokeDasharray="3 7"
+          />
+          <g>
+            {BARS.map(b => (
+              <rect
+                key={b.x}
+                className="motion-safe:animate-rise origin-bottom"
+                x={b.x}
+                y={66 - b.h}
+                width={7}
+                height={b.h}
+                rx={2}
+                fill={b.color}
+                style={{ animationDelay: b.delay }}
+              />
+            ))}
+          </g>
+        </svg>
+      </div>
+
+      <h1 className="font-display text-[27px] font-semibold text-app-text mb-1.5">Inversiones</h1>
+      <p className="text-[13px] text-app-text-dim mb-9">Tu cartera, sincronizada.</p>
+
+      <Button onClick={triggerSync} loading={syncing} icon={<Icon name="sync" className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />} className="w-full max-w-[280px]">
+        {syncing ? 'Sincronizando…' : 'Sincronizar Google Sheet'}
+      </Button>
+
+      {error && <p className="mt-3 text-[12px] text-app-coral max-w-[280px]">{error}</p>}
+
+      <div className="mt-4 flex items-center gap-1.5 text-[11px] text-app-text-faint">
+        <Icon name="lock" className="w-3 h-3" />
+        Solo lectura · tus datos no salen de tu Sheet
+      </div>
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 32/53: frontend/src/components/ui/Button.tsx
+################################################################################
+
+import type { ButtonHTMLAttributes, ReactNode } from 'react'
+
+type Variant = 'primary' | 'outline' | 'ghost' | 'danger'
+
+interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: Variant
+  icon?: ReactNode
+  loading?: boolean
+  children: ReactNode
+}
+
+const VARIANT_CLASSES: Record<Variant, string> = {
+  primary: 'bg-app-gold text-[#1a1406] font-bold',
+  outline: 'bg-app-surface border border-app-border text-app-text font-bold',
+  ghost: 'bg-transparent text-app-text-dim font-semibold',
+  danger: 'bg-app-coral-soft text-app-coral font-bold',
+}
+
+export default function Button({ variant = 'primary', icon, loading, children, className = '', disabled, ...rest }: Props) {
+  return (
+    <button
+      className={`h-11 px-4 rounded-2xl flex items-center justify-center gap-2 text-[13.5px] transition-opacity disabled:opacity-50 ${VARIANT_CLASSES[variant]} ${className}`}
+      disabled={disabled || loading}
+      {...rest}
+    >
+      {icon}
+      {children}
+    </button>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 33/53: frontend/src/components/ui/Card.tsx
+################################################################################
+
+import type { HTMLAttributes, ReactNode } from 'react'
+
+export default function Card({ children, className = '', ...rest }: HTMLAttributes<HTMLDivElement> & { children: ReactNode }) {
+  return (
+    <div className={`bg-app-surface border border-app-border rounded-2xl p-4 ${className}`} {...rest}>
+      {children}
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 34/53: frontend/src/components/ui/Chip.tsx
+################################################################################
+
+import type { ReactNode } from 'react'
+import { Icon } from '../icons/Icons'
+
+export default function Chip({ children, onRemove }: { children: ReactNode; onRemove?: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 bg-app-gold-soft text-app-gold rounded-[9px] px-2.5 py-1.5 text-[11px] font-bold">
+      {children}
+      {onRemove && (
+        <button onClick={onRemove} aria-label="Quitar filtro" className="flex items-center">
+          <Icon name="close" className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </span>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 35/53: frontend/src/components/ui/EmptyState.tsx
+################################################################################
+
+import type { ReactNode } from 'react'
+
+export default function EmptyState({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
+  return (
+    <div className="flex flex-col items-center text-center gap-3 py-16 px-6">
+      <div className="text-[14.5px] font-bold text-app-text">{title}</div>
+      {description && <div className="text-[12.5px] text-app-text-dim max-w-[260px]">{description}</div>}
+      {action}
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 36/53: frontend/src/components/ui/IconButton.tsx
+################################################################################
+
+import type { ButtonHTMLAttributes } from 'react'
+
+type Tone = 'default' | 'accent' | 'danger'
+
+interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
+  accent?: boolean
+  tone?: Tone
+}
+
+const TONE_CLASSES: Record<Tone, string> = {
+  default: 'bg-app-surface border-app-border text-app-text',
+  accent: 'bg-app-gold-soft border-transparent text-app-gold',
+  danger: 'bg-app-coral-soft border-transparent text-app-coral',
+}
+
+export default function IconButton({ accent, tone, className = '', children, ...rest }: Props) {
+  const resolvedTone: Tone = tone ?? (accent ? 'accent' : 'default')
+  return (
+    <button
+      className={`w-9 h-9 rounded-[11px] flex items-center justify-center border transition-colors ${TONE_CLASSES[resolvedTone]} ${className}`}
+      {...rest}
+    >
+      {children}
+    </button>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 37/53: frontend/src/components/ui/Modal.tsx
+################################################################################
+
+import type { ReactNode } from 'react'
+import { Icon } from '../icons/Icons'
+
+export default function Modal({
+  open,
+  onClose,
+  title,
+  children,
+}: {
+  open: boolean
+  onClose: () => void
+  title: string
+  children: ReactNode
+}) {
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative w-full sm:max-w-md bg-app-surface border border-app-border rounded-t-3xl sm:rounded-3xl max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-app-border sticky top-0 bg-app-surface">
+          <h2 className="font-display text-[18px] font-semibold text-app-text">{title}</h2>
+          <button onClick={onClose} aria-label="Cerrar" className="w-8 h-8 rounded-full flex items-center justify-center bg-app-surface-2 text-app-text-dim">
+            <Icon name="close" className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-5">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 38/53: frontend/src/components/ui/Pill.tsx
+################################################################################
+
+import type { ButtonHTMLAttributes, ReactNode } from 'react'
+
+interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
+  children: ReactNode
+}
+
+export default function Pill({ children, className = '', ...rest }: Props) {
+  return (
+    <button
+      className={`h-9 px-3 rounded-[11px] bg-app-surface border border-app-border inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-app-text ${className}`}
+      {...rest}
+    >
+      {children}
+    </button>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 39/53: frontend/src/components/ui/Segmented.tsx
+################################################################################
+
+export default function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: T; label: string }[]
+  value: T
+  onChange: (v: T) => void
+}) {
+  return (
+    <div className="flex bg-app-surface border border-app-border rounded-[11px] p-[3px] gap-0.5 overflow-x-auto no-scrollbar">
+      {options.map(opt => (
+        <button
+          key={opt.value}
+          onClick={() => onChange(opt.value)}
+          className={`font-semibold text-[11.5px] px-2.5 py-1.5 rounded-lg whitespace-nowrap transition-colors ${
+            opt.value === value ? 'bg-app-gold-soft text-app-gold' : 'text-app-text-dim'
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 40/53: frontend/src/components/ui/Toast.tsx
+################################################################################
+
+import { useEffect } from 'react'
+import { Icon } from '../icons/Icons'
+
+export default function Toast({
+  message,
+  tone = 'success',
+  onDone,
+}: {
+  message: string | null
+  tone?: 'success' | 'error'
+  onDone: () => void
+}) {
+  useEffect(() => {
+    if (!message) return
+    const t = setTimeout(onDone, 3500)
+    return () => clearTimeout(t)
+  }, [message, onDone])
+
+  if (!message) return null
+
+  return (
+    <div className="fixed left-1/2 -translate-x-1/2 bottom-24 z-[60] max-w-[92vw] px-4 py-3 rounded-2xl border shadow-lg flex items-center gap-2 text-[12.5px] font-semibold bg-app-surface border-app-border text-app-text">
+      <Icon
+        name={tone === 'success' ? 'check' : 'alert'}
+        className={`w-4 h-4 ${tone === 'success' ? 'text-app-teal' : 'text-app-coral'}`}
+      />
+      {message}
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 41/53: frontend/src/context/InversionesContext.tsx
+################################################################################
+
+import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { useInversiones } from '../hooks/useInversiones'
+import type { SyncErrorItem } from '../api'
+
+interface ToastState {
+  message: string
+  tone: 'success' | 'error'
+}
+
+interface InversionesContextValue extends ReturnType<typeof useInversiones> {
+  triggerSync: () => Promise<void>
+  toast: ToastState | null
+  showToast: (message: string, tone?: 'success' | 'error') => void
+  dismissToast: () => void
+  syncSheetOpen: boolean
+  closeSyncSheet: () => void
+  syncErrors: SyncErrorItem[]
+  syncWarnings: SyncErrorItem[]
+  syncResumenTexto: string
+}
+
+const InversionesContext = createContext<InversionesContextValue | null>(null)
+
+export function InversionesProvider({ children }: { children: ReactNode }) {
+  const inversiones = useInversiones()
+  const [toast, setToast] = useState<ToastState | null>(null)
+  const [syncSheetOpen, setSyncSheetOpen] = useState(false)
+  const [syncErrors, setSyncErrors] = useState<SyncErrorItem[]>([])
+  const [syncWarnings, setSyncWarnings] = useState<SyncErrorItem[]>([])
+  const [syncResumenTexto, setSyncResumenTexto] = useState('')
+
+  const triggerSync = useCallback(async () => {
+    try {
+      const resultado = await inversiones.sincronizar()
+      const advertencias = resultado.errores.filter(e => e.motivo.startsWith('Advertencia:'))
+      const errores = resultado.errores.filter(e => !e.motivo.startsWith('Advertencia:'))
+      const resumenTexto = `${resultado.movimientos} movimientos, ${resultado.instrumentos} instrumentos, ${resultado.precios} precios, ${resultado.indices_mercado} fechas con CER/MEP`
+      setSyncErrors(errores)
+      setSyncWarnings(advertencias)
+      setSyncResumenTexto(resumenTexto)
+      if (errores.length > 0 || advertencias.length > 0) {
+        setSyncSheetOpen(true)
+      } else {
+        setToast({ message: `Sincronizado: ${resumenTexto}.`, tone: 'success' })
+      }
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setToast({ message: detail || 'Error al sincronizar el Google Sheet', tone: 'error' })
+    }
+  }, [inversiones])
+
+  const value: InversionesContextValue = {
+    ...inversiones,
+    triggerSync,
+    toast,
+    showToast: (message: string, tone: 'success' | 'error' = 'success') => setToast({ message, tone }),
+    dismissToast: () => setToast(null),
+    syncSheetOpen,
+    closeSyncSheet: () => setSyncSheetOpen(false),
+    syncErrors,
+    syncWarnings,
+    syncResumenTexto,
+  }
+
+  return <InversionesContext.Provider value={value}>{children}</InversionesContext.Provider>
+}
+
+export function useInversionesContext() {
+  const ctx = useContext(InversionesContext)
+  if (!ctx) throw new Error('useInversionesContext debe usarse dentro de <InversionesProvider>')
+  return ctx
+}
+
+
+################################################################################
+# ARCHIVO 42/53: frontend/src/hooks/useInversiones.ts
+################################################################################
+
+import { useState, useEffect, useCallback } from 'react'
+import {
+  syncInversiones,
+  getCarterasInversion,
+  getResumenInversiones,
+  getExposicionInversiones,
+  getMovimientosInversion,
+  getRendimientoPorTicker,
+  type CarteraInfo,
+  type InversionesResumen,
+  type ExposicionOut,
+  type MovimientoInversion,
+  type RendimientoPorTickerItem,
+  type SyncResult,
+} from '../api'
+
+export function useInversiones() {
+  const [carteras, setCarteras] = useState<CarteraInfo[]>([])
+  const [carteraSeleccionada, setCarteraSeleccionada] = useState<string | null>(null)
+  const [monedaSeleccionada, setMonedaSeleccionada] = useState<'USD' | 'ARS'>('USD')
+  const [resumen, setResumen] = useState<InversionesResumen | null>(null)
+  const [exposicion, setExposicion] = useState<ExposicionOut>({ ejes: [] })
+  const [movimientos, setMovimientos] = useState<MovimientoInversion[]>([])
+  const [rendimientoPorTicker, setRendimientoPorTicker] = useState<RendimientoPorTickerItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchCarteras = useCallback(async () => {
+    const data = await getCarterasInversion()
+    setCarteras(data)
+    return data
+  }, [])
+
+  const fetchDetalle = useCallback(async (cartera: string | null) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [r, ex, mv, rt] = await Promise.all([
+        getResumenInversiones(cartera),
+        getExposicionInversiones(cartera),
+        getMovimientosInversion(cartera ? { cartera } : {}),
+        getRendimientoPorTicker(cartera),
+      ])
+      setResumen(r)
+      setExposicion(ex)
+      setMovimientos(mv)
+      setRendimientoPorTicker(rt)
+    } catch {
+      setError('Error al cargar los datos de inversiones')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchCarteras()
+  }, [fetchCarteras])
+
+  useEffect(() => {
+    if (carteras.length === 0) {
+      setLoading(false)
+      return
+    }
+    fetchDetalle(carteraSeleccionada)
+  }, [carteraSeleccionada, carteras.length, fetchDetalle])
+
+  const sincronizar = async (): Promise<SyncResult> => {
+    setSyncing(true)
+    try {
+      const resultado = await syncInversiones()
+      const nuevasCarteras = await fetchCarteras()
+      if (carteraSeleccionada && !nuevasCarteras.some(c => c.nombre === carteraSeleccionada)) {
+        setCarteraSeleccionada(null)
+      } else {
+        await fetchDetalle(carteraSeleccionada)
+      }
+      return resultado
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  return {
+    carteras,
+    carteraSeleccionada,
+    setCarteraSeleccionada,
+    monedaSeleccionada,
+    setMonedaSeleccionada,
+    resumen,
+    exposicion,
+    movimientos,
+    rendimientoPorTicker,
+    loading,
+    syncing,
+    error,
+    sincronizar,
+    sinDatos: carteras.length === 0,
+  }
+}
+
+
+################################################################################
+# ARCHIVO 43/53: frontend/src/hooks/useObjetivoInversion.ts
+################################################################################
+
+import { useState, useEffect, useCallback } from 'react'
+import {
+  getObjetivoInversion,
+  getAportesHistoricos,
+  crearObjetivoInversion,
+  editarObjetivoInversion,
+  eliminarObjetivoInversion,
+  type ObjetivoInversion,
+  type AportesHistoricosOut,
+  type ObjetivoInversionPayload,
+} from '../api'
+
+export function useObjetivoInversion(cartera: string | null) {
+  const [objetivo, setObjetivo] = useState<ObjetivoInversion | null>(null)
+  const [aportesHistoricos, setAportesHistoricos] = useState<AportesHistoricosOut | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!cartera) {
+      setObjetivo(null)
+      setAportesHistoricos(null)
+      setLoading(false)
+      return
+    }
+
+    const fetch = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const [obj, aportes] = await Promise.all([
+          getObjetivoInversion(cartera),
+          getAportesHistoricos(cartera),
+        ])
+        setObjetivo(obj)
+        setAportesHistoricos(aportes)
+      } catch (err: any) {
+        setError((err as Error).message || 'Error cargando objetivo')
+        setObjetivo(null)
+        setAportesHistoricos(null)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetch()
+  }, [cartera])
+
+  const crear = useCallback(
+    async (payload: ObjetivoInversionPayload): Promise<ObjetivoInversion | null> => {
+      if (!cartera) return null
+      try {
+        const nuevo = await crearObjetivoInversion(cartera, payload)
+        setObjetivo(nuevo)
+        return nuevo
+      } catch (err: any) {
+        setError((err as Error).message || 'Error creando objetivo')
+        throw err
+      }
+    },
+    [cartera]
+  )
+
+  const editar = useCallback(
+    async (payload: ObjetivoInversionPayload): Promise<ObjetivoInversion | null> => {
+      if (!objetivo) return null
+      try {
+        const actualizado = await editarObjetivoInversion(objetivo.id, payload)
+        setObjetivo(actualizado)
+        return actualizado
+      } catch (err: any) {
+        setError((err as Error).message || 'Error editando objetivo')
+        throw err
+      }
+    },
+    [objetivo]
+  )
+
+  const eliminar = useCallback(async (): Promise<void> => {
+    if (!objetivo) return
+    try {
+      await eliminarObjetivoInversion(objetivo.id)
+      setObjetivo(null)
+    } catch (err: any) {
+      setError((err as Error).message || 'Error eliminando objetivo')
+      throw err
+    }
+  }, [objetivo])
+
+  return {
+    objetivo,
+    aportesHistoricos,
+    loading,
+    error,
+    crear,
+    editar,
+    eliminar,
+  }
+}
+
+
+################################################################################
+# ARCHIVO 44/53: frontend/src/main.tsx
+################################################################################
+
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
+import App from './App'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </React.StrictMode>
+)
+
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+  })
+}
+
+
+################################################################################
+# ARCHIVO 45/53: frontend/src/pages/Exposicion.tsx
+################################################################################
+
+import { useMemo, useState } from 'react'
+import { useInversionesContext } from '../context/InversionesContext'
+import type { ExposicionItem } from '../api'
+import { CHART_COLORS, formatARS, formatUSD } from '../utils'
+import ScreenHeader from '../components/layout/ScreenHeader'
+import Segmented from '../components/ui/Segmented'
+import Donut from '../components/charts/Donut'
+import EmptyState from '../components/ui/EmptyState'
+
+function bucketizeTop10(items: ExposicionItem[]): ExposicionItem[] {
+  if (items.length <= 10) return items
+  const top = items.slice(0, 10)
+  const resto = items.slice(10)
+  return [
+    ...top,
+    {
+      etiqueta: 'Otros',
+      valor_usd: resto.reduce((acc, i) => acc + i.valor_usd, 0),
+      valor_ars: resto.reduce((acc, i) => acc + i.valor_ars, 0),
+      porcentaje: resto.reduce((acc, i) => acc + i.porcentaje, 0),
+    },
+  ]
+}
+
+export default function Exposicion() {
+  const { exposicion, monedaSeleccionada, loading } = useInversionesContext()
+  const [ejeActivo, setEjeActivo] = useState<string | null>(null)
+  const esARS = monedaSeleccionada === 'ARS'
+  const formatMoneda = esARS ? formatARS : formatUSD
+
+  const eje = useMemo(() => {
+    if (exposicion.ejes.length === 0) return null
+    return exposicion.ejes.find(e => e.eje === ejeActivo) ?? exposicion.ejes[0]
+  }, [exposicion.ejes, ejeActivo])
+
+  const items = useMemo(() => {
+    if (!eje) return []
+    const base = eje.eje === 'Ticker' ? bucketizeTop10(eje.items) : eje.items
+    return [...base].sort((a, b) => b.porcentaje - a.porcentaje)
+  }, [eje])
+
+  const total = items.reduce((acc, i) => acc + (esARS ? i.valor_ars : i.valor_usd), 0)
+
+  return (
+    <div className="pb-4">
+      <ScreenHeader title="Exposición" />
+
+      {loading ? (
+        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+      ) : exposicion.ejes.length === 0 ? (
+        <EmptyState title="Sin exposición para mostrar" description="Sincronizá tu Sheet o elegí otra cartera." />
+      ) : (
+        <>
+          <Segmented
+            options={exposicion.ejes.map(e => ({ value: e.eje, label: e.eje }))}
+            value={eje?.eje ?? exposicion.ejes[0].eje}
+            onChange={setEjeActivo}
+          />
+
+          <div className="my-4">
+            <Donut
+              slices={items.map(i => ({ etiqueta: i.etiqueta, porcentaje: i.porcentaje }))}
+              centerLabel="Total"
+              centerValue={formatMoneda(total)}
+            />
+          </div>
+
+          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">Detalle</h3>
+          <div className="flex flex-col gap-2.5">
+            {items.map((item, i) => (
+              <div key={item.etiqueta}>
+                <div className="flex justify-between items-baseline text-[11.5px] mb-1.5">
+                  <span className="text-app-text">{item.etiqueta}</span>
+                  <span className="font-mono font-bold text-app-text tabular-nums">{formatMoneda(esARS ? item.valor_ars : item.valor_usd)}</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-app-surface-2 overflow-hidden">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${item.porcentaje}%`, background: CHART_COLORS[i % CHART_COLORS.length] }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 46/53: frontend/src/pages/Movimientos.tsx
+################################################################################
+
+import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import dayjs from 'dayjs'
+import { useInversionesContext } from '../context/InversionesContext'
+import ScreenHeader from '../components/layout/ScreenHeader'
+import MovimientoRow from '../components/inversiones/MovimientoRow'
+import Chip from '../components/ui/Chip'
+import EmptyState from '../components/ui/EmptyState'
+import { Icon } from '../components/icons/Icons'
+
+export default function Movimientos() {
+  const { movimientos, loading } = useInversionesContext()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tickerFiltro = searchParams.get('ticker')
+  const [busqueda, setBusqueda] = useState('')
+
+  const filtrados = useMemo(
+    () =>
+      movimientos.filter(
+        m =>
+          (!tickerFiltro || m.ticker === tickerFiltro) &&
+          (!busqueda || m.ticker.toLowerCase().includes(busqueda.toLowerCase()) || m.cartera.toLowerCase().includes(busqueda.toLowerCase())),
+      ),
+    [movimientos, tickerFiltro, busqueda],
+  )
+
+  const grupos = useMemo(() => {
+    const out: { fecha: string; items: typeof filtrados }[] = []
+    for (const m of filtrados) {
+      const ultimo = out[out.length - 1]
+      if (ultimo && ultimo.fecha === m.fecha) {
+        ultimo.items.push(m)
+      } else {
+        out.push({ fecha: m.fecha, items: [m] })
+      }
+    }
+    return out
+  }, [filtrados])
+
+  const labelFecha = (fecha: string) => {
+    const d = dayjs(fecha)
+    if (d.isSame(dayjs(), 'day')) return 'Hoy'
+    return d.format('D MMM')
+  }
+
+  return (
+    <div className="pb-4">
+      <ScreenHeader title="Movimientos" />
+
+      <div className="flex items-center gap-2 bg-app-surface border border-app-border rounded-xl h-10 px-3 mb-3">
+        <Icon name="search" className="w-4 h-4 text-app-text-faint" />
+        <input
+          value={busqueda}
+          onChange={e => setBusqueda(e.target.value)}
+          placeholder="Buscar ticker o cartera…"
+          className="flex-1 bg-transparent outline-none text-[12.5px] text-app-text placeholder:text-app-text-faint"
+        />
+      </div>
+
+      {tickerFiltro && (
+        <div className="mb-3">
+          <Chip onRemove={() => setSearchParams(p => { p.delete('ticker'); return p })}>{tickerFiltro}</Chip>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+      ) : grupos.length === 0 ? (
+        <EmptyState title="Sin movimientos" description="No hay movimientos que coincidan con el filtro." />
+      ) : (
+        grupos.map(grupo => (
+          <div key={grupo.fecha}>
+            <div className="text-[10.5px] font-bold uppercase tracking-wide text-app-text-faint mt-3.5 mb-1">{labelFecha(grupo.fecha)}</div>
+            {grupo.items.map(mov => (
+              <MovimientoRow key={mov.id} mov={mov} />
+            ))}
+          </div>
+        ))
+      )}
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 47/53: frontend/src/pages/Objetivo.tsx
+################################################################################
+
+import { useState } from 'react'
+import dayjs from 'dayjs'
+import { useInversionesContext } from '../context/InversionesContext'
+import { useObjetivoInversion } from '../hooks/useObjetivoInversion'
+import type { ObjetivoInversionPayload } from '../api'
+import { formatUSD } from '../utils'
+import ScreenHeader from '../components/layout/ScreenHeader'
+import Button from '../components/ui/Button'
+import IconButton from '../components/ui/IconButton'
+import Card from '../components/ui/Card'
+import EmptyState from '../components/ui/EmptyState'
+import AportesChart from '../components/charts/AportesChart'
+import ObjetivoModal from '../components/inversiones/ObjetivoModal'
+import { Icon } from '../components/icons/Icons'
+
+export default function Objetivo() {
+  const { carteras, carteraSeleccionada, setCarteraSeleccionada, showToast } = useInversionesContext()
+  const { objetivo, aportesHistoricos, loading, crear, editar, eliminar } = useObjetivoInversion(carteraSeleccionada)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editando, setEditando] = useState(false)
+
+  if (!carteraSeleccionada) {
+    return (
+      <div className="pb-4">
+        <ScreenHeader title="Objetivo" />
+        <EmptyState
+          title="Elegí una cartera"
+          description="Los objetivos se definen por cartera, no aplican al Consolidado."
+        />
+        <div className="flex flex-col gap-1.5 px-4">
+          {carteras.map(c => (
+            <button
+              key={c.nombre}
+              onClick={() => setCarteraSeleccionada(c.nombre)}
+              className="text-left px-3.5 py-3 rounded-xl text-[13.5px] font-semibold text-app-text bg-app-surface border border-app-border"
+            >
+              {c.nombre}
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  const handleCrear = async (payload: ObjetivoInversionPayload) => {
+    try {
+      await crear(payload)
+      showToast('Objetivo creado correctamente')
+      setModalOpen(false)
+    } catch (err: any) {
+      showToast(err?.response?.data?.detail || 'Error creando objetivo', 'error')
+    }
+  }
+
+  const handleEditar = async (payload: ObjetivoInversionPayload) => {
+    try {
+      await editar(payload)
+      showToast('Objetivo actualizado correctamente')
+      setEditando(false)
+      setModalOpen(false)
+    } catch (err: any) {
+      showToast(err?.response?.data?.detail || 'Error editando objetivo', 'error')
+    }
+  }
+
+  const handleEliminar = async () => {
+    if (!window.confirm('¿Eliminar este objetivo?')) return
+    try {
+      await eliminar()
+      showToast('Objetivo eliminado correctamente')
+    } catch (err: any) {
+      showToast(err?.response?.data?.detail || 'Error eliminando objetivo', 'error')
+    }
+  }
+
+  const progreso = objetivo ? Math.min((objetivo.valor_actual_usd / objetivo.monto_usd) * 100, 100) : 0
+
+  return (
+    <div className="pb-4">
+      <ScreenHeader title="Objetivo" />
+
+      {loading ? (
+        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+      ) : !objetivo ? (
+        <EmptyState
+          title="Esta cartera no tiene un objetivo definido"
+          action={
+            <Button
+              onClick={() => {
+                setEditando(false)
+                setModalOpen(true)
+              }}
+            >
+              Definir objetivo
+            </Button>
+          }
+        />
+      ) : (
+        <>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-[46px] h-[46px] rounded-2xl bg-app-gold-soft flex items-center justify-center text-[21px] shrink-0">{objetivo.icono}</div>
+            <div className="flex-1 min-w-0">
+              <div className="font-display text-[18px] font-semibold text-app-text truncate">{objetivo.nombre}</div>
+              <div className="text-[11.5px] text-app-text-dim">Meta al {dayjs(objetivo.fecha_limite).format('MMM YYYY')} · cartera {carteraSeleccionada}</div>
+            </div>
+            <IconButton
+              onClick={() => {
+                setEditando(true)
+                setModalOpen(true)
+              }}
+              aria-label="Editar objetivo"
+            >
+              <Icon name="edit" className="w-4 h-4" />
+            </IconButton>
+            <IconButton onClick={handleEliminar} aria-label="Eliminar objetivo" tone="danger">
+              <Icon name="trash" className="w-4 h-4" />
+            </IconButton>
+          </div>
+
+          <Card>
+            <div className="flex items-center gap-5">
+              <div
+                className="relative w-[130px] h-[130px] rounded-full shrink-0"
+                style={{ background: `conic-gradient(${objetivo.alcanzable ? '#d8b14a' : '#e2665a'} 0% ${progreso}%, #223028 ${progreso}% 100%)` }}
+              >
+                <div className="absolute inset-3.5 rounded-full bg-app-surface flex flex-col items-center justify-center">
+                  <b className="font-mono text-[21px] text-app-text tabular-nums">{progreso.toFixed(0)}%</b>
+                  <span className="text-[9px] text-app-text-dim mt-0.5">completado</span>
+                </div>
+              </div>
+              <div className="flex-1 flex flex-col gap-2.5 min-w-0">
+                <div>
+                  <b className="font-mono text-[14px] text-app-text tabular-nums block">
+                    {formatUSD(objetivo.valor_actual_usd)}
+                  </b>
+                  <span className="text-[10px] uppercase tracking-wide text-app-text-dim">de {formatUSD(objetivo.monto_usd)}</span>
+                </div>
+                <div>
+                  <b className="font-mono text-[14px] text-app-text tabular-nums block">{objetivo.meses_restantes} meses</b>
+                  <span className="text-[10px] uppercase tracking-wide text-app-text-dim">Restantes</span>
+                </div>
+                <span className={`inline-flex items-center gap-1.5 font-bold text-[11px] px-2.5 py-1.5 rounded-lg w-fit ${objetivo.alcanzable ? 'bg-app-teal-soft text-app-teal' : 'bg-app-coral-soft text-app-coral'}`}>
+                  <Icon name={objetivo.alcanzable ? 'up' : 'down'} className="w-3 h-3" />
+                  {objetivo.meses_restantes === 0 ? 'Fecha límite vencida' : objetivo.alcanzable ? 'Alcanzable' : 'En riesgo'}
+                </span>
+              </div>
+            </div>
+          </Card>
+
+          <div className="grid grid-cols-2 gap-2 my-3.5">
+            <div className="bg-app-surface border border-app-border rounded-[13px] p-2.5">
+              <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">Aporte prom./mes</div>
+              <div className="font-mono text-[15px] font-bold text-app-text tabular-nums">{formatUSD(objetivo.aporte_mensual_promedio_usd)}</div>
+            </div>
+            <div className="bg-app-surface border border-app-border rounded-[13px] p-2.5">
+              <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">Necesario/mes</div>
+              <div className={`font-mono text-[15px] font-bold tabular-nums ${objetivo.alcanzable ? 'text-app-text' : 'text-app-coral'}`}>
+                {objetivo.aporte_mensual_necesario_usd != null ? formatUSD(objetivo.aporte_mensual_necesario_usd) : '—'}
+              </div>
+            </div>
+          </div>
+
+          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">Aportes históricos</h3>
+          <Card>
+            <AportesChart aportesHistoricos={aportesHistoricos} montoObjetivo={objetivo.monto_usd} />
+          </Card>
+        </>
+      )}
+
+      <ObjetivoModal
+        open={modalOpen}
+        objetivo={editando ? objetivo : null}
+        onGuardar={editando ? handleEditar : handleCrear}
+        onCancelar={() => {
+          setModalOpen(false)
+          setEditando(false)
+        }}
+      />
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 48/53: frontend/src/pages/Posiciones.tsx
+################################################################################
+
+import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useInversionesContext } from '../context/InversionesContext'
+import type { RendimientoPorTickerItem } from '../api'
+import ScreenHeader from '../components/layout/ScreenHeader'
+import PosicionRow from '../components/inversiones/PosicionRow'
+import EmptyState from '../components/ui/EmptyState'
+import IconButton from '../components/ui/IconButton'
+import { Icon } from '../components/icons/Icons'
+
+function exportarCSV(items: RendimientoPorTickerItem[], cartera: string | null) {
+  const headers = [
+    'Ticker', 'Nombre', 'Cantidad Actual', 'Precio Promedio', 'Precio Actual',
+    'Rendimiento USD %', 'Rendimiento ARS %', 'Rendimiento ARS Real %',
+    'Valor Invertido (USD)', 'Valor Actual (USD)', 'Valor Invertido (ARS)', 'Valor Actual (ARS)',
+  ]
+  const rows = items.map(it => [
+    it.ticker, it.nombre, it.cantidad_actual, it.precio_promedio, it.precio_actual,
+    it.rendimiento_simple_usd != null ? (it.rendimiento_simple_usd * 100).toFixed(2) : '',
+    it.rendimiento_simple_ars != null ? (it.rendimiento_simple_ars * 100).toFixed(2) : '',
+    it.rendimiento_simple_ars_real != null ? (it.rendimiento_simple_ars_real * 100).toFixed(2) : '',
+    it.valor_invertido_usd, it.valor_actual_usd, it.valor_invertido_ars, it.valor_actual_ars,
+  ])
+  const csv = [headers, ...rows].map(r => r.join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  const fecha = new Date().toISOString().slice(0, 10)
+  a.download = `inversiones-rendimiento-${cartera || 'consolidado'}-${fecha}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export default function Posiciones() {
+  const navigate = useNavigate()
+  const { rendimientoPorTicker, carteraSeleccionada, monedaSeleccionada, loading } = useInversionesContext()
+  const [busqueda, setBusqueda] = useState('')
+
+  const filtrados = useMemo(() => {
+    const q = busqueda.trim().toLowerCase()
+    if (!q) return rendimientoPorTicker
+    return rendimientoPorTicker.filter(it => it.ticker.toLowerCase().includes(q) || it.nombre.toLowerCase().includes(q))
+  }, [rendimientoPorTicker, busqueda])
+
+  return (
+    <div className="pb-4">
+      <ScreenHeader title="Posiciones" onBack={() => navigate(-1)} />
+
+      <div className="flex items-center gap-2 mb-3">
+        <div className="flex-1 flex items-center gap-2 bg-app-surface border border-app-border rounded-xl h-10 px-3">
+          <Icon name="search" className="w-4 h-4 text-app-text-faint" />
+          <input
+            value={busqueda}
+            onChange={e => setBusqueda(e.target.value)}
+            placeholder="Buscar ticker o nombre…"
+            className="flex-1 bg-transparent outline-none text-[12.5px] text-app-text placeholder:text-app-text-faint"
+          />
+        </div>
+        <IconButton onClick={() => exportarCSV(filtrados, carteraSeleccionada)} aria-label="Exportar CSV" disabled={filtrados.length === 0}>
+          <Icon name="download" className="w-4 h-4" />
+        </IconButton>
+      </div>
+
+      {loading ? (
+        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+      ) : filtrados.length === 0 ? (
+        <EmptyState title="No hay posiciones activas" />
+      ) : (
+        <div>
+          {filtrados.map(item => (
+            <PosicionRow key={item.ticker} item={item} moneda={monedaSeleccionada} onClick={() => navigate(`/ticker/${encodeURIComponent(item.ticker)}`)} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 49/53: frontend/src/pages/Resumen.tsx
+################################################################################
+
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useInversionesContext } from '../context/InversionesContext'
+import { getEvolucionInversiones, type EvolucionPunto } from '../api'
+import ScreenHeader from '../components/layout/ScreenHeader'
+import HeroValorCard from '../components/inversiones/HeroValorCard'
+import KpiGrid from '../components/inversiones/KpiGrid'
+import CarterasScroll from '../components/inversiones/CarterasScroll'
+import PosicionRow from '../components/inversiones/PosicionRow'
+import EmptyState from '../components/ui/EmptyState'
+import Card from '../components/ui/Card'
+import ComparacionChart from '../components/charts/ComparacionChart'
+
+export default function Resumen() {
+  const navigate = useNavigate()
+  const { carteras, carteraSeleccionada, setCarteraSeleccionada, monedaSeleccionada, resumen, rendimientoPorTicker, loading } =
+    useInversionesContext()
+  const [evolucion, setEvolucion] = useState<EvolucionPunto[]>([])
+
+  useEffect(() => {
+    let cancelado = false
+    getEvolucionInversiones(carteraSeleccionada)
+      .then(out => {
+        if (!cancelado) setEvolucion(out.puntos)
+      })
+      .catch(() => {
+        if (!cancelado) setEvolucion([])
+      })
+    return () => {
+      cancelado = true
+    }
+  }, [carteraSeleccionada])
+
+  const topPosiciones = rendimientoPorTicker.slice(0, 5)
+
+  return (
+    <div className="pb-4">
+      <ScreenHeader title="Resumen" />
+
+      {loading ? (
+        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+      ) : (
+        <>
+          <HeroValorCard resumen={resumen} moneda={monedaSeleccionada} evolucion={evolucion} />
+          <KpiGrid resumen={resumen} moneda={monedaSeleccionada} />
+
+          <div className="flex items-center justify-between mb-2.5 mt-1">
+            <h3 className="text-[13.5px] font-bold text-app-text">Carteras</h3>
+          </div>
+          <CarterasScroll carteras={carteras} seleccionada={carteraSeleccionada} onSelect={setCarteraSeleccionada} />
+
+          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5 mt-5">Cartera vs. benchmarks (ARS)</h3>
+          <Card>
+            <ComparacionChart resumen={resumen} />
+          </Card>
+
+          <div className="flex items-center justify-between mb-1 mt-5">
+            <h3 className="text-[13.5px] font-bold text-app-text">Posiciones</h3>
+            {rendimientoPorTicker.length > 5 && (
+              <button onClick={() => navigate('/posiciones')} className="text-[11px] font-semibold text-app-text-dim">
+                Ver todas
+              </button>
+            )}
+          </div>
+          {topPosiciones.length === 0 ? (
+            <EmptyState title="Sin posiciones activas" description="Todavía no hay tenencias para esta cartera." />
+          ) : (
+            <div>
+              {topPosiciones.map(item => (
+                <PosicionRow key={item.ticker} item={item} moneda={monedaSeleccionada} onClick={() => navigate(`/ticker/${encodeURIComponent(item.ticker)}`)} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 50/53: frontend/src/pages/TickerDetalle.tsx
+################################################################################
+
+import { useEffect, useState } from 'react'
+import { useNavigate, useParams, Navigate } from 'react-router-dom'
+import { useInversionesContext } from '../context/InversionesContext'
+import { getPreciosTicker, type PrecioPunto } from '../api'
+import { formatARS, formatCantidad, formatPctRatio, formatPrecio, formatUSD } from '../utils'
+import ScreenHeader from '../components/layout/ScreenHeader'
+import Sparkline from '../components/charts/Sparkline'
+import Button from '../components/ui/Button'
+import { Icon } from '../components/icons/Icons'
+
+export default function TickerDetalle() {
+  const { ticker: tickerParam } = useParams<{ ticker: string }>()
+  const navigate = useNavigate()
+  const { rendimientoPorTicker, monedaSeleccionada, loading } = useInversionesContext()
+  const [precios, setPrecios] = useState<PrecioPunto[]>([])
+
+  const ticker = tickerParam ? decodeURIComponent(tickerParam) : ''
+  const item = rendimientoPorTicker.find(i => i.ticker === ticker)
+
+  useEffect(() => {
+    if (!ticker) return
+    let cancelado = false
+    getPreciosTicker(ticker)
+      .then(out => {
+        if (!cancelado) setPrecios(out.puntos)
+      })
+      .catch(() => {
+        if (!cancelado) setPrecios([])
+      })
+    return () => {
+      cancelado = true
+    }
+  }, [ticker])
+
+  if (loading) {
+    return (
+      <div className="pb-4">
+        <ScreenHeader title="Ticker" onBack={() => navigate(-1)} />
+        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+      </div>
+    )
+  }
+
+  if (!item) {
+    return <Navigate to="/posiciones" replace />
+  }
+
+  const esARS = monedaSeleccionada === 'ARS'
+  const formatMoneda = esARS ? formatARS : formatUSD
+  const valorInvertido = esARS ? item.valor_invertido_ars : item.valor_invertido_usd
+  const valorActual = esARS ? item.valor_actual_ars : item.valor_actual_usd
+  const rendimiento = esARS ? item.rendimiento_simple_ars : item.rendimiento_simple_usd
+  const positivo = (rendimiento ?? 0) >= 0
+
+  return (
+    <div className="pb-4">
+      <ScreenHeader title={item.ticker} onBack={() => navigate(-1)} />
+
+      <div className="flex items-center gap-3 mb-1">
+        <div className="w-[46px] h-[46px] rounded-2xl bg-app-surface-2 border border-app-border flex items-center justify-center font-mono text-[12px] font-bold text-app-text shrink-0">
+          {item.ticker.slice(0, 4)}
+        </div>
+        <div className="min-w-0">
+          <div className="font-display text-[19px] font-semibold text-app-text truncate">{item.ticker}</div>
+          <div className="text-[11.5px] text-app-text-dim truncate">{item.nombre}</div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 my-2.5">
+        {[item.tipo_instrumento, item.mercado, item.moneda, item.pais, item.sector].filter(Boolean).map(tag => (
+          <span key={tag} className="text-[10px] font-semibold text-app-text-dim bg-app-surface-2 border border-app-border px-2 py-1 rounded-[7px]">
+            {tag}
+          </span>
+        ))}
+      </div>
+
+      <div className="mt-3">
+        <div className="font-mono text-[26px] font-bold text-app-text tabular-nums">{formatPrecio(item.precio_actual)}</div>
+        {rendimiento != null && (
+          <span className={`inline-flex items-center gap-0.5 font-mono font-bold text-[12px] mt-1 tabular-nums ${positivo ? 'text-app-teal' : 'text-app-coral'}`}>
+            <Icon name={positivo ? 'up' : 'down'} className="w-3 h-3" />
+            {formatPctRatio(rendimiento)} desde promedio
+          </span>
+        )}
+        <Sparkline
+          data={precios.map(p => p.precio)}
+          color={positivo ? '#4fd1ae' : '#e2665a'}
+          className="w-full h-14 mt-2.5"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 mt-4">
+        <StatCell label="Cantidad" value={formatCantidad(item.cantidad_actual)} />
+        <StatCell label="Precio promedio" value={formatPrecio(item.precio_promedio)} />
+        <StatCell label="Invertido" value={formatMoneda(valorInvertido)} />
+        <StatCell label="Valor actual" value={formatMoneda(valorActual)} />
+        <StatCell label="Rend. simple" value={formatPctRatio(rendimiento)} tone={rendimiento == null ? undefined : positivo ? 'pos' : 'neg'} />
+        {esARS && item.rendimiento_simple_ars_real != null && (
+          <StatCell label="Rend. ARS real" value={formatPctRatio(item.rendimiento_simple_ars_real)} tone={item.rendimiento_simple_ars_real >= 0 ? 'pos' : 'neg'} />
+        )}
+      </div>
+
+      <Button variant="outline" icon={<Icon name="list" className="w-4 h-4" />} className="w-full mt-4" onClick={() => navigate(`/movimientos?ticker=${encodeURIComponent(item.ticker)}`)}>
+        Ver movimientos de {item.ticker}
+      </Button>
+    </div>
+  )
+}
+
+function StatCell({ label, value, tone }: { label: string; value: string; tone?: 'pos' | 'neg' }) {
+  return (
+    <div className="bg-app-surface border border-app-border rounded-[13px] p-2.5">
+      <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">{label}</div>
+      <div className={`font-mono text-[14.5px] font-bold tabular-nums ${tone === 'pos' ? 'text-app-teal' : tone === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>{value}</div>
+    </div>
+  )
+}
+
+
+################################################################################
+# ARCHIVO 51/53: frontend/src/utils.ts
+################################################################################
+
+export function formatARS(value: number | null | undefined): string {
+  if (value == null) return '—'
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value)
+}
+
+export function formatUSD(value: number | null | undefined): string {
+  if (value == null) return '—'
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value)
+}
+
+export function formatPct(value: number | null | undefined): string {
+  if (value == null) return '—'
+  const sign = value >= 0 ? '+' : ''
+  return `${sign}${value.toFixed(2)}%`
+}
+
+// Igual que formatPct pero recibe una razón (0.1059) en vez de un porcentaje (10.59)
+export function formatPctRatio(value: number | null | undefined): string {
+  if (value == null) return '—'
+  return formatPct(value * 100)
+}
+
+export function formatCantidad(value: number): string {
+  return value.toLocaleString('es-AR', { maximumFractionDigits: 8 })
+}
+
+export function formatPrecio(value: number): string {
+  return value.toLocaleString('es-AR', { maximumFractionDigits: 6 })
+}
+
+export const TIPO_COLORS: Record<string, string> = {
+  ingreso: '#4fd1ae',
+  egreso: '#e2665a',
+  neutro: '#8ca39b',
+}
+
+// Paleta categórica de la app ("ledger"): oro, verde azulado, acero, ciruela, salvia, coral.
+export const CHART_COLORS = [
+  '#d8b14a', '#4fd1ae', '#5b8ba0', '#9c7aa0', '#7e9c90', '#e2665a',
+  '#c9a53a', '#3fb599', '#4a7688', '#856787', '#6a877c', '#c9544a',
+]
+
+
+################################################################################
+# ARCHIVO 52/53: frontend/src/vite-env.d.ts
+################################################################################
+
+/// <reference types="vite/client" />
+
+
+################################################################################
+# ARCHIVO 53/53: frontend/vite.config.ts
+################################################################################
+
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+  },
+})
+

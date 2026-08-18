@@ -293,3 +293,49 @@ def frecuencia_positivos_negativos(retornos: list[float]) -> dict:
         "pct_negativos": round(negativos / n, 4),
         "n_obs": n,
     }
+
+
+def serie_retornos_mensuales_desde_niveles(
+    niveles: list[tuple[date, float]], boundaries: list[date]
+) -> dict[tuple[int, int], float]:
+    """Convierte una serie de niveles diarios a retornos mensuales encadenados.
+
+    Para cada mes de `boundaries`, toma el último nivel conocido (carry-forward) en cada fin de mes,
+    encadena la variación porcentual mes a mes. Si un mes no tiene dato, se omite.
+
+    Args:
+        niveles: lista de (fecha, valor) ordenada cronológicamente
+        boundaries: lista de fechas fin-de-mes (usualmente desde _fin_de_mes_range)
+
+    Returns:
+        dict[(año, mes), retorno_porcentual] — solo meses con al menos un dato anterior
+    """
+    if not niveles or not boundaries:
+        return {}
+
+    fechas = [v[0] for v in niveles]
+    puntos: list[tuple[date, float]] = []
+
+    for b in boundaries:
+        idx = _bisect_right_carry_forward(fechas, b)
+        if idx < 0:
+            continue
+        puntos.append((b, niveles[idx][1]))
+
+    resultado: dict[tuple[int, int], float] = {}
+    for i in range(1, len(puntos)):
+        d0, v0 = puntos[i - 1]
+        d1, v1 = puntos[i]
+        if v0 == 0:
+            continue
+        resultado[(d1.year, d1.month)] = v1 / v0 - 1
+    return resultado
+
+
+def _bisect_right_carry_forward(fechas: list[date], fecha_buscada: date) -> int:
+    """Busca el índice del último elemento en `fechas` que sea <= `fecha_buscada`.
+    Retorna -1 si no hay ninguno (la búsqueda está antes de todas las fechas).
+    """
+    import bisect
+    idx = bisect.bisect_right(fechas, fecha_buscada) - 1
+    return idx

@@ -7,6 +7,7 @@ import bisect
 from datetime import date
 from sqlalchemy.orm import Session
 
+from ..database import BenchmarkValor
 from . import risk_engine
 from .inversiones_analytics import (
     _movimientos_ordenados,

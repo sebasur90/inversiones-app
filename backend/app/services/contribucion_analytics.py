@@ -23,6 +23,7 @@ from .inversiones_analytics import (
     _agrupar,
     _agrupar_sobre_total,
     _clasificados_valorizados,
+    _retornos_mensuales_ticker,
     get_pnl_realizado_no_realizado,
 )
 
@@ -189,42 +190,6 @@ def get_concentracion(cartera: str | None, db: Session) -> list[dict]:
 
 # ── Correlaciones ────────────────────────────────────────────────────────────
 
-def _retornos_mensuales_ticker(
-    precios_sorted: list[tuple[date, float, str]],
-    boundaries: list[date],
-    db: Session,
-    mep_cache: dict,
-) -> dict[tuple[int, int], float]:
-    """Retornos mensuales de un ticker en USD, alineados a fin de mes, calcado de
-    `riesgo_analytics._benchmark_retornos_mensuales`: carry-forward del último precio conocido
-    en cada boundary (vía `_precio_conocido`) y encadenado de %-change mes a mes. Los boundaries
-    previos al primer precio conocido se saltan (no se rellenan con 0)."""
-    if not precios_sorted:
-        return {}
-
-    primera_fecha_precio = precios_sorted[0][0]
-    puntos: list[tuple[date, float]] = []
-    for b in boundaries:
-        if b < primera_fecha_precio:
-            continue
-        info = _precio_conocido(precios_sorted, b)
-        if info is None:
-            continue
-        _fecha_precio, precio, moneda = info
-        usd = _to_usd(precio, moneda, b, db, mep_cache)
-        if usd is not None:
-            puntos.append((b, usd))
-
-    resultado: dict[tuple[int, int], float] = {}
-    for i in range(1, len(puntos)):
-        d0, v0 = puntos[i - 1]
-        d1, v1 = puntos[i]
-        if v0 <= EPS:
-            continue
-        resultado[(d1.year, d1.month)] = v1 / v0 - 1
-    return resultado
-
-
 def get_correlaciones(cartera: str | None, db: Session, universo: str = "tenencias") -> dict:
     vacio = {"universo": universo, "n_tickers": 0, "tickers": [], "matriz": [], "pares": [], "advertencia_historial_corto": False}
 
@@ -252,7 +217,7 @@ def get_correlaciones(cartera: str | None, db: Session, universo: str = "tenenci
     boundaries = _fin_de_mes_range(min(fechas_iniciales), hoy)
 
     series_por_ticker = {
-        t: _retornos_mensuales_ticker(precios_por_ticker.get(t, []), boundaries, db, mep_cache)
+        t: _retornos_mensuales_ticker(precios_por_ticker.get(t, []), boundaries, "USD", db, mep_cache)
         for t in tickers
     }
 

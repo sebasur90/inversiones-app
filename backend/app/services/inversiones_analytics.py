@@ -48,6 +48,81 @@ def _convertir(monto: float, moneda_origen: str, moneda_destino: str, fecha: dat
         mep = _mep_sheet(fecha, db, mep_cache)
         if not mep:
             return None
+
+
+def _flujos_cashflow(movs: list[MovimientoInversion], monto_fn) -> list[tuple[date, float]]:
+    """Extrae flujos de caja de una lista de movimientos usando una función para obtener montos.
+
+    Convención de signos: compra → -monto (cash out), venta/amortizacion/ingresos → +monto (cash in).
+    Usada para XIRR y para oportunidad de costo (aportes/retiros ponderados por fecha).
+
+    Args:
+        movs: lista de MovimientoInversion ordenados por fecha
+        monto_fn: función callable(MovimientoInversion) -> float | None para obtener monto
+                  (ya contabiliza conversión de moneda / deflactación si aplica)
+
+    Returns:
+        lista de (fecha, monto) con signos ya aplicados
+    """
+    flujos: list[tuple[date, float]] = []
+    for mov in movs:
+        monto = monto_fn(mov)
+        if monto is None:
+            continue
+        if mov.tipo_movimiento == "compra":
+            flujos.append((mov.fecha, -monto))
+        elif mov.tipo_movimiento in ("venta", "amortizacion") or mov.tipo_movimiento in TIPOS_INGRESO:
+            flujos.append((mov.fecha, monto))
+    return flujos
+
+
+def _retornos_mensuales_ticker(
+    precios_sorted: list[tuple[date, float, str]],
+    boundaries: list[date],
+    moneda_destino: str,
+    db: Session,
+    mep_cache: dict,
+) -> dict[tuple[int, int], float]:
+    """Retornos mensuales de un ticker en una moneda destino, alineados a fin de mes.
+
+    Carry-forward del último precio conocido en cada boundary (vía `_precio_conocido`),
+    convierte a la moneda destino, y encadena %-change mes a mes. Los boundaries previos
+    al primer precio conocido se saltan.
+
+    Args:
+        precios_sorted: lista de (fecha, precio_nominal, moneda_nativa) ordenada por fecha
+        boundaries: lista de fechas fin-de-mes (usualmente desde _fin_de_mes_range)
+        moneda_destino: moneda a convertir ("USD" o "ARS")
+        db: sesión SQLAlchemy
+        mep_cache: caché de MEP para conversiones
+
+    Returns:
+        dict[(año, mes), retorno_porcentual] — solo meses con al menos un dato anterior
+    """
+    if not precios_sorted:
+        return {}
+
+    primera_fecha_precio = precios_sorted[0][0]
+    puntos: list[tuple[date, float]] = []
+    for b in boundaries:
+        if b < primera_fecha_precio:
+            continue
+        info = _precio_conocido(precios_sorted, b)
+        if info is None:
+            continue
+        _fecha_precio, precio, moneda = info
+        convertido = _convertir(precio, moneda, moneda_destino, b, db, mep_cache)
+        if convertido is not None:
+            puntos.append((b, convertido))
+
+    resultado: dict[tuple[int, int], float] = {}
+    for i in range(1, len(puntos)):
+        d0, v0 = puntos[i - 1]
+        d1, v1 = puntos[i]
+        if v0 <= EPS:
+            continue
+        resultado[(d1.year, d1.month)] = v1 / v0 - 1
+    return resultado
         return monto * mep
     return None
 
@@ -361,7 +436,6 @@ def _resumen_sobre_movs(movs: list[MovimientoInversion], db: Session) -> dict:
     total_invertido_usd = 0.0
     ingresos_recibidos_usd = 0.0
     hubo_compra = False
-    flujos_xirr_usd: list[tuple[date, float]] = []
 
     # === ARS nominal y real ===
     total_invertido_ars = 0.0
@@ -370,6 +444,10 @@ def _resumen_sobre_movs(movs: list[MovimientoInversion], db: Session) -> dict:
     ingresos_recibidos_ars_real = 0.0
     tiene_cer_faltante = False
 
+    # Construir flujos de caja (para XIRR después)
+    flujos_xirr_usd = _flujos_cashflow(movs, lambda mov: _monto_usd(mov, db, mep_cache))
+
+    # Procesar movimientos para acumular totales de invertido/ingresos
     for mov in movs:
         monto_usd = _monto_usd(mov, db, mep_cache)
         if monto_usd is None:
@@ -383,27 +461,23 @@ def _resumen_sobre_movs(movs: list[MovimientoInversion], db: Session) -> dict:
         if mov.tipo_movimiento == "compra":
             total_invertido_usd += monto_usd
             hubo_compra = True
-            flujos_xirr_usd.append((mov.fecha, -monto_usd))
             if monto_ars is not None:
                 total_invertido_ars += monto_ars
             if monto_ars_real is not None:
                 total_invertido_ars_real += monto_ars_real
         elif mov.tipo_movimiento == "venta":
             total_invertido_usd -= monto_usd
-            flujos_xirr_usd.append((mov.fecha, monto_usd))
             if monto_ars is not None:
                 total_invertido_ars -= monto_ars
             if monto_ars_real is not None:
                 total_invertido_ars_real -= monto_ars_real
         elif mov.tipo_movimiento in TIPOS_INGRESO:
             ingresos_recibidos_usd += monto_usd
-            flujos_xirr_usd.append((mov.fecha, monto_usd))
             if monto_ars is not None:
                 ingresos_recibidos_ars += monto_ars
             if monto_ars_real is not None:
                 ingresos_recibidos_ars_real += monto_ars_real
         elif mov.tipo_movimiento == "amortizacion":
-            flujos_xirr_usd.append((mov.fecha, monto_usd))
             if monto_ars is not None:
                 pass  # No afecta invertido/ingresos en amortización
 
@@ -438,19 +512,7 @@ def _resumen_sobre_movs(movs: list[MovimientoInversion], db: Session) -> dict:
 
     xirr_ars = None
     if hubo_compra:
-        flujos_xirr_ars: list[tuple[date, float]] = []
-        for mov in movs:
-            monto_ars = _monto_ars(mov, db, mep_cache)
-            if monto_ars is None:
-                continue
-            if mov.tipo_movimiento == "compra":
-                flujos_xirr_ars.append((mov.fecha, -monto_ars))
-            elif mov.tipo_movimiento == "venta":
-                flujos_xirr_ars.append((mov.fecha, monto_ars))
-            elif mov.tipo_movimiento in TIPOS_INGRESO:
-                flujos_xirr_ars.append((mov.fecha, monto_ars))
-            elif mov.tipo_movimiento == "amortizacion":
-                flujos_xirr_ars.append((mov.fecha, monto_ars))
+        flujos_xirr_ars = _flujos_cashflow(movs, lambda mov: _monto_ars(mov, db, mep_cache))
         flujos_xirr_ars.append((hoy, valor_actual_ars))
         xirr_ars = _calcular_xirr(flujos_xirr_ars)
 
