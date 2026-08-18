@@ -12,5 +12,8 @@ google-service-account.json
 backend/data/google-service-account.json
 **/credentials/
 CREDENTIALS.md
+.env
 .env.local
 .env.*.local
+.env.corporate
+.env.example
