@@ -610,3 +610,72 @@ class DescomposicionFxPosicionItem(BaseModel):
 
 class DescomposicionFxPosicionOut(BaseModel):
     posiciones: list[DescomposicionFxPosicionItem]
+
+
+# --- Análisis profundo por ticker ---
+
+class TickerPositionOut(InversionesResumen):
+    """Resumen + metadata de posición por ticker."""
+    ticker: str
+    nombre: str
+    tipo_instrumento: str
+    mercado: str
+    moneda: str
+    pais: Optional[str] = None
+    sector: Optional[str] = None
+    cantidad_actual: float
+    precio_promedio: float
+    precio_actual: Optional[float] = None
+    primera_fecha_movimiento: Optional[date] = None
+    ultima_fecha_movimiento: Optional[date] = None
+    posicion_cerrada: bool
+    objetivo_modo: Optional[str] = None
+    objetivo_valor: Optional[float] = None
+    precio_objetivo: Optional[float] = None
+    pct_a_objetivo: Optional[float] = None
+    objetivo_alcanzado: Optional[bool] = None
+    stop_loss_modo: Optional[str] = None
+    stop_loss_valor: Optional[float] = None
+    precio_stop_loss: Optional[float] = None
+    pct_a_stop_loss: Optional[float] = None
+    stop_loss_disparado: Optional[bool] = None
+
+
+class TickerPerformanceOut(PnlPorTickerItem):
+    """PnL + comisiones por ticker."""
+    comisiones_usd: float
+    comisiones_ars: float
+    precio_actual_faltante: bool = False
+
+
+class TickerAnalysisOut(BaseModel):
+    """Response del endpoint /ticker/{ticker}/analysis (eager)."""
+    position: TickerPositionOut
+    performance: TickerPerformanceOut
+
+
+class TickerHistoricoPunto(BaseModel):
+    fecha: date
+    precio_nominal: float
+    precio_usd: Optional[float] = None
+    precio_cer: Optional[float] = None
+    valor_posicion_usd: Optional[float] = None
+    valor_posicion_ars: Optional[float] = None
+    rendimiento_acumulado_pct: Optional[float] = None
+
+
+class TickerHistoricoOut(BaseModel):
+    """Response del endpoint /ticker/{ticker}/historico (lazy)."""
+    ticker: str
+    moneda: str
+    puntos: list[TickerHistoricoPunto]
+
+
+class TickerRiesgoOut(RiesgoOut):
+    """Response del endpoint /ticker/{ticker}/riesgo (lazy). Reusa RiesgoOut tal cual."""
+    pass
+
+
+class TickerPerformanceRelativaOut(PerformanceRelativaOut):
+    """Response del endpoint /ticker/{ticker}/performance-relativa (lazy). Reusa PerformanceRelativaOut tal cual."""
+    pass

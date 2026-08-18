@@ -32,6 +32,12 @@ from ..schemas import (
     DiagnosticoOut,
     DescomposicionFxOut,
     DescomposicionFxPosicionOut,
+    TickerPositionOut,
+    TickerPerformanceOut,
+    TickerAnalysisOut,
+    TickerHistoricoOut,
+    TickerRiesgoOut,
+    TickerPerformanceRelativaOut,
 )
 from ..services.sheets_client import SheetsClientError
 from ..services.inversiones_sync import sync_from_sheet
@@ -60,6 +66,13 @@ from ..services.diagnostico_analytics import get_diagnostico
 from ..services.fx_decomposition_analytics import (
     get_descomposicion_fx,
     get_descomposicion_fx_por_posicion,
+)
+from ..services.ticker_analytics import (
+    get_ticker_position,
+    get_ticker_performance,
+    get_ticker_riesgo,
+    get_ticker_performance_relativa,
+    get_ticker_historico,
 )
 
 router = APIRouter(prefix="/api/inversiones", tags=["inversiones"])
@@ -391,3 +404,69 @@ def descomposicion_fx_por_posicion_consolidado(
 def calidad_datos(db: Session = Depends(get_db)):
     """Obtiene el estado de calidad de datos del último sync."""
     return get_calidad_datos(db)
+
+
+# ── Análisis profundo por ticker ──────────────────────────────────────────────
+
+def _validar_ticker(ticker: str, db: Session) -> None:
+    existe = db.query(InstrumentoInversion).filter(InstrumentoInversion.ticker == ticker).first()
+    if not existe:
+        raise HTTPException(status_code=404, detail=f"Ticker '{ticker}' no encontrado")
+
+
+@router.get("/ticker/{ticker}/analysis", response_model=TickerAnalysisOut)
+def ticker_analysis(ticker: str, cartera: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    """Análisis profundo: position + performance (eager, barato)."""
+    _validar_ticker(ticker, db)
+    if cartera is not None:
+        _validar_cartera(cartera, db)
+    return {
+        "position": get_ticker_position(ticker, cartera, db),
+        "performance": get_ticker_performance(ticker, cartera, db),
+    }
+
+
+@router.get("/ticker/{ticker}/riesgo", response_model=TickerRiesgoOut)
+def ticker_riesgo(
+    ticker: str,
+    cartera: Optional[str] = Query(None),
+    moneda: str = Query("usd"),
+    benchmark: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Riesgo y metrics vs benchmark por ticker (lazy)."""
+    _validar_ticker(ticker, db)
+    if cartera is not None:
+        _validar_cartera(cartera, db)
+    _validar_moneda(moneda)
+    return get_ticker_riesgo(ticker, cartera, moneda, benchmark, db)
+
+
+@router.get("/ticker/{ticker}/performance-relativa", response_model=TickerPerformanceRelativaOut)
+def ticker_performance_relativa(
+    ticker: str,
+    cartera: Optional[str] = Query(None),
+    moneda: str = Query("usd"),
+    benchmark: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Performance relativa vs benchmark por ticker (lazy)."""
+    _validar_ticker(ticker, db)
+    if cartera is not None:
+        _validar_cartera(cartera, db)
+    _validar_moneda(moneda)
+    return get_ticker_performance_relativa(ticker, cartera, moneda, benchmark, db)
+
+
+@router.get("/ticker/{ticker}/historico", response_model=TickerHistoricoOut)
+def ticker_historico(
+    ticker: str,
+    cartera: Optional[str] = Query(None),
+    desde: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Serie histórica: precio + valor de posición + rendimiento acumulado (lazy)."""
+    _validar_ticker(ticker, db)
+    if cartera is not None:
+        _validar_cartera(cartera, db)
+    return get_ticker_historico(ticker, cartera, desde, db)

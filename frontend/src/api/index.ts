@@ -713,3 +713,73 @@ export const getDescomposicionFx = (cartera: string | null, desde?: string) =>
 
 export const getDescomposicionFxPorPosicion = (cartera: string | null) =>
   api.get<DescomposicionFxPosicionOut>(`${carteraPath(cartera)}/descomposicion-fx-por-posicion`).then(r => r.data)
+
+// --- Análisis profundo por ticker ---
+
+export interface TickerPositionOut extends InversionesResumen {
+  ticker: string
+  nombre: string
+  tipo_instrumento: string
+  mercado: string
+  moneda: string
+  pais: string | null
+  sector: string | null
+  cantidad_actual: number
+  precio_promedio: number
+  precio_actual: number | null
+  primera_fecha_movimiento: string | null
+  ultima_fecha_movimiento: string | null
+  posicion_cerrada: boolean
+  objetivo_modo: string | null
+  objetivo_valor: number | null
+  precio_objetivo: number | null
+  pct_a_objetivo: number | null
+  objetivo_alcanzado: boolean | null
+  stop_loss_modo: string | null
+  stop_loss_valor: number | null
+  precio_stop_loss: number | null
+  pct_a_stop_loss: number | null
+  stop_loss_disparado: boolean | null
+}
+
+export interface TickerPerformanceOut extends PnlPorTickerItem {
+  comisiones_usd: number
+  comisiones_ars: number
+  precio_actual_faltante: boolean
+}
+
+export interface TickerAnalysisOut {
+  position: TickerPositionOut
+  performance: TickerPerformanceOut
+}
+
+export interface TickerHistoricoPunto {
+  fecha: string
+  precio_nominal: number
+  precio_usd: number | null
+  precio_cer: number | null
+  valor_posicion_usd: number | null
+  valor_posicion_ars: number | null
+  rendimiento_acumulado_pct: number | null
+}
+
+export interface TickerHistoricoOut {
+  ticker: string
+  moneda: string
+  puntos: TickerHistoricoPunto[]
+}
+
+export type TickerRiesgoOut = RiesgoOut
+export type TickerPerformanceRelativaOut = PerformanceRelativaOut
+
+export const getAnalisisTicker = (ticker: string, cartera: string | null = null) =>
+  api.get<TickerAnalysisOut>(`/inversiones/ticker/${encodeURIComponent(ticker)}/analysis`, { params: cartera ? { cartera } : undefined }).then(r => r.data)
+
+export const getRiesgoTicker = (ticker: string, cartera: string | null = null, moneda: MonedaRiesgo = 'usd', benchmark: string | null = null) =>
+  api.get<TickerRiesgoOut>(`/inversiones/ticker/${encodeURIComponent(ticker)}/riesgo`, { params: { ...(cartera && { cartera }), moneda, ...(benchmark && { benchmark }) } }).then(r => r.data)
+
+export const getHistoricoTicker = (ticker: string, cartera: string | null = null, desde?: string) =>
+  api.get<TickerHistoricoOut>(`/inversiones/ticker/${encodeURIComponent(ticker)}/historico`, { params: { ...(cartera && { cartera }), ...(desde && { desde }) } }).then(r => r.data)
+
+export const getPerformanceRelativaTicker = (ticker: string, cartera: string | null = null, moneda: MonedaRiesgo = 'usd', benchmark: string | null = null, desde?: string) =>
+  api.get<TickerPerformanceRelativaOut>(`/inversiones/ticker/${encodeURIComponent(ticker)}/performance-relativa`, { params: { ...(cartera && { cartera }), moneda, ...(benchmark && { benchmark }), ...(desde && { desde }) } }).then(r => r.data)

@@ -334,6 +334,10 @@ def get_carteras(db: Session) -> list[str]:
 
 def get_resumen(cartera: str | None, db: Session) -> dict:
     movs = _movimientos_ordenados(db, cartera)
+    return _resumen_sobre_movs(movs, db)
+
+
+def _resumen_sobre_movs(movs: list[MovimientoInversion], db: Session) -> dict:
     precios_por_ticker = _precios_por_ticker(db)
     mep_cache: dict = {}
     cer_cache: dict = {}

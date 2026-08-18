@@ -95,6 +95,14 @@ def get_performance_relativa(cartera: str | None, moneda: str, benchmark: str | 
         raise ValueError(f"moneda inválida: {moneda}")
 
     movs = _movimientos_ordenados(db, cartera)
+    return _performance_relativa_sobre_movs(movs, moneda, benchmark, desde, db)
+
+
+def _performance_relativa_sobre_movs(movs: list, moneda: str, benchmark: str | None, desde: date | None, db: Session) -> dict:
+    """Calcula performance relativa sobre una lista de movimientos ya filtrada."""
+    if moneda not in MONEDAS_VALIDAS:
+        raise ValueError(f"moneda inválida: {moneda}")
+
     precios_por_ticker = _precios_por_ticker(db)
     mep_cache: dict = {}
     cer_cache: dict = {}
