@@ -102,21 +102,46 @@ export default function Simulador() {
   // Guardar escenario
   const handleGuardarEscenario = async (escenarioIndex: number) => {
     const esc = escenarios[escenarioIndex]
-    if (!esc.parametros) return
+    if (!esc.parametros) {
+      setError('Configura los parámetros antes de guardar')
+      return
+    }
 
     try {
       const nombre = esc.nombre || `Escenario ${new Date().toLocaleString()}`
+      // Asegurar que todos los parámetros requeridos estén presentes
+      const parametrosCompletos: EscenarioParamsIn = {
+        horizonte_meses: esc.parametros.horizonte_meses || 60,
+        variacion_dolar_pct: esc.parametros.variacion_dolar_pct ?? 0,
+        variacion_por_instrumento: esc.parametros.variacion_por_instrumento || {},
+        variacion_por_defecto_pct: esc.parametros.variacion_por_defecto_pct ?? 0,
+        aporte_mensual_usd: esc.parametros.aporte_mensual_usd ?? 0,
+        crecimiento_aporte_anual_pct: esc.parametros.crecimiento_aporte_anual_pct ?? 0,
+        retiro_mensual_usd: esc.parametros.retiro_mensual_usd ?? 0,
+        modo_dividendos: esc.parametros.modo_dividendos || 'reinvertir_total',
+        dividend_yield_anual_pct: esc.parametros.dividend_yield_anual_pct ?? 0,
+        pct_dividendo_reinvertido: esc.parametros.pct_dividendo_reinvertido ?? null,
+        comision_pct: esc.parametros.comision_pct ?? 0,
+        inflacion_anual_pct: esc.parametros.inflacion_anual_pct ?? null,
+      }
       await guardarEscenario({
         cartera: carteraSeleccionada,
         nombre,
         tipo_preset: esc.tipo_preset,
-        parametros: esc.parametros,
+        parametros: parametrosCompletos,
       })
       // Recargar lista
       const saved = await listarEscenarios(carteraSeleccionada)
       setEscenariosSaved(saved)
+      setError(null) // Limpiar error al éxito
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Error al guardar')
+      let mensajeError = 'Error al guardar'
+      if (err?.response?.data?.detail) {
+        mensajeError = typeof err.response.data.detail === 'string'
+          ? err.response.data.detail
+          : JSON.stringify(err.response.data.detail)
+      }
+      setError(mensajeError)
     }
   }
 
