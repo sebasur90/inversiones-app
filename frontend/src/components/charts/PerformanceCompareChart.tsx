@@ -8,59 +8,53 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
-import { Paper, useMantineTheme } from '@mantine/core'
 
 interface PerformanceCompareChartProps {
   serie: Record<string, any>[]
 }
 
 const COLORS = [
-  '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
-  '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
+  '#4fd1ae', '#d8b14a', '#e2665a', '#5b8ba0', '#9c7aa0', '#7e9c90',
+  '#3fb599', '#c9a53a', '#c9544a', '#4a7688',
 ]
 
 export default function PerformanceCompareChart({ serie }: PerformanceCompareChartProps) {
-  const theme = useMantineTheme()
-
   if (!serie || serie.length === 0) {
     return (
-      <Paper p="xl" style={{ textAlign: 'center', color: theme.colors.gray[6] }}>
+      <div className="bg-app-surface border border-app-border rounded-lg p-4 text-center text-app-text-dim">
         No hay datos para mostrar
-      </Paper>
+      </div>
     )
   }
 
-  // Extraer keys de todas las fuentes (excluyendo 'fecha')
   const fuentes = serie.length > 0
     ? Object.keys(serie[0]).filter(k => k !== 'fecha')
     : []
 
   return (
-    <ResponsiveContainer width="100%" height={400}>
+    <ResponsiveContainer width="100%" height={300}>
       <LineChart
         data={serie}
         margin={{ top: 5, right: 30, left: 0, bottom: 5 }}
       >
-        <CartesianGrid strokeDasharray="3 3" />
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(139, 153, 166, 0.2)" />
         <XAxis
           dataKey="fecha"
-          tick={{ fontSize: 12 }}
-          style={{ color: theme.colors.gray[6] }}
+          tick={{ fontSize: 11, fill: 'rgba(139, 153, 166, 0.6)' }}
         />
         <YAxis
-          tick={{ fontSize: 12 }}
-          style={{ color: theme.colors.gray[6] }}
+          tick={{ fontSize: 11, fill: 'rgba(139, 153, 166, 0.6)' }}
         />
         <Tooltip
           contentStyle={{
-            backgroundColor: theme.colors.dark[7],
-            border: `1px solid ${theme.colors.gray[7]}`,
-            borderRadius: theme.radius.sm,
+            backgroundColor: 'rgba(28, 38, 51, 0.95)',
+            border: '1px solid rgba(139, 153, 166, 0.3)',
+            borderRadius: '8px',
           }}
-          labelStyle={{ color: theme.colors.gray[3] }}
-          formatter={(value) => value ? value.toFixed(2) : '—'}
+          labelStyle={{ color: 'rgba(139, 153, 166, 0.8)' }}
+          formatter={(value: any) => typeof value === 'number' ? value.toFixed(2) : String(value ?? '—')}
         />
-        <Legend />
+        <Legend wrapperStyle={{ paddingTop: '16px' }} />
         {fuentes.map((fuente, idx) => (
           <Line
             key={fuente}
@@ -70,6 +64,7 @@ export default function PerformanceCompareChart({ serie }: PerformanceCompareCha
             dot={false}
             isAnimationActive={false}
             connectNulls
+            strokeWidth={2}
           />
         ))}
       </LineChart>
