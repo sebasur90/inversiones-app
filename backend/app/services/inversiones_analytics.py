@@ -123,8 +123,6 @@ def _retornos_mensuales_ticker(
             continue
         resultado[(d1.year, d1.month)] = v1 / v0 - 1
     return resultado
-        return monto * mep
-    return None
 
 
 def _cer_indice(fecha: date, db: Session, cache: dict) -> float | None:
