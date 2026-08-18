@@ -41,7 +41,7 @@ def construir_snapshot(
 
     # Obtener total invertido
     resumen = get_resumen(cartera, db)
-    total_invertido = resumen.total_invertido_usd
+    total_invertido = resumen.get("total_invertido_usd", 0) if isinstance(resumen, dict) else resumen.total_invertido_usd
 
     # Obtener MEP actual
     mep_actual = get_mep_actual(db)
