@@ -20,11 +20,27 @@ import EscenarioComparacionTable from '../components/inversiones/EscenarioCompar
 export default function Simulador() {
   const { carteraSeleccionada } = useInversionesContext()
 
+  // Estado inicial con parámetros completos por defecto
+  const defaultParams: EscenarioParamsIn = {
+    horizonte_meses: 60,
+    variacion_dolar_pct: 0,
+    variacion_por_instrumento: {},
+    variacion_por_defecto_pct: 0,
+    aporte_mensual_usd: 0,
+    crecimiento_aporte_anual_pct: 0,
+    retiro_mensual_usd: 0,
+    modo_dividendos: 'reinvertir_total',
+    dividend_yield_anual_pct: 0,
+    pct_dividendo_reinvertido: null,
+    comision_pct: 0,
+    inflacion_anual_pct: null,
+  }
+
   // Estados
   const [escenarios, setEscenarios] = useState<EscenarioSimulacionItem[]>([
-    { tipo_preset: 'personalizado', nombre: 'Base', parametros: undefined },
-    { tipo_preset: 'alcista', nombre: 'Alcista', parametros: undefined },
-    { tipo_preset: 'bajista', nombre: 'Bajista', parametros: undefined },
+    { tipo_preset: 'personalizado', nombre: 'Base', parametros: defaultParams },
+    { tipo_preset: 'alcista', nombre: 'Alcista', parametros: defaultParams },
+    { tipo_preset: 'bajista', nombre: 'Bajista', parametros: defaultParams },
   ])
   const [resultado, setResultado] = useState<EscenarioSimulacionOut | null>(null)
   const [cargando, setCargando] = useState(false)
