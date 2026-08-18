@@ -283,7 +283,7 @@ def get_ticker_performance_relativa(
     """
     movs = _movimientos_ticker(db, cartera, ticker)
     desde = movs[0].fecha if movs else None
-    return _performance_relativa_sobre_movs(movs, moneda, benchmark, desde, db)
+    return _performance_relativa_sobre_movs(movs, cartera, moneda, benchmark, desde, db)
 
 
 def get_ticker_historico(ticker: str, cartera: Optional[str], desde: Optional[date], db: Session) -> dict:

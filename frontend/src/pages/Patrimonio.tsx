@@ -4,12 +4,14 @@ import {
   ComposedChart, Area, Line, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
 } from 'recharts'
 import { useInversionesContext } from '../context/InversionesContext'
-import { getEvolucionInversiones, type EvolucionPunto, type MovimientoInversion } from '../api'
+import { getEvolucionInversiones, getPatrimonioHistory, getPatrimonioSummary, type EvolucionPunto, type MovimientoInversion, type PatrimonioPunto, type PatrimonioSummaryOut } from '../api'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import EmptyState from '../components/ui/EmptyState'
 import Modal from '../components/ui/Modal'
 import { Icon } from '../components/icons/Icons'
+import MetricCard from '../components/ui/MetricCard'
+import PatrimonioMensualTable from '../components/tables/PatrimonioMensualTable'
 import { calcularDesde, type PeriodoEvolucion } from '../utils'
 
 type Periodo = PeriodoEvolucion
@@ -28,9 +30,10 @@ const OPCIONES_PERIODO: { value: Periodo; label: string }[] = [
   { value: '1M', label: '1M' },
   { value: '3M', label: '3M' },
   { value: '6M', label: '6M' },
-  { value: '1Y', label: '1Y' },
+  { value: '1Y', label: '1A' },
+  { value: '3Y', label: '3A' },
   { value: 'YTD', label: 'YTD' },
-  { value: 'ALL', label: 'ALL' },
+  { value: 'ALL', label: 'Todo' },
 ]
 
 const TIPO_LABELS: Record<string, string> = {
@@ -137,6 +140,8 @@ export default function Patrimonio() {
   const [vista, setVista] = useState<Vista>('ars')
   const [puntos, setPuntos] = useState<EvolucionPunto[]>([])
   const [puntosAll, setPuntosAll] = useState<EvolucionPunto[]>([])
+  const [patrimonioHistoria, setPatrimonioHistoria] = useState<PatrimonioPunto[]>([])
+  const [patrimonioSummary, setPatrimonioSummary] = useState<PatrimonioSummaryOut | null>(null)
   const [loading, setLoading] = useState(true)
   const [eventoSeleccionado, setEventoSeleccionado] = useState<EventoPunto | null>(null)
 
@@ -172,14 +177,43 @@ export default function Patrimonio() {
     }
   }, [carteraSeleccionada])
 
+  useEffect(() => {
+    let cancelado = false
+    getPatrimonioSummary(carteraSeleccionada, calcularDesde(periodo))
+      .then(data => {
+        if (!cancelado) setPatrimonioSummary(data)
+      })
+      .catch(() => {
+        if (!cancelado) setPatrimonioSummary(null)
+      })
+    return () => {
+      cancelado = true
+    }
+  }, [carteraSeleccionada, periodo])
+
+  useEffect(() => {
+    let cancelado = false
+    getPatrimonioHistory(carteraSeleccionada, undefined)
+      .then(data => {
+        if (!cancelado) setPatrimonioHistoria(data.puntos)
+      })
+      .catch(() => {
+        if (!cancelado) setPatrimonioHistoria([])
+      })
+    return () => {
+      cancelado = true
+    }
+  }, [carteraSeleccionada])
+
   const esUSD = vista === 'usd'
-  const datosGrafico = puntos
+  type DatoGrafico = { fecha: string; valor: number; capitalAportado: number | null }
+  const datosGrafico: DatoGrafico[] = puntos
     .map(p => ({
       fecha: p.fecha,
       valor: valorPorVista(p, vista),
       capitalAportado: capitalPorVista(p, vista),
     }))
-    .filter(p => p.valor != null) as { fecha: string; valor: number; capitalAportado: number | null }[]
+    .filter((p): p is DatoGrafico => p.valor != null)
 
   const primerPunto = datosGrafico.length > 0 ? datosGrafico[0] : undefined
   const ultimoPunto = datosGrafico.length > 0 ? datosGrafico[datosGrafico.length - 1] : undefined
@@ -256,22 +290,34 @@ export default function Patrimonio() {
       </div>
 
       {ultimoPunto && (
-        <div className="flex items-start justify-between mb-3">
-          <div>
-            <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">Valor actual</div>
-            <div className="font-mono font-bold text-[22px] text-app-text tabular-nums">
-              {formatCompact(ultimoPunto.valor, esUSD)}
-            </div>
-          </div>
-          {deltaAbs != null && variacionPct != null && (
-            <div className="text-right shrink-0 ml-4">
-              <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">Variación del período</div>
-              <div className={`font-mono font-bold text-[15px] tabular-nums ${variacionPct >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
-                {variacionPct >= 0 ? '+' : ''}{formatCompact(deltaAbs, esUSD)} ({variacionPct >= 0 ? '+' : ''}{variacionPct.toFixed(1)}%)
+        <>
+          <div className="flex items-start justify-between mb-3">
+            <div>
+              <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">Valor actual</div>
+              <div className="font-mono font-bold text-[22px] text-app-text tabular-nums">
+                {formatCompact(ultimoPunto.valor, esUSD)}
               </div>
             </div>
-          )}
-        </div>
+            {deltaAbs != null && variacionPct != null && (
+              <div className="text-right shrink-0 ml-4">
+                <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">Variación del período</div>
+                <div className={`font-mono font-bold text-[15px] tabular-nums ${variacionPct >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
+                  {variacionPct >= 0 ? '+' : ''}{formatCompact(deltaAbs, esUSD)} ({variacionPct >= 0 ? '+' : ''}{variacionPct.toFixed(1)}%)
+                </div>
+              </div>
+            )}
+          </div>
+          {(() => {
+            const valor = ultimoPunto?.valor ?? null
+            const capital = ultimoPunto?.capitalAportado ?? null
+            const ganancia = valor !== null && capital !== null ? valor - capital : null
+            return ganancia !== null ? (
+              <div className="text-[11px] text-app-text-dim mb-3">
+                Ganancia: <span className={ganancia >= 0 ? 'text-app-teal' : 'text-app-coral'}>{formatCompact(ganancia, esUSD)}</span>
+              </div>
+            ) : null
+          })()}
+        </>
       )}
 
       <div className="flex items-center gap-4 mb-2">
@@ -385,6 +431,71 @@ export default function Patrimonio() {
               </div>
             ))}
           </div>
+        </>
+      )}
+
+      {patrimonioSummary && (
+        <>
+          <div className="mt-6 mb-4">
+            <div className="text-[10px] text-app-text-faint uppercase tracking-wide font-semibold mb-2">Máximo histórico y drawdown</div>
+            <div className="grid grid-cols-2 gap-2">
+              <MetricCard
+                label="Máximo histórico"
+                infoTerm="drawdown"
+                value={formatCompact(vista === 'usd' ? (patrimonioSummary.maximo.valor_usd ?? 0) : (patrimonioSummary.maximo.valor_ars ?? 0), esUSD)}
+                insuficiente={false}
+              />
+              <MetricCard
+                label="Drawdown nominal"
+                infoTerm="drawdown"
+                value={((vista === 'usd' ? (patrimonioSummary.maximo.drawdown_usd ?? 0) : (patrimonioSummary.maximo.drawdown_ars ?? 0)) * 100).toFixed(1) + '%'}
+                insuficiente={false}
+                tone={(vista === 'usd' ? (patrimonioSummary.maximo.drawdown_usd ?? 0) : (patrimonioSummary.maximo.drawdown_ars ?? 0)) > 0.1 ? 'text-app-coral' : 'text-app-teal'}
+              />
+            </div>
+          </div>
+
+          <div className="mt-6 mb-4">
+            <div className="text-[10px] text-app-text-faint uppercase tracking-wide font-semibold mb-2">Descomposición del período</div>
+            <div className="space-y-2 text-[11px]">
+              <div className="flex justify-between">
+                <span className="text-app-text-dim">Aportes:</span>
+                <span className="text-app-text font-mono">{formatCompact(vista === 'usd' ? patrimonioSummary.descomposicion.aportes_usd : patrimonioSummary.descomposicion.aportes_ars, esUSD)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-app-text-dim">Rendimiento:</span>
+                <span className={`font-mono ${(vista === 'usd' ? patrimonioSummary.descomposicion.rendimiento_usd : patrimonioSummary.descomposicion.rendimiento_ars) >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
+                  {formatCompact(vista === 'usd' ? patrimonioSummary.descomposicion.rendimiento_usd : patrimonioSummary.descomposicion.rendimiento_ars, esUSD)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-app-text-dim">Dividendos:</span>
+                <span className="text-app-text font-mono">{formatCompact(vista === 'usd' ? patrimonioSummary.descomposicion.dividendos_usd : patrimonioSummary.descomposicion.dividendos_ars, esUSD)}</span>
+              </div>
+              <div className="flex justify-between border-t border-app-border-soft pt-2 mt-2">
+                <span className="text-app-text-dim font-semibold">Total:</span>
+                <span className="text-app-text font-mono font-bold">
+                  {formatCompact(
+                    (vista === 'usd'
+                      ? patrimonioSummary.descomposicion.aportes_usd +
+                        patrimonioSummary.descomposicion.rendimiento_usd +
+                        patrimonioSummary.descomposicion.dividendos_usd
+                      : patrimonioSummary.descomposicion.aportes_ars +
+                        patrimonioSummary.descomposicion.rendimiento_ars +
+                        patrimonioSummary.descomposicion.dividendos_ars),
+                    esUSD
+                  )}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {patrimonioHistoria.length > 0 && (
+            <div className="mt-6">
+              <div className="text-[10px] text-app-text-faint uppercase tracking-wide font-semibold mb-2">Tabla mensual</div>
+              <PatrimonioMensualTable puntos={patrimonioHistoria} esUSD={esUSD} />
+            </div>
+          )}
         </>
       )}
 
