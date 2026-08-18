@@ -53,6 +53,14 @@ export default function Simulador() {
 
   // Simular
   const handleSimular = async () => {
+    // Validación: 'personalizado' requiere parámetros
+    for (const esc of escenarios) {
+      if (esc.tipo_preset === 'personalizado' && !esc.parametros) {
+        setError("Escenarios 'personalizado' requieren configurar los parámetros")
+        return
+      }
+    }
+
     setCargando(true)
     setError(null)
     try {
@@ -148,7 +156,26 @@ export default function Simulador() {
                 index={idx}
                 onChangePreset={(tipo: string) => {
                   const updated = [...escenarios]
-                  updated[idx] = { ...esc, tipo_preset: tipo as 'alcista' | 'bajista' | 'crisis' | 'personalizado', parametros: undefined }
+                  const tipoPreset = tipo as 'alcista' | 'bajista' | 'crisis' | 'personalizado'
+                  // Si selecciona 'personalizado', inicializar parámetros si no existen
+                  let parametros = undefined
+                  if (tipoPreset === 'personalizado' && !esc.parametros) {
+                    parametros = {
+                      horizonte_meses: 60,
+                      variacion_dolar_pct: 0,
+                      variacion_por_instrumento: {},
+                      variacion_por_defecto_pct: 0,
+                      aporte_mensual_usd: 0,
+                      crecimiento_aporte_anual_pct: 0,
+                      retiro_mensual_usd: 0,
+                      modo_dividendos: 'reinvertir_total',
+                      dividend_yield_anual_pct: 0,
+                      pct_dividendo_reinvertido: null,
+                      comision_pct: 0,
+                      inflacion_anual_pct: null,
+                    } as EscenarioParamsIn
+                  }
+                  updated[idx] = { ...esc, tipo_preset: tipoPreset, parametros }
                   setEscenarios(updated)
                 }}
                 onChangeParam={(campo, valor) => handleChangeEscenario(idx, campo, valor)}
