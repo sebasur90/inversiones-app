@@ -260,6 +260,68 @@ export interface EvolucionOut {
 export const getEvolucionInversiones = (cartera: string | null, desde?: string) =>
   api.get<EvolucionOut>(`${carteraPath(cartera)}/evolucion`, { params: desde ? { desde } : undefined }).then(r => r.data)
 
+export interface PatrimonioPunto {
+  fecha: string
+  valor_usd: number
+  valor_ars: number
+  valor_ars_real: number | null
+  aportes_acumulados_usd: number
+  aportes_acumulados_ars: number
+  aportes_acumulados_ars_real: number | null
+  dividendos_acumulados_usd: number
+  dividendos_acumulados_ars: number
+  dividendos_acumulados_ars_real: number | null
+  otros_ajustes_acumulados_usd: number
+  otros_ajustes_acumulados_ars: number
+  otros_ajustes_acumulados_ars_real: number | null
+  ganancia_usd: number
+  ganancia_ars: number
+  ganancia_ars_real: number | null
+}
+
+export interface PatrimonioHistoryOut {
+  puntos: PatrimonioPunto[]
+}
+
+export interface PatrimonioMaximoOut {
+  valor_usd: number | null
+  valor_ars: number | null
+  valor_ars_real: number | null
+  fecha: string | null
+  valor_actual_usd: number | null
+  valor_actual_ars: number | null
+  valor_actual_ars_real: number | null
+  drawdown_usd: number | null
+  drawdown_ars: number | null
+  drawdown_ars_real: number | null
+}
+
+export interface PatrimonioDescomposicionOut {
+  aportes_usd: number
+  aportes_ars: number
+  aportes_ars_real: number | null
+  rendimiento_usd: number
+  rendimiento_ars: number
+  rendimiento_ars_real: number | null
+  dividendos_usd: number
+  dividendos_ars: number
+  dividendos_ars_real: number | null
+  otros_ajustes_usd: number
+  otros_ajustes_ars: number
+  otros_ajustes_ars_real: number | null
+}
+
+export interface PatrimonioSummaryOut {
+  maximo: PatrimonioMaximoOut
+  descomposicion: PatrimonioDescomposicionOut
+}
+
+export const getPatrimonioHistory = (cartera: string | null, desde?: string) =>
+  api.get<PatrimonioHistoryOut>(`${carteraPath(cartera)}/patrimonio/history`, { params: desde ? { desde } : undefined }).then(r => r.data)
+
+export const getPatrimonioSummary = (cartera: string | null, desde?: string) =>
+  api.get<PatrimonioSummaryOut>(`${carteraPath(cartera)}/patrimonio/summary`, { params: desde ? { desde } : undefined }).then(r => r.data)
+
 export interface RendimientoMensualItem {
   anio: number
   mes: number

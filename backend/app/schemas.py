@@ -289,6 +289,62 @@ class RendimientoMensualOut(BaseModel):
     anios: list[RendimientoAnualItem]
 
 
+class PatrimonioPunto(BaseModel):
+    fecha: date
+    valor_usd: float
+    valor_ars: float
+    valor_ars_real: Optional[float] = None
+    aportes_acumulados_usd: float
+    aportes_acumulados_ars: float
+    aportes_acumulados_ars_real: Optional[float] = None
+    dividendos_acumulados_usd: float
+    dividendos_acumulados_ars: float
+    dividendos_acumulados_ars_real: Optional[float] = None
+    otros_ajustes_acumulados_usd: float
+    otros_ajustes_acumulados_ars: float
+    otros_ajustes_acumulados_ars_real: Optional[float] = None
+    ganancia_usd: float
+    ganancia_ars: float
+    ganancia_ars_real: Optional[float] = None
+
+
+class PatrimonioHistoryOut(BaseModel):
+    puntos: list[PatrimonioPunto]
+
+
+class PatrimonioMaximoOut(BaseModel):
+    valor_usd: Optional[float] = None
+    valor_ars: Optional[float] = None
+    valor_ars_real: Optional[float] = None
+    fecha: Optional[date] = None
+    valor_actual_usd: Optional[float] = None
+    valor_actual_ars: Optional[float] = None
+    valor_actual_ars_real: Optional[float] = None
+    drawdown_usd: Optional[float] = None
+    drawdown_ars: Optional[float] = None
+    drawdown_ars_real: Optional[float] = None
+
+
+class PatrimonioDescomposicionOut(BaseModel):
+    aportes_usd: float
+    aportes_ars: float
+    aportes_ars_real: Optional[float] = None
+    rendimiento_usd: float
+    rendimiento_ars: float
+    rendimiento_ars_real: Optional[float] = None
+    dividendos_usd: float
+    dividendos_ars: float
+    dividendos_ars_real: Optional[float] = None
+    otros_ajustes_usd: float
+    otros_ajustes_ars: float
+    otros_ajustes_ars_real: Optional[float] = None
+
+
+class PatrimonioSummaryOut(BaseModel):
+    maximo: PatrimonioMaximoOut
+    descomposicion: PatrimonioDescomposicionOut
+
+
 class PrecioPunto(BaseModel):
     fecha: date
     precio: float

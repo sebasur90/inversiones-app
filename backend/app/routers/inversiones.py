@@ -17,6 +17,8 @@ from ..schemas import (
     MovimientoInversionOut,
     RendimientoPorTickerItem,
     EvolucionOut,
+    PatrimonioHistoryOut,
+    PatrimonioSummaryOut,
     PrecioSerieOut,
     PrecioHistoricoOut,
     TickerConPrecioItem,
@@ -61,6 +63,7 @@ from ..services.inversiones_analytics import (
     get_pnl_realizado_no_realizado,
     get_rendimiento_mensual,
 )
+from ..services.patrimonio_analytics import get_patrimonio_history, get_patrimonio_summary
 from ..services.riesgo_analytics import get_riesgo, get_benchmarks_disponibles, MONEDAS_VALIDAS
 from ..services.benchmarks_analytics import get_performance_relativa, get_performance_compare
 from ..services.opportunity_cost_analytics import get_opportunity_cost
@@ -212,6 +215,30 @@ def rendimiento_mensual_cartera(nombre: str, db: Session = Depends(get_db)):
 @router.get("/consolidado/rendimiento-mensual", response_model=RendimientoMensualOut)
 def rendimiento_mensual_consolidado(db: Session = Depends(get_db)):
     return get_rendimiento_mensual(None, db)
+
+
+@router.get("/carteras/{nombre}/patrimonio/history", response_model=PatrimonioHistoryOut)
+def patrimonio_history_cartera(nombre: str, desde: Optional[date] = Query(None), db: Session = Depends(get_db)):
+    _validar_cartera(nombre, db)
+    max_puntos = 180 if desde is not None else 24
+    return get_patrimonio_history(nombre, db, desde=desde, max_puntos=max_puntos)
+
+
+@router.get("/consolidado/patrimonio/history", response_model=PatrimonioHistoryOut)
+def patrimonio_history_consolidado(desde: Optional[date] = Query(None), db: Session = Depends(get_db)):
+    max_puntos = 180 if desde is not None else 24
+    return get_patrimonio_history(None, db, desde=desde, max_puntos=max_puntos)
+
+
+@router.get("/carteras/{nombre}/patrimonio/summary", response_model=PatrimonioSummaryOut)
+def patrimonio_summary_cartera(nombre: str, desde: Optional[date] = Query(None), db: Session = Depends(get_db)):
+    _validar_cartera(nombre, db)
+    return get_patrimonio_summary(nombre, db, desde=desde)
+
+
+@router.get("/consolidado/patrimonio/summary", response_model=PatrimonioSummaryOut)
+def patrimonio_summary_consolidado(desde: Optional[date] = Query(None), db: Session = Depends(get_db)):
+    return get_patrimonio_summary(None, db, desde=desde)
 
 
 @router.get("/ticker/{ticker}/precios", response_model=PrecioSerieOut)
