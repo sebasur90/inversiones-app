@@ -69,3 +69,47 @@ body {
 .safe-top {
   padding-top: env(safe-area-inset-top, 0px);
 }
+
+/* Diagnostico custom sizing */
+.salud-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-app-text-faint);
+  margin-bottom: 0.75rem;
+}
+
+.salud-score {
+  font-size: 56px;
+  font-weight: 600;
+  color: var(--color-app-text);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.salud-score-divider {
+  font-size: 22px;
+  color: var(--color-app-text-dim);
+  margin-left: 0.25rem;
+}
+
+.dimension-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-app-text);
+}
+
+.dimension-score {
+  font-size: 13px;
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  font-weight: 600;
+  color: var(--color-app-text-dim);
+}
+
+.dimension-detail {
+  font-size: 11px;
+  color: var(--color-app-text-faint);
+  line-height: 1.4;
+  margin-top: 0.25rem;
+}

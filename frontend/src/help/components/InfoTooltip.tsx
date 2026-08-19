@@ -3,6 +3,77 @@ import Modal from '../../components/ui/Modal'
 import { Icon } from '../../components/icons/Icons'
 import { HELP, type HelpKey } from '../content/index'
 
+function InfoTooltipLink({ term, title }: { term: HelpKey; title: string }) {
+  const [open, setOpen] = useState(false)
+  const entry = HELP[term]
+
+  if (!entry) return null
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-xs px-2 py-1 rounded-md bg-app-surface border border-app-border text-app-text-secondary hover:text-app-text hover:bg-app-surface-2 transition-colors"
+      >
+        {title}
+      </button>
+      <Modal open={open} onClose={() => setOpen(false)} title={entry.title}>
+        <div className="text-[13px] text-app-text-dim leading-relaxed space-y-3">
+          {entry.shortDescription && <p>{entry.shortDescription}</p>}
+          {entry.whyItMatters && (
+            <div>
+              <div className="font-semibold text-app-text mb-1">¿Por qué importa?</div>
+              <p>{entry.whyItMatters}</p>
+            </div>
+          )}
+          {entry.howItIsCalculated && (
+            <div>
+              <div className="font-semibold text-app-text mb-1">Cómo se calcula</div>
+              <p>{entry.howItIsCalculated}</p>
+            </div>
+          )}
+          {entry.howToInterpret && (
+            <div>
+              <div className="font-semibold text-app-text mb-1">Cómo interpretarlo</div>
+              <p>{entry.howToInterpret}</p>
+            </div>
+          )}
+          {entry.example && (
+            <div>
+              <div className="font-semibold text-app-text mb-1">Ejemplo</div>
+              <p>{entry.example}</p>
+            </div>
+          )}
+          {entry.limitations && (
+            <div>
+              <div className="font-semibold text-app-text mb-1">Limitaciones</div>
+              <p>{entry.limitations}</p>
+            </div>
+          )}
+          {entry.relatedTerms && entry.relatedTerms.length > 0 && (
+            <div>
+              <div className="font-semibold text-app-text mb-1">Ver también</div>
+              <div className="flex flex-wrap gap-2">
+                {entry.relatedTerms.map(relatedKey => {
+                  const relatedEntry = HELP[relatedKey as HelpKey]
+                  return relatedEntry ? (
+                    <InfoTooltipLink
+                      key={relatedKey}
+                      term={relatedKey as HelpKey}
+                      title={relatedEntry.title}
+                    />
+                  ) : null
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+    </>
+  )
+}
+
 export default function InfoTooltip({ term, label, className = '' }: { term: HelpKey; label?: string; className?: string }) {
   const [open, setOpen] = useState(false)
   const entry = HELP[term]
@@ -66,17 +137,11 @@ export default function InfoTooltip({ term, label, className = '' }: { term: Hel
                 {entry.relatedTerms.map(relatedKey => {
                   const relatedEntry = HELP[relatedKey as HelpKey]
                   return relatedEntry ? (
-                    <button
+                    <InfoTooltipLink
                       key={relatedKey}
-                      onClick={() => {
-                        setOpen(false)
-                        // No-op por ahora: la navegación entre términos sería más compleja
-                        // Este campo sirve principalmente para documentación
-                      }}
-                      className="text-xs px-2 py-1 rounded-md bg-app-surface border border-app-border text-app-text-secondary hover:text-app-text"
-                    >
-                      {relatedEntry.title}
-                    </button>
+                      term={relatedKey as HelpKey}
+                      title={relatedEntry.title}
+                    />
                   ) : null
                 })}
               </div>

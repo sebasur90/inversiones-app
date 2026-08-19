@@ -103,17 +103,17 @@ export default function Diagnostico() {
         <Card className="bg-gradient-to-br from-app-surface to-app-surface-2">
           <div className="mb-1">
             <div className="flex items-center gap-1">
-              <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">Salud de cartera</div>
-              <InfoTooltip term="diagnostico_salud_cartera" />
+              <div className="salud-title">Salud de cartera</div>
+              <InfoTooltip term="diagnostico_salud_cartera" label="" />
             </div>
-            <div className="font-display text-[42px] font-semibold text-app-text">
+            <div className="font-display salud-score">
               {diagnostico.salud.score_total !== null ? Math.round(diagnostico.salud.score_total) : '—'}
-              <span className="text-[18px] text-app-text-dim">/100</span>
+              <span className="salud-score-divider">/100</span>
             </div>
           </div>
 
           {diagnostico.salud.score_total !== null && (
-            <div className="mt-4 space-y-2">
+            <div className="mt-5 space-y-3">
               {diagnostico.salud.dimensiones.map(dim => {
                 const dimensionTermMap: Record<string, keyof typeof import('../help/content').DIAGNOSTICO_HELP> = {
                   rendimiento: 'diagnostico_dimension_rendimiento',
@@ -121,20 +121,28 @@ export default function Diagnostico() {
                   riesgo: 'diagnostico_dimension_riesgo',
                   costos: 'diagnostico_dimension_costos',
                 }
-                const termKey = dimensionTermMap[dim.nombre.toLowerCase()] as any
+                const insuficienciaTermMap: Record<string, keyof typeof import('../help/content').DIAGNOSTICO_HELP> = {
+                  performance: 'diagnostico_datos_insuficientes_performance',
+                  objetivo: 'diagnostico_datos_insuficientes_objetivo',
+                }
+                const termKey = (dim.estado === 'excluida'
+                  ? insuficienciaTermMap[dim.nombre.toLowerCase()]
+                  : dimensionTermMap[dim.nombre.toLowerCase()]) as any
 
                 return (
                   <div key={dim.nombre}>
-                    <div className="flex items-baseline justify-between mb-0.5">
+                    <div className="flex items-baseline justify-between mb-1">
                       <div className="flex items-center gap-1">
-                        <span className="text-[11px] font-semibold text-app-text capitalize">{dim.nombre}</span>
-                        {termKey && <InfoTooltip term={termKey} />}
+                        <span className={`dimension-name capitalize ${dim.estado === 'excluida' ? 'text-app-text-dim' : ''}`}>
+                          {dim.nombre}
+                        </span>
+                        {termKey && <InfoTooltip term={termKey} label="" />}
                       </div>
-                      <span className="text-[11px] font-mono text-app-text-dim">
+                      <span className={`dimension-score ${dim.estado === 'excluida' ? 'text-app-text-dim' : ''}`}>
                         {dim.score !== null ? Math.round(dim.score) : '—'}
                       </span>
                     </div>
-                    <div className="h-1.5 rounded-full bg-app-surface-2 overflow-hidden">
+                    <div className="h-2 rounded-full bg-app-surface-2 overflow-hidden mb-1.5">
                       {dim.score !== null ? (
                         <div
                           className={`h-full rounded-full transition-all ${
@@ -150,7 +158,9 @@ export default function Diagnostico() {
                         <div className="h-full bg-app-text-faint opacity-20" />
                       )}
                     </div>
-                    <div className="text-[9px] text-app-text-faint mt-0.5">{dim.detalle}</div>
+                    <div className={`dimension-detail ${dim.estado === 'excluida' ? 'text-app-text-dim' : ''}`}>
+                      {dim.detalle}
+                    </div>
                   </div>
                 )
               })}

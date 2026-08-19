@@ -7,6 +7,8 @@ export type DiagnosticoHelpKey =
   | 'diagnostico_dimension_riesgo'
   | 'diagnostico_dimension_costos'
   | 'diagnostico_hallazgos'
+  | 'diagnostico_datos_insuficientes_performance'
+  | 'diagnostico_datos_insuficientes_objetivo'
 
 export const DIAGNOSTICO_HELP: Record<DiagnosticoHelpKey, HelpContent> = {
   diagnostico_salud_cartera: {
@@ -44,5 +46,17 @@ export const DIAGNOSTICO_HELP: Record<DiagnosticoHelpKey, HelpContent> = {
     title: 'Hallazgos',
     shortDescription: 'Lista de alertas y recomendaciones específicas basadas en el análisis de tu cartera. Cada hallazgo es accionable.',
     whyItMatters: 'Los hallazgos te guían sobre qué revisar o cambiar para mejorar la salud de tu cartera.',
+  },
+  diagnostico_datos_insuficientes_performance: {
+    title: 'Datos insuficientes: Performance',
+    shortDescription: 'Esta dimensión no se puede calcular porque faltan datos históricos de rendimiento.',
+    whyItMatters: 'Para evaluar la performance de tu cartera se necesita: (1) historial de al menos 3–6 meses de evolución de valores, (2) datos de precios actualizados para todos los instrumentos, y (3) un benchmark configurado en "Configuración de Cartera". Sin esto, no es posible calcular métricas como CAGR o Sharpe ratio.',
+    limitations: 'Una vez que tengas 3+ meses de historial con precios actualizados, esta dimensión se calculará automáticamente en el próximo diagnóstico.',
+  },
+  diagnostico_datos_insuficientes_objetivo: {
+    title: 'Datos insuficientes: Objetivo',
+    shortDescription: 'Esta dimensión no se puede calcular porque no hay un objetivo de inversión definido.',
+    whyItMatters: 'Para evaluar el progreso hacia tu objetivo necesitas: (1) un objetivo de inversión creado en "Objetivo de Cartera" (monto y fecha límite), y (2) historial de aportes/evolución de la cartera para comparar contra la proyección. Sin un objetivo definido, no se puede evaluar si vas en camino correcto.',
+    limitations: 'Crea un objetivo de inversión en la pantalla "Objetivo de Cartera" para habilitar esta dimensión.',
   },
 }
