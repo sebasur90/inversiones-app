@@ -16,6 +16,11 @@ import {
 import EscenarioConfigPanel from '../components/inversiones/EscenarioConfigPanel'
 import EscenarioProyeccionChart from '../components/inversiones/EscenarioProyeccionChart'
 import EscenarioComparacionTable from '../components/inversiones/EscenarioComparacionTable'
+import ScenarioIntentBanner from '../help/components/ScenarioIntentBanner'
+import ErrorBanner from '../help/components/ErrorBanner'
+import ResultInterpretation from '../help/components/ResultInterpretation'
+import { parseApiError } from '../help/errors/apiErrors'
+import type { ParsedApiError } from '../help/errors/apiErrors'
 
 export default function Simulador() {
   const { carteraSeleccionada } = useInversionesContext()
@@ -44,7 +49,7 @@ export default function Simulador() {
   ])
   const [resultado, setResultado] = useState<EscenarioSimulacionOut | null>(null)
   const [cargando, setCargando] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<ParsedApiError | null>(null)
   const [escenariosSaved, setEscenariosSaved] = useState<Escenario[]>([])
   const [mostrarConfigPersonalizado, setMostrarConfigPersonalizado] = useState(false)
 
@@ -72,7 +77,7 @@ export default function Simulador() {
     // Validación: 'personalizado' requiere parámetros
     for (const esc of escenarios) {
       if (esc.tipo_preset === 'personalizado' && !esc.parametros) {
-        setError("Escenarios 'personalizado' requieren configurar los parámetros")
+        setError({ message: "Escenarios 'personalizado' requieren configurar los parámetros" })
         return
       }
     }
@@ -83,8 +88,8 @@ export default function Simulador() {
       const body: EscenarioSimulacionRequest = { escenarios }
       const res = await simularEscenarios(carteraSeleccionada, body)
       setResultado(res)
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Error en la simulación')
+    } catch (err) {
+      setError(parseApiError(err))
     } finally {
       setCargando(false)
     }
@@ -119,7 +124,7 @@ export default function Simulador() {
   const handleGuardarEscenario = async (escenarioIndex: number) => {
     const esc = escenarios[escenarioIndex]
     if (!esc.parametros) {
-      setError('Configura los parámetros antes de guardar')
+      setError({ message: 'Configura los parámetros antes de guardar' })
       return
     }
 
@@ -150,14 +155,8 @@ export default function Simulador() {
       const saved = await listarEscenarios(carteraSeleccionada)
       setEscenariosSaved(saved)
       setError(null) // Limpiar error al éxito
-    } catch (err: any) {
-      let mensajeError = 'Error al guardar'
-      if (err?.response?.data?.detail) {
-        mensajeError = typeof err.response.data.detail === 'string'
-          ? err.response.data.detail
-          : JSON.stringify(err.response.data.detail)
-      }
-      setError(mensajeError)
+    } catch (err) {
+      setError(parseApiError(err))
     }
   }
 
@@ -167,24 +166,12 @@ export default function Simulador() {
 
       <div className="px-3 space-y-4">
         {/* Advertencia: Simulado */}
-        <Card className="bg-app-surface border border-app-gold/30 p-3">
-          <div className="flex items-start gap-2">
-            <span className="text-xl">⚠️</span>
-            <div>
-              <div className="font-medium text-app-gold text-sm">Simulación determinista</div>
-              <div className="text-xs text-app-text-secondary mt-1">
-                Estos resultados son proyecciones bajo supuestos fijos. No representan predicciones de mercado.
-              </div>
-            </div>
-          </div>
-        </Card>
+        <ScenarioIntentBanner variant="antes">
+          Estos resultados son proyecciones bajo supuestos fijos. No representan predicciones de mercado ni modifican tus inversiones reales.
+        </ScenarioIntentBanner>
 
         {/* Error */}
-        {error && (
-          <Card className="bg-red-900/20 border border-red-600/30 p-3">
-            <div className="text-sm text-red-300">{error}</div>
-          </Card>
-        )}
+        <ErrorBanner error={error} />
 
         {/* Panel de configuración — 3 escenarios lado a lado */}
         <div>
@@ -253,6 +240,12 @@ export default function Simulador() {
                 <EscenarioComparacionTable resultado={resultado} />
               </Card>
             </div>
+
+            {/* Interpretación */}
+            <ResultInterpretation>
+              <p>Cada escenario muestra cómo evolucionaría tu patrimonio bajo diferentes supuestos de mercado. Compara los valores finales para entender el rango de posibilidades.</p>
+              <p className="text-app-text-faint text-[10px]">Recuerda: estos son ejercicios matemáticos bajo supuestos. El mercado real es más complejo y menos predecible.</p>
+            </ResultInterpretation>
 
             {/* Advertencias */}
             {resultado.advertencias.length > 0 && (

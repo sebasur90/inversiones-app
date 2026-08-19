@@ -1,9 +1,9 @@
 import InfoTerm from './InfoTerm'
-import type { GlosarioKey } from '../../data/glosario'
+import type { HelpKey } from '../../help/content/index'
 
 interface MetricCardProps {
   label: string
-  infoTerm: GlosarioKey
+  infoTerm: HelpKey
   value: string
   subtitulo?: string
   insuficiente?: boolean

@@ -1,21 +1,7 @@
 import { formatARS, formatPctRatio, formatUSD } from '../../utils'
 import Card from '../../components/ui/Card'
-import InfoTerm from '../../components/ui/InfoTerm'
-import type { GlosarioKey } from '../../data/glosario'
+import MetricTile from '../../components/ui/MetricTile'
 import type { TickerPerformanceOut, TickerPositionOut } from '../../api'
-
-function PnlCard({ label, infoTerm, value, tone }: { label: string; infoTerm?: GlosarioKey; value: string; tone?: 'pos' | 'neg' }) {
-  return (
-    <div className="bg-app-surface border border-app-border rounded-[13px] px-2.5 py-2.5">
-      <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
-        {infoTerm ? <InfoTerm term={infoTerm} label={label} /> : label}
-      </div>
-      <div className={`font-mono text-[14px] font-bold tabular-nums ${tone === 'pos' ? 'text-app-teal' : tone === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
-        {value}
-      </div>
-    </div>
-  )
-}
 
 function toneFor(v: number | null | undefined): 'pos' | 'neg' | undefined {
   if (v == null) return undefined
@@ -35,30 +21,30 @@ export default function TickerRendimientoTab({ performance, position, monedaSele
   return (
     <div className="pb-4">
       <div className="grid grid-cols-2 gap-2 mb-4">
-        <PnlCard
+        <MetricTile
           label="Realizado"
           infoTerm="realizado"
           value={formatMoneda(realizado)}
           tone={toneFor(realizado)}
         />
-        <PnlCard
+        <MetricTile
           label="No realizado"
           infoTerm="noRealizado"
           value={noRealizado != null ? formatMoneda(noRealizado) : 'N/A'}
           tone={toneFor(noRealizado)}
         />
-        <PnlCard
+        <MetricTile
           label="Ingresos"
           infoTerm="ingresos"
           value={formatMoneda(ingresos)}
           tone={toneFor(ingresos)}
         />
-        <PnlCard
+        <MetricTile
           label="Total P&L"
           value={total != null ? formatMoneda(total) : 'N/A'}
           tone={toneFor(total)}
         />
-        <PnlCard
+        <MetricTile
           label="Comisiones"
           value={formatMoneda(comisiones)}
           tone={comisiones === 0 ? undefined : 'neg'}

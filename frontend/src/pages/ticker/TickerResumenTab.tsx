@@ -2,22 +2,9 @@ import { useEffect, useState } from 'react'
 import { getDescomposicionFxPorPosicion, getPreciosTicker, type PrecioPunto, type DescomposicionFxPosicionItem } from '../../api'
 import { formatARS, formatCantidad, formatPctRatio, formatPrecio, formatUSD } from '../../utils'
 import Sparkline from '../../components/charts/Sparkline'
-import InfoTerm from '../../components/ui/InfoTerm'
+import MetricTile from '../../components/ui/MetricTile'
 import { Icon } from '../../components/icons/Icons'
-import type { GlosarioKey } from '../../data/glosario'
 import type { TickerPositionOut } from '../../api'
-
-function StatCell({ label, infoTerm, value, sub, tone }: { label: string; infoTerm?: GlosarioKey; value: string; sub?: string; tone?: 'pos' | 'neg' }) {
-  return (
-    <div className="bg-app-surface border border-app-border rounded-[13px] p-2.5">
-      <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
-        {infoTerm ? <InfoTerm term={infoTerm} label={label} /> : label}
-      </div>
-      <div className={`font-mono text-[14.5px] font-bold tabular-nums ${tone === 'pos' ? 'text-app-teal' : tone === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>{value}</div>
-      {sub && <div className="text-[10px] text-app-text-dim mt-0.5">{sub}</div>}
-    </div>
-  )
-}
 
 export default function TickerResumenTab({ position, cartera, monedaSeleccionada }: { position: TickerPositionOut; cartera: string | null; monedaSeleccionada: 'ARS' | 'USD' }) {
   const [precios, setPrecios] = useState<PrecioPunto[]>([])
@@ -88,23 +75,23 @@ export default function TickerResumenTab({ position, cartera, monedaSeleccionada
       </div>
 
       <div className="grid grid-cols-2 gap-2 mt-4">
-        <StatCell label="Cantidad" value={formatCantidad(position.cantidad_actual)} />
-        <StatCell label="Precio promedio" value={formatPrecio(position.precio_promedio)} />
-        <StatCell label="Invertido" infoTerm="invertido" value={formatMoneda(valorInvertido)} />
-        <StatCell label="Valor actual" value={formatMoneda(valorActual)} />
-        <StatCell label="Rend. simple" infoTerm="simple" value={formatPctRatio(rendimiento)} tone={rendimiento == null ? undefined : positivo ? 'pos' : 'neg'} />
+        <MetricTile label="Cantidad" value={formatCantidad(position.cantidad_actual)} />
+        <MetricTile label="Precio promedio" value={formatPrecio(position.precio_promedio)} />
+        <MetricTile label="Invertido" infoTerm="invertido" value={formatMoneda(valorInvertido)} />
+        <MetricTile label="Valor actual" value={formatMoneda(valorActual)} />
+        <MetricTile label="Rend. simple" infoTerm="simple" value={formatPctRatio(rendimiento)} tone={rendimiento == null ? undefined : positivo ? 'pos' : 'neg'} />
         {esARS && position.rendimiento_simple_ars_real != null && (
-          <StatCell label="Rend. ARS real" value={formatPctRatio(position.rendimiento_simple_ars_real)} tone={position.rendimiento_simple_ars_real >= 0 ? 'pos' : 'neg'} />
+          <MetricTile label="Rend. ARS real" value={formatPctRatio(position.rendimiento_simple_ars_real)} tone={position.rendimiento_simple_ars_real >= 0 ? 'pos' : 'neg'} />
         )}
         {descomposicionFxPorTicker && descomposicionFxPorTicker.estado === 'ok' && (
           <>
-            <StatCell
+            <MetricTile
               label="Efecto FX"
               infoTerm="efecto_fx"
               value={formatPctRatio(descomposicionFxPorTicker.efecto_fx_pct)}
               tone={descomposicionFxPorTicker.efecto_fx_pct == null ? undefined : descomposicionFxPorTicker.efecto_fx_pct >= 0 ? 'pos' : 'neg'}
             />
-            <StatCell
+            <MetricTile
               label="Retorno activo"
               infoTerm="retorno_activo"
               value={formatPctRatio(descomposicionFxPorTicker.retorno_activo_pct)}
@@ -113,7 +100,7 @@ export default function TickerResumenTab({ position, cartera, monedaSeleccionada
           </>
         )}
         {position.precio_objetivo != null && (
-          <StatCell
+          <MetricTile
             label="Precio Objetivo"
             infoTerm="objetivo"
             value={formatPrecio(position.precio_objetivo)}
@@ -122,7 +109,7 @@ export default function TickerResumenTab({ position, cartera, monedaSeleccionada
           />
         )}
         {position.precio_stop_loss != null && (
-          <StatCell
+          <MetricTile
             label="Stop Loss"
             infoTerm="stopLoss"
             value={formatPrecio(position.precio_stop_loss)}

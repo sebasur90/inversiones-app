@@ -3,6 +3,8 @@ import Card from '../ui/Card'
 import Segmented from '../ui/Segmented'
 import Button from '../ui/Button'
 import { EscenarioSimulacionItem, EscenarioParamsIn } from '../../api'
+import FormHelp from '../../help/components/FormHelp'
+import { ESCENARIO_PARAM_LIMITS } from '../../help/errors/escenarioLimits'
 
 interface EscenarioConfigPanelProps {
   escenario: EscenarioSimulacionItem
@@ -75,78 +77,80 @@ export default function EscenarioConfigPanel({
       <div className="mt-4 grid grid-cols-2 gap-2">
         {/* Horizonte */}
         <div>
-          <label className="text-xs font-medium text-app-text-secondary uppercase">Horizonte</label>
+          <FormHelp term="escenario_horizonte" label="Horizonte" fieldKey="horizonte_meses" />
           <input
             type="number"
             value={params.horizonte_meses}
+            min={ESCENARIO_PARAM_LIMITS.horizonte_meses.min}
+            max={ESCENARIO_PARAM_LIMITS.horizonte_meses.max}
             onChange={(e) => onChangeParam('horizonte_meses', parseInt(e.target.value) || 0)}
             className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
             disabled={escenario.tipo_preset !== 'personalizado'}
           />
-          <div className="text-[10px] text-app-text-secondary mt-0.5">meses</div>
         </div>
 
         {/* Variación dólar */}
         <div>
-          <label className="text-xs font-medium text-app-text-secondary uppercase">Dólar</label>
+          <FormHelp term="escenario_variacion_dolar" label="Dólar" fieldKey="variacion_dolar_pct" />
           <input
             type="number"
             step="0.1"
-            min="-90"
-            max="500"
+            min={ESCENARIO_PARAM_LIMITS.variacion_dolar_pct.min}
+            max={ESCENARIO_PARAM_LIMITS.variacion_dolar_pct.max}
             value={params.variacion_dolar_pct}
             onChange={(e) => onChangeParam('variacion_dolar_pct', parseFloat(e.target.value) || 0)}
             className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
             disabled={escenario.tipo_preset !== 'personalizado'}
           />
-          <div className="text-[10px] text-app-text-secondary mt-0.5">% (-90 a 500)</div>
         </div>
 
         {/* Variación por defecto */}
         <div>
-          <label className="text-xs font-medium text-app-text-secondary uppercase">Var. Default</label>
+          <FormHelp term="escenario_variacion_default" label="Var. Default" fieldKey="variacion_por_defecto_pct" />
           <input
             type="number"
             step="0.1"
+            min={ESCENARIO_PARAM_LIMITS.variacion_por_defecto_pct.min}
+            max={ESCENARIO_PARAM_LIMITS.variacion_por_defecto_pct.max}
             value={params.variacion_por_defecto_pct}
             onChange={(e) => onChangeParam('variacion_por_defecto_pct', parseFloat(e.target.value) || 0)}
             className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
             disabled={escenario.tipo_preset !== 'personalizado'}
           />
-          <div className="text-[10px] text-app-text-secondary mt-0.5">% anual</div>
         </div>
 
         {/* Aporte mensual */}
         <div>
-          <label className="text-xs font-medium text-app-text-secondary uppercase">Aporte</label>
+          <FormHelp term="escenario_aporte_mensual" label="Aporte" fieldKey="aporte_mensual_usd" />
           <input
             type="number"
             step="10"
+            min={ESCENARIO_PARAM_LIMITS.aporte_mensual_usd.min}
             value={params.aporte_mensual_usd}
             onChange={(e) => onChangeParam('aporte_mensual_usd', parseFloat(e.target.value) || 0)}
             className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
             disabled={escenario.tipo_preset !== 'personalizado'}
           />
-          <div className="text-[10px] text-app-text-secondary mt-0.5">USD/mes</div>
         </div>
 
         {/* Dividend yield */}
         <div>
-          <label className="text-xs font-medium text-app-text-secondary uppercase">Dividend</label>
+          <FormHelp term="escenario_dividend_yield" label="Dividend" fieldKey="dividend_yield_anual_pct" />
           <input
             type="number"
             step="0.1"
+            min={ESCENARIO_PARAM_LIMITS.dividend_yield_anual_pct.min}
+            max={ESCENARIO_PARAM_LIMITS.dividend_yield_anual_pct.max}
             value={params.dividend_yield_anual_pct}
             onChange={(e) => onChangeParam('dividend_yield_anual_pct', parseFloat(e.target.value) || 0)}
             className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
             disabled={escenario.tipo_preset !== 'personalizado'}
           />
-          <div className="text-[10px] text-app-text-secondary mt-0.5">% anual</div>
         </div>
 
         {/* Modo dividendos */}
         <div>
-          <label className="text-xs font-medium text-app-text-secondary uppercase">Modo Div.</label>
+          <label className="text-xs font-semibold text-app-text mb-2">Modo Div.</label>
           <select
             value={params.modo_dividendos}
             onChange={(e) => onChangeParam('modo_dividendos', e.target.value)}
@@ -170,63 +174,85 @@ export default function EscenarioConfigPanel({
         </button>
 
         {mostrarAvanzado && (
-          <div className="mt-3 grid grid-cols-2 gap-2 pt-3 border-t border-app-border">
-            {/* Retiro mensual */}
-            <div>
-              <label className="text-xs font-medium text-app-text-secondary uppercase">Retiro</label>
-              <input
-                type="number"
-                step="10"
-                value={params.retiro_mensual_usd}
-                onChange={(e) => onChangeParam('retiro_mensual_usd', parseFloat(e.target.value) || 0)}
-                className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
-                disabled={escenario.tipo_preset !== 'personalizado'}
-              />
-              <div className="text-[10px] text-app-text-secondary mt-0.5">USD/mes</div>
+          <div className="mt-3 space-y-3 pt-3 border-t border-app-border">
+            <div className="grid grid-cols-2 gap-2">
+              {/* Retiro mensual */}
+              <div>
+                <FormHelp term="escenario_retiro_mensual" label="Retiro" fieldKey="retiro_mensual_usd" />
+                <input
+                  type="number"
+                  step="10"
+                  min={ESCENARIO_PARAM_LIMITS.retiro_mensual_usd.min}
+                  value={params.retiro_mensual_usd}
+                  onChange={(e) => onChangeParam('retiro_mensual_usd', parseFloat(e.target.value) || 0)}
+                  className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
+                  disabled={escenario.tipo_preset !== 'personalizado'}
+                />
+              </div>
+
+              {/* Crecimiento aporte */}
+              <div>
+                <FormHelp term="escenario_crecimiento_aporte" label="Crec. Aporte" fieldKey="crecimiento_aporte_anual_pct" />
+                <input
+                  type="number"
+                  step="0.1"
+                  min={ESCENARIO_PARAM_LIMITS.crecimiento_aporte_anual_pct.min}
+                  max={ESCENARIO_PARAM_LIMITS.crecimiento_aporte_anual_pct.max}
+                  value={params.crecimiento_aporte_anual_pct}
+                  onChange={(e) => onChangeParam('crecimiento_aporte_anual_pct', parseFloat(e.target.value) || 0)}
+                  className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
+                  disabled={escenario.tipo_preset !== 'personalizado'}
+                />
+              </div>
+
+              {/* Comisión */}
+              <div>
+                <FormHelp term="escenario_comision" label="Comisión" fieldKey="comision_pct" />
+                <input
+                  type="number"
+                  step="0.01"
+                  min={ESCENARIO_PARAM_LIMITS.comision_pct.min}
+                  max={ESCENARIO_PARAM_LIMITS.comision_pct.max}
+                  value={params.comision_pct}
+                  onChange={(e) => onChangeParam('comision_pct', parseFloat(e.target.value) || 0)}
+                  className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
+                  disabled={escenario.tipo_preset !== 'personalizado'}
+                />
+              </div>
+
+              {/* Inflación */}
+              <div>
+                <FormHelp term="escenario_inflacion" label="Inflación" />
+                <input
+                  type="number"
+                  step="0.1"
+                  min={ESCENARIO_PARAM_LIMITS.inflacion_anual_pct.min}
+                  max={ESCENARIO_PARAM_LIMITS.inflacion_anual_pct.max}
+                  value={params.inflacion_anual_pct || ''}
+                  onChange={(e) => onChangeParam('inflacion_anual_pct', e.target.value ? parseFloat(e.target.value) : null)}
+                  className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
+                  disabled={escenario.tipo_preset !== 'personalizado'}
+                  placeholder="Opcional"
+                />
+              </div>
             </div>
 
-            {/* Crecimiento aporte */}
-            <div>
-              <label className="text-xs font-medium text-app-text-secondary uppercase">Crec. Aporte</label>
-              <input
-                type="number"
-                step="0.1"
-                value={params.crecimiento_aporte_anual_pct}
-                onChange={(e) => onChangeParam('crecimiento_aporte_anual_pct', parseFloat(e.target.value) || 0)}
-                className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
-                disabled={escenario.tipo_preset !== 'personalizado'}
-              />
-              <div className="text-[10px] text-app-text-secondary mt-0.5">% anual</div>
-            </div>
-
-            {/* Comisión */}
-            <div>
-              <label className="text-xs font-medium text-app-text-secondary uppercase">Comisión</label>
-              <input
-                type="number"
-                step="0.01"
-                value={params.comision_pct}
-                onChange={(e) => onChangeParam('comision_pct', parseFloat(e.target.value) || 0)}
-                className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
-                disabled={escenario.tipo_preset !== 'personalizado'}
-              />
-              <div className="text-[10px] text-app-text-secondary mt-0.5">%</div>
-            </div>
-
-            {/* Inflación */}
-            <div>
-              <label className="text-xs font-medium text-app-text-secondary uppercase">Inflación</label>
-              <input
-                type="number"
-                step="0.1"
-                value={params.inflacion_anual_pct || ''}
-                onChange={(e) => onChangeParam('inflacion_anual_pct', e.target.value ? parseFloat(e.target.value) : null)}
-                className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
-                disabled={escenario.tipo_preset !== 'personalizado'}
-                placeholder="Opcional"
-              />
-              <div className="text-[10px] text-app-text-secondary mt-0.5">% anual</div>
-            </div>
+            {/* Porcentaje dividendo reinvertido (solo si modo = reinvertir_parcial) */}
+            {params.modo_dividendos === 'reinvertir_parcial' && (
+              <div>
+                <FormHelp term="escenario_pct_dividendo_reinvertido" label="% Dividendo reinvertido" fieldKey="pct_dividendo_reinvertido" />
+                <input
+                  type="number"
+                  step="0.1"
+                  min={ESCENARIO_PARAM_LIMITS.pct_dividendo_reinvertido.min}
+                  max={ESCENARIO_PARAM_LIMITS.pct_dividendo_reinvertido.max}
+                  value={params.pct_dividendo_reinvertido ?? ''}
+                  onChange={(e) => onChangeParam('pct_dividendo_reinvertido', e.target.value ? parseFloat(e.target.value) : null)}
+                  className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
+                  disabled={escenario.tipo_preset !== 'personalizado'}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

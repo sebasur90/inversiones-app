@@ -4,11 +4,14 @@ import ScreenHeader from '../components/layout/ScreenHeader'
 import { getCalidadDatos } from '../api'
 import type { CalidadDatosOut, SyncIssueOut } from '../api'
 import CalidadIssueRow from '../components/inversiones/CalidadIssueRow'
+import { parseApiError, type ParsedApiError } from '../help/errors/apiErrors'
+import ErrorBanner from '../help/components/ErrorBanner'
 
 export default function CalidadDatos() {
   const navigate = useNavigate()
   const [calidad, setCalidad] = useState<CalidadDatosOut | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<ParsedApiError | null>(null)
 
   useEffect(() => {
     const fetch = async () => {
@@ -16,7 +19,7 @@ export default function CalidadDatos() {
         const data = await getCalidadDatos()
         setCalidad(data)
       } catch (err) {
-        console.error('Error loading calidad datos:', err)
+        setError(parseApiError(err))
       } finally {
         setLoading(false)
       }
@@ -24,11 +27,22 @@ export default function CalidadDatos() {
     fetch()
   }, [])
 
-  if (loading || !calidad) {
+  if (loading) {
     return (
       <>
         <ScreenHeader title="Calidad de datos" onBack={() => navigate('/resumen')} />
         <div className="flex items-center justify-center h-64 text-app-text-dim">Cargando...</div>
+      </>
+    )
+  }
+
+  if (error || !calidad) {
+    return (
+      <>
+        <ScreenHeader title="Calidad de datos" onBack={() => navigate('/resumen')} />
+        <div className="p-6 max-w-2xl">
+          <ErrorBanner error={error ?? { message: 'No pudimos cargar los datos de calidad.' }} />
+        </div>
       </>
     )
   }

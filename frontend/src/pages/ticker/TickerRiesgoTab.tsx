@@ -1,57 +1,43 @@
 import { formatPctRatio } from '../../utils'
 import Card from '../../components/ui/Card'
-import InfoTerm from '../../components/ui/InfoTerm'
-import type { GlosarioKey } from '../../data/glosario'
+import MetricTile from '../../components/ui/MetricTile'
 import type { TickerRiesgoOut } from '../../api'
-
-function MetricCard({ label, infoTerm, value, tone }: { label: string; infoTerm?: GlosarioKey; value: string; tone?: 'pos' | 'neg' }) {
-  return (
-    <div className="bg-app-surface border border-app-border rounded-[13px] px-2.5 py-2.5">
-      <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
-        {infoTerm ? <InfoTerm term={infoTerm} label={label} /> : label}
-      </div>
-      <div className={`font-mono text-[14px] font-bold tabular-nums ${tone === 'pos' ? 'text-app-teal' : tone === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
-        {value}
-      </div>
-    </div>
-  )
-}
 
 export default function TickerRiesgoTab({ riesgo }: { riesgo: TickerRiesgoOut }) {
   return (
     <div className="pb-4">
       <div className="grid grid-cols-2 gap-2 mb-4">
-        <MetricCard
+        <MetricTile
           label="Volatilidad"
           infoTerm="volatilidad"
           value={riesgo.volatilidad?.anualizada != null ? formatPctRatio(riesgo.volatilidad.anualizada) : 'N/A'}
         />
-        <MetricCard
+        <MetricTile
           label="Sharpe vs Benchmark"
           infoTerm="sharpe"
           value={riesgo.sharpe?.valor != null ? riesgo.sharpe.valor.toFixed(2) : 'N/A'}
           tone={riesgo.sharpe?.valor != null && riesgo.sharpe.valor >= 0 ? 'pos' : undefined}
         />
-        <MetricCard
+        <MetricTile
           label="Sortino"
           infoTerm="sortino"
           value={riesgo.sortino?.valor != null ? riesgo.sortino.valor.toFixed(2) : 'N/A'}
           tone={riesgo.sortino?.valor != null && riesgo.sortino.valor >= 0 ? 'pos' : undefined}
         />
-        <MetricCard
+        <MetricTile
           label="Calmar"
           infoTerm="calmar"
           value={riesgo.calmar?.valor != null ? riesgo.calmar.valor.toFixed(2) : 'N/A'}
           tone={riesgo.calmar?.valor != null && riesgo.calmar.valor >= 0 ? 'pos' : undefined}
         />
-        <MetricCard
+        <MetricTile
           label="Drawdown máximo"
           infoTerm="drawdown"
           value={riesgo.drawdown?.maximo != null ? formatPctRatio(riesgo.drawdown.maximo) : 'N/A'}
           tone="neg"
         />
         {riesgo.calmar?.retorno_anualizado != null && (
-          <MetricCard
+          <MetricTile
             label="Retorno anualizado"
             value={formatPctRatio(riesgo.calmar.retorno_anualizado)}
             tone={riesgo.calmar.retorno_anualizado >= 0 ? 'pos' : 'neg'}

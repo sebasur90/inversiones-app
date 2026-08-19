@@ -1,17 +1,17 @@
 import { useState } from 'react'
 import Modal from './Modal'
 import { Icon } from '../icons/Icons'
-import { GLOSARIO, type GlosarioKey } from '../../data/glosario'
+import { HELP, type HelpKey } from '../../help/content/index'
 
-export default function InfoTerm({ term, label, className = '' }: { term: GlosarioKey; label?: string; className?: string }) {
+export default function InfoTerm({ term, label, className = '' }: { term: HelpKey; label?: string; className?: string }) {
   const [open, setOpen] = useState(false)
-  const entry = GLOSARIO[term]
+  const entry = HELP[term]
   return (
     <span className={`inline-flex items-center gap-1 ${className}`}>
-      {label ?? entry.titulo}
+      {label ?? entry.title}
       <button
         type="button"
-        aria-label={`Qué significa ${entry.titulo}`}
+        aria-label={`Qué significa ${entry.title}`}
         onClick={e => {
           e.stopPropagation()
           setOpen(true)
@@ -20,8 +20,8 @@ export default function InfoTerm({ term, label, className = '' }: { term: Glosar
       >
         <Icon name="info" className="w-3.5 h-3.5" />
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} title={entry.titulo}>
-        <p className="text-[13px] text-app-text-dim leading-relaxed">{entry.texto}</p>
+      <Modal open={open} onClose={() => setOpen(false)} title={entry.title}>
+        <p className="text-[13px] text-app-text-dim leading-relaxed">{entry.shortDescription}</p>
       </Modal>
     </span>
   )
