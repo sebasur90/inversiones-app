@@ -1,6 +1,7 @@
 import type { RendimientoPorTickerItem } from '../../api'
 import { formatARS, formatPctRatio, formatUSD } from '../../utils'
 import { Icon } from '../icons/Icons'
+import InfoTooltip from '../../help/components/InfoTooltip'
 
 export default function PosicionRow({
   item,
@@ -24,16 +25,27 @@ export default function PosicionRow({
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-[12.5px] font-bold text-app-text truncate">{item.nombre}</div>
-        <div className="text-[10.5px] text-app-text-dim mt-0.5 truncate">
-          {item.tipo_instrumento} · {item.mercado}
+        <div className="flex items-center gap-1 text-[10.5px] text-app-text-dim mt-0.5">
+          <span className="truncate">
+            <span className="inline-flex items-center gap-0.5">
+              {item.tipo_instrumento}
+              <InfoTooltip term="posiciones_tipo_instrumento" />
+            </span>
+            {' · '}
+            <span className="inline-flex items-center gap-0.5">
+              {item.mercado}
+              <InfoTooltip term="posiciones_mercado" />
+            </span>
+          </span>
         </div>
       </div>
       <div className="text-right shrink-0">
         <div className="font-mono text-[12.5px] font-bold text-app-text tabular-nums">{formatMoneda(valor)}</div>
         {rendimiento != null && (
-          <div className={`inline-flex items-center gap-0.5 font-mono text-[11px] font-bold mt-0.5 tabular-nums ${positivo ? 'text-app-teal' : 'text-app-coral'}`}>
+          <div className={`flex items-center justify-end gap-0.5 font-mono text-[11px] font-bold mt-0.5 tabular-nums ${positivo ? 'text-app-teal' : 'text-app-coral'}`}>
             <Icon name={positivo ? 'up' : 'down'} className="w-2.5 h-2.5" />
             {formatPctRatio(rendimiento)}
+            <InfoTooltip term="posiciones_rendimiento_simple" />
           </div>
         )}
       </div>

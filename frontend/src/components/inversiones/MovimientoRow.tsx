@@ -1,5 +1,7 @@
 import type { MovimientoInversion } from '../../api'
 import { formatUSD } from '../../utils'
+import InfoTooltip from '../../help/components/InfoTooltip'
+import type { MovimientosHelpKey } from '../../help/content/movimientos'
 
 const TIPO_LABELS: Record<string, string> = {
   compra: 'Compra',
@@ -15,6 +17,12 @@ const TIPO_BADGE_CLASSES: Record<string, string> = {
   dividendo: 'bg-app-teal-soft text-app-teal',
   cupon: 'bg-app-teal-soft text-app-teal',
   amortizacion: 'bg-app-plum/15 text-app-plum',
+}
+
+const TIPO_HELP_KEY: Record<string, MovimientosHelpKey | undefined> = {
+  dividendo: 'movimientos_dividendo',
+  cupon: 'movimientos_cupon',
+  amortizacion: 'movimientos_amortizacion',
 }
 
 const MOVIMIENTOS_INGRESO = ['dividendo', 'cupon']
@@ -36,13 +44,21 @@ export default function MovimientoRow({ mov }: { mov: MovimientoInversion }) {
         {mov.ticker.slice(0, 4)}
       </div>
       <div className="flex-1 min-w-0">
-        <span className={`inline-block font-bold text-[9.5px] tracking-wide px-1.5 py-0.5 rounded-[6px] ${TIPO_BADGE_CLASSES[mov.tipo_movimiento] ?? 'bg-app-surface-2 text-app-text-dim'}`}>
-          {(TIPO_LABELS[mov.tipo_movimiento] ?? mov.tipo_movimiento).toUpperCase()}
-        </span>
+        <div className="flex items-center gap-1">
+          <span className={`inline-block font-bold text-[9.5px] tracking-wide px-1.5 py-0.5 rounded-[6px] ${TIPO_BADGE_CLASSES[mov.tipo_movimiento] ?? 'bg-app-surface-2 text-app-text-dim'}`}>
+            {(TIPO_LABELS[mov.tipo_movimiento] ?? mov.tipo_movimiento).toUpperCase()}
+          </span>
+          {TIPO_HELP_KEY[mov.tipo_movimiento] && (
+            <InfoTooltip term={TIPO_HELP_KEY[mov.tipo_movimiento]!} />
+          )}
+        </div>
         <div className="text-[10.5px] text-app-text-dim mt-1 truncate">{detalle}</div>
         {mov.comision > 0 && (
-          <div className="text-[10px] text-app-text-faint mt-0.5">
-            Comisión: {mov.moneda === 'USD' ? formatUSD(mov.comision) : `$${mov.comision.toLocaleString('es-AR')}`}
+          <div className="flex items-center gap-1 text-[10px] text-app-text-faint mt-0.5">
+            <span>
+              Comisión: {mov.moneda === 'USD' ? formatUSD(mov.comision) : `$${mov.comision.toLocaleString('es-AR')}`}
+            </span>
+            <InfoTooltip term="movimientos_comision" />
           </div>
         )}
       </div>
