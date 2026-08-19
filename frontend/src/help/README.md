@@ -96,21 +96,21 @@ try {
 
 | Pantalla | Estado | Prioridad | Notas |
 |---|---|---|---|
-| Exposición | ⏳ | — | |
-| Movimientos | ⏳ | — | |
-| Posiciones | ⏳ | — | |
-| Precios | ⏳ | — | |
+| Patrimonio | ✅ | ✓ | MetricTile + patrimonio.ts + ErrorBanner (Batch 1) |
+| Riesgo | ✅ | ✓ | MetricTile + ErrorBanner + InfoTooltip; reutiliza glosario (Batch 1) |
+| Resumen | ✅ | ✓ | InfoTooltip + ErrorBanner en diagnóstico/calidad (Batch 1) |
+| CalidadDatos | ✅ | ✓ | InfoTooltip para health_score/errores/advertencias; 5 términos (Batch 2) |
+| Diagnostico | ✅ | ✓ | ErrorBanner + InfoTooltip para salud/dimensiones; 6 términos (Batch 2) |
+| Movimientos | ✅ | ✓ | 9 términos + InfoTooltip inline (Batch 3 Sprint 1) |
+| Posiciones | ✅ | ✓ | 9 términos + InfoTooltip inline (Batch 3 Sprint 1) |
+| Exposición | ✅ | ✓ | 6 términos + sección informativa (Batch 3 Sprint 2) |
+| Vencimientos | ✅ | ✓ | 5 términos + sección informativa (Batch 3 Sprint 3) |
+| Precios | ✅ | ✓ | 6 términos + sección informativa (Batch 3 Sprint 4) |
 | IndicadoresMacro | ⏳ | — | |
-| Vencimientos | ⏳ | — | |
 | Comparador | ⏳ | — | |
 | Comisiones | ⏳ | — | |
-| Patrimonio | ✅ | ✓ | MetricTile + patrimonio.ts + ErrorBanner (Batch 1) |
 | Rebalanceo | ⏳ | — | |
-| Riesgo | ✅ | ✓ | MetricTile + ErrorBanner + InfoTooltip; reutiliza glosario (Batch 1) |
 | PerformanceRelativa | ⏳ | — | |
-| Diagnostico | ✅ | ✓ | ErrorBanner + InfoTooltip para salud/dimensiones; 6 términos (Batch 2) |
-| CalidadDatos | ✅ | ✓ | InfoTooltip para health_score/errores/advertencias; 5 términos (Batch 2) |
-| Resumen | ✅ | ✓ | InfoTooltip + ErrorBanner en diagnóstico/calidad (Batch 1) |
 | Tabs de TickerDetalle | ⏳ | — | |
 
 ## Notas para mantainers
