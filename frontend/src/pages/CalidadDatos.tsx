@@ -6,6 +6,7 @@ import type { CalidadDatosOut, SyncIssueOut } from '../api'
 import CalidadIssueRow from '../components/inversiones/CalidadIssueRow'
 import { parseApiError, type ParsedApiError } from '../help/errors/apiErrors'
 import ErrorBanner from '../help/components/ErrorBanner'
+import InfoTooltip from '../help/components/InfoTooltip'
 
 export default function CalidadDatos() {
   const navigate = useNavigate()
@@ -56,9 +57,12 @@ export default function CalidadDatos() {
         {ultimo_sync && (
           <div className="mb-6 p-4 bg-app-surface border border-app-border rounded-2xl">
             <div className="flex items-center justify-between mb-2">
-              <div className="text-[42px] font-display font-semibold text-app-text">
-                {ultimo_sync.health_score}
-                <span className="text-[20px] text-app-text-dim ml-1">/100</span>
+              <div className="flex items-baseline gap-1">
+                <div className="text-[42px] font-display font-semibold text-app-text">
+                  {ultimo_sync.health_score}
+                  <span className="text-[20px] text-app-text-dim ml-1">/100</span>
+                </div>
+                <InfoTooltip term="calidaddatos_health_score" />
               </div>
             </div>
             <div className="text-[13px] text-app-text-dim">
@@ -68,8 +72,18 @@ export default function CalidadDatos() {
             </div>
             {ultimo_sync.resultado !== 'ok' && (
               <div className="mt-2 text-[12px]">
-                {ultimo_sync.filas_error > 0 && <div className="text-app-coral">🔴 {ultimo_sync.filas_error} error(es) crítico(s)</div>}
-                {ultimo_sync.filas_advertencia > 0 && <div className="text-app-gold">🟡 {ultimo_sync.filas_advertencia} advertencia(s)</div>}
+                {ultimo_sync.filas_error > 0 && (
+                  <div className="text-app-coral flex items-center gap-1">
+                    🔴 {ultimo_sync.filas_error} error(es) crítico(s)
+                    <InfoTooltip term="calidaddatos_filas_error" />
+                  </div>
+                )}
+                {ultimo_sync.filas_advertencia > 0 && (
+                  <div className="text-app-gold flex items-center gap-1">
+                    🟡 {ultimo_sync.filas_advertencia} advertencia(s)
+                    <InfoTooltip term="calidaddatos_filas_advertencia" />
+                  </div>
+                )}
               </div>
             )}
           </div>
