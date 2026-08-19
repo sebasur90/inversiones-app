@@ -9,6 +9,7 @@ import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import EmptyState from '../components/ui/EmptyState'
 import { Icon } from '../components/icons/Icons'
+import InfoTooltip from '../help/components/InfoTooltip'
 
 type Vista = 'cer' | 'mep'
 
@@ -84,16 +85,35 @@ export default function IndicadoresMacro() {
         </div>
         {ultimoPunto && (
           <div className="text-right shrink-0 ml-4">
-            <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">Último registro</div>
+            <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5 flex items-center justify-end gap-1.5">
+              <span>Último registro</span>
+              <InfoTooltip term="precios_ultimo_registro" />
+            </div>
             <div className="font-mono font-bold text-[15px] text-app-text tabular-nums">{formatIndice(ultimoPunto.valor)}</div>
             {variacion != null && (
               <div className={`inline-flex items-center gap-0.5 font-mono text-[11px] font-bold mt-0.5 tabular-nums ${positivo ? 'text-app-teal' : 'text-app-coral'}`}>
                 <Icon name={positivo ? 'up' : 'down'} className="w-2.5 h-2.5" />
                 {formatPct(variacion)}
+                <div className="ml-0.5">
+                  <InfoTooltip term="indicadoresmacro_variacion" />
+                </div>
               </div>
             )}
           </div>
         )}
+      </div>
+
+      <div className="px-4 mb-4 pt-2">
+        <div className="text-[12px] text-app-text-dim space-y-1.5 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-app-text">CER</span>
+            <InfoTooltip term="cer" />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-app-text">MEP</span>
+            <InfoTooltip term="mep" />
+          </div>
+        </div>
       </div>
 
       <div className="mb-3">
