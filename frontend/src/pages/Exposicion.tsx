@@ -8,6 +8,7 @@ import Segmented from '../components/ui/Segmented'
 import Donut from '../components/charts/Donut'
 import EmptyState from '../components/ui/EmptyState'
 import { Icon } from '../components/icons/Icons'
+import InfoTooltip from '../help/components/InfoTooltip'
 
 function bucketizeTop10(items: ExposicionItem[]): ExposicionItem[] {
   if (items.length <= 10) return items
@@ -49,12 +50,18 @@ export default function Exposicion() {
       <ScreenHeader title="Exposición" />
 
       <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
-        <button onClick={() => navigate('/vencimientos')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
-          <Icon name="target" className="w-3.5 h-3.5" /> Ver calendario de vencimientos
-        </button>
-        <button onClick={() => navigate('/contribucion')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
-          <Icon name="scale" className="w-3.5 h-3.5" /> Ver contribución y concentración
-        </button>
+        <div className="inline-flex items-center gap-1">
+          <button onClick={() => navigate('/vencimientos')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+            <Icon name="target" className="w-3.5 h-3.5" /> Ver calendario de vencimientos
+          </button>
+          <InfoTooltip term="exposicion_vencimientos" />
+        </div>
+        <div className="inline-flex items-center gap-1">
+          <button onClick={() => navigate('/contribucion')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+            <Icon name="scale" className="w-3.5 h-3.5" /> Ver contribución y concentración
+          </button>
+          <InfoTooltip term="exposicion_contribucion_concentracion" />
+        </div>
       </div>
 
       {loading ? (
@@ -63,11 +70,16 @@ export default function Exposicion() {
         <EmptyState title="Sin exposición para mostrar" description="Sincronizá tu Sheet o elegí otra cartera." />
       ) : (
         <>
-          <Segmented
-            options={exposicion.ejes.map(e => ({ value: e.eje, label: e.eje }))}
-            value={eje?.eje ?? exposicion.ejes[0].eje}
-            onChange={setEjeActivo}
-          />
+          <div className="flex items-center gap-2 mb-3">
+            <div className="flex-1">
+              <Segmented
+                options={exposicion.ejes.map(e => ({ value: e.eje, label: e.eje }))}
+                value={eje?.eje ?? exposicion.ejes[0].eje}
+                onChange={setEjeActivo}
+              />
+            </div>
+            <InfoTooltip term="exposicion_eje" />
+          </div>
 
           <div className="my-4">
             <Donut
@@ -77,12 +89,18 @@ export default function Exposicion() {
             />
           </div>
 
-          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">Detalle</h3>
+          <div className="flex items-center gap-2 mb-2.5">
+            <h3 className="text-[13.5px] font-bold text-app-text">Detalle</h3>
+            <InfoTooltip term="exposicion_porcentaje" />
+          </div>
           <div className="flex flex-col gap-2.5">
             {items.map((item, i) => (
               <div key={item.etiqueta}>
                 <div className="flex justify-between items-baseline text-[11.5px] mb-1.5">
-                  <span className="text-app-text">{item.etiqueta}</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-app-text">{item.etiqueta}</span>
+                    {item.etiqueta === 'Otros' && <InfoTooltip term="exposicion_ticker_top10" />}
+                  </div>
                   <span className="font-mono font-bold text-app-text tabular-nums">{formatMoneda(esARS ? item.valor_ars : item.valor_usd)}</span>
                 </div>
                 <div className="h-1.5 rounded-full bg-app-surface-2 overflow-hidden">
