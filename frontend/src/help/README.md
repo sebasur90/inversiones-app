@@ -108,8 +108,8 @@ try {
 | Rebalanceo | ⏳ | — | |
 | Riesgo | ✅ | ✓ | MetricTile + ErrorBanner + InfoTooltip; reutiliza glosario (Batch 1) |
 | PerformanceRelativa | ⏳ | — | |
-| Diagnostico | ⏳ | — | |
-| CalidadDatos | ⏳ | — | |
+| Diagnostico | ✅ | ✓ | ErrorBanner + InfoTooltip para salud/dimensiones; 6 términos (Batch 2) |
+| CalidadDatos | ✅ | ✓ | InfoTooltip para health_score/errores/advertencias; 5 términos (Batch 2) |
 | Resumen | ✅ | ✓ | InfoTooltip + ErrorBanner en diagnóstico/calidad (Batch 1) |
 | Tabs de TickerDetalle | ⏳ | — | |
 
