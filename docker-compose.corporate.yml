@@ -15,8 +15,6 @@ services:
       - HTTP_PROXY=${HTTP_PROXY:-}
       - HTTPS_PROXY=${HTTPS_PROXY:-}
     volumes:
-      # Database persistence
-      - backend_data:/app/data
       # Google Service Account - mount from local credentials directory (read-only)
       - ./credentials/google-service-account.json:/app/data/google-service-account.json:ro
       # Local Excel file for development environment (read-only)
@@ -41,6 +39,3 @@ services:
       backend:
         condition: service_healthy
     restart: unless-stopped
-
-volumes:
-  backend_data:

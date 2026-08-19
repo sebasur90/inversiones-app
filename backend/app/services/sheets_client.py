@@ -97,7 +97,8 @@ def _fetch_from_excel() -> dict[str, TabRaw]:
                 result[tab] = TabRaw(presente=False, header=[], rows=[])
             else:
                 try:
-                    df = pd.read_excel(excel_path, sheet_name=tab)
+                    # Leer TODO como string para evitar que pandas interprete fechas en formato US (MM/DD)
+                    df = pd.read_excel(excel_path, sheet_name=tab, dtype=str, keep_default_na=False)
                     values = [df.columns.tolist()] + df.values.tolist()
                     # Convertir NaN a vacío para evitar 'nan' en string
                     rows = _rows_to_dicts([['' if pd.isna(v) else str(v) for v in row] for row in values])

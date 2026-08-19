@@ -27,16 +27,31 @@ def _normalize_tipo_movimiento(raw: str) -> str | None:
 
 
 def _parse_fecha(raw: str) -> date | None:
-    raw = (raw or "").strip()
+    from datetime import datetime
+
+    if raw is None or raw == "":
+        return None
+
+    # Si ya es datetime/date, devolverlo
+    if isinstance(raw, date):
+        return raw
+    if isinstance(raw, datetime):
+        return raw.date()
+
+    raw = str(raw).strip()
     if not raw:
         return None
+
+    # Intentar ISO format primero (YYYY-MM-DD)
     try:
-        return date.fromisoformat(raw)
+        return date.fromisoformat(raw.split()[0])  # Separar fecha de hora si existe
     except ValueError:
         pass
+
+    # Luego intentar con dayfirst=True para formatos ambiguos (DD/MM/YYYY, etc)
     try:
         return dateutil_parser.parse(raw, dayfirst=True).date()
-    except (ValueError, OverflowError):
+    except (ValueError, OverflowError, TypeError):
         return None
 
 
