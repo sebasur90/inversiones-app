@@ -85,7 +85,6 @@ export default function EscenarioConfigPanel({
             max={ESCENARIO_PARAM_LIMITS.horizonte_meses.max}
             onChange={(e) => onChangeParam('horizonte_meses', parseInt(e.target.value) || 0)}
             className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
-            disabled={escenario.tipo_preset !== 'personalizado'}
           />
         </div>
 
@@ -100,7 +99,6 @@ export default function EscenarioConfigPanel({
             value={params.variacion_dolar_pct}
             onChange={(e) => onChangeParam('variacion_dolar_pct', parseFloat(e.target.value) || 0)}
             className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
-            disabled={escenario.tipo_preset !== 'personalizado'}
           />
         </div>
 
@@ -115,7 +113,6 @@ export default function EscenarioConfigPanel({
             value={params.variacion_por_defecto_pct}
             onChange={(e) => onChangeParam('variacion_por_defecto_pct', parseFloat(e.target.value) || 0)}
             className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
-            disabled={escenario.tipo_preset !== 'personalizado'}
           />
         </div>
 
@@ -129,7 +126,6 @@ export default function EscenarioConfigPanel({
             value={params.aporte_mensual_usd}
             onChange={(e) => onChangeParam('aporte_mensual_usd', parseFloat(e.target.value) || 0)}
             className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
-            disabled={escenario.tipo_preset !== 'personalizado'}
           />
         </div>
 
@@ -144,7 +140,6 @@ export default function EscenarioConfigPanel({
             value={params.dividend_yield_anual_pct}
             onChange={(e) => onChangeParam('dividend_yield_anual_pct', parseFloat(e.target.value) || 0)}
             className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
-            disabled={escenario.tipo_preset !== 'personalizado'}
           />
         </div>
 
@@ -155,7 +150,6 @@ export default function EscenarioConfigPanel({
             value={params.modo_dividendos}
             onChange={(e) => onChangeParam('modo_dividendos', e.target.value)}
             className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60"
-            disabled={escenario.tipo_preset !== 'personalizado'}
           >
             {MODOS_DIVIDENDOS.map(modo => (
               <option key={modo} value={modo}>{modo}</option>
@@ -186,8 +180,7 @@ export default function EscenarioConfigPanel({
                   value={params.retiro_mensual_usd}
                   onChange={(e) => onChangeParam('retiro_mensual_usd', parseFloat(e.target.value) || 0)}
                   className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
-                  disabled={escenario.tipo_preset !== 'personalizado'}
-                />
+                      />
               </div>
 
               {/* Crecimiento aporte */}
@@ -201,8 +194,7 @@ export default function EscenarioConfigPanel({
                   value={params.crecimiento_aporte_anual_pct}
                   onChange={(e) => onChangeParam('crecimiento_aporte_anual_pct', parseFloat(e.target.value) || 0)}
                   className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
-                  disabled={escenario.tipo_preset !== 'personalizado'}
-                />
+                      />
               </div>
 
               {/* Comisión */}
@@ -216,8 +208,7 @@ export default function EscenarioConfigPanel({
                   value={params.comision_pct}
                   onChange={(e) => onChangeParam('comision_pct', parseFloat(e.target.value) || 0)}
                   className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
-                  disabled={escenario.tipo_preset !== 'personalizado'}
-                />
+                      />
               </div>
 
               {/* Inflación */}
@@ -231,8 +222,7 @@ export default function EscenarioConfigPanel({
                   value={params.inflacion_anual_pct || ''}
                   onChange={(e) => onChangeParam('inflacion_anual_pct', e.target.value ? parseFloat(e.target.value) : null)}
                   className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
-                  disabled={escenario.tipo_preset !== 'personalizado'}
-                  placeholder="Opcional"
+                        placeholder="Opcional"
                 />
               </div>
             </div>
@@ -249,8 +239,7 @@ export default function EscenarioConfigPanel({
                   value={params.pct_dividendo_reinvertido ?? ''}
                   onChange={(e) => onChangeParam('pct_dividendo_reinvertido', e.target.value ? parseFloat(e.target.value) : null)}
                   className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
-                  disabled={escenario.tipo_preset !== 'personalizado'}
-                />
+                      />
               </div>
             )}
           </div>
