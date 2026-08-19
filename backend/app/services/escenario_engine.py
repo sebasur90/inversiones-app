@@ -83,16 +83,19 @@ class ResultadoEscenario:
 
 PRESETS = {
     "alcista": {
+        "horizonte_meses": 120,
         "variacion_por_defecto_pct": 20.0,
         "variacion_dolar_pct": 5.0,
         "dividend_yield_anual_pct": 2.0,
     },
     "bajista": {
+        "horizonte_meses": 120,
         "variacion_por_defecto_pct": -10.0,
         "variacion_dolar_pct": 10.0,
         "dividend_yield_anual_pct": 1.5,
     },
     "crisis": {
+        "horizonte_meses": 120,
         "variacion_por_defecto_pct": -35.0,
         "variacion_dolar_pct": 60.0,
         "dividend_yield_anual_pct": 0.5,
@@ -119,7 +122,11 @@ def resolver_preset(
         raise ValueError(f"tipo_preset inválido: {tipo_preset}")
 
     if tipo_preset == "personalizado":
-        return params_personalizados or {}
+        result = params_personalizados or {}
+        # Asegurar horizonte_meses si no está presente
+        if "horizonte_meses" not in result:
+            result["horizonte_meses"] = 120
+        return result
 
     # Preset no personalizado: llenar defaults desde PRESETS[tipo_preset]
     preset_defaults = PRESETS[tipo_preset]
