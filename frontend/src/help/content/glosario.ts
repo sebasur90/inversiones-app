@@ -11,6 +11,7 @@ export type GlosarioKey =
   | 'benchmark'
   | 'cer'
   | 'mep'
+  | 'pp'
   | 'objetivo'
   | 'stopLoss'
   | 'rebalanceo'
@@ -76,6 +77,12 @@ export const GLOSARIO_HELP: Record<GlosarioKey, HelpContent> = {
   mep: {
     title: 'MEP',
     shortDescription: 'Dólar MEP (Mercado Electrónico de Pagos): la cotización del dólar que resulta de comprar y vender bonos en el mercado local. Se usa para convertir tu cartera a dólares de forma legal.',
+  },
+  pp: {
+    title: 'Puntos porcentuales (pp)',
+    shortDescription: 'La diferencia entre dos porcentajes, medida en unidades de porcentaje absoluto (no relativo). No es lo mismo que "% de aumento": 10pp es diferente de "10% de aumento".',
+    example: 'Si tu cartera rindió 15% y el benchmark rindió 10%, la diferencia es 5 pp (no 5%, que sería 10% × 1.05 = 10.5%). Si una métrica cambia de 50% a 55%, subió 5 pp (no 5%).',
+    howToInterpret: 'Los pp se usan cuando comparás dos números que ya son porcentajes (rendimientos, tasas, pesos dentro de una cartera). Siempre restá los % directamente: sin hacer cálculos relativos.',
   },
   objetivo: {
     title: 'Precio Objetivo',
@@ -144,12 +151,12 @@ export const GLOSARIO_HELP: Record<GlosarioKey, HelpContent> = {
   },
   costoOportunidad: {
     title: 'Costo de oportunidad',
-    shortDescription: 'La diferencia en dólares entre lo que tu cartera real valió y lo que hubiera valido si hubieras seguido exactamente el benchmark elegido.',
-    whyItMatters: 'Cuantifica el costo exacto de tus decisiones de selección: si es positivo, dejaste dinero en la mesa siguiendo tu criterio vs. el benchmark; si es negativo, ganaste plata siendo diferente.',
-    howItIsCalculated: 'Se calcula con los mismos aportes/retiros que tu cartera real, pero invirtiendo 100% en el benchmark en vez de en tus activos elegidos. La diferencia entre tu valor actual y este valor "shadow" es el costo de oportunidad.',
+    shortDescription: 'La diferencia entre lo que tu cartera real valió y lo que hubiera valido si hubieras seguido exactamente el benchmark elegido. Puede expresarse en dinero (dólares, pesos) o en rendimiento %.',
+    whyItMatters: 'Cuantifica el costo exacto de tus decisiones de selección: si es positivo, dejaste dinero/rentabilidad en la mesa siguiendo tu criterio vs. el benchmark; si es negativo, ganaste plata siendo diferente.',
+    howItIsCalculated: 'Se calcula con los mismos aportes/retiros que tu cartera real, pero invirtiendo 100% en el benchmark en vez de en tus activos elegidos. La diferencia entre tu valor actual (o rendimiento) y este valor "shadow" es el costo de oportunidad.',
     howToInterpret: 'Positivo = el benchmark te hubiera ido mejor (oportunidad perdida). Negativo = tu selección fue mejor que seguir ciegamente el benchmark. Recuerda que esta es una visión retrospectiva: lo que pasó ayer no garantiza lo que pasará mañana.',
     limitations: 'Solo relevante si comparas con un período en el que el benchmark tuvo datos. Es una métrica histórica: los benchmarks pasados no garantizan rendimientos futuros. No constituye una recomendación de inversión.',
-    example: 'Si tu cartera real vale USD 100.000 pero el valor shadow es USD 95.000, tu costo de oportunidad es USD -5.000 (negativo = ganaste diferente). Si fuera al revés, sería USD +5.000 (positivo = dejaste dinero).',
+    example: 'En dinero: si tu cartera real vale USD 100.000 pero el valor shadow es USD 95.000, tu costo es USD -5.000 (ganaste diferente). En rendimiento: si tu cartera rindió 10% pero el benchmark rindió 8%, tu costo de oportunidad es -2 pp (ganaste 2 pp extra).',
   },
   rendimiento_ars: {
     title: 'Rendimiento en ARS',

@@ -8,9 +8,9 @@ import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
-import MetricCard from '../components/ui/MetricCard'
+import MetricTile from '../components/ui/MetricTile'
 import PerformanceRelativaChart from '../components/charts/PerformanceRelativaChart'
-import InfoTerm from '../components/ui/InfoTerm'
+import InfoTooltip from '../help/components/InfoTooltip'
 
 const OPCIONES_VISTA: { value: MonedaRiesgo; label: string }[] = [
   { value: 'ars_nominal', label: 'ARS Nominal' },
@@ -27,9 +27,9 @@ const OPCIONES_PERIODO: { value: PeriodoEvolucion; label: string }[] = [
   { value: 'ALL', label: 'ALL' },
 ]
 
-function toneClass(v: number | null | undefined): string {
-  if (v == null) return 'text-app-text'
-  return v >= 0 ? 'text-app-teal' : 'text-app-coral'
+function getTone(v: number | null | undefined): 'pos' | 'neg' | undefined {
+  if (v == null) return undefined
+  return v >= 0 ? 'pos' : 'neg'
 }
 
 export default function PerformanceRelativa() {
@@ -69,6 +69,19 @@ export default function PerformanceRelativa() {
         <Segmented options={OPCIONES_PERIODO} value={periodo} onChange={setPeriodo} />
       </div>
 
+      <div className="px-4 mb-4 pt-2">
+        <div className="text-[12px] text-app-text-dim space-y-1.5 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-app-text">ARS Real (CER)</span>
+            <InfoTooltip term="cer" />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-app-text">USD (MEP)</span>
+            <InfoTooltip term="mep" />
+          </div>
+        </div>
+      </div>
+
       <div className="mb-3">
         <Segmented options={OPCIONES_VISTA} value={vista} onChange={setVista} />
       </div>
@@ -96,19 +109,19 @@ export default function PerformanceRelativa() {
             <div className="flex items-start justify-between mb-3">
               <div>
                 <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">Cartera</div>
-                <div className={`font-mono font-bold text-[18px] tabular-nums ${toneClass(perfRelativa.retorno_cartera_pct)}`}>
+                <div className={`font-mono font-bold text-[18px] tabular-nums ${getTone(perfRelativa.retorno_cartera_pct) === 'pos' ? 'text-app-teal' : getTone(perfRelativa.retorno_cartera_pct) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
                   {formatPctRatio(perfRelativa.retorno_cartera_pct)}
                 </div>
               </div>
               <div>
                 <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">Benchmark</div>
-                <div className={`font-mono font-bold text-[18px] tabular-nums ${toneClass(perfRelativa.retorno_benchmark_pct)}`}>
+                <div className={`font-mono font-bold text-[18px] tabular-nums ${getTone(perfRelativa.retorno_benchmark_pct) === 'pos' ? 'text-app-teal' : getTone(perfRelativa.retorno_benchmark_pct) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
                   {formatPctRatio(perfRelativa.retorno_benchmark_pct)}
                 </div>
               </div>
               <div>
                 <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">Diferencia</div>
-                <div className={`font-mono font-bold text-[16px] tabular-nums ${toneClass(perfRelativa.delta_pp)}`}>
+                <div className={`font-mono font-bold text-[16px] tabular-nums ${getTone(perfRelativa.delta_pp) === 'pos' ? 'text-app-teal' : getTone(perfRelativa.delta_pp) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
                   {(perfRelativa.delta_pp ?? 0) >= 0 ? '+' : ''}{perfRelativa.delta_pp?.toFixed(1)} pp
                 </div>
               </div>
@@ -122,7 +135,10 @@ export default function PerformanceRelativa() {
 
           <Card className="mb-4">
             <div className="mb-3">
-              <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">Costo de oportunidad vs {perfRelativa.benchmark_usado}</div>
+              <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1 flex items-center justify-between">
+                <span>Costo de oportunidad vs {perfRelativa.benchmark_usado}</span>
+                <InfoTooltip term="costoOportunidad" />
+              </div>
               <div className={`font-mono font-bold text-[16px] tabular-nums ${toneClass(perfRelativa.costo_oportunidad_pp)}`}>
                 {(perfRelativa.costo_oportunidad_pp ?? 0) >= 0 ? '+' : ''}{perfRelativa.costo_oportunidad_pp?.toFixed(1)} pp
               </div>
@@ -142,38 +158,38 @@ export default function PerformanceRelativa() {
 
           <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">Métricas de performance relativa</h3>
           <div className="grid grid-cols-2 gap-2 mb-4">
-            <MetricCard
+            <MetricTile
               label="Exceso de retorno"
-              infoTerm="benchmark"
+              infoTerm="excesoRetorno"
               value={formatPctRatio(perfRelativa.exceso_retorno.valor)}
               insuficiente={perfRelativa.exceso_retorno.estado !== 'ok'}
-              tone={toneClass(perfRelativa.exceso_retorno.valor)}
+              tone={getTone(perfRelativa.exceso_retorno.valor)}
             />
-            <MetricCard
+            <MetricTile
               label="Alpha"
               infoTerm="alpha"
               value={formatPctRatio(perfRelativa.alpha.valor)}
               insuficiente={perfRelativa.alpha.estado !== 'ok'}
-              tone={toneClass(perfRelativa.alpha.valor)}
+              tone={getTone(perfRelativa.alpha.valor)}
             />
-            <MetricCard
+            <MetricTile
               label="Beta"
               infoTerm="beta"
               value={perfRelativa.beta.valor?.toFixed(2) ?? '—'}
               insuficiente={perfRelativa.beta.estado !== 'ok'}
             />
-            <MetricCard
+            <MetricTile
               label="Tracking error"
               infoTerm="trackingError"
               value={formatPctRatio(perfRelativa.tracking_error.valor)}
               insuficiente={perfRelativa.tracking_error.estado !== 'ok'}
             />
-            <MetricCard
+            <MetricTile
               label="Information ratio"
               infoTerm="informationRatio"
               value={perfRelativa.information_ratio.valor?.toFixed(2) ?? '—'}
               insuficiente={perfRelativa.information_ratio.estado !== 'ok'}
-              tone={toneClass(perfRelativa.information_ratio.valor)}
+              tone={getTone(perfRelativa.information_ratio.valor)}
             />
           </div>
         </>

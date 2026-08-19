@@ -13,8 +13,9 @@ import { VENCIMIENTOS_HELP, type VencimientosHelpKey } from './vencimientos'
 import { PRECIOS_HELP, type PreciosHelpKey } from './precios'
 import { INDICADORESMACRO_HELP, type IndicadoresMacroHelpKey } from './indicadoresmacro'
 import { COMPARADOR_HELP, type ComparadorHelpKey } from './comparador'
+import { PERFORMANCERELATIVA_HELP, type PerformanceRelativaHelpKey } from './performancerelativa'
 
-export type HelpKey = GlosarioKey | SimuladorHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey
+export type HelpKey = GlosarioKey | SimuladorHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey
 
 export const HELP: Record<HelpKey, HelpContent> = {
   ...GLOSARIO_HELP,
@@ -31,6 +32,7 @@ export const HELP: Record<HelpKey, HelpContent> = {
   ...PRECIOS_HELP,
   ...INDICADORESMACRO_HELP,
   ...COMPARADOR_HELP,
+  ...PERFORMANCERELATIVA_HELP,
 }
 
 export {
@@ -48,4 +50,5 @@ export {
   PRECIOS_HELP,
   INDICADORESMACRO_HELP,
   COMPARADOR_HELP,
+  PERFORMANCERELATIVA_HELP,
 }
