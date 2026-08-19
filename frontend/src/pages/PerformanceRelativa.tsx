@@ -139,7 +139,7 @@ export default function PerformanceRelativa() {
                 <span>Costo de oportunidad vs {perfRelativa.benchmark_usado}</span>
                 <InfoTooltip term="costoOportunidad" />
               </div>
-              <div className={`font-mono font-bold text-[16px] tabular-nums ${toneClass(perfRelativa.costo_oportunidad_pp)}`}>
+              <div className={`font-mono font-bold text-[16px] tabular-nums ${getTone(perfRelativa.costo_oportunidad_pp) === 'pos' ? 'text-app-teal' : getTone(perfRelativa.costo_oportunidad_pp) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
                 {(perfRelativa.costo_oportunidad_pp ?? 0) >= 0 ? '+' : ''}{perfRelativa.costo_oportunidad_pp?.toFixed(1)} pp
               </div>
             </div>
