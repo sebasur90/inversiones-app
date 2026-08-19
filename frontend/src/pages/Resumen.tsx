@@ -11,7 +11,9 @@ import PosicionRow from '../components/inversiones/PosicionRow'
 import EmptyState from '../components/ui/EmptyState'
 import Card from '../components/ui/Card'
 import ComparacionChart from '../components/charts/ComparacionChart'
-import InfoTerm from '../components/ui/InfoTerm'
+import InfoTooltip from '../help/components/InfoTooltip'
+import ErrorBanner from '../help/components/ErrorBanner'
+import { parseApiError, type ParsedApiError } from '../help/errors/apiErrors'
 
 export default function Resumen() {
   const navigate = useNavigate()
@@ -20,6 +22,7 @@ export default function Resumen() {
   const [evolucion, setEvolucion] = useState<EvolucionPunto[]>([])
   const [diagnostico, setDiagnostico] = useState<DiagnosticoOut | null>(null)
   const [calidad, setCalidad] = useState<CalidadDatosOut | null>(null)
+  const [error, setError] = useState<ParsedApiError | null>(null)
 
   useEffect(() => {
     let cancelado = false
@@ -39,10 +42,16 @@ export default function Resumen() {
     let cancelado = false
     getDiagnostico(carteraSeleccionada)
       .then(d => {
-        if (!cancelado) setDiagnostico(d)
+        if (!cancelado) {
+          setDiagnostico(d)
+          setError(null)
+        }
       })
-      .catch(() => {
-        if (!cancelado) setDiagnostico(null)
+      .catch(err => {
+        if (!cancelado) {
+          setDiagnostico(null)
+          setError(parseApiError(err))
+        }
       })
     return () => {
       cancelado = true
@@ -53,10 +62,16 @@ export default function Resumen() {
     let cancelado = false
     getCalidadDatos()
       .then(c => {
-        if (!cancelado) setCalidad(c)
+        if (!cancelado) {
+          setCalidad(c)
+          setError(null)
+        }
       })
-      .catch(() => {
-        if (!cancelado) setCalidad(null)
+      .catch(err => {
+        if (!cancelado) {
+          setCalidad(null)
+          setError(parseApiError(err))
+        }
       })
     return () => {
       cancelado = true
@@ -75,6 +90,8 @@ export default function Resumen() {
         <>
           <HeroValorCard resumen={resumen} moneda={monedaSeleccionada} evolucion={evolucion} />
           <KpiGrid resumen={resumen} moneda={monedaSeleccionada} />
+
+          <ErrorBanner error={error} />
 
           {diagnostico && (
             <button
@@ -138,7 +155,7 @@ export default function Resumen() {
           </button>
 
           <h3 className="text-[13.5px] font-bold text-app-text mb-2.5 mt-5">
-            <InfoTerm term="benchmark" label="Cartera vs. benchmarks (ARS)" />
+            <InfoTooltip term="benchmark" label="Cartera vs. benchmarks (ARS)" />
           </h3>
           <Card>
             <ComparacionChart resumen={resumen} />

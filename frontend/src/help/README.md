@@ -10,6 +10,7 @@ Este directorio centraliza todo el contenido y componentes del sistema de ayuda 
   - `simulador.ts` — 12 keys para Piloto A (Simulador de escenarios)
   - `objetivo.ts` — 9 keys para Piloto B (Objetivo/Proyección)
   - `benchmarks.ts` — 4 keys para Piloto C (Benchmarks)
+  - `patrimonio.ts` — 5 keys para Patrimonio (Batch 1)
   - `index.ts` — Combina todo en un Record único
 - **`components/`** — Componentes reutilizables
   - `InfoTooltip.tsx` — Reemplaza `InfoTerm`, botón "(i)" + Modal con secciones
@@ -103,13 +104,13 @@ try {
 | Vencimientos | ⏳ | — | |
 | Comparador | ⏳ | — | |
 | Comisiones | ⏳ | — | |
-| Patrimonio | ⏳ | — | |
+| Patrimonio | ✅ | ✓ | MetricTile + patrimonio.ts + ErrorBanner (Batch 1) |
 | Rebalanceo | ⏳ | — | |
-| Riesgo | ⏳ | — | |
+| Riesgo | ✅ | ✓ | MetricTile + ErrorBanner + InfoTooltip; reutiliza glosario (Batch 1) |
 | PerformanceRelativa | ⏳ | — | |
 | Diagnostico | ⏳ | — | |
 | CalidadDatos | ⏳ | — | |
-| Resumen | ⏳ | — | |
+| Resumen | ✅ | ✓ | InfoTooltip + ErrorBanner en diagnóstico/calidad (Batch 1) |
 | Tabs de TickerDetalle | ⏳ | — | |
 
 ## Notas para mantainers

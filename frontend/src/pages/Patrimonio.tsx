@@ -10,7 +10,10 @@ import Segmented from '../components/ui/Segmented'
 import EmptyState from '../components/ui/EmptyState'
 import Modal from '../components/ui/Modal'
 import { Icon } from '../components/icons/Icons'
-import MetricCard from '../components/ui/MetricCard'
+import MetricTile from '../components/ui/MetricTile'
+import InfoTooltip from '../help/components/InfoTooltip'
+import ErrorBanner from '../help/components/ErrorBanner'
+import { parseApiError, type ParsedApiError } from '../help/errors/apiErrors'
 import PatrimonioMensualTable from '../components/tables/PatrimonioMensualTable'
 import { calcularDesde, type PeriodoEvolucion } from '../utils'
 
@@ -143,6 +146,7 @@ export default function Patrimonio() {
   const [patrimonioHistoria, setPatrimonioHistoria] = useState<PatrimonioPunto[]>([])
   const [patrimonioSummary, setPatrimonioSummary] = useState<PatrimonioSummaryOut | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<ParsedApiError | null>(null)
   const [eventoSeleccionado, setEventoSeleccionado] = useState<EventoPunto | null>(null)
 
   useEffect(() => {
@@ -150,10 +154,16 @@ export default function Patrimonio() {
     setLoading(true)
     getEvolucionInversiones(carteraSeleccionada, calcularDesde(periodo))
       .then(data => {
-        if (!cancelado) setPuntos(data.puntos)
+        if (!cancelado) {
+          setPuntos(data.puntos)
+          setError(null)
+        }
       })
-      .catch(() => {
-        if (!cancelado) setPuntos([])
+      .catch(err => {
+        if (!cancelado) {
+          setPuntos([])
+          setError(parseApiError(err))
+        }
       })
       .finally(() => {
         if (!cancelado) setLoading(false)
@@ -181,10 +191,16 @@ export default function Patrimonio() {
     let cancelado = false
     getPatrimonioSummary(carteraSeleccionada, calcularDesde(periodo))
       .then(data => {
-        if (!cancelado) setPatrimonioSummary(data)
+        if (!cancelado) {
+          setPatrimonioSummary(data)
+          setError(null)
+        }
       })
-      .catch(() => {
-        if (!cancelado) setPatrimonioSummary(null)
+      .catch(err => {
+        if (!cancelado) {
+          setPatrimonioSummary(null)
+          setError(parseApiError(err))
+        }
       })
     return () => {
       cancelado = true
@@ -282,6 +298,8 @@ export default function Patrimonio() {
         </button>
       </div>
 
+      <ErrorBanner error={error} />
+
       <div className="mb-3">
         <Segmented options={OPCIONES_PERIODO} value={periodo} onChange={setPeriodo} />
       </div>
@@ -323,11 +341,11 @@ export default function Patrimonio() {
       <div className="flex items-center gap-4 mb-2">
         <div className="flex items-center gap-1.5 text-[10.5px] text-app-text-dim">
           <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: colorLinea }} />
-          Valor de mercado
+          <InfoTooltip term="patrimonio_valor_mercado" label="Valor de mercado" />
         </div>
         <div className="flex items-center gap-1.5 text-[10.5px] text-app-text-dim">
           <span className="w-2.5 h-0.5 rounded-full shrink-0" style={{ backgroundColor: '#8ca39b' }} />
-          Capital aportado
+          <InfoTooltip term="patrimonio_capital_aportado" label="Capital aportado" />
         </div>
       </div>
 
@@ -439,19 +457,24 @@ export default function Patrimonio() {
           <div className="mt-6 mb-4">
             <div className="text-[10px] text-app-text-faint uppercase tracking-wide font-semibold mb-2">Máximo histórico y drawdown</div>
             <div className="grid grid-cols-2 gap-2">
-              <MetricCard
+              <MetricTile
                 label="Máximo histórico"
-                infoTerm="drawdown"
+                infoTerm="maximoHistorico"
                 value={formatCompact(vista === 'usd' ? (patrimonioSummary.maximo.valor_usd ?? 0) : (patrimonioSummary.maximo.valor_ars ?? 0), esUSD)}
                 insuficiente={false}
               />
-              <MetricCard
-                label="Drawdown nominal"
-                infoTerm="drawdown"
-                value={((vista === 'usd' ? (patrimonioSummary.maximo.drawdown_usd ?? 0) : (patrimonioSummary.maximo.drawdown_ars ?? 0)) * 100).toFixed(1) + '%'}
-                insuficiente={false}
-                tone={(vista === 'usd' ? (patrimonioSummary.maximo.drawdown_usd ?? 0) : (patrimonioSummary.maximo.drawdown_ars ?? 0)) > 0.1 ? 'text-app-coral' : 'text-app-teal'}
-              />
+              {(() => {
+                const drawdownNominal = vista === 'usd' ? (patrimonioSummary.maximo.drawdown_usd ?? 0) : (patrimonioSummary.maximo.drawdown_ars ?? 0)
+                return (
+                  <MetricTile
+                    label="Drawdown nominal"
+                    infoTerm="drawdown"
+                    value={(drawdownNominal * 100).toFixed(1) + '%'}
+                    insuficiente={false}
+                    tone={drawdownNominal > 0.1 ? 'neg' : 'pos'}
+                  />
+                )
+              })()}
             </div>
           </div>
 
@@ -459,21 +482,29 @@ export default function Patrimonio() {
             <div className="text-[10px] text-app-text-faint uppercase tracking-wide font-semibold mb-2">Descomposición del período</div>
             <div className="space-y-2 text-[11px]">
               <div className="flex justify-between">
-                <span className="text-app-text-dim">Aportes:</span>
+                <span className="text-app-text-dim">
+                  <InfoTooltip term="patrimonio_descomposicion_aportes" label="Aportes:" className="text-app-text-dim" />
+                </span>
                 <span className="text-app-text font-mono">{formatCompact(vista === 'usd' ? patrimonioSummary.descomposicion.aportes_usd : patrimonioSummary.descomposicion.aportes_ars, esUSD)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-app-text-dim">Rendimiento:</span>
+                <span className="text-app-text-dim">
+                  <InfoTooltip term="patrimonio_descomposicion_rendimiento" label="Rendimiento:" className="text-app-text-dim" />
+                </span>
                 <span className={`font-mono ${(vista === 'usd' ? patrimonioSummary.descomposicion.rendimiento_usd : patrimonioSummary.descomposicion.rendimiento_ars) >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
                   {formatCompact(vista === 'usd' ? patrimonioSummary.descomposicion.rendimiento_usd : patrimonioSummary.descomposicion.rendimiento_ars, esUSD)}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-app-text-dim">Dividendos:</span>
+                <span className="text-app-text-dim">
+                  <InfoTooltip term="ingresos" label="Dividendos:" className="text-app-text-dim" />
+                </span>
                 <span className="text-app-text font-mono">{formatCompact(vista === 'usd' ? patrimonioSummary.descomposicion.dividendos_usd : patrimonioSummary.descomposicion.dividendos_ars, esUSD)}</span>
               </div>
               <div className="flex justify-between border-t border-app-border-soft pt-2 mt-2">
-                <span className="text-app-text-dim font-semibold">Total:</span>
+                <span className="text-app-text-dim font-semibold">
+                  <InfoTooltip term="patrimonio_descomposicion_total" label="Total:" className="text-app-text-dim font-semibold" />
+                </span>
                 <span className="text-app-text font-mono font-bold">
                   {formatCompact(
                     (vista === 'usd'

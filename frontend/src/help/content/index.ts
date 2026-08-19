@@ -1,0 +1,16 @@
+import { HelpContent } from '../types'
+import { GLOSARIO_HELP, type GlosarioKey } from './glosario'
+import { SIMULADOR_HELP, type SimuladorHelpKey } from './simulador'
+import { OBJETIVO_HELP, type ObjetivoHelpKey } from './objetivo'
+import { BENCHMARKS_HELP, type BenchmarksHelpKey } from './benchmarks'
+import { PATRIMONIO_HELP, type PatrimonioHelpKey } from './patrimonio'
+
+export type HelpKey = GlosarioKey | SimuladorHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey
+
+export const HELP: Record<HelpKey, HelpContent> = {
+  ...GLOSARIO_HELP,
+  ...SIMULADOR_HELP,
+  ...OBJETIVO_HELP,
+  ...BENCHMARKS_HELP,
+  ...PATRIMONIO_HELP,
+}

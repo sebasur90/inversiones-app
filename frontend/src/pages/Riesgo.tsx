@@ -8,10 +8,12 @@ import { formatPctRatio } from '../utils'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
-import MetricCard from '../components/ui/MetricCard'
+import MetricTile from '../components/ui/MetricTile'
+import InfoTooltip from '../help/components/InfoTooltip'
+import ErrorBanner from '../help/components/ErrorBanner'
+import { parseApiError, type ParsedApiError } from '../help/errors/apiErrors'
 import Segmented from '../components/ui/Segmented'
 import { Icon } from '../components/icons/Icons'
-import InfoTerm from '../components/ui/InfoTerm'
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
@@ -40,6 +42,11 @@ function toneClass(v: number | null | undefined): string {
   return v >= 0 ? 'text-app-teal' : 'text-app-coral'
 }
 
+function tonoDeValor(v: number | null | undefined): 'pos' | 'neg' | undefined {
+  if (v == null) return undefined
+  return v >= 0 ? 'pos' : 'neg'
+}
+
 function PeriodoRow({ item }: { item: PeriodoRetorno }) {
   return (
     <div className="flex items-center justify-between bg-app-surface border border-app-border rounded-[13px] px-3.5 py-2 text-left">
@@ -56,16 +63,23 @@ export default function Riesgo() {
   const { benchmarks, benchmarkSeleccionado, setBenchmarkSeleccionado } = useBenchmarkSeleccionado(carteraSeleccionada)
   const [riesgo, setRiesgo] = useState<RiesgoOut | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<ParsedApiError | null>(null)
 
   useEffect(() => {
     let cancelado = false
     setLoading(true)
     getRiesgo(carteraSeleccionada, vista, benchmarkSeleccionado)
       .then(data => {
-        if (!cancelado) setRiesgo(data)
+        if (!cancelado) {
+          setRiesgo(data)
+          setError(null)
+        }
       })
-      .catch(() => {
-        if (!cancelado) setRiesgo(null)
+      .catch(err => {
+        if (!cancelado) {
+          setRiesgo(null)
+          setError(parseApiError(err))
+        }
       })
       .finally(() => {
         if (!cancelado) setLoading(false)
@@ -108,6 +122,8 @@ export default function Riesgo() {
 
       {loading ? (
         <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+      ) : error ? (
+        <div className="py-4"><ErrorBanner error={error} /></div>
       ) : !riesgo || sinHistorialSuficiente ? (
         <EmptyState title="Sin datos" description="No hay suficiente historial mensual para calcular métricas de riesgo de esta cartera." />
       ) : (
@@ -117,7 +133,7 @@ export default function Riesgo() {
           </div>
 
           <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">
-            <InfoTerm term="drawdown" label="Drawdown" />
+            <InfoTooltip term="drawdown" label="Drawdown" />
           </h3>
           {serieDrawdown.length < 2 ? (
             <EmptyState title="Sin historial suficiente" description="Se necesitan al menos 2 meses con tenencia para graficar el drawdown." />
@@ -189,47 +205,47 @@ export default function Riesgo() {
           )}
 
           <div className="grid grid-cols-2 gap-2 my-4">
-            <MetricCard
+            <MetricTile
               label="Drawdown actual"
               infoTerm="drawdown"
               value={formatPctRatio(riesgo.drawdown.actual)}
               insuficiente={riesgo.drawdown.estado !== 'ok'}
-              tone={toneClass(riesgo.drawdown.actual)}
+              tone={tonoDeValor(riesgo.drawdown.actual)}
             />
-            <MetricCard
+            <MetricTile
               label="Drawdown máximo"
               infoTerm="drawdown"
               value={formatPctRatio(riesgo.drawdown.maximo)}
               insuficiente={riesgo.drawdown.estado !== 'ok'}
-              tone="text-app-coral"
+              tone="neg"
             />
-            <MetricCard
+            <MetricTile
               label="Volatilidad anualizada"
               infoTerm="volatilidad"
               value={formatPctRatio(riesgo.volatilidad.anualizada)}
               insuficiente={riesgo.volatilidad.estado !== 'ok'}
             />
-            <MetricCard
+            <MetricTile
               label="Calmar"
               infoTerm="calmar"
               value={formatRatio(riesgo.calmar.valor)}
               insuficiente={riesgo.calmar.estado !== 'ok'}
-              tone={toneClass(riesgo.calmar.valor)}
+              tone={tonoDeValor(riesgo.calmar.valor)}
             />
-            <MetricCard
+            <MetricTile
               label="Sortino"
               infoTerm="sortino"
               value={formatRatio(riesgo.sortino.valor)}
               insuficiente={riesgo.sortino.estado !== 'ok' || riesgo.sortino.valor == null}
-              tone={toneClass(riesgo.sortino.valor)}
+              tone={tonoDeValor(riesgo.sortino.valor)}
             />
-            <MetricCard
+            <MetricTile
               label="Sharpe"
               infoTerm="sharpe"
               value={formatRatio(riesgo.sharpe.valor)}
-              subtitulo={riesgo.sharpe.benchmark ? `vs. ${riesgo.sharpe.benchmark}` : undefined}
+              sub={riesgo.sharpe.benchmark ? `vs. ${riesgo.sharpe.benchmark}` : undefined}
               insuficiente={riesgo.sharpe.estado !== 'ok'}
-              tone={toneClass(riesgo.sharpe.valor)}
+              tone={tonoDeValor(riesgo.sharpe.valor)}
             />
           </div>
 
