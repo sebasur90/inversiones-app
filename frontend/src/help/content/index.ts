@@ -12,8 +12,9 @@ import { EXPOSICION_HELP, type ExposicionHelpKey } from './exposicion'
 import { VENCIMIENTOS_HELP, type VencimientosHelpKey } from './vencimientos'
 import { PRECIOS_HELP, type PreciosHelpKey } from './precios'
 import { INDICADORESMACRO_HELP, type IndicadoresMacroHelpKey } from './indicadoresmacro'
+import { COMPARADOR_HELP, type ComparadorHelpKey } from './comparador'
 
-export type HelpKey = GlosarioKey | SimuladorHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey
+export type HelpKey = GlosarioKey | SimuladorHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey
 
 export const HELP: Record<HelpKey, HelpContent> = {
   ...GLOSARIO_HELP,
@@ -29,6 +30,7 @@ export const HELP: Record<HelpKey, HelpContent> = {
   ...VENCIMIENTOS_HELP,
   ...PRECIOS_HELP,
   ...INDICADORESMACRO_HELP,
+  ...COMPARADOR_HELP,
 }
 
 export {
@@ -45,4 +47,5 @@ export {
   VENCIMIENTOS_HELP,
   PRECIOS_HELP,
   INDICADORESMACRO_HELP,
+  COMPARADOR_HELP,
 }

@@ -12,6 +12,7 @@ import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import EmptyState from '../components/ui/EmptyState'
 import Card from '../components/ui/Card'
+import InfoTooltip from '../help/components/InfoTooltip'
 
 type Vista = 'nominal' | 'usd' | 'cer'
 
@@ -188,16 +189,38 @@ export default function Comparador() {
         <EmptyState title="Elegí al menos un ticker" description="Tocá los chips de arriba para agregarlos a la comparación." />
       ) : (
         <>
+          <div className="px-4 mb-4 pt-2">
+            <div className="text-[12px] text-app-text-dim space-y-1.5 mb-3">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-app-text">USD (MEP)</span>
+                <InfoTooltip term="precios_usd_mep" />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-app-text">ARS Real (CER)</span>
+                <InfoTooltip term="precios_ars_real_cer" />
+              </div>
+              {monedasSel.size <= 1 && (
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-app-text">Nominal</span>
+                  <InfoTooltip term="comparador_nominal" />
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="flex items-center justify-between gap-2 mb-3">
             <Segmented options={opcionesVista} value={vista} onChange={setVista} />
-            <button
-              onClick={() => setNormalizado(v => !v)}
-              className={`shrink-0 font-semibold text-[11px] px-2.5 py-1.5 rounded-lg border ${
-                normalizado ? 'bg-app-gold-soft border-app-gold text-app-gold' : 'bg-app-surface border-app-border text-app-text-dim'
-              }`}
-            >
-              Base 100
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setNormalizado(v => !v)}
+                className={`shrink-0 font-semibold text-[11px] px-2.5 py-1.5 rounded-lg border ${
+                  normalizado ? 'bg-app-gold-soft border-app-gold text-app-gold' : 'bg-app-surface border-app-border text-app-text-dim'
+                }`}
+              >
+                Base 100
+              </button>
+              <InfoTooltip term="comparador_base100" />
+            </div>
           </div>
 
           <Card>
