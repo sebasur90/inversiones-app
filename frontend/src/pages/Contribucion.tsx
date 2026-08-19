@@ -14,38 +14,13 @@ import ScreenHeader from '../components/layout/ScreenHeader'
 import EmptyState from '../components/ui/EmptyState'
 import Segmented from '../components/ui/Segmented'
 import InfoTerm from '../components/ui/InfoTerm'
+import MetricTile from '../components/ui/MetricTile'
 import CorrelacionMatriz from '../components/charts/CorrelacionMatriz'
 import { Icon } from '../components/icons/Icons'
 
 function toneClass(v: number | null | undefined): string {
   if (v == null) return 'text-app-text'
   return v >= 0 ? 'text-app-teal' : 'text-app-coral'
-}
-
-function StatTile({
-  label,
-  value,
-  subtitulo,
-  insuficiente,
-}: {
-  label: string
-  value: string
-  subtitulo?: string
-  insuficiente?: boolean
-}) {
-  return (
-    <div className="bg-app-surface border border-app-border rounded-[13px] px-2.5 py-2.5">
-      <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
-        <InfoTerm term="hhi" label={label} />
-      </div>
-      {insuficiente ? (
-        <div className="text-[12px] text-app-text-faint">Sin datos</div>
-      ) : (
-        <div className="font-mono text-[14px] font-bold tabular-nums text-app-text">{value}</div>
-      )}
-      {subtitulo && !insuficiente && <div className="text-[10px] text-app-text-dim mt-0.5">{subtitulo}</div>}
-    </div>
-  )
 }
 
 function ContribucionBar({ item, maxAbs }: { item: ContribucionItem; maxAbs: number }) {
@@ -194,16 +169,18 @@ export default function Contribucion() {
           </div>
           {ejeActivoConcentracion && (
             <div className="grid grid-cols-2 gap-2 mb-6">
-              <StatTile
+              <MetricTile
                 label="HHI"
+                infoTerm="hhi"
                 value={ejeActivoConcentracion.hhi != null ? ejeActivoConcentracion.hhi.toFixed(0) : '—'}
-                subtitulo={etiquetaHhi(ejeActivoConcentracion.hhi)}
+                sub={etiquetaHhi(ejeActivoConcentracion.hhi)}
                 insuficiente={ejeActivoConcentracion.estado !== 'ok'}
               />
-              <StatTile
+              <MetricTile
                 label="N efectivo"
+                infoTerm="hhi"
                 value={ejeActivoConcentracion.effective_n != null ? ejeActivoConcentracion.effective_n.toFixed(1) : '—'}
-                subtitulo={`${ejeActivoConcentracion.n_componentes} componente${ejeActivoConcentracion.n_componentes === 1 ? '' : 's'}`}
+                sub={`${ejeActivoConcentracion.n_componentes} componente${ejeActivoConcentracion.n_componentes === 1 ? '' : 's'}`}
                 insuficiente={ejeActivoConcentracion.estado !== 'ok'}
               />
             </div>

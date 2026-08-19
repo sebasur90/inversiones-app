@@ -10,25 +10,13 @@ import ComparacionChart from '../components/charts/ComparacionChart'
 import RendimientoHeatmap from '../components/charts/RendimientoHeatmap'
 import DescomposicionFxChart from '../components/charts/DescomposicionFxChart'
 import { Icon } from '../components/icons/Icons'
+import MetricTile from '../components/ui/MetricTile'
 import InfoTerm from '../components/ui/InfoTerm'
-import type { GlosarioKey } from '../data/glosario'
+import type { HelpKey } from '../help/content/index'
 
 function toneClass(v: number | null | undefined): string {
   if (v == null) return 'text-app-text'
   return v >= 0 ? 'text-app-teal' : 'text-app-coral'
-}
-
-function PnlCard({ label, infoTerm, value, tone }: { label: string; infoTerm?: GlosarioKey; value: string; tone?: 'pos' | 'neg' }) {
-  return (
-    <div className="bg-app-surface border border-app-border rounded-[13px] px-2.5 py-2.5">
-      <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
-        {infoTerm ? <InfoTerm term={infoTerm} label={label} /> : label}
-      </div>
-      <div className={`font-mono text-[14px] font-bold tabular-nums ${tone === 'pos' ? 'text-app-teal' : tone === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
-        {value}
-      </div>
-    </div>
-  )
 }
 
 function toneFor(v: number | null | undefined): 'pos' | 'neg' | undefined {
@@ -88,7 +76,7 @@ export default function Rendimiento() {
   const ingresos = c ? (esARS ? c.ingresos_ars : c.ingresos_usd) : null
   const total = c ? (esARS ? c.total_ars : c.total_usd) : null
 
-  const filas: { label: string; infoTerm: GlosarioKey; valores: (number | null | undefined)[] }[] = resumen
+  const filas: { label: string; infoTerm: HelpKey; valores: (number | null | undefined)[] }[] = resumen
     ? [
         { label: 'Simple', infoTerm: 'simple', valores: [resumen.rendimiento_simple_ars, resumen.rendimiento_simple_ars_real, resumen.rendimiento_simple_usd] },
         { label: 'TIR (XIRR)', infoTerm: 'xirr', valores: [resumen.xirr_ars, resumen.xirr_ars_real, resumen.xirr_usd] },
@@ -120,13 +108,13 @@ export default function Rendimiento() {
               <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">¿Ganaste por los activos o por el dólar?</h3>
               <Card className="mb-4">
                 <div className="grid grid-cols-2 gap-2 mb-4">
-                  <PnlCard
+                  <MetricTile
                     label="Retorno ARS"
                     infoTerm="rendimiento_ars"
                     value={formatPctRatio(descomposicionFx.retorno_total_ars_pct)}
                     tone={toneFor(descomposicionFx.retorno_total_ars_pct)}
                   />
-                  <PnlCard
+                  <MetricTile
                     label="Retorno USD"
                     infoTerm="rendimiento_usd"
                     value={formatPctRatio(descomposicionFx.retorno_activo_pct)}
@@ -180,12 +168,12 @@ export default function Rendimiento() {
 
           <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">P&amp;L realizado vs. no realizado</h3>
           <div className="grid grid-cols-2 gap-2 mb-2">
-            <PnlCard label="Realizado (ventas)" infoTerm="realizado" value={formatMoneda(realizado)} tone={toneFor(realizado)} />
-            <PnlCard label="No realizado (en cartera)" infoTerm="noRealizado" value={formatMoneda(noRealizado)} tone={toneFor(noRealizado)} />
+            <MetricTile label="Realizado (ventas)" infoTerm="realizado" value={formatMoneda(realizado)} tone={toneFor(realizado)} />
+            <MetricTile label="No realizado (en cartera)" infoTerm="noRealizado" value={formatMoneda(noRealizado)} tone={toneFor(noRealizado)} />
           </div>
           <div className="grid grid-cols-2 gap-2 mb-4">
-            <PnlCard label="Ingresos (div./cupones)" infoTerm="ingresos" value={formatMoneda(ingresos)} tone={toneFor(ingresos)} />
-            <PnlCard label="Total" value={formatMoneda(total)} tone={toneFor(total)} />
+            <MetricTile label="Ingresos (div./cupones)" infoTerm="ingresos" value={formatMoneda(ingresos)} tone={toneFor(ingresos)} />
+            <MetricTile label="Total" value={formatMoneda(total)} tone={toneFor(total)} />
           </div>
 
           <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">Rendimiento: nominal vs. real vs. USD</h3>

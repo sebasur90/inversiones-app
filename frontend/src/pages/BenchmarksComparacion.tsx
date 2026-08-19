@@ -11,6 +11,11 @@ import BenchmarkComparisonTable from '../components/inversiones/BenchmarkCompari
 import PerformanceCompareChart from '../components/charts/PerformanceCompareChart'
 import { formatUSD, formatARS } from '../utils'
 import { Icon } from '../components/icons/Icons'
+import MetricTile from '../components/ui/MetricTile'
+import FormHelp from '../help/components/FormHelp'
+import ErrorBanner from '../help/components/ErrorBanner'
+import { parseApiError } from '../help/errors/apiErrors'
+import type { ParsedApiError } from '../help/errors/apiErrors'
 
 const calcularDesdeFromPeriod = (period: string): string | undefined => {
   const hoy = new Date()
@@ -51,6 +56,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
   const [opportunityCostData, setOpportunityCostData] = useState<OpportunityCostOut | null>(null)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('comparacion')
+  const [error, setError] = useState<ParsedApiError | null>(null)
 
   useEffect(() => {
     Promise.all([getBenchmarksDisponibles(), getTickersConPrecios()])
@@ -66,6 +72,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
 
   const loadData = async () => {
     setLoading(true)
+    setError(null)
     try {
       const desde = calcularDesdeFromPeriod(periodo)
       const [perfData, oppData] = await Promise.all([
@@ -75,7 +82,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
       setPerformanceData(perfData)
       if (oppData) setOpportunityCostData(oppData)
     } catch (err) {
-      console.error('Error loading performance data:', err)
+      setError(parseApiError(err))
     } finally {
       setLoading(false)
     }
@@ -95,7 +102,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <div className="text-[11px] font-bold uppercase text-app-text-faint mb-2">Período</div>
+              <FormHelp term="benchmarks_periodo" label="Período" />
               <div className="flex gap-1 flex-wrap">
                 {['1m', '3m', '6m', '1y', 'all'].map((p) => (
                   <button
@@ -113,7 +120,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
               </div>
             </div>
             <div>
-              <div className="text-[11px] font-bold uppercase text-app-text-faint mb-2">Moneda</div>
+              <FormHelp term="benchmarks_moneda" label="Moneda" />
               <div className="flex gap-1 flex-wrap">
                 {(['usd', 'ars_nominal', 'ars_real'] as const).map((m) => (
                   <button
@@ -134,7 +141,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <div className="text-[11px] font-bold uppercase text-app-text-faint mb-2">Benchmarks</div>
+              <FormHelp term="benchmarks_seleccion" label="Benchmarks" />
               <div className="flex flex-wrap gap-2">
                 {benchmarksDisponibles.map((b) => (
                   <button
@@ -157,7 +164,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
               </div>
             </div>
             <div>
-              <div className="text-[11px] font-bold uppercase text-app-text-faint mb-2">Tickers</div>
+              <div className="text-xs font-semibold text-app-text mb-2">Tickers</div>
               <div className="flex flex-wrap gap-2 max-h-12 overflow-y-auto">
                 {tickersConPrecios.map((t) => (
                   <button
@@ -182,6 +189,8 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
           </div>
         </div>
       </div>
+
+      {error && <ErrorBanner error={error} />}
 
       {loading && (
         <div className="flex items-center justify-center py-8">
@@ -235,38 +244,31 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
                     <h3 className="text-[13px] font-bold text-app-text mb-3">Resumen</h3>
                     {opportunityCostData.estado === 'ok' ? (
                       <div className="grid grid-cols-2 gap-2">
-                        <div className="bg-app-surface border border-app-border rounded-lg p-3">
-                          <div className="text-[10px] text-app-text-faint uppercase mb-1">Valor Actual</div>
-                          <div className="font-mono font-bold text-[13px] text-app-text">
-                            {moneda === 'usd'
-                              ? formatUSD(opportunityCostData.valor_actual_usd || 0)
-                              : formatARS(opportunityCostData.valor_actual_ars || 0)}
-                          </div>
-                        </div>
-                        <div className="bg-app-surface border border-app-border rounded-lg p-3">
-                          <div className="text-[10px] text-app-text-faint uppercase mb-1">Valor Shadow</div>
-                          <div className="font-mono font-bold text-[13px] text-app-text">
-                            {moneda === 'usd'
-                              ? formatUSD(opportunityCostData.valor_shadow_usd || 0)
-                              : formatARS(opportunityCostData.valor_shadow_ars || 0)}
-                          </div>
-                        </div>
-                        <div className="bg-app-surface border border-app-border rounded-lg p-3">
-                          <div className="text-[10px] text-app-text-faint uppercase mb-1">Costo Oportunidad</div>
-                          <div className={`font-mono font-bold text-[13px] ${
-                            (opportunityCostData.costo_oportunidad_usd || 0) > 0 ? 'text-app-coral' : 'text-app-teal'
-                          }`}>
-                            {moneda === 'usd'
-                              ? formatUSD(opportunityCostData.costo_oportunidad_usd || 0)
-                              : formatARS(opportunityCostData.costo_oportunidad_ars || 0)}
-                          </div>
-                        </div>
-                        <div className="bg-app-surface border border-app-border rounded-lg p-3">
-                          <div className="text-[10px] text-app-text-faint uppercase mb-1">Benchmark</div>
-                          <div className="text-[12px] font-semibold text-app-text">
-                            {opportunityCostData.benchmark_usado}
-                          </div>
-                        </div>
+                        <MetricTile
+                          label="Valor Actual"
+                          value={moneda === 'usd'
+                            ? formatUSD(opportunityCostData.valor_actual_usd || 0)
+                            : formatARS(opportunityCostData.valor_actual_ars || 0)}
+                        />
+                        <MetricTile
+                          label="Valor Shadow"
+                          value={moneda === 'usd'
+                            ? formatUSD(opportunityCostData.valor_shadow_usd || 0)
+                            : formatARS(opportunityCostData.valor_shadow_ars || 0)}
+                          infoTerm="valorShadow"
+                        />
+                        <MetricTile
+                          label="Costo de Oportunidad"
+                          value={moneda === 'usd'
+                            ? formatUSD(opportunityCostData.costo_oportunidad_usd || 0)
+                            : formatARS(opportunityCostData.costo_oportunidad_ars || 0)}
+                          tone={(opportunityCostData.costo_oportunidad_usd || 0) > 0 ? 'neg' : 'pos'}
+                          infoTerm="costoOportunidad"
+                        />
+                        <MetricTile
+                          label="Benchmark usado"
+                          value={opportunityCostData.benchmark_usado || '—'}
+                        />
                       </div>
                     ) : (
                       <div className="bg-app-surface border border-app-border rounded-lg p-3 text-app-text-dim text-[12px]">
