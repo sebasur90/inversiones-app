@@ -1767,6 +1767,8 @@ def get_evolucion(cartera: str | None, db: Session, desde: date | None = None, m
 
     Sin `desde`, arranca en el primer movimiento con granularidad mensual (uso original: sparklines).
     Con `desde`, ajusta la granularidad al rango solicitado (diaria/semanal/mensual).
+
+    Para ARS real, el capital aportado se ajusta por CER: Σ(Aporte_i × CER_hoy / CER_i)
     """
     movs = _movimientos_ordenados(db, cartera)
     if not movs:
@@ -1794,8 +1796,9 @@ def get_evolucion(cartera: str | None, db: Session, desde: date | None = None, m
     idx_capital = 0
     capital_usd = 0.0
     capital_ars = 0.0
-    capital_ars_real = 0.0
+    movimientos_acumulados = []  # (fecha, monto_ars, tipo) para calcular capital_ars_real
     capital_ars_real_valido = True
+
     for f in fechas:
         tracker.avanzar_a(f)
         snapshot = tracker.snapshot()
@@ -1820,12 +1823,18 @@ def get_evolucion(cartera: str | None, db: Session, desde: date | None = None, m
             monto_ars = _monto_ars(mov, db, mep_cache)
             if monto_ars is not None:
                 capital_ars += signo * monto_ars
-            if capital_ars_real_valido:
-                monto_ars_real = _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy)
-                if monto_ars_real is not None:
-                    capital_ars_real += signo * monto_ars_real
-                else:
+                movimientos_acumulados.append((mov.fecha, signo * monto_ars))
+
+        # Calcular capital_ars_real ajustado por CER en este punto del gráfico
+        capital_ars_real = 0.0
+        if capital_ars_real_valido and cer_hoy is not None:
+            for fecha_mov, monto_ars in movimientos_acumulados:
+                cer_mov = _cer_indice(fecha_mov, db, cer_cache)
+                if cer_mov is None:
                     capital_ars_real_valido = False
+                    capital_ars_real = 0.0
+                    break
+                capital_ars_real += monto_ars * (cer_hoy / cer_mov)
 
         puntos.append({
             "fecha": f,
