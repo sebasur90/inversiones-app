@@ -12,6 +12,8 @@ import {
 import { formatUSD, formatPct } from '../../utils'
 import Card from '../ui/Card'
 import Segmented from '../ui/Segmented'
+import FormHelp from '../../help/components/FormHelp'
+import InfoTooltip from '../../help/components/InfoTooltip'
 
 type SolverMode = 'aporte' | 'fecha' | 'tasa'
 
@@ -143,8 +145,9 @@ export default function SimuladorInverso({
 
       <Card>
         <div className="mb-4">
-          <label className="block text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2">
+          <label className="block text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2 flex items-center gap-1.5">
             ¿Qué querés resolver?
+            <InfoTooltip term="objetivo_modo_solver" />
           </label>
           <Segmented<SolverMode>
             value={mode}
@@ -161,9 +164,7 @@ export default function SimuladorInverso({
         <div className="grid grid-cols-2 gap-2 mb-4">
           {/* Objetivo USD */}
           <div>
-            <label className="block text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
-              Objetivo (USD)
-            </label>
+            <FormHelp term="objetivo_monto" label="Objetivo (USD)" />
             <input
               type="number"
               min={0}
@@ -175,9 +176,7 @@ export default function SimuladorInverso({
 
           {/* Fecha objetivo */}
           <div>
-            <label className="block text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
-              Fecha objetivo
-            </label>
+            <FormHelp term="objetivo_fecha_limite" label="Fecha objetivo" />
             <input
               type="date"
               value={form.fechaObjetivo}
@@ -188,9 +187,7 @@ export default function SimuladorInverso({
 
           {/* Patrimonio inicial */}
           <div>
-            <label className="block text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
-              Patrimonio inicial (USD)
-            </label>
+            <FormHelp term="objetivo_patrimonio_inicial" label="Patrimonio inicial (USD)" />
             <input
               type="number"
               min={0}
@@ -202,9 +199,7 @@ export default function SimuladorInverso({
 
           {/* Aporte mensual */}
           <div>
-            <label className="block text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
-              Aporte mensual (USD)
-            </label>
+            <FormHelp term="objetivo_aporte_mensual" label="Aporte mensual (USD)" />
             <input
               type="number"
               min={0}
@@ -233,9 +228,7 @@ export default function SimuladorInverso({
 
           {/* Rentabilidad anual */}
           <div>
-            <label className="block text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
-              Rentabilidad anual (%)
-            </label>
+            <FormHelp term="objetivo_rentabilidad_anual" label="Rentabilidad anual (%)" />
             <input
               type="number"
               min={-90}

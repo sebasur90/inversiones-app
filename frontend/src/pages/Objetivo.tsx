@@ -16,11 +16,14 @@ import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
 import Segmented from '../components/ui/Segmented'
+import MetricTile from '../components/ui/MetricTile'
 import AportesChart from '../components/charts/AportesChart'
 import ProyeccionPatrimonialChart from '../components/charts/ProyeccionPatrimonialChart'
 import SensibilidadGrid from '../components/charts/SensibilidadGrid'
 import SimuladorInverso from '../components/inversiones/SimuladorInverso'
 import { Icon } from '../components/icons/Icons'
+import InfoTooltip from '../help/components/InfoTooltip'
+import FormHelp from '../help/components/FormHelp'
 
 export default function Objetivo() {
   const { carteras, carteraSeleccionada, setCarteraSeleccionada } = useInversionesContext()
@@ -297,61 +300,31 @@ export default function Objetivo() {
 
           {/* Grid 2x2 de aportes */}
           <div className="grid grid-cols-2 gap-2 my-3.5">
-            <div className="bg-app-surface border border-app-border rounded-[13px] p-2.5">
-              <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
-                Aporte prom./mes
-              </div>
-              <div className="font-mono text-[15px] font-bold text-app-text tabular-nums">
-                {formatUSD(objetivo.aporte_mensual_promedio_usd)}
-              </div>
-            </div>
-            <div className="bg-app-surface border border-app-border rounded-[13px] p-2.5">
-              <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
-                Necesario/mes
-              </div>
-              <div
-                className={`font-mono text-[15px] font-bold tabular-nums ${
-                  objetivo.alcanzable ? 'text-app-text' : 'text-app-coral'
-                }`}
-              >
-                {objetivo.aporte_mensual_necesario_usd != null
-                  ? formatUSD(objetivo.aporte_mensual_necesario_usd)
-                  : '—'}
-              </div>
-            </div>
+            <MetricTile
+              label="Aporte prom./mes"
+              value={formatUSD(objetivo.aporte_mensual_promedio_usd)}
+              infoTerm="objetivo_aporte_mensual"
+            />
+            <MetricTile
+              label="Necesario/mes"
+              value={objetivo.aporte_mensual_necesario_usd != null ? formatUSD(objetivo.aporte_mensual_necesario_usd) : '—'}
+              tone={objetivo.alcanzable ? undefined : 'neg'}
+            />
             {plan ? (
               <>
-                <div className="bg-app-surface border border-app-border rounded-[13px] p-2.5">
-                  <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
-                    Esperado/mes
-                  </div>
-                  <div className="font-mono text-[15px] font-bold text-app-text tabular-nums">
-                    {formatUSD(plan.aporteMensualEsperadoUsd)}
-                  </div>
-                  <div className="text-[8px] text-app-text-dim mt-1">según plan original</div>
-                </div>
+                <MetricTile
+                  label="Esperado/mes"
+                  value={formatUSD(plan.aporteMensualEsperadoUsd)}
+                  sub="según plan original"
+                />
                 {desviacion ? (
-                  <div className="bg-app-surface border border-app-border rounded-[13px] p-2.5">
-                    <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
-                      Desviación vs. plan
-                    </div>
-                    <div
-                      className={`font-mono text-[15px] font-bold tabular-nums flex items-center gap-1 ${
-                        desviacion.adelantado ? 'text-app-teal' : 'text-app-coral'
-                      }`}
-                    >
-                      <Icon
-                        name={desviacion.adelantado ? 'up' : 'down'}
-                        className="w-3.5 h-3.5"
-                      />
-                      {formatUSD(Math.abs(desviacion.desviacionUsd))}
-                    </div>
-                    {desviacion.desviacionPct != null && (
-                      <div className="text-[8px] text-app-text-dim mt-1">
-                        {desviacion.adelantado ? '+' : ''}{(desviacion.desviacionPct * 100).toFixed(1)}%
-                      </div>
-                    )}
-                  </div>
+                  <MetricTile
+                    label="Desviación vs. plan"
+                    value={formatUSD(Math.abs(desviacion.desviacionUsd))}
+                    sub={desviacion.desviacionPct != null ? `${desviacion.adelantado ? '+' : ''}${(desviacion.desviacionPct * 100).toFixed(1)}%` : undefined}
+                    tone={desviacion.adelantado ? 'pos' : 'neg'}
+                    infoTerm="objetivo_desviacion_plan"
+                  />
                 ) : null}
               </>
             ) : null}
@@ -479,8 +452,9 @@ export default function Objetivo() {
               <Card>
                 {escenarios && (
                   <div className="mb-3">
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-app-text-faint mb-1.5">
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-app-text-faint mb-1.5 flex items-center gap-1.5">
                       Escenario mostrado
+                      <InfoTooltip term="objetivo_escenario_mostrado" />
                     </label>
                     <Segmented<'conservador' | 'base' | 'optimista'>
                       value={escenarioActual}
