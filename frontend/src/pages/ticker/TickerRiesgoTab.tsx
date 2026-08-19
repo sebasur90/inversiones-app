@@ -39,6 +39,7 @@ export default function TickerRiesgoTab({ riesgo }: { riesgo: TickerRiesgoOut })
         {riesgo.calmar?.retorno_anualizado != null && (
           <MetricTile
             label="Retorno anualizado"
+            infoTerm="tickerdetalle_retorno_anualizado"
             value={formatPctRatio(riesgo.calmar.retorno_anualizado)}
             tone={riesgo.calmar.retorno_anualizado >= 0 ? 'pos' : 'neg'}
           />

@@ -81,7 +81,7 @@ export default function TickerResumenTab({ position, cartera, monedaSeleccionada
         <MetricTile label="Valor actual" value={formatMoneda(valorActual)} />
         <MetricTile label="Rend. simple" infoTerm="simple" value={formatPctRatio(rendimiento)} tone={rendimiento == null ? undefined : positivo ? 'pos' : 'neg'} />
         {esARS && position.rendimiento_simple_ars_real != null && (
-          <MetricTile label="Rend. ARS real" value={formatPctRatio(position.rendimiento_simple_ars_real)} tone={position.rendimiento_simple_ars_real >= 0 ? 'pos' : 'neg'} />
+          <MetricTile label="Rend. ARS real" infoTerm="cer" value={formatPctRatio(position.rendimiento_simple_ars_real)} tone={position.rendimiento_simple_ars_real >= 0 ? 'pos' : 'neg'} />
         )}
         {descomposicionFxPorTicker && descomposicionFxPorTicker.estado === 'ok' && (
           <>

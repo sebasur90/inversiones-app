@@ -41,6 +41,7 @@ export default function TickerRendimientoTab({ performance, position, monedaSele
         />
         <MetricTile
           label="Total P&L"
+          infoTerm="tickerdetalle_total_pl"
           value={total != null ? formatMoneda(total) : 'N/A'}
           tone={toneFor(total)}
         />

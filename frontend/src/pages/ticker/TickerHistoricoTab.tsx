@@ -1,6 +1,7 @@
 import { formatARS, formatPrecio, formatUSD } from '../../utils'
 import Card from '../../components/ui/Card'
 import Sparkline from '../../components/charts/Sparkline'
+import InfoTooltip from '../../help/components/InfoTooltip'
 import type { TickerHistoricoOut } from '../../api'
 
 export default function TickerHistoricoTab({ historico, monedaSeleccionada }: { historico: TickerHistoricoOut; monedaSeleccionada: 'ARS' | 'USD' }) {
@@ -31,10 +32,22 @@ export default function TickerHistoricoTab({ historico, monedaSeleccionada }: { 
             <thead>
               <tr className="border-b border-app-border">
                 <th className="text-left py-2 px-2 text-app-text-dim font-semibold">Fecha</th>
-                <th className="text-right py-2 px-2 text-app-text-dim font-semibold">Precio nominal</th>
-                <th className="text-right py-2 px-2 text-app-text-dim font-semibold">Precio USD</th>
-                {moneda && <th className="text-right py-2 px-2 text-app-text-dim font-semibold">Precio CER</th>}
-                <th className="text-right py-2 px-2 text-app-text-dim font-semibold">Valor posición</th>
+                <th className="text-right py-2 px-2 text-app-text-dim font-semibold flex items-center justify-end gap-1.5">
+                  <span>Precio nominal</span>
+                  <InfoTooltip term="tickerdetalle_precio_nominal" />
+                </th>
+                <th className="text-right py-2 px-2 text-app-text-dim font-semibold flex items-center justify-end gap-1.5">
+                  <span>Precio USD</span>
+                  <InfoTooltip term="mep" />
+                </th>
+                {moneda && <th className="text-right py-2 px-2 text-app-text-dim font-semibold flex items-center justify-end gap-1.5">
+                  <span>Precio CER</span>
+                  <InfoTooltip term="cer" />
+                </th>}
+                <th className="text-right py-2 px-2 text-app-text-dim font-semibold flex items-center justify-end gap-1.5">
+                  <span>Valor posición</span>
+                  <InfoTooltip term="tickerdetalle_valor_posicion" />
+                </th>
               </tr>
             </thead>
             <tbody>
