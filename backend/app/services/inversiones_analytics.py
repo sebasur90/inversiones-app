@@ -1811,8 +1811,6 @@ def get_evolucion(cartera: str | None, db: Session, desde: date | None = None, m
                 signo = 1
             elif mov.tipo_movimiento in ("venta", "amortizacion"):
                 signo = -1
-            elif mov.tipo_movimiento in TIPOS_INGRESO:
-                signo = 1
             else:
                 continue
 
