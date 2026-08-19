@@ -106,12 +106,13 @@ try {
 | Exposición | ✅ | ✓ | 6 términos + sección informativa (Batch 3 Sprint 2) |
 | Vencimientos | ✅ | ✓ | 5 términos + sección informativa (Batch 3 Sprint 3) |
 | Precios | ✅ | ✓ | 6 términos + sección informativa (Batch 3 Sprint 4) |
-| IndicadoresMacro | ⏳ | — | |
-| Comparador | ⏳ | — | |
-| Comisiones | ⏳ | — | |
-| Rebalanceo | ⏳ | — | |
-| PerformanceRelativa | ⏳ | — | |
-| Tabs de TickerDetalle | ⏳ | — | |
+| IndicadoresMacro | ✅ | ✓ | 2 términos nuevos + sección CER/MEP (Batch 4 Sprint 1) |
+| Comparador | ✅ | ✓ | 2 términos nuevos + reutiliza precios_usd_mep/cer (Batch 4 Sprint 2) |
+| PerformanceRelativa | ✅ | ✓ | 3 términos nuevos + pp global + reescrita costoOportunidad + MetricCard→MetricTile (Batch 5 Sprint 1) |
+| TickerDetalle (Resumen/Rendimiento/Riesgo) | ✅ | ✓ | 2 términos nuevos + conexión cer (Batch 5 Sprint 2) |
+| TickerDetalle (Histórico) | ✅ | ✓ | 2 términos nuevos + tooltips en headers tabla (Batch 5 Sprint 3) |
+| Comisiones | ✅ | ✓ | 3 términos nuevos (Batch 6 Sprint 1) |
+| Rebalanceo | ✅ | ✓ | 4 términos nuevos + migración InfoTerm→InfoTooltip (Batch 6 Sprint 2) |
 
 ## Notas para mantainers
 
