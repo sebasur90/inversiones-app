@@ -11,6 +11,7 @@ import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import EmptyState from '../components/ui/EmptyState'
 import { Icon } from '../components/icons/Icons'
+import InfoTooltip from '../help/components/InfoTooltip'
 
 type Vista = 'nominal' | 'usd' | 'cer'
 
@@ -124,6 +125,23 @@ export default function Precios() {
     <div className="pb-4">
       <ScreenHeader title="Precios" />
 
+      <div className="px-4 mb-4 pt-2">
+        <div className="text-[12px] text-app-text-dim space-y-1.5 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-app-text">ARS Nominal</span>
+            <InfoTooltip term="precios_ars_nominal" />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-app-text">USD (MEP)</span>
+            <InfoTooltip term="precios_usd_mep" />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-app-text">ARS Real (CER)</span>
+            <InfoTooltip term="precios_ars_real_cer" />
+          </div>
+        </div>
+      </div>
+
       <div className="flex flex-wrap gap-x-4 gap-y-1 mb-2">
         <button onClick={() => navigate('/indicadores')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
           <Icon name="trend" className="w-3.5 h-3.5" /> Indicadores macro (CER/MEP)
@@ -159,7 +177,10 @@ export default function Precios() {
           </div>
           {ultimoPunto && (
             <div className="text-right shrink-0 ml-4">
-              <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">Último registro</div>
+              <div className="inline-flex items-center gap-1 text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">
+                <span>Último registro</span>
+                <InfoTooltip term="precios_ultimo_registro" />
+              </div>
               <div className="font-mono font-bold text-[15px] text-app-text tabular-nums">
                 {formatCompact(ultimoPunto.valor, vistaEsUSD)}
               </div>
