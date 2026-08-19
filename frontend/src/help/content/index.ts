@@ -15,8 +15,10 @@ import { INDICADORESMACRO_HELP, type IndicadoresMacroHelpKey } from './indicador
 import { COMPARADOR_HELP, type ComparadorHelpKey } from './comparador'
 import { PERFORMANCERELATIVA_HELP, type PerformanceRelativaHelpKey } from './performancerelativa'
 import { TICKERDETALLE_HELP, type TickerDetalleHelpKey } from './tickerdetalle'
+import { COMISIONES_HELP, type ComisionesHelpKey } from './comisiones'
+import { REBALANCEO_HELP, type RebalanceoHelpKey } from './rebalanceo'
 
-export type HelpKey = GlosarioKey | SimuladorHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey
+export type HelpKey = GlosarioKey | SimuladorHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey | ComisionesHelpKey | RebalanceoHelpKey
 
 export const HELP: Record<HelpKey, HelpContent> = {
   ...GLOSARIO_HELP,
@@ -35,6 +37,8 @@ export const HELP: Record<HelpKey, HelpContent> = {
   ...COMPARADOR_HELP,
   ...PERFORMANCERELATIVA_HELP,
   ...TICKERDETALLE_HELP,
+  ...COMISIONES_HELP,
+  ...REBALANCEO_HELP,
 }
 
 export {
@@ -54,4 +58,6 @@ export {
   COMPARADOR_HELP,
   PERFORMANCERELATIVA_HELP,
   TICKERDETALLE_HELP,
+  COMISIONES_HELP,
+  REBALANCEO_HELP,
 }

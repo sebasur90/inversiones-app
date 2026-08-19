@@ -11,7 +11,7 @@ import {
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import EmptyState from '../components/ui/EmptyState'
-import InfoTerm from '../components/ui/InfoTerm'
+import InfoTooltip from '../help/components/InfoTooltip'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import { Icon } from '../components/icons/Icons'
@@ -97,7 +97,7 @@ export default function Rebalanceo() {
       ) : (
         <>
           <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">
-            <InfoTerm term="rebalanceo" label="Balance de Cartera" />
+            <InfoTooltip term="rebalanceo" label="Balance de Cartera" />
           </h3>
 
           <Segmented
