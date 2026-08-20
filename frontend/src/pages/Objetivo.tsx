@@ -5,7 +5,6 @@ import { useObjetivoInversion } from '../hooks/useObjetivoInversion'
 import { formatUSD, formatPct } from '../utils'
 import {
   derivarPlanObjetivo,
-  calcularDesviacionPlan,
   calcularEscenarios,
   resolverFechaAlcanzable,
   calcularGrillaSensibilidad,
@@ -69,12 +68,6 @@ export default function Objetivo() {
     )
   }, [objetivo, aportesHistoricos, tasaBaseResuelto.valor])
 
-  // Desviación frente al plan
-  const desviacion = useMemo(() => {
-    if (!plan || !evolucion) return null
-    const ultimoPunto = evolucion.puntos[evolucion.puntos.length - 1]
-    return calcularDesviacionPlan(plan, ultimoPunto?.valor_usd ?? 0)
-  }, [plan, evolucion])
 
   // Escenarios
   const escenarios = useMemo(() => {
@@ -310,24 +303,6 @@ export default function Objetivo() {
               value={objetivo.aporte_mensual_necesario_usd != null ? formatUSD(objetivo.aporte_mensual_necesario_usd) : '—'}
               tone={objetivo.alcanzable ? undefined : 'neg'}
             />
-            {plan ? (
-              <>
-                <MetricTile
-                  label="Esperado/mes"
-                  value={formatUSD(plan.aporteMensualEsperadoUsd)}
-                  sub="según plan original"
-                />
-                {desviacion ? (
-                  <MetricTile
-                    label="Desviación vs. plan"
-                    value={formatUSD(Math.abs(desviacion.desviacionUsd))}
-                    sub={desviacion.desviacionPct != null ? `${desviacion.adelantado ? '+' : ''}${(desviacion.desviacionPct * 100).toFixed(1)}%` : undefined}
-                    tone={desviacion.adelantado ? 'pos' : 'neg'}
-                    infoTerm="objetivo_desviacion_plan"
-                  />
-                ) : null}
-              </>
-            ) : null}
           </div>
 
           {/* Fechas estimadas */}
