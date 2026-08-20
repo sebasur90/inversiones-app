@@ -230,7 +230,8 @@ export function derivarPlanObjetivo(
   montoObjetivoUsd: number,
   fechaLimite: string,
   primerMesCurva: string | null,
-  tasaBaseAnualPct: number
+  tasaBaseAnualPct: number,
+  valorActualUsd: number = 0
 ): PlanObjetivo | null {
   if (!primerMesCurva) return null
 
@@ -243,7 +244,7 @@ export function derivarPlanObjetivo(
   if (mesesTotales <= 0) return null
 
   const resolver = resolverAporteMensual(montoObjetivoUsd, mesesTotales, {
-    valorInicialUsd: 0,
+    valorInicialUsd: valorActualUsd,
     crecimientoAporteAnualPct: 0,
     tasaAnualPct: tasaBaseAnualPct,
   })
