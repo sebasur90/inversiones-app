@@ -87,12 +87,12 @@ export default function Objetivo() {
         valorInicialUsd: objetivo.valor_actual_usd,
         aporteMensualUsd: objetivo.aporte_mensual_promedio_usd,
         crecimientoAporteAnualPct: 0,
-        tasaAnualPct: tasaBaseResuelto.valor,
+        tasaAnualPct: 0,
       },
       1200,
       new Date()
     )
-  }, [objetivo, tasaBaseResuelto.valor])
+  }, [objetivo])
 
   // Fechas estimadas (aporte necesario + presets)
   const [aporteBonusMultiplier, setAporteBonusMultiplier] = useState(0) // 0 = necesario, 1.25 = +25%, 1.5 = +50%, 2 = +100%
@@ -120,12 +120,12 @@ export default function Objetivo() {
         valorInicialUsd: objetivo.valor_actual_usd,
         aporteMensualUsd: aporte,
         crecimientoAporteAnualPct: 0,
-        tasaAnualPct: tasaBaseResuelto.valor,
+        tasaAnualPct: 0,
       },
       1200,
       new Date()
     )
-  }, [objetivo, tasaBaseResuelto.valor, aporteBonusMultiplier, aportesPresets])
+  }, [objetivo, aporteBonusMultiplier, aportesPresets])
 
   // Grilla de sensibilidad
   const grillaSensibilidad = useMemo(() => {

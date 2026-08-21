@@ -70,9 +70,9 @@ export const OBJETIVO_HELP: Record<ObjetivoHelpKey, HelpContent> = {
   },
   objetivo_fechas_estimadas: {
     title: 'Fechas estimadas',
-    shortDescription: 'Proyecciones de cuándo alcanzarás tu objetivo bajo diferentes escenarios de aporte mensual.',
-    whyItMatters: 'Te ayuda a entender el impacto del aporte mensual en el tiempo necesario para alcanzar tu meta. Mayor aporte = menos tiempo.',
-    howItIsCalculated: 'Se calcula considerando: patrimonio actual, aporte mensual, rentabilidad anual esperada, y el monto objetivo. Usa esta fórmula: Valor Futuro = Patrimonio Inicial × (1 + Tasa)^años + Aporte Mensual × [(1 + Tasa)^años - 1] / Tasa.',
+    shortDescription: 'Proyecciones de cuándo alcanzarás tu objetivo bajo diferentes escenarios de aporte mensual, sin considerar rendimientos.',
+    whyItMatters: 'Te ayuda a entender el impacto del aporte mensual en el tiempo necesario para alcanzar tu meta. Mayor aporte = menos tiempo. El cálculo es lineal (sin rendimientos) para ver el efecto puro del ahorro.',
+    howItIsCalculated: 'Se calcula considerando únicamente: patrimonio actual + aporte mensual × meses restantes = monto objetivo. Los rendimientos se visualizan separadamente en Escenarios, Proyección patrimonial y Sensibilidad.',
   },
   objetivo_aporte_actual: {
     title: 'Manteniendo aporte actual',
