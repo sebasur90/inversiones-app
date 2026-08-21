@@ -400,10 +400,16 @@ class ObjetivoInversionOut(BaseModel):
     valor_actual_usd: float
     aporte_mensual_promedio_usd: float
     aporte_mensual_necesario_usd: Optional[float]
+    aporte_mensual_esperado_usd: Optional[float]
     meses_restantes: int
     proyeccion_usd: float
     alcanzable: bool
     deficit_usd: float
+    desviacion_usd: Optional[float]
+    desviacion_pct: Optional[float]
+    adelantado: Optional[bool]
+    aportado_a_la_fecha_usd: Optional[float]
+    esperado_a_la_fecha_usd: Optional[float]
 
     model_config = {"from_attributes": True}
 

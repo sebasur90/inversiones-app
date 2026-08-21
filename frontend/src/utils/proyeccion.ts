@@ -24,14 +24,6 @@ export interface PlanObjetivo {
   tasaBaseAnualPct: number
 }
 
-export interface DesviacionPlan {
-  valorPlanHoyUsd: number
-  valorRealHoyUsd: number
-  desviacionUsd: number
-  desviacionPct: number | null
-  adelantado: boolean
-}
-
 export interface Escenarios {
   conservador: number
   base: number
@@ -256,40 +248,6 @@ export function derivarPlanObjetivo(
     mesesTotales,
     aporteMensualEsperadoUsd: resolver.aporteMensualUsd,
     tasaBaseAnualPct,
-  }
-}
-
-export function calcularDesviacionPlan(
-  plan: PlanObjetivo,
-  valorRealHoyUsd: number,
-  hoy: Date = new Date()
-): DesviacionPlan {
-  const mesesTranscurridos = Math.min(
-    Math.max(
-      0,
-      dayjsDiffMeses(dayjs(plan.fechaInicio), dayjs(hoy))
-    ),
-    plan.mesesTotales
-  )
-
-  const valorPlanHoyUsd = valorFinalSimulado(
-    {
-      valorInicialUsd: 0,
-      aporteMensualUsd: plan.aporteMensualEsperadoUsd,
-      crecimientoAporteAnualPct: 0,
-      tasaAnualPct: plan.tasaBaseAnualPct,
-    },
-    Math.round(mesesTranscurridos)
-  )
-
-  const desviacionUsd = valorRealHoyUsd - valorPlanHoyUsd
-
-  return {
-    valorPlanHoyUsd,
-    valorRealHoyUsd,
-    desviacionUsd,
-    desviacionPct: valorPlanHoyUsd > 0 ? desviacionUsd / valorPlanHoyUsd : null,
-    adelantado: desviacionUsd >= 0,
   }
 }
 

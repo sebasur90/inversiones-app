@@ -511,10 +511,16 @@ export interface ObjetivoInversion {
   valor_actual_usd: number
   aporte_mensual_promedio_usd: number
   aporte_mensual_necesario_usd: number | null
+  aporte_mensual_esperado_usd: number | null
   meses_restantes: number
   proyeccion_usd: number
   alcanzable: boolean
   deficit_usd: number
+  desviacion_usd: number | null
+  desviacion_pct: number | null
+  adelantado: boolean | null
+  aportado_a_la_fecha_usd: number | null
+  esperado_a_la_fecha_usd: number | null
 }
 
 export const getObjetivoInversion = async (cartera: string): Promise<ObjetivoInversion | null> => {

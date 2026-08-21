@@ -2150,34 +2150,28 @@ def get_progreso_objetivo(cartera: str, objetivo_id: int, db: Session) -> dict |
     curva = aportes_hist["curva"]
     valor_actual_usd = aportes_hist["valor_actual_usd"]
 
-    # Calcular promedio de aporte mensual (últimos 12 meses o todo si menos)
     hoy = date.today()
-    hace_12_meses = date(hoy.year - 1, hoy.month, 1)
-
-    aportes_ultimos_12 = [punto for punto in curva if punto["mes"] >= hace_12_meses.strftime("%Y-%m")]
-    if not aportes_ultimos_12:
-        aportes_ultimos_12 = curva
-
-    aporte_mensual_promedio = 0.0
-    if len(aportes_ultimos_12) > 0:
-        meses_considerados = len(aportes_ultimos_12)
-        if meses_considerados == 1:
-            aporte_mensual_promedio = aportes_ultimos_12[0]["aportes_netos_acumulados"]
-        else:
-            # Diferencia entre el último y el anterior al primero (que es el acumulado antes)
-            acumulado_final = aportes_ultimos_12[-1]["aportes_netos_acumulados"]
-            acumulado_anterior = 0.0
-            # Si hay puntos antes del período de 12 meses, restar el acumulado
-            if len(curva) > len(aportes_ultimos_12):
-                idx_first = curva.index(aportes_ultimos_12[0])
-                if idx_first > 0:
-                    acumulado_anterior = curva[idx_first - 1]["aportes_netos_acumulados"]
-            aporte_total_12 = acumulado_final - acumulado_anterior
-            aporte_mensual_promedio = aporte_total_12 / meses_considerados
-
-    # Calcular meses restantes
     monto_objetivo = float(objetivo.monto_usd)
     fecha_limite = objetivo.fecha_limite
+
+    # fecha_inicio efectiva = primer mes con movimiento (curva[0])
+    fecha_inicio = None
+    if curva:
+        anio_ini, mes_ini = map(int, curva[0]["mes"].split("-"))
+        fecha_inicio = date(anio_ini, mes_ini, 1)
+
+    # Aporte prom./mes = total aportado neto desde el inicio / meses transcurridos desde el inicio
+    aporte_mensual_promedio = 0.0
+    meses_transcurridos_float = None
+    total_aportado = 0.0
+    if curva and fecha_inicio:
+        total_aportado = curva[-1]["aportes_netos_acumulados"]
+        dias_transcurridos = (hoy - fecha_inicio).days
+        # Piso de 1 mes: si el primer aporte fue este mismo mes, evita dividir por ~0
+        meses_transcurridos_float = max(dias_transcurridos / 30.44, 1.0)
+        aporte_mensual_promedio = total_aportado / meses_transcurridos_float
+
+    # Calcular meses restantes
     dias_restantes = (fecha_limite - hoy).days
     meses_restantes_float = dias_restantes / 30.44  # Aproximado 30.44 días/mes
     meses_restantes = max(0, int(round(meses_restantes_float)))
@@ -2193,12 +2187,34 @@ def get_progreso_objetivo(cartera: str, objetivo_id: int, db: Session) -> dict |
     alcanzable = proyeccion_usd >= monto_objetivo
     deficit_usd = max(0, monto_objetivo - proyeccion_usd)
 
+    # Esperado/mes = objetivo / meses totales del plan (sin compounding) y desviación vs. lo aportado
+    aporte_mensual_esperado = None
+    desviacion_usd = None
+    desviacion_pct = None
+    adelantado = None
+    esperado_a_la_fecha_usd = None
+    if curva and fecha_inicio:
+        dias_totales = (fecha_limite - fecha_inicio).days
+        if dias_totales > 0:
+            meses_totales_float = max(dias_totales / 30.44, 1.0)
+            aporte_mensual_esperado = monto_objetivo / meses_totales_float
+            esperado_a_la_fecha_usd = aporte_mensual_esperado * meses_transcurridos_float
+            desviacion_usd = total_aportado - esperado_a_la_fecha_usd
+            desviacion_pct = desviacion_usd / esperado_a_la_fecha_usd if esperado_a_la_fecha_usd > 0 else None
+            adelantado = desviacion_usd >= 0
+
     return {
         "valor_actual_usd": round(valor_actual_usd, 2),
         "aporte_mensual_promedio_usd": round(aporte_mensual_promedio, 2),
         "aporte_mensual_necesario_usd": round(aporte_mensual_necesario, 2) if aporte_mensual_necesario is not None else None,
+        "aporte_mensual_esperado_usd": round(aporte_mensual_esperado, 2) if aporte_mensual_esperado is not None else None,
         "meses_restantes": meses_restantes,
         "proyeccion_usd": round(proyeccion_usd, 2),
         "alcanzable": alcanzable,
         "deficit_usd": round(deficit_usd, 2),
+        "desviacion_usd": round(desviacion_usd, 2) if desviacion_usd is not None else None,
+        "desviacion_pct": round(desviacion_pct, 4) if desviacion_pct is not None else None,
+        "adelantado": adelantado,
+        "aportado_a_la_fecha_usd": round(total_aportado, 2) if curva else None,
+        "esperado_a_la_fecha_usd": round(esperado_a_la_fecha_usd, 2) if esperado_a_la_fecha_usd is not None else None,
     }

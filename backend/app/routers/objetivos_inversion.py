@@ -35,10 +35,16 @@ def fetch_objetivo(nombre: str, db: Session = Depends(get_db)):
         valor_actual_usd=progreso["valor_actual_usd"],
         aporte_mensual_promedio_usd=progreso["aporte_mensual_promedio_usd"],
         aporte_mensual_necesario_usd=progreso["aporte_mensual_necesario_usd"],
+        aporte_mensual_esperado_usd=progreso["aporte_mensual_esperado_usd"],
         meses_restantes=progreso["meses_restantes"],
         proyeccion_usd=progreso["proyeccion_usd"],
         alcanzable=progreso["alcanzable"],
         deficit_usd=progreso["deficit_usd"],
+        desviacion_usd=progreso["desviacion_usd"],
+        desviacion_pct=progreso["desviacion_pct"],
+        adelantado=progreso["adelantado"],
+        aportado_a_la_fecha_usd=progreso["aportado_a_la_fecha_usd"],
+        esperado_a_la_fecha_usd=progreso["esperado_a_la_fecha_usd"],
     )
 
 

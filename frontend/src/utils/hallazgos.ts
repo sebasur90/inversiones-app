@@ -1,5 +1,4 @@
-import type { HallazgoItem } from '../api'
-import type { DesviacionPlan } from './proyeccion'
+import type { HallazgoItem, ObjetivoInversion } from '../api'
 
 export const TIPO_PRIORIDAD = [
   'stop_loss_disparado',
@@ -30,9 +29,14 @@ const UMBRAL_DESVIACION_CRITICO = -0.20
 const UMBRAL_DESVIACION_ADVERTENCIA = -0.08
 const UMBRAL_DESVIACION_ADELANTADO_INFO = 0.08
 
-export function evaluarDesviacionPlan(desviacion: DesviacionPlan | null): HallazgoItem | null {
-  if (!desviacion || desviacion.desviacionPct == null) return null
-  const pct = desviacion.desviacionPct
+export function evaluarDesviacionPlan(objetivo: ObjetivoInversion | null): HallazgoItem | null {
+  if (!objetivo || objetivo.desviacion_pct == null) return null
+  const pct = objetivo.desviacion_pct
+  const datoDisparador = {
+    desviacion_pct: Math.round(pct * 10000) / 100,
+    aportado_plan_usd: objetivo.esperado_a_la_fecha_usd != null ? Math.round(objetivo.esperado_a_la_fecha_usd) : null,
+    aportado_real_usd: objetivo.aportado_a_la_fecha_usd != null ? Math.round(objetivo.aportado_a_la_fecha_usd) : null,
+  }
 
   if (pct <= UMBRAL_DESVIACION_CRITICO) {
     return {
@@ -40,11 +44,7 @@ export function evaluarDesviacionPlan(desviacion: DesviacionPlan | null): Hallaz
       severidad: 'critico',
       titulo: 'Objetivo de patrimonio muy atrasado',
       explicacion: `Estás ${(Math.abs(pct) * 100).toFixed(1)}% por debajo del plan esperado. Necesitas acelerar aportes o mejorar el rendimiento.`,
-      dato_disparador: {
-        desviacion_pct: Math.round(pct * 10000) / 100,
-        valor_plan_usd: Math.round(desviacion.valorPlanHoyUsd),
-        valor_real_usd: Math.round(desviacion.valorRealHoyUsd),
-      },
+      dato_disparador: datoDisparador,
       pantalla: '/objetivo',
       fecha_calculo: new Date().toISOString().split('T')[0],
     }
@@ -56,11 +56,7 @@ export function evaluarDesviacionPlan(desviacion: DesviacionPlan | null): Hallaz
       severidad: 'advertencia',
       titulo: 'Objetivo de patrimonio algo atrasado',
       explicacion: `Estás ${(Math.abs(pct) * 100).toFixed(1)}% por debajo del plan esperado. Considera revisar tu estrategia de aportes.`,
-      dato_disparador: {
-        desviacion_pct: Math.round(pct * 10000) / 100,
-        valor_plan_usd: Math.round(desviacion.valorPlanHoyUsd),
-        valor_real_usd: Math.round(desviacion.valorRealHoyUsd),
-      },
+      dato_disparador: datoDisparador,
       pantalla: '/objetivo',
       fecha_calculo: new Date().toISOString().split('T')[0],
     }
@@ -72,11 +68,7 @@ export function evaluarDesviacionPlan(desviacion: DesviacionPlan | null): Hallaz
       severidad: 'info',
       titulo: 'Vas adelantado en tu objetivo',
       explicacion: `Excelente: estás ${(pct * 100).toFixed(1)}% por encima del plan esperado. Al ritmo actual alcanzarás antes tu meta.`,
-      dato_disparador: {
-        desviacion_pct: Math.round(pct * 10000) / 100,
-        valor_plan_usd: Math.round(desviacion.valorPlanHoyUsd),
-        valor_real_usd: Math.round(desviacion.valorRealHoyUsd),
-      },
+      dato_disparador: datoDisparador,
       pantalla: '/objetivo',
       fecha_calculo: new Date().toISOString().split('T')[0],
     }

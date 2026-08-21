@@ -8,7 +8,6 @@ import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
 import HallazgoCard from '../components/inversiones/HallazgoCard'
 import { priorizarHallazgos, evaluarDesviacionPlan } from '../utils/hallazgos'
-import { derivarPlanObjetivo, calcularDesviacionPlan, resolverTasaBase } from '../utils/proyeccion'
 import { parseApiError, type ParsedApiError } from '../help/errors/apiErrors'
 import ErrorBanner from '../help/components/ErrorBanner'
 import InfoTooltip from '../help/components/InfoTooltip'
@@ -21,7 +20,7 @@ export default function Diagnostico() {
   const [error, setError] = useState<ParsedApiError | null>(null)
   const [expandido, setExpandido] = useState(false)
 
-  const { objetivo, aportesHistoricos, evolucion, riesgo, configuracion } = useObjetivoInversion(carteraSeleccionada)
+  const { objetivo } = useObjetivoInversion(carteraSeleccionada)
 
   useEffect(() => {
     let cancelado = false
@@ -50,23 +49,9 @@ export default function Diagnostico() {
 
   const hallazgos = useMemo(() => {
     if (!diagnostico) return []
-
-    const tasaBase = resolverTasaBase(configuracion ?? null, riesgo ?? null)
-    const plan =
-      objetivo && aportesHistoricos
-        ? derivarPlanObjetivo(
-            objetivo.monto_usd,
-            objetivo.fecha_limite,
-            aportesHistoricos.curva[0]?.mes ?? null,
-            tasaBase.valor
-          )
-        : null
-    const ultimoPunto = evolucion?.puntos[evolucion.puntos.length - 1]
-    const desviacion = plan && ultimoPunto ? calcularDesviacionPlan(plan, ultimoPunto.valor_usd) : null
-    const hallazgoFrontend = evaluarDesviacionPlan(desviacion)
-
+    const hallazgoFrontend = evaluarDesviacionPlan(objetivo ?? null)
     return priorizarHallazgos([...diagnostico.hallazgos, ...(hallazgoFrontend ? [hallazgoFrontend] : [])])
-  }, [diagnostico, objetivo, aportesHistoricos, evolucion, riesgo, configuracion])
+  }, [diagnostico, objetivo])
 
   const visibles = expandido ? hallazgos : hallazgos.slice(0, 5)
 

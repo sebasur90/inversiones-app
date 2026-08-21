@@ -61,8 +61,8 @@ export const OBJETIVO_HELP: Record<ObjetivoHelpKey, HelpContent> = {
   },
   objetivo_desviacion_plan: {
     title: 'Desviación vs. plan',
-    shortDescription: 'Diferencia entre tu patrimonio actual y lo que deberías tener según el plan original para estar "en el camino".',
-    whyItMatters: 'Te indica si vas adelante, a tiempo o atrasado en relación a tu objetivo.',
-    example: 'Si el plan decía que deberías tener USD 50.000 hoy pero tienes USD 45.000, tu desviación es de -5.000 USD.',
+    shortDescription: 'Diferencia entre lo que aportaste realmente hasta hoy y lo que el plan simple (objetivo ÷ meses totales) esperaba que hubieras aportado a esta altura.',
+    whyItMatters: 'Indica si tu ritmo de aportes va adelantado, a tiempo o atrasado, sin mezclar el efecto del rendimiento de mercado.',
+    example: 'Con un plan de USD 250/mes y 2 meses transcurridos, se esperaban USD 500 aportados. Si aportaste USD 3.000, la desviación es +2.500 USD (adelantado).',
   },
 }

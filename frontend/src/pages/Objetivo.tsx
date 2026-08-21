@@ -5,7 +5,6 @@ import { useObjetivoInversion } from '../hooks/useObjetivoInversion'
 import { formatUSD, formatPct } from '../utils'
 import {
   derivarPlanObjetivo,
-  calcularDesviacionPlan,
   calcularEscenarios,
   resolverFechaAlcanzable,
   calcularGrillaSensibilidad,
@@ -69,13 +68,6 @@ export default function Objetivo() {
       objetivo.valor_actual_usd
     )
   }, [objetivo, aportesHistoricos, tasaBaseResuelto.valor])
-
-  // Desviación frente al plan
-  const desviacion = useMemo(() => {
-    if (!plan || !evolucion) return null
-    const ultimoPunto = evolucion.puntos[evolucion.puntos.length - 1]
-    return calcularDesviacionPlan(plan, ultimoPunto?.valor_usd ?? 0)
-  }, [plan, evolucion])
 
   // Escenarios
   const escenarios = useMemo(() => {
@@ -145,11 +137,12 @@ export default function Objetivo() {
       escenarios.optimista + (escenarios.optimista - escenarios.base),
       escenarios.optimista + 2 * (escenarios.optimista - escenarios.base),
     ]
+    const necesarioBase = objetivo.aporte_mensual_necesario_usd ?? 0
     const aportesGrilla = [
-      objetivo.aporte_mensual_promedio_usd,
-      objetivo.aporte_mensual_necesario_usd ?? objetivo.aporte_mensual_promedio_usd * 1.5,
-      (objetivo.aporte_mensual_necesario_usd ?? objetivo.aporte_mensual_promedio_usd * 1.5) * 1.25,
-      (objetivo.aporte_mensual_necesario_usd ?? objetivo.aporte_mensual_promedio_usd * 1.5) * 1.5,
+      necesarioBase * 0.75,
+      necesarioBase,
+      necesarioBase * 1.25,
+      necesarioBase * 1.5,
     ]
     return {
       grilla: calcularGrillaSensibilidad(
@@ -184,7 +177,7 @@ export default function Objetivo() {
     return simularMesAMes(
       {
         valorInicialUsd: objetivo.valor_actual_usd,
-        aporteMensualUsd: objetivo.aporte_mensual_promedio_usd,
+        aporteMensualUsd: objetivo.aporte_mensual_necesario_usd ?? 0,
         crecimientoAporteAnualPct: 0,
         tasaAnualPct: tasaEscenario,
       },
@@ -311,19 +304,19 @@ export default function Objetivo() {
               value={objetivo.aporte_mensual_necesario_usd != null ? formatUSD(objetivo.aporte_mensual_necesario_usd) : '—'}
               tone={objetivo.alcanzable ? undefined : 'neg'}
             />
-            {plan ? (
+            {objetivo.aporte_mensual_esperado_usd != null ? (
               <>
                 <MetricTile
                   label="Esperado/mes"
-                  value={formatUSD(plan.aporteMensualEsperadoUsd)}
-                  sub="según plan original"
+                  value={formatUSD(objetivo.aporte_mensual_esperado_usd)}
+                  sub="objetivo ÷ meses totales"
                 />
-                {desviacion ? (
+                {objetivo.desviacion_usd != null ? (
                   <MetricTile
                     label="Desviación vs. plan"
-                    value={formatUSD(Math.abs(desviacion.desviacionUsd))}
-                    sub={desviacion.desviacionPct != null ? `${desviacion.adelantado ? '+' : ''}${(desviacion.desviacionPct * 100).toFixed(1)}%` : undefined}
-                    tone={desviacion.adelantado ? 'pos' : 'neg'}
+                    value={formatUSD(Math.abs(objetivo.desviacion_usd))}
+                    sub={objetivo.desviacion_pct != null ? `${objetivo.adelantado ? '+' : ''}${(objetivo.desviacion_pct * 100).toFixed(1)}%` : undefined}
+                    tone={objetivo.adelantado ? 'pos' : 'neg'}
                     infoTerm="objetivo_desviacion_plan"
                   />
                 ) : null}
@@ -399,7 +392,7 @@ export default function Objetivo() {
                       objetivo.monto_usd,
                       {
                         valorInicialUsd: objetivo.valor_actual_usd,
-                        aporteMensualUsd: objetivo.aporte_mensual_promedio_usd,
+                        aporteMensualUsd: objetivo.aporte_mensual_necesario_usd ?? 0,
                         crecimientoAporteAnualPct: 0,
                         tasaAnualPct: tasa,
                       },
