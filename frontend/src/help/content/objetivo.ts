@@ -10,6 +10,9 @@ export type ObjetivoHelpKey =
   | 'objetivo_escenario_mostrado'
   | 'objetivo_tasa_override'
   | 'objetivo_desviacion_plan'
+  | 'objetivo_fechas_estimadas'
+  | 'objetivo_aporte_actual'
+  | 'objetivo_aporte_objetivo'
 
 export const OBJETIVO_HELP: Record<ObjetivoHelpKey, HelpContent> = {
   objetivo_monto: {
@@ -64,5 +67,23 @@ export const OBJETIVO_HELP: Record<ObjetivoHelpKey, HelpContent> = {
     shortDescription: 'Diferencia entre lo que aportaste realmente hasta hoy y lo que el plan simple (objetivo ÷ meses totales) esperaba que hubieras aportado a esta altura.',
     whyItMatters: 'Indica si tu ritmo de aportes va adelantado, a tiempo o atrasado, sin mezclar el efecto del rendimiento de mercado.',
     example: 'Con un plan de USD 250/mes y 2 meses transcurridos, se esperaban USD 500 aportados. Si aportaste USD 3.000, la desviación es +2.500 USD (adelantado).',
+  },
+  objetivo_fechas_estimadas: {
+    title: 'Fechas estimadas',
+    shortDescription: 'Proyecciones de cuándo alcanzarás tu objetivo bajo diferentes escenarios de aporte mensual.',
+    whyItMatters: 'Te ayuda a entender el impacto del aporte mensual en el tiempo necesario para alcanzar tu meta. Mayor aporte = menos tiempo.',
+    howItIsCalculated: 'Se calcula considerando: patrimonio actual, aporte mensual, rentabilidad anual esperada, y el monto objetivo. Usa esta fórmula: Valor Futuro = Patrimonio Inicial × (1 + Tasa)^años + Aporte Mensual × [(1 + Tasa)^años - 1] / Tasa.',
+  },
+  objetivo_aporte_actual: {
+    title: 'Manteniendo aporte actual',
+    shortDescription: 'Fecha estimada para alcanzar tu objetivo si continúas aportando el promedio actual cada mes.',
+    whyItMatters: 'Te muestra tu trayectoria actual: cuánto tiempo más necesitas si no cambias tu ritmo de aportes.',
+    example: 'Si aportas USD 1.993/mes en promedio y tu objetivo es USD 100.000, esta sección muestra en cuántos meses lo alcanzarás.',
+  },
+  objetivo_aporte_objetivo: {
+    title: 'Con aporte objetivo',
+    shortDescription: 'Fecha estimada para alcanzar tu objetivo bajo diferentes aumentos de aporte: desde el monto "Necesario" hasta 2x ese monto.',
+    whyItMatters: 'Te permite explorar cómo cambios en tu aporte mensual afectan la velocidad de tu plan. Cada botón (+25%, +50%, +100%) acelera el proceso.',
+    example: 'El botón "Necesario" muestra la fecha si aportas el mínimo calculado. "+50%" te muestra qué sucede si incrementas ese aporte en 50%.',
   },
 }

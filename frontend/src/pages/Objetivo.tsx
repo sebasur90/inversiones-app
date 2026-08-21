@@ -327,13 +327,13 @@ export default function Objetivo() {
           {/* Fechas estimadas */}
           <h3 className="text-[13.5px] font-bold text-app-text mb-2.5 flex items-center gap-1.5">
             <Icon name="trend" className="w-3.5 h-3.5 text-app-gold" />
-            Fechas estimadas
+            <InfoTooltip term="objetivo_fechas_estimadas" label="Fechas estimadas" />
           </h3>
           <Card>
             <div className="space-y-3.5">
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
-                  Manteniendo aporte actual ({formatUSD(objetivo.aporte_mensual_promedio_usd)}/mes)
+                  <InfoTooltip term="objetivo_aporte_actual" label={`Manteniendo aporte actual (${formatUSD(objetivo.aporte_mensual_promedio_usd)}/mes)`} />
                 </div>
                 {fechaAportueActual?.fecha ? (
                   <div className="font-mono text-[14px] font-semibold text-app-text">
@@ -349,7 +349,7 @@ export default function Objetivo() {
 
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-wide text-app-text-faint mb-2">
-                  Con aporte objetivo
+                  <InfoTooltip term="objetivo_aporte_objetivo" label="Con aporte objetivo" />
                 </div>
                 {fechaAporteObjetivo?.fecha ? (
                   <div className="font-mono text-[14px] font-semibold text-app-text mb-2">
