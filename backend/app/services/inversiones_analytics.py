@@ -2137,61 +2137,6 @@ def get_aportes_historicos(cartera: str, db: Session) -> dict:
     }
 
 
-def _tasa_mensual_desde_anual(tasa_anual_pct: float) -> float:
-  """Convierte tasa anual a tasa mensual usando compounding."""
-  t = max(tasa_anual_pct, -99)
-  if t == 0:
-    return 0
-  return (1 + t / 100) ** (1 / 12) - 1
-
-
-def _valor_final_simulado(
-    valor_inicial: float,
-    aporte_mensual: float,
-    tasa_anual_pct: float,
-    meses: int,
-) -> float:
-  """Simula el valor final con compounding mes a mes."""
-  if meses <= 0:
-    return valor_inicial
-  tasa_mensual = _tasa_mensual_desde_anual(tasa_anual_pct)
-  valor = valor_inicial
-  for _ in range(int(meses)):
-    valor = valor * (1 + tasa_mensual) + aporte_mensual
-  return valor
-
-
-def _resolver_aporte_necesario(
-    objetivo_usd: float,
-    valor_inicial: float,
-    meses: int,
-    tasa_anual_pct: float,
-) -> float | None:
-  """Calcula el aporte mensual necesario para alcanzar el objetivo usando búsqueda binaria."""
-  if meses <= 0:
-    sin_aporte = _valor_final_simulado(valor_inicial, 0, tasa_anual_pct, 0)
-    return None if sin_aporte < objetivo_usd else 0
-
-  sin_aportes = _valor_final_simulado(valor_inicial, 0, tasa_anual_pct, meses)
-  if sin_aportes >= objetivo_usd:
-    return 0
-
-  # Búsqueda binaria: encontrar hi tal que valor_final >= objetivo
-  hi = 100.0
-  while _valor_final_simulado(valor_inicial, hi, tasa_anual_pct, meses) < objetivo_usd and hi < 1e8:
-    hi *= 2
-
-  lo = 0.0
-  for _ in range(60):  # ~60 iteraciones = log2(2^60) de precisión
-    mid = (lo + hi) / 2
-    if _valor_final_simulado(valor_inicial, mid, tasa_anual_pct, meses) >= objetivo_usd:
-      hi = mid
-    else:
-      lo = mid
-
-  return round(hi * 100) / 100
-
-
 def get_progreso_objetivo(cartera: str, objetivo_id: int, db: Session) -> dict | None:
     """Calcula progreso del objetivo: proyección, aporte promedio, déficit, etc."""
     from ..database import ObjetivoInversion
@@ -2231,25 +2176,10 @@ def get_progreso_objetivo(cartera: str, objetivo_id: int, db: Session) -> dict |
     meses_restantes_float = dias_restantes / 30.44  # Aproximado 30.44 días/mes
     meses_restantes = max(0, int(round(meses_restantes_float)))
 
-    # Obtener tasa base de la cartera (fallback a 7% si no disponible)
-    tasa_base_pct = 7.0
-    try:
-        riesgo = get_riesgo_cartera(cartera, db)
-        if riesgo and riesgo.get("tasa_base_anual_pct"):
-            tasa_base_pct = float(riesgo["tasa_base_anual_pct"])
-    except Exception:
-        pass
-
-    # Proyección simple (sin compounding, igual a antes para compatibilidad)
+    # Proyección
     if meses_restantes_float > 0:
         proyeccion_usd = valor_actual_usd + aporte_mensual_promedio * meses_restantes_float
-        # Aporte necesario CORRECTO: con compounding
-        aporte_mensual_necesario = _resolver_aporte_necesario(
-            monto_objetivo,
-            valor_actual_usd,
-            meses_restantes_float,
-            tasa_base_pct
-        )
+        aporte_mensual_necesario = max(0, (monto_objetivo - valor_actual_usd) / meses_restantes_float) if meses_restantes_float > 0 else None
     else:
         proyeccion_usd = valor_actual_usd
         aporte_mensual_necesario = None
