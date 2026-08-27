@@ -24,14 +24,18 @@ def test_instrumentos_ticker_vacio():
 
 def test_instrumentos_ticker_duplicado():
     """Ticker duplicado → crítico/drop segundos."""
+    # Tipo Instrumento y Mercado van completos para que el único issue sea el duplicado
+    # (vacíos emiten sus propias advertencias de salvage).
     rows = [
-        (2, {"Ticker": "AAPL", "Nombre": "Apple 1", "Tipo Instrumento": "", "Mercado": "", "Moneda": "USD"}),
-        (3, {"Ticker": "AAPL", "Nombre": "Apple 2", "Tipo Instrumento": "", "Mercado": "", "Moneda": "USD"}),
+        (2, {"Ticker": "AAPL", "Nombre": "Apple 1", "Tipo Instrumento": "Accion", "Mercado": "NYSE", "Moneda": "USD"}),
+        (3, {"Ticker": "AAPL", "Nombre": "Apple 2", "Tipo Instrumento": "Accion", "Mercado": "NYSE", "Moneda": "USD"}),
     ]
     validos, tickers, issues = reglas_instrumentos.validar_instrumentos(rows)
     assert len(validos) == 1
+    assert validos[0]["nombre"] == "Apple 1"  # gana la primera, se descarta la segunda
     assert "AAPL" in tickers
     assert len(issues) == 1
+    assert issues[0].regla == "ticker_duplicado"
     assert issues[0].fila == 3
 
 
@@ -84,12 +88,16 @@ def test_movimientos_comision_negativa():
 
 
 def test_precios_precio_cero():
-    """Precio == 0 → advertencia/keep."""
+    """Precio == 0 → crítico/drop, igual que un precio negativo.
+
+    Un 0 en la columna Precio del Sheet es casi siempre una celda vacía mal parseada, no una
+    cotización real. Dejarlo pasar rompe toda valuación de esa fecha (y los retornos que la
+    usan como base), así que se descarta la fila en vez de conservarla con una advertencia.
+    """
     rows = [(2, {"Fecha": "2024-01-01", "Ticker": "AAPL", "Precio": "0", "Moneda": "USD"})]
     validos, cer_mep, issues = reglas_precios.validar_precios(rows)
-    assert len(validos) == 1
-    assert validos[0]["precio"] == 0
-    assert any("precio_cero" in i.regla for i in issues)
+    assert len(validos) == 0
+    assert any("precio_no_positivo" in i.regla for i in issues)
 
 
 def test_precios_precio_negativo():

@@ -300,9 +300,13 @@ def test_resolver_preset_personalizado():
 
 
 def test_resolver_preset_personalizado_vacio():
-    """Preset 'personalizado' sin overrides devuelve dict vacío."""
+    """Preset 'personalizado' sin overrides sólo recibe el horizonte por defecto.
+
+    A diferencia de los presets con nombre, 'personalizado' no hereda variaciones: el único
+    campo que resolver_preset garantiza es `horizonte_meses`, sin el cual no se puede simular.
+    """
     resolved = resolver_preset("personalizado")
-    assert resolved == {}
+    assert resolved == {"horizonte_meses": 120}
 
 
 # ─── Tests: Edge cases ────────────────────────────────────────────────────

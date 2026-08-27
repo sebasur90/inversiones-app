@@ -68,7 +68,10 @@ def test_health_score_solo_info():
 
 
 def test_health_score_mezcla():
-    """2 críticos + 5 advertencias + 3 info → score 100 - 30 - 15 = 55, capado a 59."""
+    """2 críticos + 5 advertencias + 3 info → score 100 - 30 - 15 = 55.
+
+    El tope por críticos (59) es un techo, no un piso: 55 ya está por debajo, así que no aplica.
+    """
     issues = [
         ValidationIssue("Test", f"critico{i}", "msg", "impacto", Severity.CRITICO)
         for i in range(2)
@@ -81,8 +84,8 @@ def test_health_score_mezcla():
     ]
     result = calcular_health_score(issues)
     # score = 100 - min(70, 2*15) - min(25, 5*3) = 100 - 30 - 15 = 55
-    # pero con crítico, capped a 59
-    assert result["score"] == 59
+    # el cap por críticos es min(score, 59) → 55 se mantiene
+    assert result["score"] == 55
     assert result["n_criticos"] == 2
     assert result["n_advertencias"] == 5
     assert result["n_info"] == 3

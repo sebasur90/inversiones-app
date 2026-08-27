@@ -4,6 +4,7 @@ Los valores esperados se calculan a mano en los comentarios de cada test (no rei
 la fórmula bajo test), como referencia manual de verificación.
 """
 import math
+import statistics
 from datetime import date
 
 import pytest
