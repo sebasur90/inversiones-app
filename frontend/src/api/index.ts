@@ -439,6 +439,7 @@ export interface ComisionPorTickerItem {
 export interface ComisionPeriodoItem {
   periodo: string
   total_usd: number
+  total_ars: number
 }
 
 export interface ComisionesOut {

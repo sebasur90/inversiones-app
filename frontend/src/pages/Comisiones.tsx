@@ -10,6 +10,7 @@ import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
+import BotonExportarCsv from '../components/ui/BotonExportarCsv'
 
 type Desglose = 'cartera' | 'ticker' | 'mes' | 'anio'
 
@@ -44,23 +45,26 @@ function BarrasDesglose({
   )
 }
 
-function PeriodoChart({ items }: { items: ComisionPeriodoItem[] }) {
+function PeriodoChart({ items, esARS }: { items: ComisionPeriodoItem[]; esARS: boolean }) {
   if (items.length === 0) {
     return <div className="text-center py-10 text-app-text-dim text-[12.5px]">Sin comisiones para este período</div>
   }
+  const clave = esARS ? 'total_ars' : 'total_usd'
+  const formatMoneda = esARS ? formatARS : formatUSD
+  const prefijo = esARS ? '$' : 'U$S'
   return (
     <ResponsiveContainer width="100%" height={220}>
       <BarChart data={items} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#223028" />
         <XAxis dataKey="periodo" stroke="#8ca39b" tick={{ fontSize: 10, fill: '#8ca39b' }} />
-        <YAxis stroke="#8ca39b" tick={{ fontSize: 10, fill: '#8ca39b' }} width={56} tickFormatter={v => `U$S ${v}`} />
+        <YAxis stroke="#8ca39b" tick={{ fontSize: 10, fill: '#8ca39b' }} width={56} tickFormatter={v => `${prefijo} ${v}`} />
         <Tooltip
           contentStyle={{ background: '#17221e', border: '1px solid #223028', borderRadius: 10, fontSize: 12 }}
           labelStyle={{ color: '#edf2ef' }}
-          formatter={(v: number) => [formatUSD(v), 'Comisión']}
+          formatter={(v: number) => [formatMoneda(v), 'Comisión']}
           cursor={{ fill: 'rgba(255,255,255,0.04)' }}
         />
-        <Bar dataKey="total_usd" fill="#d8b14a" radius={[4, 4, 0, 0]} />
+        <Bar dataKey={clave} fill="#d8b14a" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   )
@@ -135,8 +139,18 @@ export default function Comisiones() {
         </div>
       </Card>
 
-      <div className="mb-3">
+      <div className="flex items-center justify-between gap-3 mb-3">
         <Segmented options={opciones} value={desglose} onChange={setDesglose} />
+        <BotonExportarCsv
+          nombre={`comisiones-${carteraSeleccionada || 'consolidado'}`}
+          encabezados={['Desglose', 'Etiqueta', 'Total USD', 'Total ARS']}
+          filas={() => [
+            ...datos.por_cartera.map(i => ['Cartera', i.etiqueta, i.total_usd, i.total_ars]),
+            ...datos.por_ticker.map(i => ['Ticker', i.ticker, i.total_usd, i.total_ars]),
+            ...datos.por_mes.map(i => ['Mes', i.periodo, i.total_usd, i.total_ars]),
+            ...datos.por_anio.map(i => ['Año', i.periodo, i.total_usd, i.total_ars]),
+          ]}
+        />
       </div>
 
       {desglose === 'cartera' && (
@@ -151,8 +165,8 @@ export default function Comisiones() {
           formatMoneda={formatMoneda}
         />
       )}
-      {desglose === 'mes' && <PeriodoChart items={datos.por_mes} />}
-      {desglose === 'anio' && <PeriodoChart items={datos.por_anio} />}
+      {desglose === 'mes' && <PeriodoChart items={datos.por_mes} esARS={esARS} />}
+      {desglose === 'anio' && <PeriodoChart items={datos.por_anio} esARS={esARS} />}
     </div>
   )
 }

@@ -28,4 +28,4 @@ La app lee de Google Sheets (pestañas `Movimientos`, `Instrumentos`, `Precios`,
 
 ## Extras
 
-Glosario financiero integrado (tooltips), modal de resultados de sincronización con Sheets, app instalable como PWA. No tiene exportación (CSV/PDF) ni alertas push.
+Glosario financiero integrado (tooltips), modal de resultados de sincronización con Sheets, app instalable como PWA. Exportación a CSV en Movimientos, Posiciones y Comisiones (separador `;` y BOM, para que Excel en español lo abra bien). La cartera y la moneda elegidas se recuerdan entre sesiones. No tiene exportación a PDF ni alertas push.

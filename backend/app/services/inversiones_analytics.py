@@ -2077,7 +2077,9 @@ def get_comisiones(cartera: str | None, db: Session) -> dict:
     por_ticker: dict[str, float] = {}
     por_ticker_ars: dict[str, float] = {}
     por_mes: dict[str, float] = {}
+    por_mes_ars: dict[str, float] = {}
     por_anio: dict[str, float] = {}
+    por_anio_ars: dict[str, float] = {}
     movimientos_con_comision = 0
 
     for mov in movs:
@@ -2100,7 +2102,9 @@ def get_comisiones(cartera: str | None, db: Session) -> dict:
         mes_key = mov.fecha.strftime("%Y-%m")
         anio_key = mov.fecha.strftime("%Y")
         por_mes[mes_key] = por_mes.get(mes_key, 0.0) + c_usd
+        por_mes_ars[mes_key] = por_mes_ars.get(mes_key, 0.0) + c_ars
         por_anio[anio_key] = por_anio.get(anio_key, 0.0) + c_usd
+        por_anio_ars[anio_key] = por_anio_ars.get(anio_key, 0.0) + c_ars
 
     por_cartera_items = sorted(
         [
@@ -2129,8 +2133,14 @@ def get_comisiones(cartera: str | None, db: Session) -> dict:
         "movimientos_con_comision": movimientos_con_comision,
         "por_cartera": por_cartera_items,
         "por_ticker": por_ticker_items,
-        "por_mes": [{"periodo": k, "total_usd": round(v, 2)} for k, v in sorted(por_mes.items())],
-        "por_anio": [{"periodo": k, "total_usd": round(v, 2)} for k, v in sorted(por_anio.items())],
+        "por_mes": [
+            {"periodo": k, "total_usd": round(v, 2), "total_ars": round(por_mes_ars[k], 2)}
+            for k, v in sorted(por_mes.items())
+        ],
+        "por_anio": [
+            {"periodo": k, "total_usd": round(v, 2), "total_ars": round(por_anio_ars[k], 2)}
+            for k, v in sorted(por_anio.items())
+        ],
     }
 
 

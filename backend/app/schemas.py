@@ -492,6 +492,7 @@ class ComisionPorTickerItem(BaseModel):
 class ComisionPeriodoItem(BaseModel):
     periodo: str
     total_usd: float
+    total_ars: float
 
 
 class ComisionesOut(BaseModel):

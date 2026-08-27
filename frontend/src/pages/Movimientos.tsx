@@ -6,6 +6,7 @@ import ScreenHeader from '../components/layout/ScreenHeader'
 import MovimientoRow from '../components/inversiones/MovimientoRow'
 import Chip from '../components/ui/Chip'
 import EmptyState from '../components/ui/EmptyState'
+import BotonExportarCsv from '../components/ui/BotonExportarCsv'
 import { Icon } from '../components/icons/Icons'
 
 export default function Movimientos() {
@@ -48,9 +49,23 @@ export default function Movimientos() {
     <div className="pb-4">
       <ScreenHeader title="Movimientos" />
 
-      <button onClick={() => navigate('/comisiones')} className="mb-3 inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
-        Ver comisiones pagadas →
-      </button>
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <button onClick={() => navigate('/comisiones')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+          Ver comisiones pagadas →
+        </button>
+        {filtrados.length > 0 && (
+          <BotonExportarCsv
+            nombre="movimientos"
+            encabezados={['Fecha', 'Cartera', 'Ticker', 'Tipo', 'Cantidad', 'Precio', 'Moneda', 'Comisión']}
+            filas={() =>
+              filtrados.map(m => [
+                m.fecha, m.cartera, m.ticker, m.tipo_movimiento,
+                m.cantidad, m.precio, m.moneda, m.comision,
+              ])
+            }
+          />
+        )}
+      </div>
 
       <div className="flex items-center gap-2 bg-app-surface border border-app-border rounded-xl h-10 px-3 mb-3">
         <Icon name="search" className="w-4 h-4 text-app-text-faint" />

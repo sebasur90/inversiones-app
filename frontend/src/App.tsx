@@ -87,17 +87,25 @@ function SyncResultModal() {
   )
 }
 
+// Volver a la app después de un rato equivale a abrirla de nuevo, y ahí el Resumen es el
+// mejor punto de partida. Pero cambiar de app unos segundos (mirar una cotización, responder
+// un mensaje) no debería costar el lugar donde estabas.
+const MS_PARA_VOLVER_AL_INICIO = 5 * 60 * 1000
+
 function useVolverAInicioAlReabrir() {
   const navigate = useNavigate()
-  const salioDeLaApp = useRef(false)
+  const salidaEnMs = useRef<number | null>(null)
 
   useEffect(() => {
     function onVisibilityChange() {
       if (document.visibilityState === 'hidden') {
-        salioDeLaApp.current = true
-      } else if (document.visibilityState === 'visible' && salioDeLaApp.current) {
-        salioDeLaApp.current = false
-        navigate('/resumen', { replace: true })
+        salidaEnMs.current = Date.now()
+      } else if (document.visibilityState === 'visible' && salidaEnMs.current !== null) {
+        const ausente = Date.now() - salidaEnMs.current
+        salidaEnMs.current = null
+        if (ausente >= MS_PARA_VOLVER_AL_INICIO) {
+          navigate('/resumen', { replace: true })
+        }
       }
     }
     document.addEventListener('visibilitychange', onVisibilityChange)

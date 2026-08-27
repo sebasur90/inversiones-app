@@ -7,29 +7,21 @@ import PosicionRow from '../components/inversiones/PosicionRow'
 import EmptyState from '../components/ui/EmptyState'
 import IconButton from '../components/ui/IconButton'
 import { Icon } from '../components/icons/Icons'
+import { descargarCSV, sufijoFechaHoy } from '../utils/csv'
 
-function exportarCSV(items: RendimientoPorTickerItem[], cartera: string | null) {
-  const headers = [
-    'Ticker', 'Nombre', 'Cantidad Actual', 'Precio Promedio', 'Precio Actual',
-    'Rendimiento USD %', 'Rendimiento ARS %', 'Rendimiento ARS Real %',
-    'Valor Invertido (USD)', 'Valor Actual (USD)', 'Valor Invertido (ARS)', 'Valor Actual (ARS)',
-  ]
-  const rows = items.map(it => [
+const COLUMNAS_POSICIONES = [
+  'Ticker', 'Nombre', 'Cantidad Actual', 'Precio Promedio', 'Precio Actual',
+  'Rendimiento USD %', 'Rendimiento ARS %', 'Rendimiento ARS Real %',
+  'Valor Invertido (USD)', 'Valor Actual (USD)', 'Valor Invertido (ARS)', 'Valor Actual (ARS)',
+]
+
+function filasPosiciones(items: RendimientoPorTickerItem[]) {
+  const pct = (v: number | null | undefined) => (v != null ? (v * 100).toFixed(2) : '')
+  return items.map(it => [
     it.ticker, it.nombre, it.cantidad_actual, it.precio_promedio, it.precio_actual,
-    it.rendimiento_simple_usd != null ? (it.rendimiento_simple_usd * 100).toFixed(2) : '',
-    it.rendimiento_simple_ars != null ? (it.rendimiento_simple_ars * 100).toFixed(2) : '',
-    it.rendimiento_simple_ars_real != null ? (it.rendimiento_simple_ars_real * 100).toFixed(2) : '',
+    pct(it.rendimiento_simple_usd), pct(it.rendimiento_simple_ars), pct(it.rendimiento_simple_ars_real),
     it.valor_invertido_usd, it.valor_actual_usd, it.valor_invertido_ars, it.valor_actual_ars,
   ])
-  const csv = [headers, ...rows].map(r => r.join(',')).join('\n')
-  const blob = new Blob([csv], { type: 'text/csv' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  const fecha = new Date().toISOString().slice(0, 10)
-  a.download = `inversiones-rendimiento-${cartera || 'consolidado'}-${fecha}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
 }
 
 export default function Posiciones() {
@@ -57,7 +49,17 @@ export default function Posiciones() {
             className="flex-1 bg-transparent outline-none text-[12.5px] text-app-text placeholder:text-app-text-faint"
           />
         </div>
-        <IconButton onClick={() => exportarCSV(filtrados, carteraSeleccionada)} aria-label="Exportar CSV" disabled={filtrados.length === 0}>
+        <IconButton
+          onClick={() =>
+            descargarCSV(
+              `inversiones-rendimiento-${carteraSeleccionada || 'consolidado'}-${sufijoFechaHoy()}`,
+              COLUMNAS_POSICIONES,
+              filasPosiciones(filtrados),
+            )
+          }
+          aria-label="Exportar CSV"
+          disabled={filtrados.length === 0}
+        >
           <Icon name="download" className="w-4 h-4" />
         </IconButton>
       </div>
