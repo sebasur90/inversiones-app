@@ -38,7 +38,7 @@ from .inversiones_analytics import (
 )
 from .riesgo_analytics import MONEDAS_VALIDAS
 from .benchmarks_analytics import (
-    _benchmark_retornos_mensuales,
+    _resolver_fuente,
     _filtrar_desde,
     _performance_relativa_sobre_movs,
 )
@@ -247,7 +247,7 @@ def get_ticker_riesgo(
     benchmark_retorno_anualizado = None
     if benchmark and movs:
         desde_fecha = movs[0].fecha  # Primera compra del ticker
-        retornos_benchmark = _benchmark_retornos_mensuales(benchmark, db, hoy)
+        retornos_benchmark = _resolver_fuente(benchmark, db, hoy)
         retornos_benchmark = _filtrar_desde(retornos_benchmark, desde_fecha)
         sharpe = risk_engine.calcular_sharpe_vs_benchmark(retornos_validos, retornos_benchmark, benchmark)
         if retornos_benchmark and sharpe["estado"] == "ok":

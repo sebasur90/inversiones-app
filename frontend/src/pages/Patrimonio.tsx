@@ -501,6 +501,12 @@ export default function Patrimonio() {
                 </span>
                 <span className="text-app-text font-mono">{formatCompact(vista === 'usd' ? patrimonioSummary.descomposicion.dividendos_usd : patrimonioSummary.descomposicion.dividendos_ars, esUSD)}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-app-text-dim">
+                  <InfoTooltip term="patrimonio_descomposicion_otros_ajustes" label="Otros ajustes (comisiones):" className="text-app-text-dim" />
+                </span>
+                <span className="text-app-text font-mono">{formatCompact(vista === 'usd' ? patrimonioSummary.descomposicion.otros_ajustes_usd : patrimonioSummary.descomposicion.otros_ajustes_ars, esUSD)}</span>
+              </div>
               <div className="flex justify-between border-t border-app-border-soft pt-2 mt-2">
                 <span className="text-app-text-dim font-semibold">
                   <InfoTooltip term="patrimonio_descomposicion_total" label="Total:" className="text-app-text-dim font-semibold" />
@@ -510,10 +516,12 @@ export default function Patrimonio() {
                     (vista === 'usd'
                       ? patrimonioSummary.descomposicion.aportes_usd +
                         patrimonioSummary.descomposicion.rendimiento_usd +
-                        patrimonioSummary.descomposicion.dividendos_usd
+                        patrimonioSummary.descomposicion.dividendos_usd +
+                        patrimonioSummary.descomposicion.otros_ajustes_usd
                       : patrimonioSummary.descomposicion.aportes_ars +
                         patrimonioSummary.descomposicion.rendimiento_ars +
-                        patrimonioSummary.descomposicion.dividendos_ars),
+                        patrimonioSummary.descomposicion.dividendos_ars +
+                        patrimonioSummary.descomposicion.otros_ajustes_ars),
                     esUSD
                   )}
                 </span>

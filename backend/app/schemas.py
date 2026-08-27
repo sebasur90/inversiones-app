@@ -317,6 +317,8 @@ class PatrimonioMaximoOut(BaseModel):
     valor_ars: Optional[float] = None
     valor_ars_real: Optional[float] = None
     fecha: Optional[date] = None
+    fecha_ars: Optional[date] = None
+    fecha_ars_real: Optional[date] = None
     valor_actual_usd: Optional[float] = None
     valor_actual_ars: Optional[float] = None
     valor_actual_ars_real: Optional[float] = None

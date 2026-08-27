@@ -254,6 +254,19 @@ def evaluar_vencimientos(vencimientos: list[dict]) -> dict | None:
     }
 
 
+def _ultimos_n_meses(hoy: date, n: int) -> list[str]:
+    """Últimos `n` períodos calendario (formato "YYYY-MM") terminando en el mes de `hoy`."""
+    periodos = []
+    anio, mes = hoy.year, hoy.month
+    for _ in range(n):
+        periodos.append(f"{anio:04d}-{mes:02d}")
+        mes -= 1
+        if mes == 0:
+            mes = 12
+            anio -= 1
+    return periodos
+
+
 def evaluar_comisiones(comisiones: dict, valor_actual_usd: float) -> dict | None:
     """Evalúa si la comisión anualizada es elevada."""
     if valor_actual_usd <= 0:
@@ -261,12 +274,10 @@ def evaluar_comisiones(comisiones: dict, valor_actual_usd: float) -> dict | None
     por_mes = comisiones.get("por_mes", [])
     if not por_mes:
         return None
-    por_mes_sorted = sorted(por_mes, key=lambda p: p.get("periodo", ""))
-    trailing = por_mes_sorted[-MESES_TRAILING_COMISIONES:]
-    total_trailing = sum(p.get("total_usd", 0) for p in trailing)
-    meses_cubiertos = len(trailing)
-    if meses_cubiertos == 0:
-        return None
+    valores_por_periodo = {p.get("periodo"): p.get("total_usd", 0) for p in por_mes}
+    meses_cubiertos = MESES_TRAILING_COMISIONES
+    periodos_ventana = _ultimos_n_meses(date.today(), meses_cubiertos)
+    total_trailing = sum(valores_por_periodo.get(p, 0) for p in periodos_ventana)
     anualizado = total_trailing * (12 / meses_cubiertos)
     ratio = anualizado / valor_actual_usd
     if ratio < UMBRAL_COMISION_ADVERTENCIA_PCT:
@@ -311,7 +322,7 @@ def score_riesgo(drawdown: dict, volatilidad: dict) -> dict | None:
     promedio = sum(partes) / len(partes)
     dd_val = drawdown.get("maximo")
     vol_val = volatilidad.get("anualizada")
-    detalle = f"Drawdown máx. {abs(dd_val)*-100:.1f}%" if dd_val else "Drawdown: datos insuficientes"
+    detalle = f"Drawdown máx. {abs(dd_val)*-100:.1f}%" if dd_val is not None else "Drawdown: datos insuficientes"
     if vol_val:
         detalle += f", volatilidad {vol_val*100:.1f}% anualizada"
     return {"score": round(promedio, 1), "detalle": detalle}

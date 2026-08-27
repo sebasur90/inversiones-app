@@ -288,6 +288,8 @@ export interface PatrimonioMaximoOut {
   valor_ars: number | null
   valor_ars_real: number | null
   fecha: string | null
+  fecha_ars: string | null
+  fecha_ars_real: string | null
   valor_actual_usd: number | null
   valor_actual_ars: number | null
   valor_actual_ars_real: number | null

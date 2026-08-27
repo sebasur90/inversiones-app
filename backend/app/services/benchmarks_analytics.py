@@ -162,7 +162,7 @@ def _performance_relativa_sobre_movs(movs: list, cartera: str | None, moneda: st
     retornos_cartera = _filtrar_desde(retornos_cartera, desde)
 
     # Calcular retornos mensuales del benchmark
-    retornos_benchmark = _benchmark_retornos_mensuales(benchmark_resuelto, db, hoy)
+    retornos_benchmark = _resolver_fuente(benchmark_resuelto, db, hoy)
     retornos_benchmark = _filtrar_desde(retornos_benchmark, desde)
 
     # Restricción a meses comunes (intersección)
@@ -214,7 +214,8 @@ def _performance_relativa_sobre_movs(movs: list, cartera: str | None, moneda: st
     retorno_anualizado_cartera = risk_engine.calcular_retorno_anualizado(indice_cartera)
     retorno_anualizado_benchmark = risk_engine.calcular_retorno_anualizado(indice_benchmark)
     beta = risk_engine.calcular_beta(retornos_cartera_validos, retornos_benchmark_validos)
-    exceso_retorno = risk_engine.calcular_tracking_error(retornos_cartera_validos, retornos_benchmark_validos)
+    exceso_retorno = risk_engine.calcular_exceso_retorno_medio(retornos_cartera_validos, retornos_benchmark_validos)
+    tracking_error = risk_engine.calcular_tracking_error(retornos_cartera_validos, retornos_benchmark_validos)
     alpha_result = risk_engine.calcular_alpha(retorno_anualizado_cartera, retorno_anualizado_benchmark, beta.get("valor"))
     ir = risk_engine.calcular_information_ratio(retornos_cartera_validos, retornos_benchmark_validos, benchmark_resuelto)
 
@@ -243,7 +244,7 @@ def _performance_relativa_sobre_movs(movs: list, cartera: str | None, moneda: st
         "exceso_retorno": exceso_retorno,
         "alpha": alpha_result,
         "beta": beta,
-        "tracking_error": exceso_retorno,
+        "tracking_error": tracking_error,
         "information_ratio": ir,
         "serie": serie,
     }
@@ -349,23 +350,21 @@ def get_performance_compare(
                     f["ranking"] = i
                     break
 
+    indice_cartera_por_mes = {(f.year, f.month): v for f, v in indice_cartera_completo}
+    indices_por_mes_by_fuente = {
+        fuente: {(f.year, f.month): v for f, v in indice}
+        for fuente, indice in indices_by_fuente.items()
+    }
+
     serie = []
     for fecha_key in sorted(fechas_globales):
         punto = {"fecha": date(fecha_key[0], fecha_key[1], 1)}
 
-        cartera_val = None
-        for f, v in indice_cartera_completo:
-            if f == punto["fecha"]:
-                cartera_val = v
-                break
+        cartera_val = indice_cartera_por_mes.get(fecha_key)
         punto["cartera"] = round(cartera_val, 2) if cartera_val is not None else None
 
-        for fuente, indice in indices_by_fuente.items():
-            fuente_val = None
-            for f, v in indice:
-                if f == punto["fecha"]:
-                    fuente_val = v
-                    break
+        for fuente, indice_por_mes in indices_por_mes_by_fuente.items():
+            fuente_val = indice_por_mes.get(fecha_key)
             punto[fuente] = round(fuente_val, 2) if fuente_val is not None else None
 
         serie.append(punto)

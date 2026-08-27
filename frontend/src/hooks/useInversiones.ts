@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   syncInversiones,
   getCarterasInversion,
@@ -29,13 +29,22 @@ export function useInversiones() {
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const fetchSeqRef = useRef(0)
+
   const fetchCarteras = useCallback(async () => {
-    const data = await getCarterasInversion()
-    setCarteras(data)
-    return data
+    try {
+      const data = await getCarterasInversion()
+      setCarteras(data)
+      return data
+    } catch {
+      setError('Error al cargar las carteras de inversión')
+      setLoading(false)
+      return []
+    }
   }, [])
 
   const fetchDetalle = useCallback(async (cartera: string | null) => {
+    const seq = ++fetchSeqRef.current
     setLoading(true)
     setError(null)
     try {
@@ -46,15 +55,17 @@ export function useInversiones() {
         getMovimientosInversion(cartera ? { cartera } : {}),
         getRendimientoPorTicker(cartera),
       ])
+      if (fetchSeqRef.current !== seq) return // respuesta obsoleta, se descarta
       setResumen(r)
       setExposicion(ex)
       setRebalanceo(rb)
       setMovimientos(mv)
       setRendimientoPorTicker(rt)
     } catch {
+      if (fetchSeqRef.current !== seq) return
       setError('Error al cargar los datos de inversiones')
     } finally {
-      setLoading(false)
+      if (fetchSeqRef.current === seq) setLoading(false)
     }
   }, [])
 

@@ -25,7 +25,7 @@ def test_patrimonio_history_empty(db: Session):
 
 def test_patrimonio_history_single_buy(db: Session):
     """Compra simple de 100 USD en ARS."""
-    inst = InstrumentoInversion(ticker="AAPL", tipo_instrumento="Acción", mercado="NASDAQ", moneda="USD")
+    inst = InstrumentoInversion(ticker="AAPL", nombre="Apple Inc.", tipo_instrumento="Acción", mercado="NASDAQ", moneda="USD")
     db.add(inst)
     db.commit()
 
@@ -65,7 +65,7 @@ def test_patrimonio_summary_empty(db: Session):
 
 def test_patrimonio_decomposition_identity(db: Session):
     """Verificar identidad: Δvalor = Δaportes + Δrendimiento + Δdividendos + Δotros."""
-    inst = InstrumentoInversion(ticker="TEST", tipo_instrumento="Acción", mercado="TEST", moneda="USD")
+    inst = InstrumentoInversion(ticker="TEST", nombre="Test Instrument", tipo_instrumento="Acción", mercado="TEST", moneda="USD")
     db.add(inst)
     db.commit()
 

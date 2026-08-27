@@ -130,12 +130,13 @@ export default function Objetivo() {
   // Grilla de sensibilidad
   const grillaSensibilidad = useMemo(() => {
     if (!objetivo || !escenarios) return null
+    const paso = escenarios.base - escenarios.conservador
     const tasas = [
-      escenarios.conservador - escenarios.conservador + escenarios.conservador - 2 * (escenarios.base - escenarios.conservador),
-      escenarios.conservador - (escenarios.base - escenarios.conservador),
+      escenarios.base - 2 * paso,
+      escenarios.base - paso,
       escenarios.base,
-      escenarios.optimista + (escenarios.optimista - escenarios.base),
-      escenarios.optimista + 2 * (escenarios.optimista - escenarios.base),
+      escenarios.base + paso,
+      escenarios.base + 2 * paso,
     ]
     const necesarioBase = objetivo.aporte_mensual_necesario_usd ?? 0
     const aportesGrilla = [

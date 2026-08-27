@@ -184,6 +184,24 @@ def calcular_tracking_error(
     return {"estado": "ok", "valor": round(desvio * math.sqrt(PERIODOS_POR_ANIO), 4), "n_obs": n}
 
 
+def calcular_exceso_retorno_medio(
+    retornos_por_mes: dict[tuple[int, int], float],
+    retornos_benchmark_por_mes: dict[tuple[int, int], float],
+) -> dict:
+    """Media anualizada (compuesta) del exceso de retorno mensual (cartera - benchmark)."""
+    excesos = [
+        retornos_por_mes[k] - retornos_benchmark_por_mes[k]
+        for k in sorted(set(retornos_por_mes) & set(retornos_benchmark_por_mes))
+    ]
+    n = len(excesos)
+    if n < MIN_OBS_VOLATILIDAD:
+        return {"estado": "datos_insuficientes", "valor": None, "n_obs": n}
+
+    media = statistics.mean(excesos)
+    anualizado = (1 + media) ** PERIODOS_POR_ANIO - 1
+    return {"estado": "ok", "valor": round(anualizado, 4), "n_obs": n}
+
+
 def calcular_information_ratio(
     retornos_por_mes: dict[tuple[int, int], float],
     retornos_benchmark_por_mes: dict[tuple[int, int], float],

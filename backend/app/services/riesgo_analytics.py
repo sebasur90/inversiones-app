@@ -75,8 +75,8 @@ def get_riesgo(cartera: str | None, moneda: str, benchmark: str | None, db: Sess
 
     benchmark_retorno_anualizado = None
     if benchmark:
-        from .benchmarks_analytics import _benchmark_retornos_mensuales
-        retornos_benchmark = _benchmark_retornos_mensuales(benchmark, db, hoy)
+        from .benchmarks_analytics import _resolver_fuente
+        retornos_benchmark = _resolver_fuente(benchmark, db, hoy)
         sharpe = risk_engine.calcular_sharpe_vs_benchmark(retornos_validos, retornos_benchmark, benchmark)
         if retornos_benchmark:
             indice_benchmark = risk_engine.construir_indice(retornos_benchmark)

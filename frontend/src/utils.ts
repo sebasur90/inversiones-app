@@ -69,15 +69,30 @@ export const CHART_COLORS = [
 
 export type PeriodoEvolucion = '1M' | '3M' | '6M' | '1Y' | '3Y' | 'YTD' | 'ALL'
 
+function formatDateLocal(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+// Resta `meses` a `d` clampeando el día al último día del mes destino si este es más corto
+// (ej. 31/3 menos 1 mes → 28/2, no 3/3 como haría setMonth() al desbordar).
+function restarMeses(d: Date, meses: number): Date {
+  const diaOriginal = d.getDate()
+  const resultado = new Date(d.getFullYear(), d.getMonth() - meses, 1)
+  const ultimoDiaMesDestino = new Date(resultado.getFullYear(), resultado.getMonth() + 1, 0).getDate()
+  resultado.setDate(Math.min(diaOriginal, ultimoDiaMesDestino))
+  return resultado
+}
+
 export function calcularDesde(periodo: PeriodoEvolucion): string | undefined {
   const hoy = new Date()
   if (periodo === 'ALL') return undefined
   if (periodo === 'YTD') return `${hoy.getFullYear()}-01-01`
-  const d = new Date(hoy)
-  if (periodo === '1M') d.setMonth(d.getMonth() - 1)
-  if (periodo === '3M') d.setMonth(d.getMonth() - 3)
-  if (periodo === '6M') d.setMonth(d.getMonth() - 6)
-  if (periodo === '1Y') d.setFullYear(d.getFullYear() - 1)
-  if (periodo === '3Y') d.setFullYear(d.getFullYear() - 3)
-  return d.toISOString().slice(0, 10)
+  const mesesPorPeriodo: Record<Exclude<PeriodoEvolucion, 'ALL' | 'YTD'>, number> = {
+    '1M': 1, '3M': 3, '6M': 6, '1Y': 12, '3Y': 36,
+  }
+  const d = restarMeses(hoy, mesesPorPeriodo[periodo as Exclude<PeriodoEvolucion, 'ALL' | 'YTD'>])
+  return formatDateLocal(d)
 }

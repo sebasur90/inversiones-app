@@ -465,7 +465,7 @@ def _resumen_sobre_movs(movs: list[MovimientoInversion], db: Session) -> dict:
                 total_invertido_ars += monto_ars
             if monto_ars_real is not None:
                 total_invertido_ars_real += monto_ars_real
-        elif mov.tipo_movimiento == "venta":
+        elif mov.tipo_movimiento in ("venta", "amortizacion"):
             total_invertido_usd -= monto_usd
             if monto_ars is not None:
                 total_invertido_ars -= monto_ars
@@ -477,9 +477,6 @@ def _resumen_sobre_movs(movs: list[MovimientoInversion], db: Session) -> dict:
                 ingresos_recibidos_ars += monto_ars
             if monto_ars_real is not None:
                 ingresos_recibidos_ars_real += monto_ars_real
-        elif mov.tipo_movimiento == "amortizacion":
-            if monto_ars is not None:
-                pass  # No afecta invertido/ingresos en amortización
 
     # Cálculo de métricas USD
     rendimiento_simple_usd = (
@@ -1664,21 +1661,26 @@ def get_pnl_realizado_no_realizado(cartera: str | None, db: Session) -> dict:
             precios_sorted = precios_por_ticker.get(ticker)
             info = _precio_conocido(precios_sorted, hoy) if precios_sorted else None
             if info is None:
-                continue  # sin precio actual no se puede valuar la tenencia remanente
-            _fecha_precio, precio_actual, moneda_precio = info
-            valor_usd = _to_usd(precio_actual * cantidad_held, moneda_precio, hoy, db, mep_cache)
-            valor_ars = _convertir(precio_actual * cantidad_held, moneda_precio, "ARS", hoy, db, mep_cache)
-            if valor_usd is None:
-                continue
-            no_realizado_usd = valor_usd - costo_usd
-            no_realizado_ars = (valor_ars - costo_ars) if valor_ars is not None else None
-            no_realizado_ars_real = (valor_ars - costo_ars_real) if (ars_real_valido and valor_ars is not None) else None
+                # Sin precio actual no se puede valuar la tenencia remanente, pero el
+                # realizado/ingresos ya calculados siguen siendo válidos y no deben perderse.
+                no_realizado_usd = no_realizado_ars = no_realizado_ars_real = None
+            else:
+                _fecha_precio, precio_actual, moneda_precio = info
+                valor_usd = _to_usd(precio_actual * cantidad_held, moneda_precio, hoy, db, mep_cache)
+                valor_ars = _convertir(precio_actual * cantidad_held, moneda_precio, "ARS", hoy, db, mep_cache)
+                if valor_usd is None:
+                    no_realizado_usd = no_realizado_ars = no_realizado_ars_real = None
+                else:
+                    no_realizado_usd = valor_usd - costo_usd
+                    no_realizado_ars = (valor_ars - costo_ars) if valor_ars is not None else None
+                    no_realizado_ars_real = (valor_ars - costo_ars_real) if (ars_real_valido and valor_ars is not None) else None
 
         if not ars_real_valido:
             cer_incompleto = True
 
         tot["realizado_usd"] += realizado_usd
-        tot["no_realizado_usd"] += no_realizado_usd
+        if no_realizado_usd is not None:
+            tot["no_realizado_usd"] += no_realizado_usd
         tot["ingresos_usd"] += ingresos_usd
         tot["realizado_ars"] += realizado_ars
         if no_realizado_ars is not None:
@@ -1695,9 +1697,11 @@ def get_pnl_realizado_no_realizado(cartera: str | None, db: Session) -> dict:
             "ticker": ticker,
             "nombre": instrumento.nombre if instrumento else ticker,
             "realizado_usd": round(realizado_usd, 2),
-            "no_realizado_usd": round(no_realizado_usd, 2),
+            "no_realizado_usd": round(no_realizado_usd, 2) if no_realizado_usd is not None else None,
             "ingresos_usd": round(ingresos_usd, 2),
-            "total_usd": round(realizado_usd + no_realizado_usd + ingresos_usd, 2),
+            "total_usd": (
+                round(realizado_usd + no_realizado_usd + ingresos_usd, 2) if no_realizado_usd is not None else None
+            ),
             "realizado_ars": round(realizado_ars, 2),
             "no_realizado_ars": round(no_realizado_ars, 2) if no_realizado_ars is not None else None,
             "ingresos_ars": round(ingresos_ars, 2),
@@ -1706,7 +1710,7 @@ def get_pnl_realizado_no_realizado(cartera: str | None, db: Session) -> dict:
             ),
         })
 
-    por_ticker_resultado.sort(key=lambda x: -abs(x["total_usd"]))
+    por_ticker_resultado.sort(key=lambda x: -abs(x["total_usd"]) if x["total_usd"] is not None else 0)
 
     consolidado = {
         "realizado_usd": round(tot["realizado_usd"], 2),
@@ -2143,7 +2147,11 @@ def get_progreso_objetivo(cartera: str, objetivo_id: int, db: Session) -> dict |
     """Calcula progreso del objetivo: proyección, aporte promedio, déficit, etc."""
     from ..database import ObjetivoInversion
 
-    objetivo = db.query(ObjetivoInversion).filter(ObjetivoInversion.id == objetivo_id).first()
+    objetivo = (
+        db.query(ObjetivoInversion)
+        .filter(ObjetivoInversion.id == objetivo_id, ObjetivoInversion.cartera == cartera)
+        .first()
+    )
     if not objetivo:
         return None
 

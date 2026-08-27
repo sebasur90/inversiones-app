@@ -16,15 +16,12 @@ from .inversiones_analytics import (
     _valuar_holdings_ars_real,
     _fechas_por_granularidad,
     _fin_de_mes_range,
-    _monto_bruto,
     _monto_usd,
     _monto_ars,
     _monto_ars_real,
     _comision_usd,
     _comision_ars,
     _cer_indice,
-    _to_usd,
-    _convertir,
     TIPOS_INGRESO,
 )
 
@@ -89,6 +86,11 @@ def get_patrimonio_history(
     dividendos_ars_real = 0.0
     dividendos_ars_real_valido = True
 
+    otros_ajustes_usd = 0.0
+    otros_ajustes_ars = 0.0
+    otros_ajustes_ars_real = 0.0
+    otros_ajustes_ars_real_valido = True
+
     for f in fechas:
         tracker.avanzar_a(f)
         snapshot = tracker.snapshot()
@@ -102,6 +104,19 @@ def get_patrimonio_history(
         while idx_mov < len(movs) and movs[idx_mov].fecha <= f:
             mov = movs[idx_mov]
             idx_mov += 1
+
+            comision_usd = _comision_usd(mov, db, mep_cache)
+            if comision_usd is not None:
+                otros_ajustes_usd -= comision_usd
+            comision_ars = _comision_ars(mov, db, mep_cache)
+            if comision_ars is not None:
+                otros_ajustes_ars -= comision_ars
+                if otros_ajustes_ars_real_valido:
+                    cer_fecha = _cer_indice(mov.fecha, db, cer_cache)
+                    if cer_hoy is not None and cer_fecha is not None:
+                        otros_ajustes_ars_real -= comision_ars * (cer_hoy / cer_fecha)
+                    else:
+                        otros_ajustes_ars_real_valido = False
 
             if mov.tipo_movimiento == "compra":
                 monto_usd = _monto_usd(mov, db, mep_cache)
@@ -174,9 +189,9 @@ def get_patrimonio_history(
             "dividendos_acumulados_usd": round(dividendos_usd, 2),
             "dividendos_acumulados_ars": round(dividendos_ars, 2),
             "dividendos_acumulados_ars_real": round(dividendos_ars_real, 2) if dividendos_ars_real_valido else None,
-            "otros_ajustes_acumulados_usd": 0.0,
-            "otros_ajustes_acumulados_ars": 0.0,
-            "otros_ajustes_acumulados_ars_real": 0.0,
+            "otros_ajustes_acumulados_usd": round(otros_ajustes_usd, 2),
+            "otros_ajustes_acumulados_ars": round(otros_ajustes_ars, 2),
+            "otros_ajustes_acumulados_ars_real": round(otros_ajustes_ars_real, 2) if otros_ajustes_ars_real_valido else None,
             "ganancia_usd": round(ganancia_usd, 2),
             "ganancia_ars": round(ganancia_ars, 2),
             "ganancia_ars_real": round(ganancia_ars_real, 2) if ganancia_ars_real is not None else None,
@@ -212,6 +227,8 @@ def get_patrimonio_summary(
                 "valor_ars": None,
                 "valor_ars_real": None,
                 "fecha": None,
+                "fecha_ars": None,
+                "fecha_ars_real": None,
                 "valor_actual_usd": None,
                 "valor_actual_ars": None,
                 "valor_actual_ars_real": None,
@@ -335,6 +352,8 @@ def get_patrimonio_summary(
             "valor_ars": round(maximo_ars, 2) if maximo_ars is not None else None,
             "valor_ars_real": round(maximo_ars_real, 2) if maximo_ars_real is not None else None,
             "fecha": fecha_maximo_usd,
+            "fecha_ars": fecha_maximo_ars,
+            "fecha_ars_real": fecha_maximo_ars_real,
             "valor_actual_usd": round(punto_actual["valor_usd"], 2) if punto_actual else None,
             "valor_actual_ars": round(punto_actual["valor_ars"], 2) if punto_actual else None,
             "valor_actual_ars_real": round(punto_actual["valor_ars_real"], 2) if (punto_actual and punto_actual["valor_ars_real"] is not None) else None,

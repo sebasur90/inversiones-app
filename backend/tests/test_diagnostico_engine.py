@@ -225,30 +225,28 @@ class TestEvaluarComisiones:
         assert result is None
 
     def test_comisiones_advertencia(self):
-        comis = {
-            "por_mes": [
-                {"periodo": "2026-06", "total_usd": 80},
-                {"periodo": "2026-07", "total_usd": 90},
-                {"periodo": "2026-08", "total_usd": 100},
-            ]
-        }
-        # 270/3 * 4 = 360/año, 360/100000 = 0.36%
+        # Ventana fija de 12 meses calendario (no se extrapola con meses faltantes).
+        periodos = diagnostico_engine._ultimos_n_meses(date.today(), 12)
+        comis = {"por_mes": [{"periodo": p, "total_usd": 90} for p in periodos]}
+        # 90 * 12 = 1080/año, 1080/100000 = 1.08%
         result = diagnostico_engine.evaluar_comisiones(comis, 100000)
         assert result is not None
         assert result["severidad"] == "advertencia"
 
     def test_comisiones_critico(self):
-        comis = {
-            "por_mes": [
-                {"periodo": "2026-06", "total_usd": 200},
-                {"periodo": "2026-07", "total_usd": 200},
-                {"periodo": "2026-08", "total_usd": 200},
-            ]
-        }
-        # 600/3 * 4 = 800/año, 800/100000 = 0.8%
+        periodos = diagnostico_engine._ultimos_n_meses(date.today(), 12)
+        comis = {"por_mes": [{"periodo": p, "total_usd": 200} for p in periodos]}
+        # 200 * 12 = 2400/año, 2400/100000 = 2.4%
         result = diagnostico_engine.evaluar_comisiones(comis, 100000)
         assert result is not None
         assert result["severidad"] == "critico"
+
+    def test_comisiones_no_extrapola_meses_faltantes(self):
+        """Con solo 3 meses de historial, no debe multiplicarse ×4 como si fuera un año completo."""
+        periodos = diagnostico_engine._ultimos_n_meses(date.today(), 3)
+        comis = {"por_mes": [{"periodo": p, "total_usd": 200} for p in periodos]}
+        result = diagnostico_engine.evaluar_comisiones(comis, 100000)
+        assert result is None
 
 
 class TestPriorizarHallazgos:
