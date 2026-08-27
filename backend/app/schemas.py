@@ -468,8 +468,9 @@ class VencimientoItem(BaseModel):
     dias_restantes: int
     vencido: bool
     cantidad_actual: float
-    valor_actual_usd: float
-    valor_actual_ars: float
+    # None cuando el instrumento no tiene cotización cargada: el vencimiento igual se informa.
+    valor_actual_usd: float | None = None
+    valor_actual_ars: float | None = None
     moneda: str
 
 

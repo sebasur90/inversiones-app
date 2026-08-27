@@ -619,13 +619,32 @@ def _calcular_xirr(flujos: list[tuple[date, float]]) -> float | None:
     return mid
 
 
-def _calcular_twr(
+def _calcular_twr_encadenado(
     movs: list[MovimientoInversion],
-    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
-    db: Session,
-    mep_cache: dict,
     hoy: date,
+    monto_fn,
+    valuar_fn,
+    abortar_si_falta_monto: bool = False,
 ) -> tuple[float | None, bool]:
+    """TWR encadenado sobre las fechas de cashflow, más hoy como cierre.
+
+    Núcleo compartido por las variantes USD / ARS nominal / ARS real: sólo cambian la función
+    de monto y la de valuación. Una valuación `None` (falta CER para esa fecha) siempre aborta
+    el cálculo.
+
+    Args:
+        movs: movimientos ordenados por fecha
+        hoy: fecha de cierre de la serie
+        monto_fn: callable(MovimientoInversion) -> float | None
+        valuar_fn: callable(holdings, fecha, costos) -> tuple[float | None, bool, bool]
+        abortar_si_falta_monto: si un movimiento no se puede convertir, devolver None en vez
+            de omitir su flujo. En ARS real esto importa: sin el flujo, el aporte se
+            confundiría con rendimiento. En USD/ARS nominal se mantiene omitiéndolo, que es
+            el comportamiento histórico.
+
+    Returns:
+        (twr, aproximado) — (None, False) si no hay período medible.
+    """
     fechas_borde = sorted({m.fecha for m in movs if m.tipo_movimiento in TIPOS_QUE_CAMBIAN_TENENCIA})
     if not fechas_borde:
         return None, False
@@ -633,19 +652,20 @@ def _calcular_twr(
     boundaries = list(fechas_borde)
     if boundaries[-1] < hoy:
         boundaries.append(hoy)
-    if len(boundaries) < 1:
+    # Con un solo boundary no hay sub-período que medir. Antes se agregaba `hoy` incluso
+    # cuando ya era el único borde, dejando [hoy, hoy]: un tramo degenerado de v0 == v1 al
+    # que se le restaba el flujo del día, dando un retorno espurio de casi -100%.
+    if len(boundaries) < 2:
         return None, False
-
-    # Si solo hay un boundary (una sola compra/venta), agregar hoy como segundo punto
-    if len(boundaries) == 1:
-        boundaries.append(hoy)
 
     cf_por_fecha: dict[date, float] = {}
     for mov in movs:
         if mov.tipo_movimiento not in TIPOS_QUE_CAMBIAN_TENENCIA:
             continue
-        monto = _monto_usd(mov, db, mep_cache)
+        monto = monto_fn(mov)
         if monto is None:
+            if abortar_si_falta_monto:
+                return None, False
             continue
         signo = 1 if mov.tipo_movimiento == "compra" else -1
         cf_por_fecha[mov.fecha] = cf_por_fecha.get(mov.fecha, 0.0) + signo * monto
@@ -655,117 +675,7 @@ def _calcular_twr(
     aproximado = False
     for b in boundaries:
         tracker.avanzar_a(b)
-        valor, aprox, _ = _valuar_holdings(tracker.snapshot(), b, precios_por_ticker, db, mep_cache, tracker.costo_snapshot())
-        valores[b] = valor
-        aproximado = aproximado or aprox
-
-    twr_total = 1.0
-    for i in range(1, len(boundaries)):
-        d0, d1 = boundaries[i - 1], boundaries[i]
-        v0, v1 = valores[d0], valores[d1]
-        if v0 <= EPS:
-            continue
-        flujo = cf_por_fecha.get(d1, 0.0)
-        r = (v1 - flujo) / v0 - 1
-        twr_total *= (1 + r)
-
-    return twr_total - 1, aproximado
-
-
-def _calcular_twr_ars(
-    movs: list[MovimientoInversion],
-    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
-    db: Session,
-    mep_cache: dict,
-    hoy: date,
-) -> tuple[float | None, bool]:
-    """TWR en ARS nominal."""
-    fechas_borde = sorted({m.fecha for m in movs if m.tipo_movimiento in TIPOS_QUE_CAMBIAN_TENENCIA})
-    if not fechas_borde:
-        return None, False
-
-    boundaries = list(fechas_borde)
-    if boundaries[-1] < hoy:
-        boundaries.append(hoy)
-    if len(boundaries) < 1:
-        return None, False
-
-    # Si solo hay un boundary (una sola compra/venta), agregar hoy como segundo punto
-    if len(boundaries) == 1:
-        boundaries.append(hoy)
-
-    cf_por_fecha: dict[date, float] = {}
-    for mov in movs:
-        if mov.tipo_movimiento not in TIPOS_QUE_CAMBIAN_TENENCIA:
-            continue
-        monto = _monto_ars(mov, db, mep_cache)
-        if monto is None:
-            continue
-        signo = 1 if mov.tipo_movimiento == "compra" else -1
-        cf_por_fecha[mov.fecha] = cf_por_fecha.get(mov.fecha, 0.0) + signo * monto
-
-    tracker = _HoldingsTracker(movs)
-    valores: dict[date, float] = {}
-    aproximado = False
-    for b in boundaries:
-        tracker.avanzar_a(b)
-        valor, aprox, _ = _valuar_holdings_ars(tracker.snapshot(), b, precios_por_ticker, db, mep_cache, tracker.costo_snapshot())
-        valores[b] = valor
-        aproximado = aproximado or aprox
-
-    twr_total = 1.0
-    for i in range(1, len(boundaries)):
-        d0, d1 = boundaries[i - 1], boundaries[i]
-        v0, v1 = valores[d0], valores[d1]
-        if v0 <= EPS:
-            continue
-        flujo = cf_por_fecha.get(d1, 0.0)
-        r = (v1 - flujo) / v0 - 1
-        twr_total *= (1 + r)
-
-    return twr_total - 1, aproximado
-
-
-def _calcular_twr_ars_real(
-    movs: list[MovimientoInversion],
-    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
-    db: Session,
-    mep_cache: dict,
-    cer_cache: dict,
-    cer_hoy: float,
-    hoy: date,
-) -> tuple[float | None, bool]:
-    """TWR en ARS real (deflactado por CER)."""
-    fechas_borde = sorted({m.fecha for m in movs if m.tipo_movimiento in TIPOS_QUE_CAMBIAN_TENENCIA})
-    if not fechas_borde:
-        return None, False
-
-    boundaries = list(fechas_borde)
-    if boundaries[-1] < hoy:
-        boundaries.append(hoy)
-    if len(boundaries) < 1:
-        return None, False
-
-    # Si solo hay un boundary (una sola compra/venta), agregar hoy como segundo punto
-    if len(boundaries) == 1:
-        boundaries.append(hoy)
-
-    cf_por_fecha: dict[date, float] = {}
-    for mov in movs:
-        if mov.tipo_movimiento not in TIPOS_QUE_CAMBIAN_TENENCIA:
-            continue
-        monto = _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy)
-        if monto is None:
-            return None, False
-        signo = 1 if mov.tipo_movimiento == "compra" else -1
-        cf_por_fecha[mov.fecha] = cf_por_fecha.get(mov.fecha, 0.0) + signo * monto
-
-    tracker = _HoldingsTracker(movs)
-    valores: dict[date, float] = {}
-    aproximado = False
-    for b in boundaries:
-        tracker.avanzar_a(b)
-        valor, aprox, _ = _valuar_holdings_ars_real(tracker.snapshot(), b, precios_por_ticker, db, mep_cache, cer_cache, cer_hoy, tracker.costo_snapshot())
+        valor, aprox, _ = valuar_fn(tracker.snapshot(), b, tracker.costo_snapshot())
         if valor is None:
             return None, False
         valores[b] = valor
@@ -782,6 +692,56 @@ def _calcular_twr_ars_real(
         twr_total *= (1 + r)
 
     return twr_total - 1, aproximado
+
+
+def _calcular_twr(
+    movs: list[MovimientoInversion],
+    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
+    db: Session,
+    mep_cache: dict,
+    hoy: date,
+) -> tuple[float | None, bool]:
+    """TWR en USD."""
+    return _calcular_twr_encadenado(
+        movs, hoy,
+        lambda mov: _monto_usd(mov, db, mep_cache),
+        lambda holdings, f, costos: _valuar_holdings(holdings, f, precios_por_ticker, db, mep_cache, costos),
+    )
+
+
+def _calcular_twr_ars(
+    movs: list[MovimientoInversion],
+    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
+    db: Session,
+    mep_cache: dict,
+    hoy: date,
+) -> tuple[float | None, bool]:
+    """TWR en ARS nominal."""
+    return _calcular_twr_encadenado(
+        movs, hoy,
+        lambda mov: _monto_ars(mov, db, mep_cache),
+        lambda holdings, f, costos: _valuar_holdings_ars(holdings, f, precios_por_ticker, db, mep_cache, costos),
+    )
+
+
+def _calcular_twr_ars_real(
+    movs: list[MovimientoInversion],
+    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
+    db: Session,
+    mep_cache: dict,
+    cer_cache: dict,
+    cer_hoy: float,
+    hoy: date,
+) -> tuple[float | None, bool]:
+    """TWR en ARS real (deflactado por CER)."""
+    return _calcular_twr_encadenado(
+        movs, hoy,
+        lambda mov: _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy),
+        lambda holdings, f, costos: _valuar_holdings_ars_real(
+            holdings, f, precios_por_ticker, db, mep_cache, cer_cache, cer_hoy, costos
+        ),
+        abortar_si_falta_monto=True,
+    )
 
 
 def _calcular_twr_mensual(
@@ -1108,7 +1068,10 @@ def _clasificados_valorizados(cartera: str | None, db: Session) -> tuple[list[tu
             continue
         ars = _convertir(precio * cantidad, moneda, "ARS", hoy, db, mep_cache)
         if ars is None:
-            ars = 0.0
+            # Mismo criterio que en USD: se descarta la posición entera. Contarla con ars=0
+            # la dejaba sumando en USD pero aportando nada en ARS, hundiendo los totales en
+            # pesos de Exposición y Rebalanceo sin ninguna señal.
+            continue
         valores.append((cart, ticker, usd, ars))
 
     clasificados = [(cart, ticker, valor_usd, valor_ars) for cart, ticker, valor_usd, valor_ars in valores if ticker in instrumentos]
@@ -1418,8 +1381,98 @@ def _nivel_precio(
     return precio_nivel, pct_restante, alcanzado
 
 
+class _RecorridoTicker:
+    """Estado acumulado tras recorrer cronológicamente los movimientos de un ticker.
+
+    `costo_*` es el costo de la tenencia **remanente**: al vender o amortizar se remueve la
+    fracción proporcional del costo (costo promedio), de modo que el capital inmovilizado
+    siempre corresponde a las unidades que todavía se tienen.
+    """
+
+    __slots__ = (
+        "cantidad_held", "costo_usd", "costo_ars", "costo_ars_real",
+        "realizado_usd", "realizado_ars", "realizado_ars_real",
+        "ingresos_usd", "ingresos_ars", "ingresos_ars_real",
+        "ars_real_valido",
+    )
+
+    def __init__(self, ars_real_valido: bool):
+        self.cantidad_held = 0.0
+        self.costo_usd = self.costo_ars = self.costo_ars_real = 0.0
+        self.realizado_usd = self.realizado_ars = self.realizado_ars_real = 0.0
+        self.ingresos_usd = self.ingresos_ars = self.ingresos_ars_real = 0.0
+        self.ars_real_valido = ars_real_valido
+
+
+def _recorrer_movs_ticker(
+    movs_ticker: list[MovimientoInversion],
+    db: Session,
+    mep_cache: dict,
+    cer_cache: dict,
+    cer_hoy: float | None,
+    ars_real_valido_inicial: bool = True,
+) -> _RecorridoTicker:
+    """Recorre los movimientos de un ticker acumulando costo remanente, realizado e ingresos.
+
+    Fuente única de la convención de costo promedio, compartida por `get_rendimiento_por_ticker`
+    y `get_pnl_realizado_no_realizado` para que ambas pantallas cuenten el mismo capital.
+    """
+    est = _RecorridoTicker(ars_real_valido_inicial)
+
+    for mov in movs_ticker:
+        monto_usd = _monto_usd(mov, db, mep_cache)
+        if monto_usd is None:
+            continue  # mismo criterio que get_resumen: sin conversión a USD no se puede ubicar el flujo
+        monto_ars = _monto_ars(mov, db, mep_cache)
+        monto_ars_real = (
+            _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy) if est.ars_real_valido else None
+        )
+        if monto_ars_real is None:
+            est.ars_real_valido = False
+
+        cant = float(mov.cantidad or 0)
+
+        if mov.tipo_movimiento == "compra":
+            est.costo_usd += monto_usd
+            if monto_ars is not None:
+                est.costo_ars += monto_ars
+            if est.ars_real_valido and monto_ars_real is not None:
+                est.costo_ars_real += monto_ars_real
+            est.cantidad_held += cant
+        elif mov.tipo_movimiento in ("venta", "amortizacion"):
+            cantidad_vendida = min(cant, est.cantidad_held) if est.cantidad_held > EPS else 0.0
+            frac = cantidad_vendida / est.cantidad_held if est.cantidad_held > EPS else 0.0
+            costo_removido_usd = est.costo_usd * frac
+            costo_removido_ars = est.costo_ars * frac
+            costo_removido_ars_real = est.costo_ars_real * frac if est.ars_real_valido else 0.0
+
+            est.realizado_usd += monto_usd - costo_removido_usd
+            if monto_ars is not None:
+                est.realizado_ars += monto_ars - costo_removido_ars
+            if est.ars_real_valido and monto_ars_real is not None:
+                est.realizado_ars_real += monto_ars_real - costo_removido_ars_real
+
+            est.costo_usd -= costo_removido_usd
+            est.costo_ars -= costo_removido_ars
+            est.costo_ars_real -= costo_removido_ars_real
+            est.cantidad_held -= cantidad_vendida
+        elif mov.tipo_movimiento in TIPOS_INGRESO:
+            est.ingresos_usd += monto_usd
+            if monto_ars is not None:
+                est.ingresos_ars += monto_ars
+            if est.ars_real_valido and monto_ars_real is not None:
+                est.ingresos_ars_real += monto_ars_real
+
+    return est
+
+
 def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
-    """Rendimiento individual por ticker con análisis por moneda."""
+    """Rendimiento individual por ticker con análisis por moneda.
+
+    `valor_invertido_*` es el costo de la tenencia **remanente**: las ventas y amortizaciones
+    remueven su fracción proporcional del costo (ver `_recorrer_movs_ticker`). Sin eso, una
+    posición vendida a medias comparaba el valor del remanente contra el capital entero.
+    """
     movs = _movimientos_ordenados(db, cartera)
     if not movs:
         return []
@@ -1439,42 +1492,43 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
     resultado = []
 
     for ticker, movs_ticker in movimientos_por_ticker.items():
-        # Calcular tenencia actual
-        tenencia = 0.0
-        inversion_total_usd = 0.0
-        inversion_total_ars = 0.0
+        # Costo remanente (neto de ventas y amortizaciones) + ingresos, con la misma
+        # convención de costo promedio que get_pnl_realizado_no_realizado.
+        est = _recorrer_movs_ticker(movs_ticker, db, mep_cache, cer_cache, cer_hoy)
+        tenencia = est.cantidad_held
+        inversion_total_usd = est.costo_usd
+        inversion_total_ars = est.costo_ars
+
+        # Precio promedio de compra ponderado por cantidad, y su versión deflactada por CER
+        # (cada compra se ajusta con el CER de *su* fecha, no con el de la primera).
         precio_promedio_compra = 0.0
         precio_promedio_compra_cantidad = 0.0
-        primera_compra_fecha = None
+        precio_promedio_cer_acumulado = 0.0
+        precio_promedio_cer_valido = cer_hoy is not None
 
         for mov in movs_ticker:
-            if mov.tipo_movimiento == "compra":
-                cant = float(mov.cantidad or 0)
-                precio = float(mov.precio)
-                tenencia += cant
-                precio_promedio_compra_cantidad += cant
-                precio_promedio_compra += cant * precio
-                if primera_compra_fecha is None:
-                    primera_compra_fecha = mov.fecha
-
-                monto_usd = _monto_usd(mov, db, mep_cache)
-                if monto_usd is not None:
-                    inversion_total_usd += monto_usd
-                monto_ars = _monto_ars(mov, db, mep_cache)
-                if monto_ars is not None:
-                    inversion_total_ars += monto_ars
-            elif mov.tipo_movimiento == "venta":
-                tenencia -= float(mov.cantidad or 0)
-            elif mov.tipo_movimiento == "amortizacion":
-                tenencia -= float(mov.cantidad or 0)
+            if mov.tipo_movimiento != "compra":
+                continue
+            cant = float(mov.cantidad or 0)
+            precio = float(mov.precio)
+            precio_promedio_compra_cantidad += cant
+            precio_promedio_compra += cant * precio
+            if precio_promedio_cer_valido:
+                cer_mov = _cer_indice(mov.fecha, db, cer_cache)
+                if cer_mov is None or cer_mov <= 0:
+                    precio_promedio_cer_valido = False
+                else:
+                    precio_promedio_cer_acumulado += cant * precio * (cer_hoy / cer_mov)
 
         if abs(tenencia) < EPS:
             continue
 
         if precio_promedio_compra_cantidad > 0:
             precio_promedio_compra /= precio_promedio_compra_cantidad
+            precio_promedio_cer_acumulado /= precio_promedio_compra_cantidad
         else:
             precio_promedio_compra = 0.0
+            precio_promedio_cer_valido = False
 
         # Obtener precio actual
         precios_sorted = precios_por_ticker.get(ticker)
@@ -1488,30 +1542,33 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
         valor_actual_usd = _to_usd(precio_actual * tenencia, moneda, hoy, db, mep_cache) or 0.0
         valor_actual_ars = _convertir(precio_actual * tenencia, moneda, "ARS", hoy, db, mep_cache) or 0.0
 
-        # Calcular rendimiento simple
+        # Rendimiento simple sobre el costo remanente, incluyendo los ingresos cobrados
+        # (dividendos/cupones), igual que get_resumen a nivel cartera.
         rendimiento_simple_usd = None
         if abs(inversion_total_usd) > EPS:
-            rendimiento_simple_usd = (valor_actual_usd - inversion_total_usd) / inversion_total_usd
+            rendimiento_simple_usd = (
+                valor_actual_usd + est.ingresos_usd - inversion_total_usd
+            ) / inversion_total_usd
 
         rendimiento_simple_ars = None
         if abs(inversion_total_ars) > EPS:
-            rendimiento_simple_ars = (valor_actual_ars - inversion_total_ars) / inversion_total_ars
+            rendimiento_simple_ars = (
+                valor_actual_ars + est.ingresos_ars - inversion_total_ars
+            ) / inversion_total_ars
 
         # Rendimiento en ARS real (ajustado por CER) - solo si es en ARS
         rendimiento_simple_ars_real = None
         precio_promedio_ars_ajustado_cer = None
         precio_actual_ars_ajustado_cer = None
 
-        if moneda == "ARS" and cer_hoy is not None and primera_compra_fecha is not None:
-            cer_compra = _cer_indice(primera_compra_fecha, db, cer_cache)
-            if cer_compra is not None:
-                # Precio promedio de compra ajustado por inflación
-                precio_promedio_ars_ajustado_cer = precio_promedio_compra * (cer_hoy / cer_compra)
-                # Precio actual no se ajusta (es el precio de hoy)
-                precio_actual_ars_ajustado_cer = precio_actual
+        if moneda == "ARS" and precio_promedio_cer_valido:
+            # Precio promedio de compra deflactado: cada compra con el CER de su propia fecha
+            precio_promedio_ars_ajustado_cer = precio_promedio_cer_acumulado
+            # Precio actual no se ajusta (es el precio de hoy)
+            precio_actual_ars_ajustado_cer = precio_actual
 
-                if abs(precio_promedio_ars_ajustado_cer) > EPS:
-                    rendimiento_simple_ars_real = (precio_actual_ars_ajustado_cer - precio_promedio_ars_ajustado_cer) / precio_promedio_ars_ajustado_cer
+            if abs(precio_promedio_ars_ajustado_cer) > EPS:
+                rendimiento_simple_ars_real = (precio_actual_ars_ajustado_cer - precio_promedio_ars_ajustado_cer) / precio_promedio_ars_ajustado_cer
 
         instrumento = instrumentos.get(ticker, None)
         nombre = instrumento.nombre if instrumento else ticker
@@ -1606,53 +1663,19 @@ def get_pnl_realizado_no_realizado(cartera: str | None, db: Session) -> dict:
     )}
 
     for ticker, movs_ticker in movimientos_por_ticker.items():
-        cantidad_held = 0.0
-        costo_usd = costo_ars = costo_ars_real = 0.0
-        realizado_usd = realizado_ars = realizado_ars_real = 0.0
-        ingresos_usd = ingresos_ars = ingresos_ars_real = 0.0
-        ars_real_valido = not cer_incompleto
-
-        for mov in movs_ticker:
-            monto_usd = _monto_usd(mov, db, mep_cache)
-            if monto_usd is None:
-                continue  # mismo criterio que get_resumen: sin conversión a USD no se puede ubicar el flujo
-            monto_ars = _monto_ars(mov, db, mep_cache)
-            monto_ars_real = _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy) if not cer_incompleto else None
-            if monto_ars_real is None:
-                ars_real_valido = False
-
-            cant = float(mov.cantidad or 0)
-
-            if mov.tipo_movimiento == "compra":
-                costo_usd += monto_usd
-                if monto_ars is not None:
-                    costo_ars += monto_ars
-                if ars_real_valido and monto_ars_real is not None:
-                    costo_ars_real += monto_ars_real
-                cantidad_held += cant
-            elif mov.tipo_movimiento in ("venta", "amortizacion"):
-                cantidad_vendida = min(cant, cantidad_held) if cantidad_held > EPS else 0.0
-                frac = cantidad_vendida / cantidad_held if cantidad_held > EPS else 0.0
-                costo_removido_usd = costo_usd * frac
-                costo_removido_ars = costo_ars * frac
-                costo_removido_ars_real = costo_ars_real * frac if ars_real_valido else 0.0
-
-                realizado_usd += monto_usd - costo_removido_usd
-                if monto_ars is not None:
-                    realizado_ars += monto_ars - costo_removido_ars
-                if ars_real_valido and monto_ars_real is not None:
-                    realizado_ars_real += monto_ars_real - costo_removido_ars_real
-
-                costo_usd -= costo_removido_usd
-                costo_ars -= costo_removido_ars
-                costo_ars_real -= costo_removido_ars_real
-                cantidad_held -= cantidad_vendida
-            elif mov.tipo_movimiento in TIPOS_INGRESO:
-                ingresos_usd += monto_usd
-                if monto_ars is not None:
-                    ingresos_ars += monto_ars
-                if ars_real_valido and monto_ars_real is not None:
-                    ingresos_ars_real += monto_ars_real
+        est = _recorrer_movs_ticker(
+            movs_ticker, db, mep_cache, cer_cache, cer_hoy,
+            ars_real_valido_inicial=not cer_incompleto,
+        )
+        cantidad_held = est.cantidad_held
+        costo_usd, costo_ars, costo_ars_real = est.costo_usd, est.costo_ars, est.costo_ars_real
+        realizado_usd, realizado_ars, realizado_ars_real = (
+            est.realizado_usd, est.realizado_ars, est.realizado_ars_real
+        )
+        ingresos_usd, ingresos_ars, ingresos_ars_real = (
+            est.ingresos_usd, est.ingresos_ars, est.ingresos_ars_real
+        )
+        ars_real_valido = est.ars_real_valido
 
         if abs(cantidad_held) < EPS:
             no_realizado_usd, no_realizado_ars = 0.0, 0.0
@@ -1977,30 +2000,49 @@ def get_indices_mercado(dias: int, db: Session) -> dict:
 # ── Vencimientos ─────────────────────────────────────────────────────────────
 
 def get_vencimientos(cartera: str | None, db: Session) -> list[dict]:
-    """Instrumentos con tenencia activa y fecha de vencimiento, ordenados por proximidad."""
-    rendimientos = get_rendimiento_por_ticker(cartera, db)
+    """Instrumentos con tenencia activa y fecha de vencimiento, ordenados por proximidad.
+
+    La lista se arma desde las tenencias, no desde `get_rendimiento_por_ticker`: esa función
+    descarta los tickers sin cotización, y un bono sin precio cargado igual tiene que aparecer
+    acá — la fecha de vencimiento no depende del precio. El rendimiento sólo enriquece
+    `valor_actual_*`, que queda en None cuando no hay con qué valuar.
+    """
     instrumentos = {
         i.ticker: i
         for i in db.query(InstrumentoInversion).filter(InstrumentoInversion.fecha_vencimiento.isnot(None)).all()
     }
+    if not instrumentos:
+        return []
+
+    movs = _movimientos_ordenados(db, cartera)
     hoy = date.today()
+    tenencias = _holdings_por_cartera_ticker(movs, hoy)
+
+    cantidad_por_ticker: dict[str, float] = {}
+    for (_cart, ticker), cantidad in tenencias.items():
+        cantidad_por_ticker[ticker] = cantidad_por_ticker.get(ticker, 0.0) + cantidad
+
+    valuacion = {item["ticker"]: item for item in get_rendimiento_por_ticker(cartera, db)}
 
     resultado = []
-    for item in rendimientos:
-        instrumento = instrumentos.get(item["ticker"])
+    for ticker, cantidad in cantidad_por_ticker.items():
+        if abs(cantidad) < EPS:
+            continue
+        instrumento = instrumentos.get(ticker)
         if not instrumento:
             continue
+        item = valuacion.get(ticker)
         dias_restantes = (instrumento.fecha_vencimiento - hoy).days
         resultado.append({
-            "ticker": item["ticker"],
-            "nombre": item["nombre"],
+            "ticker": ticker,
+            "nombre": instrumento.nombre,
             "fecha_vencimiento": instrumento.fecha_vencimiento,
             "dias_restantes": dias_restantes,
             "vencido": dias_restantes < 0,
-            "cantidad_actual": item["cantidad_actual"],
-            "valor_actual_usd": item["valor_actual_usd"],
-            "valor_actual_ars": item["valor_actual_ars"],
-            "moneda": item["moneda"],
+            "cantidad_actual": round(cantidad, 8),
+            "valor_actual_usd": item["valor_actual_usd"] if item else None,
+            "valor_actual_ars": item["valor_actual_ars"] if item else None,
+            "moneda": item["moneda"] if item else instrumento.moneda,
         })
 
     return sorted(resultado, key=lambda x: x["dias_restantes"])
@@ -2100,14 +2142,13 @@ def get_aportes_historicos(cartera: str, db: Session) -> dict:
             continue
 
         mes_key = mov.fecha.strftime("%Y-%m")
+        # Sólo el capital que entra o sale de la cartera cuenta como aporte. Los dividendos y
+        # cupones son rendimiento, no capital propio: contarlos infla el aporte promedio, y si
+        # se reinvierten la compra correspondiente ya los registra (doble conteo).
         aporte_neto = 0.0
         if mov.tipo_movimiento == "compra":
             aporte_neto = monto_usd
-        elif mov.tipo_movimiento == "venta":
-            aporte_neto = -monto_usd
-        elif mov.tipo_movimiento in TIPOS_INGRESO:
-            aporte_neto = monto_usd
-        elif mov.tipo_movimiento == "amortizacion":
+        elif mov.tipo_movimiento in ("venta", "amortizacion"):
             aporte_neto = -monto_usd
 
         aportes_por_mes[mes_key] = aportes_por_mes.get(mes_key, 0.0) + aporte_neto

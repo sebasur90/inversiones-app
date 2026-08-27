@@ -412,8 +412,9 @@ export interface VencimientoItem {
   dias_restantes: number
   vencido: boolean
   cantidad_actual: number
-  valor_actual_usd: number
-  valor_actual_ars: number
+  // null si el instrumento no tiene cotización cargada
+  valor_actual_usd: number | null
+  valor_actual_ars: number | null
   moneda: string
 }
 

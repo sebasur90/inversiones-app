@@ -141,7 +141,10 @@ def sync_from_sheet(db: Session) -> dict:
                 raw_mov.rows, tickers_conocidos
             )
             issues.extend(issues_mov)
-            carteras_conocidas = {m["cartera"] for m in movimientos_validos}
+            # Unión con el fallback de la DB, no reemplazo: si el único movimiento de una
+            # cartera se rechaza por otro motivo, esa cartera seguiría existiendo en la DB y
+            # reemplazar el set invalidaría (y borraría) sus objetivos y su fila de rebalanceo.
+            carteras_conocidas = carteras_fallback | {m["cartera"] for m in movimientos_validos}
 
     # Validar Precios (obligatoria)
     raw_pre = raw_data.get("Precios")
