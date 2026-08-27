@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   syncInversiones,
   getCarterasInversion,
@@ -16,10 +16,35 @@ import {
   type SyncResult,
 } from '../api'
 
+const STORAGE_CARTERA = 'inversiones-cartera'
+const STORAGE_MONEDA = 'inversiones-moneda'
+
+// localStorage puede fallar (modo privado, cookies bloqueadas): nunca debe tumbar la app.
+function leerPreferencia(clave: string): string | null {
+  try {
+    return localStorage.getItem(clave)
+  } catch {
+    return null
+  }
+}
+
+function guardarPreferencia(clave: string, valor: string | null): void {
+  try {
+    if (valor === null) localStorage.removeItem(clave)
+    else localStorage.setItem(clave, valor)
+  } catch {
+    // sin persistencia, la sesión sigue funcionando igual
+  }
+}
+
 export function useInversiones() {
   const [carteras, setCarteras] = useState<CarteraInfo[]>([])
-  const [carteraSeleccionada, setCarteraSeleccionada] = useState<string | null>(null)
-  const [monedaSeleccionada, setMonedaSeleccionada] = useState<'USD' | 'ARS'>('USD')
+  const [carteraSeleccionada, setCarteraSeleccionada] = useState<string | null>(
+    () => leerPreferencia(STORAGE_CARTERA),
+  )
+  const [monedaSeleccionada, setMonedaSeleccionada] = useState<'USD' | 'ARS'>(
+    () => (leerPreferencia(STORAGE_MONEDA) === 'ARS' ? 'ARS' : 'USD'),
+  )
   const [resumen, setResumen] = useState<InversionesResumen | null>(null)
   const [exposicion, setExposicion] = useState<ExposicionOut>({ ejes: [] })
   const [rebalanceo, setRebalanceo] = useState<RebalanceoOut>({ ejes: [] })
@@ -73,6 +98,14 @@ export function useInversiones() {
     fetchCarteras()
   }, [fetchCarteras])
 
+  // La cartera guardada puede haber desaparecido del Sheet: se vuelve al consolidado.
+  useEffect(() => {
+    if (carteras.length === 0 || carteraSeleccionada === null) return
+    if (!carteras.some(c => c.nombre === carteraSeleccionada)) {
+      setCarteraSeleccionada(null)
+    }
+  }, [carteras, carteraSeleccionada])
+
   useEffect(() => {
     if (carteras.length === 0) {
       setLoading(false)
@@ -81,13 +114,23 @@ export function useInversiones() {
     fetchDetalle(carteraSeleccionada)
   }, [carteraSeleccionada, carteras.length, fetchDetalle])
 
-  const sincronizar = async (): Promise<SyncResult> => {
+  const elegirCartera = useCallback((cartera: string | null) => {
+    setCarteraSeleccionada(cartera)
+    guardarPreferencia(STORAGE_CARTERA, cartera)
+  }, [])
+
+  const elegirMoneda = useCallback((moneda: 'USD' | 'ARS') => {
+    setMonedaSeleccionada(moneda)
+    guardarPreferencia(STORAGE_MONEDA, moneda)
+  }, [])
+
+  const sincronizar = useCallback(async (): Promise<SyncResult> => {
     setSyncing(true)
     try {
       const resultado = await syncInversiones()
       const nuevasCarteras = await fetchCarteras()
       if (carteraSeleccionada && !nuevasCarteras.some(c => c.nombre === carteraSeleccionada)) {
-        setCarteraSeleccionada(null)
+        elegirCartera(null)
       } else {
         await fetchDetalle(carteraSeleccionada)
       }
@@ -95,23 +138,31 @@ export function useInversiones() {
     } finally {
       setSyncing(false)
     }
-  }
+  }, [carteraSeleccionada, fetchCarteras, fetchDetalle, elegirCartera])
 
-  return {
-    carteras,
-    carteraSeleccionada,
-    setCarteraSeleccionada,
-    monedaSeleccionada,
-    setMonedaSeleccionada,
-    resumen,
-    exposicion,
-    rebalanceo,
-    movimientos,
-    rendimientoPorTicker,
-    loading,
-    syncing,
-    error,
-    sincronizar,
-    sinDatos: carteras.length === 0,
-  }
+  // Objeto estable: el contexto lo memoiza y de él cuelgan los 21 consumidores.
+  return useMemo(
+    () => ({
+      carteras,
+      carteraSeleccionada,
+      setCarteraSeleccionada: elegirCartera,
+      monedaSeleccionada,
+      setMonedaSeleccionada: elegirMoneda,
+      resumen,
+      exposicion,
+      rebalanceo,
+      movimientos,
+      rendimientoPorTicker,
+      loading,
+      syncing,
+      error,
+      sincronizar,
+      sinDatos: carteras.length === 0,
+    }),
+    [
+      carteras, carteraSeleccionada, elegirCartera, monedaSeleccionada, elegirMoneda,
+      resumen, exposicion, rebalanceo, movimientos, rendimientoPorTicker,
+      loading, syncing, error, sincronizar,
+    ],
+  )
 }

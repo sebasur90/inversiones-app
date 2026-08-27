@@ -5,8 +5,10 @@ import Sparkline from '../../components/charts/Sparkline'
 import MetricTile from '../../components/ui/MetricTile'
 import { Icon } from '../../components/icons/Icons'
 import type { TickerPositionOut } from '../../api'
+import { useInversionesContext } from '../../context/InversionesContext'
 
 export default function TickerResumenTab({ position, cartera, monedaSeleccionada }: { position: TickerPositionOut; cartera: string | null; monedaSeleccionada: 'ARS' | 'USD' }) {
+  const { syncVersion } = useInversionesContext()
   const [precios, setPrecios] = useState<PrecioPunto[]>([])
   const [descomposicionFxPorTicker, setDescomposicionFxPorTicker] = useState<DescomposicionFxPosicionItem | null>(null)
 
@@ -32,7 +34,7 @@ export default function TickerResumenTab({ position, cartera, monedaSeleccionada
     return () => {
       cancelado = true
     }
-  }, [position.ticker, cartera])
+  }, [position.ticker, cartera, syncVersion])
 
   const esARS = monedaSeleccionada === 'ARS'
   const formatMoneda = esARS ? formatARS : formatUSD

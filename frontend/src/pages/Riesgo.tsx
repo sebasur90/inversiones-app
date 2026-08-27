@@ -58,7 +58,7 @@ function PeriodoRow({ item }: { item: PeriodoRetorno }) {
 
 export default function Riesgo() {
   const navigate = useNavigate()
-  const { carteraSeleccionada } = useInversionesContext()
+  const { carteraSeleccionada, syncVersion } = useInversionesContext()
   const [vista, setVista] = useState<MonedaRiesgo>('usd')
   const { benchmarks, benchmarkSeleccionado, setBenchmarkSeleccionado } = useBenchmarkSeleccionado(carteraSeleccionada)
   const [riesgo, setRiesgo] = useState<RiesgoOut | null>(null)
@@ -87,7 +87,7 @@ export default function Riesgo() {
     return () => {
       cancelado = true
     }
-  }, [carteraSeleccionada, vista, benchmarkSeleccionado])
+  }, [carteraSeleccionada, vista, benchmarkSeleccionado, syncVersion])
 
   const sinHistorialSuficiente = riesgo != null && riesgo.n_meses_historia === 0
   const serieDrawdown = riesgo?.drawdown.serie ?? []

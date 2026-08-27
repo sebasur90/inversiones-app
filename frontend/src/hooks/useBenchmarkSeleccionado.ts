@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { getBenchmarksDisponibles, getConfiguracionCartera } from '../api'
+import { useInversionesContext } from '../context/InversionesContext'
 
 export function useBenchmarkSeleccionado(cartera: string | null) {
+  const { syncVersion } = useInversionesContext()
   const [benchmarks, setBenchmarks] = useState<string[]>([])
   const [benchmarkSeleccionado, setBenchmarkSeleccionado] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -24,7 +26,7 @@ export function useBenchmarkSeleccionado(cartera: string | null) {
     return () => {
       cancelado = true
     }
-  }, [cartera])
+  }, [cartera, syncVersion])
 
   return { benchmarks, benchmarkSeleccionado, setBenchmarkSeleccionado, loading }
 }

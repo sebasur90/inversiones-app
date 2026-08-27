@@ -26,7 +26,7 @@ function toneFor(v: number | null | undefined): 'pos' | 'neg' | undefined {
 
 export default function Rendimiento() {
   const navigate = useNavigate()
-  const { carteraSeleccionada, monedaSeleccionada, resumen } = useInversionesContext()
+  const { carteraSeleccionada, monedaSeleccionada, resumen, syncVersion } = useInversionesContext()
   const [pnl, setPnl] = useState<PnlRealizadoNoRealizadoOut | null>(null)
   const [rendimientoMensual, setRendimientoMensual] = useState<RendimientoMensualOut | null>(null)
   const [perfRelativa, setPerfRelativa] = useState<PerformanceRelativaOut | null>(null)
@@ -65,7 +65,7 @@ export default function Rendimiento() {
     return () => {
       cancelado = true
     }
-  }, [carteraSeleccionada, monedaSeleccionada])
+  }, [carteraSeleccionada, monedaSeleccionada, syncVersion])
 
   const esARS = monedaSeleccionada === 'ARS'
   const formatMoneda = esARS ? formatARS : formatUSD

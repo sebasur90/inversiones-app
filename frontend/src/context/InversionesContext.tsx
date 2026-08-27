@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react'
 import { useInversiones } from '../hooks/useInversiones'
 import type { SyncIssueOut } from '../api'
 
@@ -18,6 +18,12 @@ interface InversionesContextValue extends ReturnType<typeof useInversiones> {
   syncHealthScore: number | null
   syncResultado: string
   syncResumenTexto: string
+  /**
+   * Se incrementa después de cada sincronización. El botón de sync está en el header de
+   * todas las pantallas, pero cada una hace su propio fetch: sin esto en las dependencias
+   * de su useEffect, seguirían mostrando los números anteriores al sync.
+   */
+  syncVersion: number
 }
 
 const InversionesContext = createContext<InversionesContextValue | null>(null)
@@ -30,15 +36,20 @@ export function InversionesProvider({ children }: { children: ReactNode }) {
   const [syncHealthScore, setSyncHealthScore] = useState<number | null>(null)
   const [syncResultado, setSyncResultado] = useState('')
   const [syncResumenTexto, setSyncResumenTexto] = useState('')
+  const [syncVersion, setSyncVersion] = useState(0)
+
+  const { sincronizar } = inversiones
 
   const triggerSync = useCallback(async () => {
     try {
-      const resultado = await inversiones.sincronizar()
+      const resultado = await sincronizar()
       const resumenTexto = `${resultado.movimientos} movimientos, ${resultado.instrumentos} instrumentos, ${resultado.precios} precios`
       setSyncIssues(resultado.issues)
       setSyncHealthScore(resultado.health_score)
       setSyncResultado(resultado.resultado)
       setSyncResumenTexto(resumenTexto)
+      // Avisa a las pantallas que traen sus propios datos que tienen que volver a pedirlos
+      setSyncVersion(v => v + 1)
       if (resultado.issues.length > 0) {
         setSyncSheetOpen(true)
       } else {
@@ -48,21 +59,37 @@ export function InversionesProvider({ children }: { children: ReactNode }) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       setToast({ message: detail || 'Error al sincronizar el Google Sheet', tone: 'error' })
     }
-  }, [inversiones])
+  }, [sincronizar])
 
-  const value: InversionesContextValue = {
-    ...inversiones,
-    triggerSync,
-    toast,
-    showToast: (message: string, tone: 'success' | 'error' = 'success') => setToast({ message, tone }),
-    dismissToast: () => setToast(null),
-    syncSheetOpen,
-    closeSyncSheet: () => setSyncSheetOpen(false),
-    syncIssues,
-    syncHealthScore,
-    syncResultado,
-    syncResumenTexto,
-  }
+  const showToast = useCallback(
+    (message: string, tone: 'success' | 'error' = 'success') => setToast({ message, tone }),
+    [],
+  )
+  const dismissToast = useCallback(() => setToast(null), [])
+  const closeSyncSheet = useCallback(() => setSyncSheetOpen(false), [])
+
+  // Memoizado: sin esto el value se recreaba en cada render y hacía re-renderizar a todos
+  // los consumidores (21 pantallas, varias con gráficos de recharts).
+  const value: InversionesContextValue = useMemo(
+    () => ({
+      ...inversiones,
+      triggerSync,
+      toast,
+      showToast,
+      dismissToast,
+      syncSheetOpen,
+      closeSyncSheet,
+      syncIssues,
+      syncHealthScore,
+      syncResultado,
+      syncResumenTexto,
+      syncVersion,
+    }),
+    [
+      inversiones, triggerSync, toast, showToast, dismissToast, syncSheetOpen, closeSyncSheet,
+      syncIssues, syncHealthScore, syncResultado, syncResumenTexto, syncVersion,
+    ],
+  )
 
   return <InversionesContext.Provider value={value}>{children}</InversionesContext.Provider>
 }

@@ -13,6 +13,7 @@ import Segmented from '../components/ui/Segmented'
 import EmptyState from '../components/ui/EmptyState'
 import Card from '../components/ui/Card'
 import InfoTooltip from '../help/components/InfoTooltip'
+import { useInversionesContext } from '../context/InversionesContext'
 
 type Vista = 'nominal' | 'usd' | 'cer'
 
@@ -74,6 +75,7 @@ function formatValor(v: number, vista: Vista, normalizado: boolean): string {
 }
 
 export default function Comparador() {
+  const { syncVersion } = useInversionesContext()
   const navigate = useNavigate()
   const [tickers, setTickers] = useState<TickerConPrecio[]>([])
   const [tickersSel, setTickersSel] = useState<string[]>([])
@@ -88,7 +90,7 @@ export default function Comparador() {
       .then(setTickers)
       .catch(() => setTickers([]))
       .finally(() => setLoading(false))
-  }, [])
+  }, [syncVersion])
 
   useEffect(() => {
     if (tickersSel.length === 0) {
@@ -110,7 +112,7 @@ export default function Comparador() {
     return () => {
       cancelado = true
     }
-  }, [tickersSel])
+  }, [tickersSel, syncVersion])
 
   const monedasSel = useMemo(
     () => new Set(tickers.filter(t => tickersSel.includes(t.ticker)).map(t => t.moneda)),

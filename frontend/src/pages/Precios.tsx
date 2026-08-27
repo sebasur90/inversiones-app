@@ -12,6 +12,7 @@ import Segmented from '../components/ui/Segmented'
 import EmptyState from '../components/ui/EmptyState'
 import { Icon } from '../components/icons/Icons'
 import InfoTooltip from '../help/components/InfoTooltip'
+import { useInversionesContext } from '../context/InversionesContext'
 
 type Vista = 'nominal' | 'usd' | 'cer'
 
@@ -40,6 +41,7 @@ function formatFechaTooltip(iso: string): string {
 }
 
 export default function Precios() {
+  const { syncVersion } = useInversionesContext()
   const navigate = useNavigate()
   const [tickers, setTickers] = useState<TickerConPrecio[]>([])
   const [tickerSel, setTickerSel] = useState<string | null>(null)
@@ -56,7 +58,7 @@ export default function Precios() {
       })
       .catch(() => setTickers([]))
       .finally(() => setLoading(false))
-  }, [])
+  }, [syncVersion])
 
   useEffect(() => {
     if (!tickerSel) return
@@ -69,7 +71,7 @@ export default function Precios() {
       })
       .catch(() => setDatos(null))
       .finally(() => setLoadingChart(false))
-  }, [tickerSel])
+  }, [tickerSel, syncVersion])
 
   const instrumento = tickers.find(t => t.ticker === tickerSel)
   const esARS = instrumento?.moneda === 'ARS'

@@ -11,6 +11,7 @@ import {
   type RiesgoOut,
   type ConfiguracionCartera,
 } from '../api'
+import { useInversionesContext } from '../context/InversionesContext'
 
 export interface UseObjetivoInversionResult {
   objetivo: ObjetivoInversion | null
@@ -23,6 +24,7 @@ export interface UseObjetivoInversionResult {
 }
 
 export function useObjetivoInversion(cartera: string | null): UseObjetivoInversionResult {
+  const { syncVersion } = useInversionesContext()
   const [objetivo, setObjetivo] = useState<ObjetivoInversion | null>(null)
   const [aportesHistoricos, setAportesHistoricos] = useState<AportesHistoricosOut | null>(null)
   const [evolucion, setEvolucion] = useState<EvolucionOut | null>(null)
@@ -87,7 +89,7 @@ export function useObjetivoInversion(cartera: string | null): UseObjetivoInversi
     return () => {
       cancelado = true
     }
-  }, [cartera])
+  }, [cartera, syncVersion])
 
   return {
     objetivo,

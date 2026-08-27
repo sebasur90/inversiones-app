@@ -23,7 +23,7 @@ import { parseApiError } from '../help/errors/apiErrors'
 import type { ParsedApiError } from '../help/errors/apiErrors'
 
 export default function Simulador() {
-  const { carteraSeleccionada } = useInversionesContext()
+  const { carteraSeleccionada, syncVersion } = useInversionesContext()
 
   // Estado inicial con parámetros completos por defecto
   const defaultParams: EscenarioParamsIn = {
@@ -70,7 +70,7 @@ export default function Simulador() {
     return () => {
       cancelado = true
     }
-  }, [carteraSeleccionada])
+  }, [carteraSeleccionada, syncVersion])
 
   // Simular
   const handleSimular = async () => {

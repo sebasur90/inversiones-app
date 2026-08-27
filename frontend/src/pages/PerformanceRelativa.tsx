@@ -34,7 +34,7 @@ function getTone(v: number | null | undefined): 'pos' | 'neg' | undefined {
 
 export default function PerformanceRelativa() {
   const navigate = useNavigate()
-  const { carteraSeleccionada } = useInversionesContext()
+  const { carteraSeleccionada, syncVersion } = useInversionesContext()
   const [periodo, setPeriodo] = useState<PeriodoEvolucion>('1Y')
   const [vista, setVista] = useState<MonedaRiesgo>('usd')
   const { benchmarks, benchmarkSeleccionado, setBenchmarkSeleccionado } = useBenchmarkSeleccionado(carteraSeleccionada)
@@ -57,7 +57,7 @@ export default function PerformanceRelativa() {
     return () => {
       cancelado = true
     }
-  }, [carteraSeleccionada, vista, benchmarkSeleccionado, periodo])
+  }, [carteraSeleccionada, vista, benchmarkSeleccionado, periodo, syncVersion])
 
   const sinHistorialSuficiente = perfRelativa != null && perfRelativa.n_meses_historia === 0
 

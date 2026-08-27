@@ -9,7 +9,7 @@ import InfoTooltip from '../help/components/InfoTooltip'
 
 export default function Vencimientos() {
   const navigate = useNavigate()
-  const { carteraSeleccionada, monedaSeleccionada } = useInversionesContext()
+  const { carteraSeleccionada, monedaSeleccionada, syncVersion } = useInversionesContext()
   const [items, setItems] = useState<VencimientoItem[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -29,7 +29,7 @@ export default function Vencimientos() {
     return () => {
       cancelado = true
     }
-  }, [carteraSeleccionada])
+  }, [carteraSeleccionada, syncVersion])
 
   return (
     <div className="pb-4">

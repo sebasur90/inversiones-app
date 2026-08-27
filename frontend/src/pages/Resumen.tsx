@@ -17,7 +17,7 @@ import { parseApiError, type ParsedApiError } from '../help/errors/apiErrors'
 
 export default function Resumen() {
   const navigate = useNavigate()
-  const { carteras, carteraSeleccionada, setCarteraSeleccionada, monedaSeleccionada, resumen, rendimientoPorTicker, loading } =
+  const { carteras, carteraSeleccionada, setCarteraSeleccionada, monedaSeleccionada, resumen, rendimientoPorTicker, loading, syncVersion } =
     useInversionesContext()
   const [evolucion, setEvolucion] = useState<EvolucionPunto[]>([])
   const [diagnostico, setDiagnostico] = useState<DiagnosticoOut | null>(null)
@@ -36,7 +36,7 @@ export default function Resumen() {
     return () => {
       cancelado = true
     }
-  }, [carteraSeleccionada])
+  }, [carteraSeleccionada, syncVersion])
 
   useEffect(() => {
     let cancelado = false
@@ -56,7 +56,7 @@ export default function Resumen() {
     return () => {
       cancelado = true
     }
-  }, [carteraSeleccionada])
+  }, [carteraSeleccionada, syncVersion])
 
   useEffect(() => {
     let cancelado = false
@@ -76,7 +76,7 @@ export default function Resumen() {
     return () => {
       cancelado = true
     }
-  }, [])
+  }, [syncVersion])
 
   const topPosiciones = rendimientoPorTicker.slice(0, 5)
 

@@ -138,7 +138,7 @@ function EventoDot(props: any) {
 
 export default function Patrimonio() {
   const navigate = useNavigate()
-  const { carteraSeleccionada, movimientos } = useInversionesContext()
+  const { carteraSeleccionada, movimientos, syncVersion } = useInversionesContext()
   const [periodo, setPeriodo] = useState<Periodo>('1Y')
   const [vista, setVista] = useState<Vista>('ars')
   const [puntos, setPuntos] = useState<EvolucionPunto[]>([])
@@ -171,7 +171,7 @@ export default function Patrimonio() {
     return () => {
       cancelado = true
     }
-  }, [carteraSeleccionada, periodo])
+  }, [carteraSeleccionada, periodo, syncVersion])
 
   useEffect(() => {
     let cancelado = false
@@ -185,7 +185,7 @@ export default function Patrimonio() {
     return () => {
       cancelado = true
     }
-  }, [carteraSeleccionada])
+  }, [carteraSeleccionada, syncVersion])
 
   useEffect(() => {
     let cancelado = false
@@ -205,7 +205,7 @@ export default function Patrimonio() {
     return () => {
       cancelado = true
     }
-  }, [carteraSeleccionada, periodo])
+  }, [carteraSeleccionada, periodo, syncVersion])
 
   useEffect(() => {
     let cancelado = false
@@ -219,7 +219,7 @@ export default function Patrimonio() {
     return () => {
       cancelado = true
     }
-  }, [carteraSeleccionada])
+  }, [carteraSeleccionada, syncVersion])
 
   const esUSD = vista === 'usd'
   type DatoGrafico = { fecha: string; valor: number; capitalAportado: number | null }

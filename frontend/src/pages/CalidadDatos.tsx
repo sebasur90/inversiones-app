@@ -7,8 +7,10 @@ import CalidadIssueRow from '../components/inversiones/CalidadIssueRow'
 import { parseApiError, type ParsedApiError } from '../help/errors/apiErrors'
 import ErrorBanner from '../help/components/ErrorBanner'
 import InfoTooltip from '../help/components/InfoTooltip'
+import { useInversionesContext } from '../context/InversionesContext'
 
 export default function CalidadDatos() {
+  const { syncVersion } = useInversionesContext()
   const navigate = useNavigate()
   const [calidad, setCalidad] = useState<CalidadDatosOut | null>(null)
   const [loading, setLoading] = useState(true)
@@ -26,7 +28,7 @@ export default function CalidadDatos() {
       }
     }
     fetch()
-  }, [])
+  }, [syncVersion])
 
   if (loading) {
     return (

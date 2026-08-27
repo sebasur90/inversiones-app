@@ -16,7 +16,7 @@ type TabKey = 'resumen' | 'rendimiento' | 'riesgo' | 'historico'
 export default function TickerDetalle() {
   const { ticker: tickerParam } = useParams<{ ticker: string }>()
   const navigate = useNavigate()
-  const { carteraSeleccionada, monedaSeleccionada } = useInversionesContext()
+  const { carteraSeleccionada, monedaSeleccionada, syncVersion } = useInversionesContext()
 
   const [tab, setTab] = useState<TabKey>('resumen')
   const [analisis, setAnalisis] = useState<TickerAnalysisOut | null>(null)
@@ -56,7 +56,7 @@ export default function TickerDetalle() {
     return () => {
       cancelado = true
     }
-  }, [ticker, carteraSeleccionada])
+  }, [ticker, carteraSeleccionada, syncVersion])
 
   // Lazy load: riesgo
   useEffect(() => {
@@ -83,7 +83,7 @@ export default function TickerDetalle() {
     return () => {
       cancelado = true
     }
-  }, [tab, ticker, carteraSeleccionada, monedaSeleccionada])
+  }, [tab, ticker, carteraSeleccionada, monedaSeleccionada, syncVersion])
 
   // Lazy load: historico
   useEffect(() => {
@@ -109,7 +109,7 @@ export default function TickerDetalle() {
     return () => {
       cancelado = true
     }
-  }, [tab, ticker, carteraSeleccionada])
+  }, [tab, ticker, carteraSeleccionada, syncVersion])
 
   if (loading) {
     return (

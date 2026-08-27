@@ -14,7 +14,7 @@ import InfoTooltip from '../help/components/InfoTooltip'
 
 export default function Diagnostico() {
   const navigate = useNavigate()
-  const { carteraSeleccionada, loading: contextLoading } = useInversionesContext()
+  const { carteraSeleccionada, loading: contextLoading, syncVersion } = useInversionesContext()
   const [diagnostico, setDiagnostico] = useState<DiagnosticoOut | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<ParsedApiError | null>(null)
@@ -45,7 +45,7 @@ export default function Diagnostico() {
     return () => {
       cancelado = true
     }
-  }, [carteraSeleccionada])
+  }, [carteraSeleccionada, syncVersion])
 
   const hallazgos = useMemo(() => {
     if (!diagnostico) return []

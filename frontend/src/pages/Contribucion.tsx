@@ -61,7 +61,7 @@ const OPCIONES_UNIVERSO: { value: UniversoCorrelacion; label: string }[] = [
 
 export default function Contribucion() {
   const navigate = useNavigate()
-  const { carteraSeleccionada } = useInversionesContext()
+  const { carteraSeleccionada, syncVersion } = useInversionesContext()
 
   const [contribucion, setContribucion] = useState<ContribucionOut | null>(null)
   const [loadingContribucion, setLoadingContribucion] = useState(true)
@@ -88,7 +88,7 @@ export default function Contribucion() {
     return () => {
       cancelado = true
     }
-  }, [carteraSeleccionada])
+  }, [carteraSeleccionada, syncVersion])
 
   useEffect(() => {
     let cancelado = false
@@ -106,7 +106,7 @@ export default function Contribucion() {
     return () => {
       cancelado = true
     }
-  }, [carteraSeleccionada, universo])
+  }, [carteraSeleccionada, universo, syncVersion])
 
   const ejeActivoContribucion =
     contribucion?.contribucion.find(e => e.eje === ejeContribucion) ?? contribucion?.contribucion[0] ?? null

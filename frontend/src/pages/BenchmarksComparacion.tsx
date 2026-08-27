@@ -16,6 +16,7 @@ import FormHelp from '../help/components/FormHelp'
 import ErrorBanner from '../help/components/ErrorBanner'
 import { parseApiError } from '../help/errors/apiErrors'
 import type { ParsedApiError } from '../help/errors/apiErrors'
+import { useInversionesContext } from '../context/InversionesContext'
 
 const calcularDesdeFromPeriod = (period: string): string | undefined => {
   const hoy = new Date()
@@ -46,6 +47,7 @@ interface BenchmarksComparacionProps {
 }
 
 export default function BenchmarksComparacion({ cartera = null }: BenchmarksComparacionProps) {
+  const { syncVersion } = useInversionesContext()
   const [periodo, setPeriodo] = useState('1y')
   const [moneda, setMoneda] = useState<'usd' | 'ars_nominal' | 'ars_real'>('usd')
   const [benchmarks, setBenchmarks] = useState<string[]>([])
@@ -68,7 +70,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
         }
       })
       .catch(err => console.error('Error loading benchmarks/tickers:', err))
-  }, [])
+  }, [syncVersion])
 
   const loadData = async () => {
     setLoading(true)
@@ -92,7 +94,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
     if (benchmarks.length > 0 || tickers.length > 0) {
       loadData()
     }
-  }, [periodo, moneda, benchmarks, tickers])
+  }, [periodo, moneda, benchmarks, tickers, syncVersion])
 
   return (
     <div className="w-full">

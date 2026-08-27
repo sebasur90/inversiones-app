@@ -10,6 +10,7 @@ import Segmented from '../components/ui/Segmented'
 import EmptyState from '../components/ui/EmptyState'
 import { Icon } from '../components/icons/Icons'
 import InfoTooltip from '../help/components/InfoTooltip'
+import { useInversionesContext } from '../context/InversionesContext'
 
 type Vista = 'cer' | 'mep'
 
@@ -35,6 +36,7 @@ const OPCIONES: { value: Vista; label: string }[] = [
 ]
 
 export default function IndicadoresMacro() {
+  const { syncVersion } = useInversionesContext()
   const navigate = useNavigate()
   const [datos, setDatos] = useState<IndicesMercadoOut | null>(null)
   const [vista, setVista] = useState<Vista>('cer')
@@ -45,7 +47,7 @@ export default function IndicadoresMacro() {
       .then(setDatos)
       .catch(() => setDatos(null))
       .finally(() => setLoading(false))
-  }, [])
+  }, [syncVersion])
 
   const datosGrafico = (datos?.puntos ?? [])
     .map(p => ({ fecha: p.fecha, valor: vista === 'cer' ? p.cer : p.mep }))

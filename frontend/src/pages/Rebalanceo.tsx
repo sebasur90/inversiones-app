@@ -24,7 +24,7 @@ const MODO_OPCIONES: { value: ModoSimulacion; label: string }[] = [
 ]
 
 export default function Rebalanceo() {
-  const { carteraSeleccionada, rebalanceo, monedaSeleccionada, loading } = useInversionesContext()
+  const { carteraSeleccionada, rebalanceo, monedaSeleccionada, loading, syncVersion } = useInversionesContext()
   const [ejeActivo, setEjeActivo] = useState<string | null>(null)
   const esARS = monedaSeleccionada === 'ARS'
   const formatMoneda = esARS ? formatARS : formatUSD
@@ -56,12 +56,12 @@ export default function Rebalanceo() {
     return () => {
       cancelado = true
     }
-  }, [carteraSeleccionada])
+  }, [carteraSeleccionada, syncVersion])
 
   useEffect(() => {
     setSimResultado(null)
     setSimError(null)
-  }, [eje?.eje, carteraSeleccionada])
+  }, [eje?.eje, carteraSeleccionada, syncVersion])
 
   const toleranciaPp = configuracion?.tolerancia ?? 2
 

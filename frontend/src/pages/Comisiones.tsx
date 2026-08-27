@@ -68,7 +68,7 @@ function PeriodoChart({ items }: { items: ComisionPeriodoItem[] }) {
 
 export default function Comisiones() {
   const navigate = useNavigate()
-  const { carteraSeleccionada, monedaSeleccionada } = useInversionesContext()
+  const { carteraSeleccionada, monedaSeleccionada, syncVersion } = useInversionesContext()
   const [datos, setDatos] = useState<ComisionesOut | null>(null)
   const [desglose, setDesglose] = useState<Desglose>('ticker')
   const [loading, setLoading] = useState(true)
@@ -91,7 +91,7 @@ export default function Comisiones() {
     return () => {
       cancelado = true
     }
-  }, [carteraSeleccionada])
+  }, [carteraSeleccionada, syncVersion])
 
   const esARS = monedaSeleccionada === 'ARS'
   const formatMoneda = esARS ? formatARS : formatUSD

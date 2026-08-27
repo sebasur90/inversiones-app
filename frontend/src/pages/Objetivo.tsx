@@ -25,7 +25,7 @@ import InfoTooltip from '../help/components/InfoTooltip'
 import FormHelp from '../help/components/FormHelp'
 
 export default function Objetivo() {
-  const { carteras, carteraSeleccionada, setCarteraSeleccionada } = useInversionesContext()
+  const { carteras, carteraSeleccionada, setCarteraSeleccionada, syncVersion } = useInversionesContext()
   const { objetivo, aportesHistoricos, evolucion, riesgo, configuracion, loading } =
     useObjetivoInversion(carteraSeleccionada)
   const [tasaOverride, setTasaOverride] = useState('')
@@ -37,7 +37,7 @@ export default function Objetivo() {
     if (!carteraSeleccionada) return
     const stored = localStorage.getItem(`objetivo-tasa-${carteraSeleccionada}`)
     setTasaOverride(stored ?? '')
-  }, [carteraSeleccionada])
+  }, [carteraSeleccionada, syncVersion])
 
   const handleTasaOverride = (value: string) => {
     setTasaOverride(value)
@@ -191,6 +191,30 @@ export default function Objetivo() {
     if (!puntosProyeccion || puntosProyeccion.length === 0 || !objetivo) return false
     return puntosProyeccion[puntosProyeccion.length - 1].valorUsd >= objetivo.monto_usd
   }, [puntosProyeccion, objetivo])
+
+  // Cada escenario simula hasta 1200 meses: fuera del render, que se re-ejecuta con cualquier
+  // cambio de estado de la pantalla (tabs, sliders, tooltips).
+  const escenariosResueltos = useMemo(() => {
+    if (!objetivo || !escenarios) return null
+    return (['conservador', 'base', 'optimista'] as const).map(esc => {
+      const tasa = escenarios[esc]
+      const fechaEsc = resolverFechaAlcanzable(
+        objetivo.monto_usd,
+        {
+          valorInicialUsd: objetivo.valor_actual_usd,
+          aporteMensualUsd: objetivo.aporte_mensual_necesario_usd ?? 0,
+          crecimientoAporteAnualPct: 0,
+          tasaAnualPct: tasa,
+        },
+        1200,
+        new Date(),
+      )
+      const alcanzable = fechaEsc.fecha
+        ? dayjs(fechaEsc.fecha).isBefore(dayjs(objetivo.fecha_limite).add(1, 'day'))
+        : false
+      return { esc, tasa, fechaEsc, alcanzable }
+    })
+  }, [objetivo, escenarios])
 
   if (!carteraSeleccionada) {
     return (
@@ -382,28 +406,12 @@ export default function Objetivo() {
           </Card>
 
           {/* Escenarios */}
-          {escenarios ? (
+          {escenarios && escenariosResueltos ? (
             <>
               <h3 className="text-[13.5px] font-bold text-app-text mb-2.5 mt-3.5">Escenarios</h3>
               <Card>
                 <div className="grid grid-cols-3 gap-2 mb-3">
-                  {(['conservador', 'base', 'optimista'] as const).map(esc => {
-                    const tasa = escenarios[esc]
-                    const fechaEsc = resolverFechaAlcanzable(
-                      objetivo.monto_usd,
-                      {
-                        valorInicialUsd: objetivo.valor_actual_usd,
-                        aporteMensualUsd: objetivo.aporte_mensual_necesario_usd ?? 0,
-                        crecimientoAporteAnualPct: 0,
-                        tasaAnualPct: tasa,
-                      },
-                      1200,
-                      new Date()
-                    )
-                    const alcanzable = fechaEsc.fecha
-                      ? dayjs(fechaEsc.fecha).isBefore(dayjs(objetivo.fecha_limite).add(1, 'day'))
-                      : false
-
+                  {escenariosResueltos.map(({ esc, tasa, fechaEsc, alcanzable }) => {
                     return (
                       <div key={esc} className="bg-app-surface rounded-lg p-2.5">
                         <div className="text-[9px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
