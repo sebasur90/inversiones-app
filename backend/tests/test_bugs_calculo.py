@@ -18,6 +18,7 @@ from app.services.inversiones_analytics import (
     get_vencimientos,
     get_exposicion,
     get_resumen,
+    _precios_por_ticker,
 )
 
 
@@ -247,3 +248,34 @@ def test_posicion_con_mep_se_valua_en_ambas_monedas(db: Session):
 
     assert ticker["valor_usd"] == pytest.approx(1000.0)
     assert ticker["valor_ars"] == pytest.approx(1_000_000.0)
+
+
+# ── C1: el caché de precios por sesión no puede quedar viejo ─────────────────
+
+def test_cache_de_precios_se_invalida_al_escribir(db: Session):
+    """Un precio nuevo tiene que verse en la misma sesión, aunque ya se haya cacheado."""
+    _instrumento(db)
+    _precio(db, date(2024, 1, 1), 100.0)
+
+    primera = _precios_por_ticker(db)
+    assert len(primera["AAPL"]) == 1
+    assert _precios_por_ticker(db) is primera  # segunda lectura: viene del caché
+
+    _precio(db, date(2024, 2, 1), 110.0)  # commit → invalida
+
+    segunda = _precios_por_ticker(db)
+    assert len(segunda["AAPL"]) == 2
+    assert segunda is not primera
+
+
+def test_valuacion_ve_precios_agregados_despues_de_una_lectura(db: Session):
+    """El caché no debe congelar la valuación dentro de una misma sesión."""
+    _instrumento(db)
+    _mov(db, date(2024, 1, 1), "compra", 10.0, 100.0)
+    _precio(db, date(2024, 1, 1), 100.0)
+
+    assert get_resumen("test", db)["valor_actual_usd"] == pytest.approx(1000.0)
+
+    _precio(db, date(2024, 2, 1), 150.0)
+
+    assert get_resumen("test", db)["valor_actual_usd"] == pytest.approx(1500.0)

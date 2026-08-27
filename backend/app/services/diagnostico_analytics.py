@@ -21,7 +21,7 @@ from .inversiones_analytics import (
 )
 
 
-def _get_objetivo(cartera: str | None, db: Session) -> dict | None:
+def _get_objetivo(cartera: str | None, db: Session, resumen: dict | None = None) -> dict | None:
     """Obtiene objetivo de inversión + progreso, o None si no existe."""
     if cartera is None:
         # No hay objetivo consolidado
@@ -29,14 +29,19 @@ def _get_objetivo(cartera: str | None, db: Session) -> dict | None:
     fila = db.query(ObjetivoInversion).filter(ObjetivoInversion.cartera == cartera).first()
     if not fila:
         return None
-    progreso = get_progreso_objetivo(cartera, fila.id, db)
+    progreso = get_progreso_objetivo(cartera, fila.id, db, resumen=resumen)
     if not progreso:
         return None
     return {**progreso, "monto_usd": float(fila.monto_usd)}
 
 
 def get_diagnostico(cartera: str | None, db: Session) -> dict:
-    """Orquesta y agrega el diagnóstico completo."""
+    """Orquesta y agrega el diagnóstico completo.
+
+    `resumen` y `rendimiento_por_ticker` se calculan una sola vez y se pasan a los analytics
+    que los necesitan: son las dos partes más caras, y antes se recalculaban por dentro
+    (get_resumen tres veces, una de ellas por cada rama de get_aportes_historicos).
+    """
     resumen = get_resumen(cartera, db)
     config = get_configuracion_cartera(cartera, db)
 
@@ -47,9 +52,9 @@ def get_diagnostico(cartera: str | None, db: Session) -> dict:
     concentracion = get_concentracion(cartera, db)
     rebalanceo = get_rebalanceo(cartera, db)
     rendimiento_por_ticker = get_rendimiento_por_ticker(cartera, db)
-    vencimientos = get_vencimientos(cartera, db)
+    vencimientos = get_vencimientos(cartera, db, rendimientos=rendimiento_por_ticker)
     comisiones = get_comisiones(cartera, db)
-    objetivo = _get_objetivo(cartera, db)
+    objetivo = _get_objetivo(cartera, db, resumen=resumen)
 
     # Evaluar hallazgos
     candidatos = [

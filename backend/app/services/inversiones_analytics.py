@@ -2,10 +2,10 @@
 import bisect
 import calendar
 from datetime import date, timedelta
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from ..database import MovimientoInversion, InstrumentoInversion, PrecioInstrumento, IndiceMercado, RebalanceoObjetivo, ConfiguracionCartera
-from .cotizaciones import get_rates_for_date
 from . import rebalanceo_engine
 
 DEFAULT_TOLERANCIA_PP = 2.0
@@ -18,16 +18,6 @@ TIPOS_INGRESO = ("dividendo", "cupon")
 
 
 # ── Conversión de monedas / índices ──────────────────────────────────────────
-
-def _mep_venta(fecha: date, db: Session, cache: dict) -> float | None:
-    if fecha in cache:
-        return cache[fecha]
-    rates = get_rates_for_date(fecha, db)
-    mep = rates.get("mep")
-    valor = float(mep["venta"]) if mep and mep.get("venta") else None
-    cache[fecha] = valor
-    return valor
-
 
 def _to_usd(monto: float, moneda: str, fecha: date, db: Session, mep_cache: dict) -> float | None:
     if moneda == "USD":
@@ -143,7 +133,7 @@ def _cer_indice(fecha: date, db: Session, cache: dict) -> float | None:
 
 
 def _mep_sheet(fecha: date, db: Session, cache: dict) -> float | None:
-    """Lookup de MEP del Sheet con carry-forward; fallback a TipoCambio auto-fetched."""
+    """Lookup de MEP del Sheet con carry-forward. None si no hay ningún MEP anterior cargado."""
     if fecha in cache:
         return cache[fecha]
     row = (
@@ -152,11 +142,7 @@ def _mep_sheet(fecha: date, db: Session, cache: dict) -> float | None:
         .order_by(IndiceMercado.fecha.desc())
         .first()
     )
-    if row:
-        valor = float(row.mep)
-    else:
-        # Fallback a TipoCambio auto-fetched
-        valor = _mep_venta(fecha, db, {})
+    valor = float(row.mep) if row else None
     cache[fecha] = valor
     return valor
 
@@ -255,17 +241,43 @@ class _HoldingsTracker:
         return dict(self.costo_promedio)
 
 
+_CACHE_PRECIOS = "_cache_precios_por_ticker"
+
+
+@event.listens_for(Session, "after_commit")
+@event.listens_for(Session, "after_flush")
+def _invalidar_cache_precios(session: Session, flush_context=None) -> None:
+    """Descarta el caché de precios ante cualquier escritura, para que no quede viejo."""
+    session.info.pop(_CACHE_PRECIOS, None)
+
+
 def _precios_por_ticker(db: Session) -> dict[str, list[tuple[date, float, str]]]:
+    """Serie de precios por ticker, ordenada por fecha.
+
+    Cacheada en `db.info`, que vive lo que dura la sesión — es decir, una request (ver
+    `get_db`). Sin esto, cada analytic recargaba la tabla entera de precios: un diagnóstico,
+    que invoca ocho de ellos, la leía ocho veces. El listener de arriba la invalida en cuanto
+    se escribe algo, así que el caché no puede sobrevivir a un sync.
+    """
+    cacheado = db.info.get(_CACHE_PRECIOS)
+    if cacheado is not None:
+        return cacheado
+
     rows = db.query(PrecioInstrumento).order_by(PrecioInstrumento.ticker, PrecioInstrumento.fecha).all()
     result: dict[str, list[tuple[date, float, str]]] = {}
     for row in rows:
         result.setdefault(row.ticker, []).append((row.fecha, float(row.precio), row.moneda))
+    db.info[_CACHE_PRECIOS] = result
     return result
 
 
 def _precio_conocido(precios_sorted: list[tuple[date, float, str]], fecha: date) -> tuple[date, float, str] | None:
-    fechas = [p[0] for p in precios_sorted]
-    idx = bisect.bisect_right(fechas, fecha) - 1
+    """Último precio con fecha ≤ `fecha` (carry-forward), o None si no hay ninguno anterior.
+
+    Se busca con `key=` en vez de materializar la lista de fechas: esta función corre dentro
+    de bucles anidados boundaries × tickers, y reconstruirla la volvía O(n) por lookup.
+    """
+    idx = bisect.bisect_right(precios_sorted, fecha, key=lambda p: p[0]) - 1
     if idx < 0:
         return None
     return precios_sorted[idx]
@@ -1825,8 +1837,10 @@ def get_evolucion(cartera: str | None, db: Session, desde: date | None = None, m
     idx_capital = 0
     capital_usd = 0.0
     capital_ars = 0.0
-    movimientos_acumulados = []  # (fecha, monto_ars, tipo) para calcular capital_ars_real
-    capital_ars_real_valido = True
+    # El factor CER_hoy/CER_i es fijo por movimiento, así que el capital deflactado se acumula
+    # incrementalmente. Antes se re-deflactaba todo el histórico en cada punto del gráfico (O(n·m)).
+    capital_ars_real = 0.0
+    capital_ars_real_valido = cer_hoy is not None
 
     for f in fechas:
         tracker.avanzar_a(f)
@@ -1852,18 +1866,12 @@ def get_evolucion(cartera: str | None, db: Session, desde: date | None = None, m
             monto_ars = _monto_ars(mov, db, mep_cache)
             if monto_ars is not None:
                 capital_ars += signo * monto_ars
-                movimientos_acumulados.append((mov.fecha, signo * monto_ars))
-
-        # Calcular capital_ars_real ajustado por CER en este punto del gráfico
-        capital_ars_real = 0.0
-        if capital_ars_real_valido and cer_hoy is not None:
-            for fecha_mov, monto_ars in movimientos_acumulados:
-                cer_mov = _cer_indice(fecha_mov, db, cer_cache)
-                if cer_mov is None:
-                    capital_ars_real_valido = False
-                    capital_ars_real = 0.0
-                    break
-                capital_ars_real += monto_ars * (cer_hoy / cer_mov)
+                if capital_ars_real_valido:
+                    cer_mov = _cer_indice(mov.fecha, db, cer_cache)
+                    if cer_mov is None:
+                        capital_ars_real_valido = False
+                    else:
+                        capital_ars_real += signo * monto_ars * (cer_hoy / cer_mov)
 
         puntos.append({
             "fecha": f,
@@ -1999,13 +2007,17 @@ def get_indices_mercado(dias: int, db: Session) -> dict:
 
 # ── Vencimientos ─────────────────────────────────────────────────────────────
 
-def get_vencimientos(cartera: str | None, db: Session) -> list[dict]:
+def get_vencimientos(
+    cartera: str | None, db: Session, rendimientos: list[dict] | None = None
+) -> list[dict]:
     """Instrumentos con tenencia activa y fecha de vencimiento, ordenados por proximidad.
 
     La lista se arma desde las tenencias, no desde `get_rendimiento_por_ticker`: esa función
     descarta los tickers sin cotización, y un bono sin precio cargado igual tiene que aparecer
     acá — la fecha de vencimiento no depende del precio. El rendimiento sólo enriquece
     `valor_actual_*`, que queda en None cuando no hay con qué valuar.
+
+    `rendimientos` permite reutilizar una salida de `get_rendimiento_por_ticker` ya calculada.
     """
     instrumentos = {
         i.ticker: i
@@ -2022,7 +2034,9 @@ def get_vencimientos(cartera: str | None, db: Session) -> list[dict]:
     for (_cart, ticker), cantidad in tenencias.items():
         cantidad_por_ticker[ticker] = cantidad_por_ticker.get(ticker, 0.0) + cantidad
 
-    valuacion = {item["ticker"]: item for item in get_rendimiento_por_ticker(cartera, db)}
+    if rendimientos is None:
+        rendimientos = get_rendimiento_por_ticker(cartera, db)
+    valuacion = {item["ticker"]: item for item in rendimientos}
 
     resultado = []
     for ticker, cantidad in cantidad_por_ticker.items():
@@ -2122,16 +2136,20 @@ def get_comisiones(cartera: str | None, db: Session) -> dict:
 
 # ── Objetivos de inversión ──────────────────────────────────────────────────
 
-def get_aportes_historicos(cartera: str, db: Session) -> dict:
-    """Histórico de aportes netos acumulados mes a mes, con valor actual de mercado hoy."""
+def get_aportes_historicos(cartera: str, db: Session, resumen: dict | None = None) -> dict:
+    """Histórico de aportes netos acumulados mes a mes, con valor actual de mercado hoy.
+
+    `resumen` permite reutilizar un `get_resumen` ya calculado por el caller (es la parte más
+    cara del cálculo, y el diagnóstico lo necesita de todos modos).
+    """
+    if resumen is None:
+        resumen = get_resumen(cartera, db)
+    valor_actual_usd = resumen["valor_actual_usd"]
+
     movs = _movimientos_ordenados(db, cartera)
     if not movs:
         # Sin movimientos, devolver estructura vacía pero con valor_actual_usd
-        resumen = get_resumen(cartera, db)
-        return {
-            "curva": [],
-            "valor_actual_usd": resumen["valor_actual_usd"],
-        }
+        return {"curva": [], "valor_actual_usd": valor_actual_usd}
 
     mep_cache: dict = {}
     aportes_por_mes: dict[str, float] = {}
@@ -2155,28 +2173,17 @@ def get_aportes_historicos(cartera: str, db: Session) -> dict:
 
     # Construir curva acumulada mes a mes, manteniendo acumulado plano en meses sin movimiento
     if not aportes_por_mes:
-        resumen = get_resumen(cartera, db)
-        return {
-            "curva": [],
-            "valor_actual_usd": resumen["valor_actual_usd"],
-        }
+        return {"curva": [], "valor_actual_usd": valor_actual_usd}
 
-    meses_ordenados = sorted(aportes_por_mes.keys())
     curva = []
     acumulado = 0.0
-    mes_anterior = None
 
-    for mes in meses_ordenados:
+    for mes in sorted(aportes_por_mes.keys()):
         acumulado += aportes_por_mes[mes]
         curva.append({
             "mes": mes,
             "aportes_netos_acumulados": round(acumulado, 2),
         })
-        mes_anterior = mes
-
-    # Obtener valor actual de mercado de hoy
-    resumen = get_resumen(cartera, db)
-    valor_actual_usd = resumen["valor_actual_usd"]
 
     return {
         "curva": curva,
@@ -2184,8 +2191,13 @@ def get_aportes_historicos(cartera: str, db: Session) -> dict:
     }
 
 
-def get_progreso_objetivo(cartera: str, objetivo_id: int, db: Session) -> dict | None:
-    """Calcula progreso del objetivo: proyección, aporte promedio, déficit, etc."""
+def get_progreso_objetivo(
+    cartera: str, objetivo_id: int, db: Session, resumen: dict | None = None
+) -> dict | None:
+    """Calcula progreso del objetivo: proyección, aporte promedio, déficit, etc.
+
+    `resumen` se propaga a `get_aportes_historicos` para no recalcularlo (ver allí).
+    """
     from ..database import ObjetivoInversion
 
     objetivo = (
@@ -2197,7 +2209,7 @@ def get_progreso_objetivo(cartera: str, objetivo_id: int, db: Session) -> dict |
         return None
 
     # Obtener aportes históricos
-    aportes_hist = get_aportes_historicos(cartera, db)
+    aportes_hist = get_aportes_historicos(cartera, db, resumen=resumen)
     curva = aportes_hist["curva"]
     valor_actual_usd = aportes_hist["valor_actual_usd"]
 

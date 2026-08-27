@@ -265,6 +265,12 @@ def _aplicar_solo_aportes(
     total_efectivo: float,
     tasa_comision_pct: float,
 ) -> ResultadoPropuesta:
+    """Reparte el aporte entre las categorías por debajo de su objetivo, sin vender nada.
+
+    Los ítems con `accion == "vender"` se descartan a propósito: el sentido de este modo es
+    corregir la cartera únicamente con dinero nuevo, así que las sobreponderaciones se diluyen
+    comprando el resto en vez de desarmando posiciones (evita costos y hechos imponibles).
+    """
     resultado: list[PropuestaItem] = []
     compras = [it for it in items if it.accion == "comprar"]
     otros = [it for it in items if it.accion != "comprar" and it.accion != "vender"]

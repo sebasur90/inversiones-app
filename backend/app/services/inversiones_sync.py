@@ -1,7 +1,7 @@
 """Orquestación del sync desde Google Sheets con validación de calidad."""
 import time
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from sqlalchemy.orm import Session
 
 from ..database import (
@@ -56,7 +56,8 @@ def _prune_sync_runs(db: Session, keep: int = 20):
 def sync_from_sheet(db: Session) -> dict:
     """Sincroniza datos del Sheet con validación, per-tab isolation y persistencia de historial."""
     inicio = time.monotonic()
-    timestamp = datetime.utcnow()
+    # naive en UTC: la columna SyncRun.timestamp es DateTime sin timezone
+    timestamp = datetime.now(UTC).replace(tzinfo=None)
     issues: list[ValidationIssue] = []
 
     # Leer datos del Sheet (raw)

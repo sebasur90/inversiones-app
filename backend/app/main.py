@@ -3,20 +3,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from .database import init_db, SessionLocal
-from .services.cotizaciones import fetch_and_cache_today
+from .database import init_db
 from .routers import inversiones, objetivos_inversion, escenarios
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
+    # Startup. El MEP y el CER salen del Sheet (tabla IndiceMercado), no de una API externa:
+    # el arranque no depende de la red.
     init_db()
-    db = SessionLocal()
-    try:
-        await fetch_and_cache_today(db)
-    finally:
-        db.close()
     yield
 
 

@@ -89,8 +89,6 @@ def _resolver_fuente(nombre: str, db: Session, hasta: date) -> dict[tuple[int, i
 
 def _twr_mensual_por_moneda(moneda: str, movs: list, precios_por_ticker: dict, db: Session, mep_cache: dict, cer_cache: dict, hoy: date) -> dict:
     """Selecciona y ejecuta el cálculo de TWR mensual según la moneda."""
-    from . import riesgo_analytics  # Import here to avoid circular dependency
-
     if moneda == "usd":
         return _calcular_twr_mensual(movs, precios_por_ticker, db, mep_cache, hoy, _monto_usd, _valuar_holdings)
     elif moneda == "ars_nominal":
