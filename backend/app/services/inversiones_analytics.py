@@ -48,6 +48,8 @@ def _convertir(monto: float, moneda_origen: str, moneda_destino: str, fecha: dat
         mep = _mep_sheet(fecha, db, mep_cache)
         if not mep:
             return None
+        return monto * mep
+    return None
 
 
 def _flujos_cashflow(movs: list[MovimientoInversion], monto_fn) -> list[tuple[date, float]]:

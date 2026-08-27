@@ -183,6 +183,18 @@ def sync_from_sheet(db: Session) -> dict:
     indices_mercado, advertencias_cer = _consolidar_indices_mercado(cer_mep_movimientos, cer_mep_precios)
     issues.extend(advertencias_cer)
 
+    # CER/MEP se arma con las columnas de Movimientos + Precios: si alguna de las dos está
+    # bloqueada, reescribir la tabla perdería el histórico que aportaba esa pestaña (y con él
+    # toda métrica ARS real). Se preserva lo que ya está en la DB, igual que el resto de tablas.
+    fuentes_cer_mep_bloqueadas = sorted({"Movimientos", "Precios"} & tabs_bloqueadas)
+    if fuentes_cer_mep_bloqueadas:
+        issues.append(ValidationIssue(
+            tab="CER/MEP", regla="fuente_bloqueada",
+            mensaje=f"No se actualizó CER/MEP: {', '.join(fuentes_cer_mep_bloqueadas)} bloqueada(s)",
+            impacto="Se preservó el histórico de CER/MEP anterior",
+            severidad=Severity.ADVERTENCIA
+        ))
+
     # Validar Objetivos (opcional)
     raw_obj = raw_data.get("Objetivos")
     if raw_obj and raw_obj.error_lectura:
@@ -301,10 +313,11 @@ def sync_from_sheet(db: Session) -> dict:
         for precio in precios_validos:
             db.add(PrecioInstrumento(**precio))
 
-    db.query(IndiceMercado).delete()
-    db.flush()
-    for indice in indices_mercado:
-        db.add(IndiceMercado(**indice))
+    if not fuentes_cer_mep_bloqueadas:
+        db.query(IndiceMercado).delete()
+        db.flush()
+        for indice in indices_mercado:
+            db.add(IndiceMercado(**indice))
 
     if "Objetivos" not in tabs_bloqueadas:
         db.query(ObjetivoInversion).delete()
@@ -375,7 +388,7 @@ def sync_from_sheet(db: Session) -> dict:
         "precios": len(precios_validos),
         "objetivos": len(objetivos_validos),
         "rebalanceo": len(rebalanceo_validos),
-        "indices_mercado": len(indices_mercado),
+        "indices_mercado": 0 if fuentes_cer_mep_bloqueadas else len(indices_mercado),
         "benchmarks": len(benchmarks_validos),
         "configuracion": len(configuracion_validos),
         "health_score": score_result["score"],

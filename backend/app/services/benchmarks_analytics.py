@@ -190,6 +190,14 @@ def _performance_relativa_sobre_movs(movs: list, cartera: str | None, moneda: st
     retornos_cartera_comunes = {k: retornos_cartera[k] for k in claves_comunes}
     retornos_benchmark_comunes = {k: retornos_benchmark[k] for k in claves_comunes}
 
+    # `_calcular_twr_mensual*` devuelve None en los meses sin tenencia. Para los índices se
+    # conservan (construir_indice los deja planos, sin componer) y así ambas series quedan
+    # pareadas mes a mes; para las métricas estadísticas se excluyen, igual que en
+    # `riesgo_analytics.get_riesgo`, porque restar/covariar None revienta.
+    claves_validas = [k for k in claves_comunes if retornos_cartera_comunes[k] is not None]
+    retornos_cartera_validos = {k: retornos_cartera_comunes[k] for k in claves_validas}
+    retornos_benchmark_validos = {k: retornos_benchmark_comunes[k] for k in claves_validas}
+
     # Construir índices base-100 pareados
     indice_cartera = risk_engine.construir_indice(retornos_cartera_comunes, base=100.0)
     indice_benchmark = risk_engine.construir_indice(retornos_benchmark_comunes, base=100.0)
@@ -205,10 +213,10 @@ def _performance_relativa_sobre_movs(movs: list, cartera: str | None, moneda: st
     # Métricas avanzadas
     retorno_anualizado_cartera = risk_engine.calcular_retorno_anualizado(indice_cartera)
     retorno_anualizado_benchmark = risk_engine.calcular_retorno_anualizado(indice_benchmark)
-    beta = risk_engine.calcular_beta(retornos_cartera_comunes, retornos_benchmark_comunes)
-    exceso_retorno = risk_engine.calcular_tracking_error(retornos_cartera_comunes, retornos_benchmark_comunes)
+    beta = risk_engine.calcular_beta(retornos_cartera_validos, retornos_benchmark_validos)
+    exceso_retorno = risk_engine.calcular_tracking_error(retornos_cartera_validos, retornos_benchmark_validos)
     alpha_result = risk_engine.calcular_alpha(retorno_anualizado_cartera, retorno_anualizado_benchmark, beta.get("valor"))
-    ir = risk_engine.calcular_information_ratio(retornos_cartera_comunes, retornos_benchmark_comunes, benchmark_resuelto)
+    ir = risk_engine.calcular_information_ratio(retornos_cartera_validos, retornos_benchmark_validos, benchmark_resuelto)
 
     # Serie pareada
     serie = []
