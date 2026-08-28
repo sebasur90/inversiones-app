@@ -28,6 +28,7 @@ from ..schemas import (
     FlujoCajaProyectadoOut,
     ComisionesOut,
     PnlRealizadoNoRealizadoOut,
+    VistaFiscalPorAnioOut,
     RendimientoMensualOut,
     RiesgoOut,
     PerformanceRelativaOut,
@@ -62,6 +63,7 @@ from ..services.inversiones_analytics import (
     get_indices_mercado,
     get_comisiones,
     get_pnl_realizado_no_realizado,
+    get_vista_fiscal_por_anio,
     get_rendimiento_mensual,
 )
 from ..services.flujo_caja_analytics import get_flujo_caja_proyectado, get_vencimientos_completo
@@ -318,6 +320,17 @@ def pnl_realizado_cartera(nombre: str, db: Session = Depends(get_db)):
 @router.get("/consolidado/pnl-realizado", response_model=PnlRealizadoNoRealizadoOut)
 def pnl_realizado_consolidado(db: Session = Depends(get_db)):
     return get_pnl_realizado_no_realizado(None, db)
+
+
+@router.get("/carteras/{nombre}/vista-fiscal", response_model=VistaFiscalPorAnioOut)
+def vista_fiscal_cartera(nombre: str, db: Session = Depends(get_db)):
+    _validar_cartera(nombre, db)
+    return get_vista_fiscal_por_anio(nombre, db)
+
+
+@router.get("/consolidado/vista-fiscal", response_model=VistaFiscalPorAnioOut)
+def vista_fiscal_consolidado(db: Session = Depends(get_db)):
+    return get_vista_fiscal_por_anio(None, db)
 
 
 @router.get("/benchmarks", response_model=list[str])

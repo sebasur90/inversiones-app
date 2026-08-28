@@ -7,8 +7,12 @@ _Actualizado: 2026-08-28_
 
 ## Estado
 
-- Todo lo hecho está en **`main`**, **sin pushear** (`main` está 8+ commits adelante de `origin/main`).
+- Todo lo hecho está en **`main`**, **sin pushear** (`main` está 9+ commits adelante de `origin/main`).
 - Últimos commits relevantes:
+  - Ola 5 ítem 5: **Vista fiscal por año** (`get_vista_fiscal_por_anio` +
+    `pages/VistaFiscal.tsx`, ruta `/vista-fiscal`). Realizado / ingresos / comisiones por año
+    calendario, USD y ARS, desglose por ticker, export CSV. Misma convención de costo promedio
+    que `get_pnl_realizado_no_realizado`.
   - `3a4b9ec` — Ola 4: **Precios automáticos de acciones y CEDEARs** (data912
     `/live/arg_stocks` + `/live/arg_cedears`). Ver detalle en `PLAN_MEJORAS_PENDIENTES.md`.
   - `9266157` — Ola 3 ítem 1b: **Backfill histórico de precios de renta fija**
@@ -18,8 +22,8 @@ _Actualizado: 2026-08-28_
   - `a60ffe0` — Ola 3 ítem 2: pantalla **Flujo de caja proyectado**.
   - `4f8eb9c` / `f29123e` — Ola 3 ítem 1: precios automáticos de renta fija (data912).
   - `0316e24` — Ola 1-2: market_data (CER/MEP/inflación) + menú "Más".
-- Tests backend: **265 pasan, 0 fallan** (+25 con Ola 4: `test_data912.py` +3,
-  `test_market_data_precios.py` +17, `test_inversiones_sync_market_data.py` +4).
+- Tests backend: **272 pasan, 0 fallan** (+25 con Ola 4; +7 con Ola 5 ítem 5:
+  `test_vista_fiscal_por_anio.py`).
 - Ola 4 es puro backend (ingesta en el sync, sin pantalla nueva) — no requiere QA visual.
 - QA visual en navegador de Flujo de caja y Vencimientos: **sigue pendiente** (no hubo browser
   en la sesión). Verificado sólo que compila (`tsc && vite build`) y que la salida valida
@@ -61,8 +65,8 @@ Tests: +25 (240 → 265).
 
 ### 3. Ola 5 (sin API, con datos que ya hay)
 
-5. Vista fiscal por año · 6. TWR bruto vs. neto de comisiones · 7. Historial de calidad de
-datos (sparkline health score) · 8. Escenarios (`variacion_por_instrumento` ya en backend,
+5. ~~Vista fiscal por año~~ ✅ · 6. TWR bruto vs. neto de comisiones · 7. Historial de calidad
+de datos (sparkline health score) · 8. Escenarios (`variacion_por_instrumento` ya en backend,
 frontend manda vacío) · 9. Config declarada y no aplicada (`peso_minimo`, `peso_maximo`,
 `rendimiento_objetivo`) · 10. Riesgo país + inflación mensual en Indicadores Macro ·
 11. Exposición/concentración por país.

@@ -157,9 +157,23 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
 
 ### Ola 5 — información nueva con los datos que ya hay (sin API)
 
-5. **Pantalla nueva: Vista fiscal por año** — agrupar `get_pnl_realizado_no_realizado`
-   (`inversiones_analytics.py:1640`) por año calendario: realizado, dividendos/cupones
-   cobrados, comisiones pagadas, en ARS y USD, con export CSV.
+5. ~~**Pantalla nueva: Vista fiscal por año**~~ — ✅ HECHO.
+   `inversiones_analytics.get_vista_fiscal_por_anio` recorre los movimientos por ticker con la
+   **misma convención de costo promedio que `get_pnl_realizado_no_realizado`**
+   (`_recorrer_movs_ticker`), pero atribuye cada venta/amortización al año de su fecha.
+   Devuelve `{por_anio: [...], total: {...}}`; cada año trae `realizado`, `ingresos`
+   (dividendos + cupones), `comisiones`, `resultado` (= realizado + ingresos) en USD y ARS
+   nominales, más `por_ticker` con el mismo desglose. Las comisiones son la caja pagada en el
+   año por **todas** las operaciones (informativo: la comisión de compra está capitalizada en
+   el costo y se "realiza" al vender) → **no** se resta de `resultado`. `_monto_*` ya viene
+   neto de la comisión de esa operación; ARS se completa con MEP y se acumula sólo cuando hay
+   conversión (mismo criterio que el resto). Endpoints
+   `/{carteras/{nombre}|consolidado}/vista-fiscal` (`VistaFiscalPorAnioOut`).
+   Frontend: `pages/VistaFiscal.tsx`, ruta `/vista-fiscal`, entrada en "Más" grupo Cartera —
+   card de resultado acumulado, un card colapsable por año con stat-row realizado/ingresos/
+   comisiones y tabla por ticker al expandir, export CSV (una fila TOTAL + una por ticker por
+   año). Tests: `backend/tests/test_vista_fiscal_por_anio.py` (7), incl. identidad con
+   `get_pnl_realizado_no_realizado`.
 6. **Costo real de operar** — `_tasa_comision_promedio` (`inversiones_analytics.py:1260`) ya
    calcula la tasa ponderada; falta mostrar TWR bruto vs. neto de comisiones en Rendimiento.
 7. **Historial de calidad de datos** — se guardan 20 `SyncRun`, se expone sólo el último
@@ -208,14 +222,14 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
     -v $(pwd):/repo -w /repo -e PYTHONPATH=/repo \
     backend python -m pytest backend/tests/ -q
   ```
-  Baseline actual: **265 pasan, 0 fallan** (176 tras Ola 1-2; +29 con Ola 3 ítem 1:
+  Baseline actual: **272 pasan, 0 fallan** (176 tras Ola 1-2; +29 con Ola 3 ítem 1:
   `test_data912.py`, `test_market_data_precios.py`, 2 de integración en
   `test_inversiones_sync_market_data.py`; +9 con Ola 3 ítem 2:
   `test_flujo_caja_analytics.py`; +7 con Ola 3 ítem 3:
   `test_vencimientos_enriquecido.py`; +19 con Ola 3 ítem 1b: `test_analisistecnico.py` (7),
   backfill en `test_market_data_precios.py` (11), 1 de integración; +25 con Ola 4 ítem 4:
   `test_data912.py` (3), `test_market_data_precios.py` (17), `test_inversiones_sync_market_data.py`
-  (3 integración + 1 mock extendido)).
+  (3 integración + 1 mock extendido); +7 con Ola 5 ítem 5: `test_vista_fiscal_por_anio.py`).
 - **Build frontend** (verifica TypeScript): `docker compose -f docker-compose.yml -f docker-compose.corporate.yml build frontend`.
 - Cualquier fetch nuevo a una API externa va en `backend/app/services/market_data/`, con el
   mismo patrón: nunca lanza (devuelve `None` en fallo total), se llama sólo si

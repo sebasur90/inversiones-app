@@ -597,6 +597,51 @@ export interface PnlRealizadoNoRealizadoOut {
 export const getPnlRealizadoNoRealizado = (cartera: string | null) =>
   api.get<PnlRealizadoNoRealizadoOut>(`${carteraPath(cartera)}/pnl-realizado`).then(r => r.data)
 
+// --- Vista fiscal por año ---
+
+export interface VistaFiscalTickerItem {
+  ticker: string
+  nombre: string
+  realizado_usd: number
+  realizado_ars: number
+  ingresos_usd: number
+  ingresos_ars: number
+  comisiones_usd: number
+  comisiones_ars: number
+}
+
+export interface VistaFiscalAnioItem {
+  anio: number
+  realizado_usd: number
+  realizado_ars: number
+  ingresos_usd: number
+  ingresos_ars: number
+  comisiones_usd: number
+  comisiones_ars: number
+  resultado_usd: number
+  resultado_ars: number
+  por_ticker: VistaFiscalTickerItem[]
+}
+
+export interface VistaFiscalTotal {
+  realizado_usd: number
+  realizado_ars: number
+  ingresos_usd: number
+  ingresos_ars: number
+  comisiones_usd: number
+  comisiones_ars: number
+  resultado_usd: number
+  resultado_ars: number
+}
+
+export interface VistaFiscalPorAnioOut {
+  por_anio: VistaFiscalAnioItem[]
+  total: VistaFiscalTotal
+}
+
+export const getVistaFiscalPorAnio = (cartera: string | null) =>
+  api.get<VistaFiscalPorAnioOut>(`${carteraPath(cartera)}/vista-fiscal`).then(r => r.data)
+
 // --- Objetivos de Inversión ---
 
 export interface AportePunto {

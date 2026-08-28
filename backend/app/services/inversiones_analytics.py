@@ -1768,6 +1768,147 @@ def get_pnl_realizado_no_realizado(cartera: str | None, db: Session) -> dict:
     return {"consolidado": consolidado, "por_ticker": por_ticker_resultado}
 
 
+# ── Vista fiscal por año ────────────────────────────────────────────────────
+
+def _clave_fiscal_ticker() -> dict[str, float]:
+    return {
+        "realizado_usd": 0.0, "realizado_ars": 0.0,
+        "ingresos_usd": 0.0, "ingresos_ars": 0.0,
+        "comisiones_usd": 0.0, "comisiones_ars": 0.0,
+    }
+
+
+def get_vista_fiscal_por_anio(cartera: str | None, db: Session) -> dict:
+    """Resultado realizado, ingresos (dividendos/cupones) y comisiones agrupados por año
+    calendario, en USD y ARS nominales, con desglose por ticker.
+
+    El realizado usa la misma convención de costo promedio que
+    `get_pnl_realizado_no_realizado` (ver `_recorrer_movs_ticker`) pero atribuye cada
+    venta/amortización al año de su fecha; `_monto_*` ya lo devuelve neto de la comisión de
+    esa operación. La columna de comisiones es la caja efectivamente pagada en el año por
+    **todas** las operaciones (informativa: la comisión de compra está capitalizada en el
+    costo y se "realiza" recién al vender) y **no** se suma a `resultado`.
+    `resultado_* = realizado_* + ingresos_*`.
+    """
+    movs = _movimientos_ordenados(db, cartera)
+    total_vacio = {
+        "realizado_usd": 0.0, "realizado_ars": 0.0,
+        "ingresos_usd": 0.0, "ingresos_ars": 0.0,
+        "comisiones_usd": 0.0, "comisiones_ars": 0.0,
+        "resultado_usd": 0.0, "resultado_ars": 0.0,
+    }
+    if not movs:
+        return {"por_anio": [], "total": total_vacio}
+
+    instrumentos = {i.ticker: i for i in db.query(InstrumentoInversion).all()}
+    mep_cache: dict = {}
+
+    movimientos_por_ticker: dict[str, list[MovimientoInversion]] = {}
+    for mov in movs:
+        movimientos_por_ticker.setdefault(mov.ticker, []).append(mov)
+
+    # (anio, ticker) -> acumuladores
+    acc: dict[tuple[int, str], dict[str, float]] = {}
+
+    def _bucket(anio: int, ticker: str) -> dict[str, float]:
+        clave = (anio, ticker)
+        if clave not in acc:
+            acc[clave] = _clave_fiscal_ticker()
+        return acc[clave]
+
+    for ticker, movs_ticker in movimientos_por_ticker.items():
+        costo_usd = 0.0
+        costo_ars = 0.0
+        cantidad_held = 0.0
+        for mov in movs_ticker:
+            anio = mov.fecha.year
+            monto_usd = _monto_usd(mov, db, mep_cache)
+            if monto_usd is None:
+                continue  # mismo criterio que get_resumen / get_pnl
+            monto_ars = _monto_ars(mov, db, mep_cache)
+
+            comision = float(mov.comision or 0)
+            if comision > 0:
+                b = _bucket(anio, ticker)
+                c_usd = _comision_usd(mov, db, mep_cache)
+                if c_usd is not None:
+                    b["comisiones_usd"] += c_usd
+                c_ars = _comision_ars(mov, db, mep_cache)
+                if c_ars is not None:
+                    b["comisiones_ars"] += c_ars
+
+            if mov.tipo_movimiento == "compra":
+                costo_usd += monto_usd
+                if monto_ars is not None:
+                    costo_ars += monto_ars
+                cantidad_held += float(mov.cantidad or 0)
+            elif mov.tipo_movimiento in ("venta", "amortizacion"):
+                cant = float(mov.cantidad or 0)
+                cantidad_vendida = min(cant, cantidad_held) if cantidad_held > EPS else 0.0
+                frac = cantidad_vendida / cantidad_held if cantidad_held > EPS else 0.0
+                costo_removido_usd = costo_usd * frac
+                costo_removido_ars = costo_ars * frac
+
+                b = _bucket(anio, ticker)
+                b["realizado_usd"] += monto_usd - costo_removido_usd
+                if monto_ars is not None:
+                    b["realizado_ars"] += monto_ars - costo_removido_ars
+
+                costo_usd -= costo_removido_usd
+                costo_ars -= costo_removido_ars
+                cantidad_held -= cantidad_vendida
+            elif mov.tipo_movimiento in TIPOS_INGRESO:
+                b = _bucket(anio, ticker)
+                b["ingresos_usd"] += monto_usd
+                if monto_ars is not None:
+                    b["ingresos_ars"] += monto_ars
+
+    por_anio_map: dict[int, dict] = {}
+    for (anio, ticker), b in acc.items():
+        entrada = por_anio_map.setdefault(anio, {"detalle": {}, "tot": _clave_fiscal_ticker()})
+        entrada["detalle"][ticker] = b
+        for k, v in b.items():
+            entrada["tot"][k] += v
+
+    por_anio = []
+    total = dict(total_vacio)
+    for anio in sorted(por_anio_map, reverse=True):
+        entrada = por_anio_map[anio]
+        tot = entrada["tot"]
+        por_ticker = sorted(
+            (
+                {
+                    "ticker": t,
+                    "nombre": instrumentos[t].nombre if t in instrumentos else t,
+                    **{k: round(val, 2) for k, val in b.items()},
+                }
+                for t, b in entrada["detalle"].items()
+            ),
+            key=lambda x: -(abs(x["realizado_usd"]) + abs(x["ingresos_usd"])),
+        )
+        resultado_usd = tot["realizado_usd"] + tot["ingresos_usd"]
+        resultado_ars = tot["realizado_ars"] + tot["ingresos_ars"]
+        por_anio.append({
+            "anio": anio,
+            "realizado_usd": round(tot["realizado_usd"], 2),
+            "realizado_ars": round(tot["realizado_ars"], 2),
+            "ingresos_usd": round(tot["ingresos_usd"], 2),
+            "ingresos_ars": round(tot["ingresos_ars"], 2),
+            "comisiones_usd": round(tot["comisiones_usd"], 2),
+            "comisiones_ars": round(tot["comisiones_ars"], 2),
+            "resultado_usd": round(resultado_usd, 2),
+            "resultado_ars": round(resultado_ars, 2),
+            "por_ticker": por_ticker,
+        })
+        for k in ("realizado_usd", "realizado_ars", "ingresos_usd", "ingresos_ars", "comisiones_usd", "comisiones_ars"):
+            total[k] += tot[k]
+        total["resultado_usd"] += resultado_usd
+        total["resultado_ars"] += resultado_ars
+
+    total = {k: round(v, 2) for k, v in total.items()}
+    return {"por_anio": por_anio, "total": total}
+
+
 # ── Evolución histórica (sparklines) ─────────────────────────────────────────
 
 def _fin_de_mes_range(desde: date, hasta: date) -> list[date]:

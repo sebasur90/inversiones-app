@@ -26,6 +26,7 @@ const GRUPOS: Grupo[] = [
       { to: '/vencimientos', label: 'Vencimientos', desc: 'Calendario de vencimientos de bonos', icon: 'alert' },
       { to: '/flujo-caja', label: 'Flujo de caja proyectado', desc: 'Cupones y amortizaciones a cobrar mes a mes', icon: 'trend' },
       { to: '/comisiones', label: 'Comisiones', desc: 'Desglose por cartera, ticker, mes y año', icon: 'scale' },
+      { to: '/vista-fiscal', label: 'Vista fiscal por año', desc: 'Realizado, dividendos/cupones y comisiones por año calendario', icon: 'scale' },
     ],
   },
   {

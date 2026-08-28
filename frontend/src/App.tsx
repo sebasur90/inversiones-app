@@ -18,6 +18,7 @@ import Vencimientos from './pages/Vencimientos'
 import FlujoCaja from './pages/FlujoCaja'
 import Comparador from './pages/Comparador'
 import Comisiones from './pages/Comisiones'
+import VistaFiscal from './pages/VistaFiscal'
 import Patrimonio from './pages/Patrimonio'
 import Rendimiento from './pages/Rendimiento'
 import Rebalanceo from './pages/Rebalanceo'
@@ -139,6 +140,7 @@ function Root() {
             <Route path="flujo-caja" element={<FlujoCaja />} />
             <Route path="comparar" element={<Comparador />} />
             <Route path="comisiones" element={<Comisiones />} />
+            <Route path="vista-fiscal" element={<VistaFiscal />} />
             <Route path="patrimonio" element={<Patrimonio />} />
             <Route path="rendimiento" element={<Rendimiento />} />
             <Route path="rebalanceo" element={<Rebalanceo />} />

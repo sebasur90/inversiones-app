@@ -640,6 +640,48 @@ class PnlRealizadoNoRealizadoOut(BaseModel):
     por_ticker: list[PnlPorTickerItem]
 
 
+# --- Vista fiscal por año ---
+
+class VistaFiscalTickerItem(BaseModel):
+    ticker: str
+    nombre: str
+    realizado_usd: float
+    realizado_ars: float
+    ingresos_usd: float
+    ingresos_ars: float
+    comisiones_usd: float
+    comisiones_ars: float
+
+
+class VistaFiscalAnioItem(BaseModel):
+    anio: int
+    realizado_usd: float
+    realizado_ars: float
+    ingresos_usd: float
+    ingresos_ars: float
+    comisiones_usd: float
+    comisiones_ars: float
+    resultado_usd: float
+    resultado_ars: float
+    por_ticker: list[VistaFiscalTickerItem]
+
+
+class VistaFiscalTotal(BaseModel):
+    realizado_usd: float
+    realizado_ars: float
+    ingresos_usd: float
+    ingresos_ars: float
+    comisiones_usd: float
+    comisiones_ars: float
+    resultado_usd: float
+    resultado_ars: float
+
+
+class VistaFiscalPorAnioOut(BaseModel):
+    por_anio: list[VistaFiscalAnioItem]
+    total: VistaFiscalTotal
+
+
 # --- Riesgo ---
 
 class DrawdownPunto(BaseModel):
