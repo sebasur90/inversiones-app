@@ -191,18 +191,6 @@ def _monto_ars(mov: MovimientoInversion, db: Session, mep_cache: dict) -> float 
     return _convertir(monto_ajustado, mov.moneda, "ARS", mov.fecha, db, mep_cache)
 
 
-def _monto_usd_bruto(mov: MovimientoInversion, db: Session, mep_cache: dict) -> float | None:
-    """Igual que `_monto_usd` pero sin aplicar la comisión: sirve para medir el TWR que se
-    habría obtenido si operar no costara nada. La diferencia con el neto es el costo de operar
-    expresado en puntos de retorno."""
-    return _to_usd(_monto_bruto(mov), mov.moneda, mov.fecha, db, mep_cache)
-
-
-def _monto_ars_bruto(mov: MovimientoInversion, db: Session, mep_cache: dict) -> float | None:
-    """`_monto_ars` sin la comisión (ver `_monto_usd_bruto`)."""
-    return _convertir(_monto_bruto(mov), mov.moneda, "ARS", mov.fecha, db, mep_cache)
-
-
 def _monto_ars_real(mov: MovimientoInversion, db: Session, cer_cache: dict, mep_cache: dict, cer_hoy: float | None) -> float | None:
     """Monto en ARS real (deflactado por CER). Devuelve None si falta CER para el período."""
     if cer_hoy is None:
@@ -518,8 +506,12 @@ def _resumen_sobre_movs(movs: list[MovimientoInversion], db: Session) -> dict:
     twr_aproximado = False
     twr_usd_bruto = None
     if hubo_compra:
-        twr_usd, twr_aproximado = _calcular_twr(movs, precios_por_ticker, db, mep_cache, hoy)
-        twr_usd_bruto, _ = _calcular_twr_bruto(movs, precios_por_ticker, db, mep_cache, hoy)
+        # M10: TWR neto y bruto en una sola pasada (el bruto salía de un segundo encadenamiento
+        # completo — boundaries × tickers × valuación — para alimentar dos filas de Rendimiento).
+        twr_usd, twr_aproximado, twr_usd_bruto = _calcular_twr(
+            movs, precios_por_ticker, db, mep_cache, hoy,
+            comision_fn=lambda mov: _comision_usd(mov, db, mep_cache),
+        )
 
     # === ARS nominal ===
     # Recalcular valor actual en ARS
@@ -542,8 +534,10 @@ def _resumen_sobre_movs(movs: list[MovimientoInversion], db: Session) -> dict:
     twr_ars = None
     twr_ars_bruto = None
     if hubo_compra:
-        twr_ars, _ = _calcular_twr_ars(movs, precios_por_ticker, db, mep_cache, hoy)
-        twr_ars_bruto, _ = _calcular_twr_ars_bruto(movs, precios_por_ticker, db, mep_cache, hoy)
+        twr_ars, _, twr_ars_bruto = _calcular_twr_ars(
+            movs, precios_por_ticker, db, mep_cache, hoy,
+            comision_fn=lambda mov: _comision_ars(mov, db, mep_cache),
+        )
 
     # === ARS real (deflactado por CER) ===
     rendimiento_simple_ars_real = None
@@ -655,7 +649,8 @@ def _calcular_twr_encadenado(
     monto_fn,
     valuar_fn,
     abortar_si_falta_monto: bool = False,
-) -> tuple[float | None, bool]:
+    comision_fn=None,
+) -> tuple[float | None, bool, float | None]:
     """TWR encadenado sobre las fechas de cashflow, más hoy como cierre.
 
     Núcleo compartido por las variantes USD / ARS nominal / ARS real: sólo cambian la función
@@ -671,13 +666,18 @@ def _calcular_twr_encadenado(
             de omitir su flujo. En ARS real esto importa: sin el flujo, el aporte se
             confundiría con rendimiento. En USD/ARS nominal se mantiene omitiéndolo, que es
             el comportamiento histórico.
+        comision_fn: callable(MovimientoInversion) -> float | None. Si se pasa, se calcula en
+            la **misma pasada** el TWR bruto (sin comisiones): el flujo bruto de cada fecha es
+            el neto menos la comisión convertida (la relación vale para compras y ventas), y la
+            valuación de cada boundary es idéntica. Evita un segundo encadenamiento (M10).
 
     Returns:
-        (twr, aproximado) — (None, False) si no hay período medible.
+        (twr, aproximado, twr_bruto) — twr_bruto es None si no se pasó `comision_fn`.
+        (None, False, None) si no hay período medible.
     """
     fechas_borde = sorted({m.fecha for m in movs if m.tipo_movimiento in TIPOS_QUE_CAMBIAN_TENENCIA})
     if not fechas_borde:
-        return None, False
+        return None, False, None
 
     boundaries = list(fechas_borde)
     if boundaries[-1] < hoy:
@@ -686,19 +686,26 @@ def _calcular_twr_encadenado(
     # cuando ya era el único borde, dejando [hoy, hoy]: un tramo degenerado de v0 == v1 al
     # que se le restaba el flujo del día, dando un retorno espurio de casi -100%.
     if len(boundaries) < 2:
-        return None, False
+        return None, False, None
 
     cf_por_fecha: dict[date, float] = {}
+    com_por_fecha: dict[date, float] = {}
     for mov in movs:
         if mov.tipo_movimiento not in TIPOS_QUE_CAMBIAN_TENENCIA:
             continue
         monto = monto_fn(mov)
         if monto is None:
             if abortar_si_falta_monto:
-                return None, False
+                return None, False, None
             continue
         signo = 1 if mov.tipo_movimiento == "compra" else -1
         cf_por_fecha[mov.fecha] = cf_por_fecha.get(mov.fecha, 0.0) + signo * monto
+        if comision_fn is not None:
+            com = comision_fn(mov)
+            if com:
+                # cf_neto - cf_bruto = +comisión, tanto en compras (bruto+com invertido) como
+                # en ventas (bruto-com recibido). Un solo término, sin signo.
+                com_por_fecha[mov.fecha] = com_por_fecha.get(mov.fecha, 0.0) + com
 
     tracker = _HoldingsTracker(movs)
     valores: dict[date, float] = {}
@@ -707,21 +714,25 @@ def _calcular_twr_encadenado(
         tracker.avanzar_a(b)
         valor, aprox, _ = valuar_fn(tracker.snapshot(), b, tracker.costo_snapshot())
         if valor is None:
-            return None, False
+            return None, False, None
         valores[b] = valor
         aproximado = aproximado or aprox
 
     twr_total = 1.0
+    twr_bruto_total = 1.0
     for i in range(1, len(boundaries)):
         d0, d1 = boundaries[i - 1], boundaries[i]
         v0, v1 = valores[d0], valores[d1]
         if v0 <= EPS:
             continue
         flujo = cf_por_fecha.get(d1, 0.0)
-        r = (v1 - flujo) / v0 - 1
-        twr_total *= (1 + r)
+        twr_total *= (1 + (v1 - flujo) / v0 - 1)
+        if comision_fn is not None:
+            flujo_bruto = flujo - com_por_fecha.get(d1, 0.0)
+            twr_bruto_total *= (1 + (v1 - flujo_bruto) / v0 - 1)
 
-    return twr_total - 1, aproximado
+    twr_bruto = (twr_bruto_total - 1) if comision_fn is not None else None
+    return twr_total - 1, aproximado, twr_bruto
 
 
 def _calcular_twr(
@@ -730,12 +741,14 @@ def _calcular_twr(
     db: Session,
     mep_cache: dict,
     hoy: date,
-) -> tuple[float | None, bool]:
-    """TWR en USD."""
+    comision_fn=None,
+) -> tuple[float | None, bool, float | None]:
+    """TWR en USD. Con `comision_fn` devuelve además el TWR bruto en la misma pasada (M10)."""
     return _calcular_twr_encadenado(
         movs, hoy,
         lambda mov: _monto_usd(mov, db, mep_cache),
         lambda holdings, f, costos: _valuar_holdings(holdings, f, precios_por_ticker, db, mep_cache, costos),
+        comision_fn=comision_fn,
     )
 
 
@@ -745,42 +758,14 @@ def _calcular_twr_ars(
     db: Session,
     mep_cache: dict,
     hoy: date,
-) -> tuple[float | None, bool]:
-    """TWR en ARS nominal."""
+    comision_fn=None,
+) -> tuple[float | None, bool, float | None]:
+    """TWR en ARS nominal. Con `comision_fn` devuelve además el TWR bruto en la misma pasada."""
     return _calcular_twr_encadenado(
         movs, hoy,
         lambda mov: _monto_ars(mov, db, mep_cache),
         lambda holdings, f, costos: _valuar_holdings_ars(holdings, f, precios_por_ticker, db, mep_cache, costos),
-    )
-
-
-def _calcular_twr_bruto(
-    movs: list[MovimientoInversion],
-    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
-    db: Session,
-    mep_cache: dict,
-    hoy: date,
-) -> tuple[float | None, bool]:
-    """TWR en USD ignorando las comisiones en los cashflows (ver `_monto_usd_bruto`)."""
-    return _calcular_twr_encadenado(
-        movs, hoy,
-        lambda mov: _monto_usd_bruto(mov, db, mep_cache),
-        lambda holdings, f, costos: _valuar_holdings(holdings, f, precios_por_ticker, db, mep_cache, costos),
-    )
-
-
-def _calcular_twr_ars_bruto(
-    movs: list[MovimientoInversion],
-    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
-    db: Session,
-    mep_cache: dict,
-    hoy: date,
-) -> tuple[float | None, bool]:
-    """TWR en ARS nominal ignorando las comisiones en los cashflows (ver `_monto_ars_bruto`)."""
-    return _calcular_twr_encadenado(
-        movs, hoy,
-        lambda mov: _monto_ars_bruto(mov, db, mep_cache),
-        lambda holdings, f, costos: _valuar_holdings_ars(holdings, f, precios_por_ticker, db, mep_cache, costos),
+        comision_fn=comision_fn,
     )
 
 
@@ -794,7 +779,7 @@ def _calcular_twr_ars_real(
     hoy: date,
 ) -> tuple[float | None, bool]:
     """TWR en ARS real (deflactado por CER)."""
-    return _calcular_twr_encadenado(
+    twr, aprox, _ = _calcular_twr_encadenado(
         movs, hoy,
         lambda mov: _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy),
         lambda holdings, f, costos: _valuar_holdings_ars_real(
@@ -802,6 +787,7 @@ def _calcular_twr_ars_real(
         ),
         abortar_si_falta_monto=True,
     )
+    return twr, aprox
 
 
 def _calcular_twr_mensual(
