@@ -195,9 +195,16 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
    health score dentro de la card de score (color según el último score, delta vs. sync
    previo, fechas y `min→max` al pie) + sección "Reglas que se repiten". Tests:
    `backend/tests/test_calidad_datos_historial.py` (5).
-8. **Escenarios** — `EscenarioParamsIn.variacion_por_instrumento` está implementado en el
-   backend y el frontend lo manda siempre vacío (`Simulador.tsx`); `duplicarEscenario`/
-   `eliminarEscenario` existen en `api/index.ts` sin consumidor.
+8. ~~**Escenarios**~~ — ✅ HECHO (sólo frontend; el backend ya lo soportaba). `EscenarioConfigPanel`
+   recibe `tickersDisponibles` (los tickers con `cantidad_actual > 0` de
+   `getRendimientoPorTicker`) y, en la sección "Más opciones", muestra el editor
+   **"Variación por instrumento"**: un input de % anual por ticker; vacío = usa
+   `variacion_por_defecto_pct`; al escribir se hace `onChangeParam('variacion_por_instrumento',
+   {...})` (borra la clave si el campo queda vacío), con botón "Limpiar overrides".
+   `Simulador.tsx`: los escenarios guardados ahora tienen acciones **Cargar** (agrega el
+   escenario como panel editable, tope 6), **Duplicar** (`duplicarEscenario`, nombre
+   "… (copia)") y **Eliminar** (`eliminarEscenario`), con refresco de la lista — antes esas
+   dos funciones de `api/index.ts` no tenían consumidor. Sin tests nuevos (cambio de UI).
 9. **Config declarada y no aplicada** — `peso_minimo` se lee/valida/persiste y
    `rebalanceo_engine.generar_propuesta` nunca lo usa (`rebalanceo_engine.py:80`);
    `peso_maximo` sólo aplica en modo `solo_aportes`; `rendimiento_objetivo` no entra en

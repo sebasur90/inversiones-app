@@ -9,6 +9,9 @@ _Actualizado: 2026-08-28_
 
 - Todo lo hecho está en **`main`**, **sin pushear** (`main` está 9+ commits adelante de `origin/main`).
 - Últimos commits relevantes:
+  - Ola 5 ítem 8: **Escenarios** (sólo frontend) — editor "Variación por instrumento" en
+    `EscenarioConfigPanel` + acciones Cargar/Duplicar/Eliminar sobre los escenarios guardados
+    en `Simulador.tsx` (consumen `duplicarEscenario`/`eliminarEscenario`, antes sin uso).
   - Ola 5 ítem 7: **Historial de calidad de datos** — `get_calidad_datos` agrega `historial`,
     `reglas_recurrentes` y `total_syncs`; `CalidadDatos.tsx` muestra sparkline del health
     score + sección "Reglas que se repiten".
@@ -73,8 +76,8 @@ Tests: +25 (240 → 265).
 ### 3. Ola 5 (sin API, con datos que ya hay)
 
 5. ~~Vista fiscal por año~~ ✅ · 6. ~~TWR bruto vs. neto de comisiones~~ ✅ ·
-7. ~~Historial de calidad de datos (sparkline health score)~~ ✅ · 8. Escenarios
-(`variacion_por_instrumento` ya en backend, frontend manda vacío) · 9. Config declarada y no
+7. ~~Historial de calidad de datos (sparkline health score)~~ ✅ ·
+8. ~~Escenarios (`variacion_por_instrumento` en el frontend)~~ ✅ · 9. Config declarada y no
 aplicada (`peso_minimo`, `peso_maximo`, `rendimiento_objetivo`) · 10. Riesgo país + inflación
 mensual en Indicadores Macro · 11. Exposición/concentración por país.
 

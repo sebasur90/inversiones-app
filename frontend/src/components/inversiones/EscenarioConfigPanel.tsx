@@ -12,6 +12,78 @@ interface EscenarioConfigPanelProps {
   onChangePreset: (tipo: string) => void
   onChangeParam: (campo: string, valor: any) => void
   onSave: () => void
+  /** Tickers en cartera, para los overrides de variación por instrumento. */
+  tickersDisponibles?: { ticker: string; nombre: string }[]
+}
+
+function VariacionPorInstrumento({
+  overrides,
+  porDefecto,
+  tickers,
+  onChange,
+}: {
+  overrides: Record<string, number>
+  porDefecto: number
+  tickers: { ticker: string; nombre: string }[]
+  onChange: (next: Record<string, number>) => void
+}) {
+  const [abierto, setAbierto] = useState(false)
+  const nOverrides = Object.keys(overrides).length
+
+  if (tickers.length === 0) return null
+
+  const setTicker = (ticker: string, raw: string) => {
+    const next = { ...overrides }
+    if (raw.trim() === '') {
+      delete next[ticker]
+    } else {
+      const n = parseFloat(raw)
+      if (Number.isNaN(n)) return
+      next[ticker] = n
+    }
+    onChange(next)
+  }
+
+  return (
+    <div>
+      <button
+        onClick={() => setAbierto(v => !v)}
+        className="text-xs text-app-text-secondary hover:text-app-text"
+      >
+        {abierto ? '▼' : '▶'} Variación por instrumento{nOverrides > 0 ? ` (${nOverrides})` : ''}
+      </button>
+      {abierto && (
+        <div className="mt-2 space-y-1.5">
+          <div className="text-[10px] text-app-text-faint">
+            Variación anual % por ticker. Vacío = usa la var. default ({porDefecto}%).
+          </div>
+          {tickers.map(t => (
+            <div key={t.ticker} className="flex items-center gap-2">
+              <span className="text-[11px] text-app-text flex-1 min-w-0 truncate" title={t.nombre}>
+                <span className="font-semibold">{t.ticker}</span>
+              </span>
+              <input
+                type="number"
+                step="0.1"
+                value={overrides[t.ticker] ?? ''}
+                placeholder={String(porDefecto)}
+                onChange={e => setTicker(t.ticker, e.target.value)}
+                className="w-24 h-8 rounded-lg bg-app-surface-2 border border-app-border px-2 text-xs focus:border-app-gold/60 tabular-nums"
+              />
+            </div>
+          ))}
+          {nOverrides > 0 && (
+            <button
+              onClick={() => onChange({})}
+              className="text-[10px] text-app-text-secondary hover:text-app-coral"
+            >
+              Limpiar overrides
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 const PRESETS = ['base', 'alcista', 'bajista', 'crisis', 'personalizado']
@@ -23,6 +95,7 @@ export default function EscenarioConfigPanel({
   onChangePreset,
   onChangeParam,
   onSave,
+  tickersDisponibles = [],
 }: EscenarioConfigPanelProps) {
   const [mostrarAvanzado, setMostrarAvanzado] = useState(false)
   const params = escenario.parametros || {
@@ -226,6 +299,14 @@ export default function EscenarioConfigPanel({
                 />
               </div>
             </div>
+
+            {/* Variación por instrumento (overrides por ticker) */}
+            <VariacionPorInstrumento
+              overrides={params.variacion_por_instrumento || {}}
+              porDefecto={params.variacion_por_defecto_pct ?? 0}
+              tickers={tickersDisponibles}
+              onChange={next => onChangeParam('variacion_por_instrumento', next)}
+            />
 
             {/* Porcentaje dividendo reinvertido (solo si modo = reinvertir_parcial) */}
             {params.modo_dividendos === 'reinvertir_parcial' && (

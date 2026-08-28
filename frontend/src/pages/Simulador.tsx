@@ -7,6 +7,9 @@ import {
   simularEscenarios,
   listarEscenarios,
   guardarEscenario,
+  duplicarEscenario,
+  eliminarEscenario,
+  getRendimientoPorTicker,
   EscenarioSimulacionRequest,
   EscenarioSimulacionItem,
   EscenarioSimulacionOut,
@@ -51,26 +54,71 @@ export default function Simulador() {
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState<ParsedApiError | null>(null)
   const [escenariosSaved, setEscenariosSaved] = useState<Escenario[]>([])
+  const [tickersDisponibles, setTickersDisponibles] = useState<{ ticker: string; nombre: string }[]>([])
   const [mostrarConfigPersonalizado, setMostrarConfigPersonalizado] = useState(false)
 
-  // Cargar escenarios guardados
+  // Cargar escenarios guardados + tickers en cartera
   useEffect(() => {
     let cancelado = false
-    const fetchEscenarios = async () => {
+    const fetchData = async () => {
       try {
-        const saved = await listarEscenarios(carteraSeleccionada)
-        if (!cancelado) {
-          setEscenariosSaved(saved)
-        }
+        const [saved, rendimiento] = await Promise.all([
+          listarEscenarios(carteraSeleccionada),
+          getRendimientoPorTicker(carteraSeleccionada).catch(() => []),
+        ])
+        if (cancelado) return
+        setEscenariosSaved(saved)
+        setTickersDisponibles(
+          rendimiento
+            .filter(r => r.cantidad_actual > 0)
+            .map(r => ({ ticker: r.ticker, nombre: r.nombre }))
+            .sort((a, b) => a.ticker.localeCompare(b.ticker)),
+        )
       } catch (err) {
         // Silenciar error (lista vacía esperada en primera carga)
       }
     }
-    fetchEscenarios()
+    fetchData()
     return () => {
       cancelado = true
     }
   }, [carteraSeleccionada, syncVersion])
+
+  const recargarGuardados = async () => {
+    try {
+      setEscenariosSaved(await listarEscenarios(carteraSeleccionada))
+    } catch (err) {
+      setError(parseApiError(err))
+    }
+  }
+
+  // Cargar un escenario guardado como panel editable
+  const handleCargarGuardado = (esc: Escenario) => {
+    setEscenarios(prev => {
+      if (prev.length >= 6) return prev
+      return [...prev, { tipo_preset: 'personalizado', nombre: esc.nombre, parametros: esc.parametros }]
+    })
+  }
+
+  const handleDuplicarGuardado = async (esc: Escenario) => {
+    try {
+      await duplicarEscenario(esc.id, `${esc.nombre} (copia)`)
+      await recargarGuardados()
+      setError(null)
+    } catch (err) {
+      setError(parseApiError(err))
+    }
+  }
+
+  const handleEliminarGuardado = async (esc: Escenario) => {
+    try {
+      await eliminarEscenario(esc.id)
+      await recargarGuardados()
+      setError(null)
+    } catch (err) {
+      setError(parseApiError(err))
+    }
+  }
 
   // Simular
   const handleSimular = async () => {
@@ -208,6 +256,7 @@ export default function Simulador() {
                 }}
                 onChangeParam={(campo, valor) => handleChangeEscenario(idx, campo, valor)}
                 onSave={() => handleGuardarEscenario(idx)}
+                tickersDisponibles={tickersDisponibles}
               />
             ))}
           </div>
@@ -260,7 +309,7 @@ export default function Simulador() {
           </>
         )}
 
-        {/* Escenarios guardados (futuro) */}
+        {/* Escenarios guardados */}
         {escenariosSaved.length > 0 && (
           <Card className="p-3 border border-app-border">
             <div className="text-xs font-medium text-app-text-secondary mb-2">
@@ -268,12 +317,41 @@ export default function Simulador() {
             </div>
             <div className="space-y-1">
               {escenariosSaved.map(esc => (
-                <div key={esc.id} className="text-xs text-app-text py-1 border-b border-app-border last:border-0">
-                  {esc.nombre}
-                  <span className="text-app-text-secondary ml-2">({esc.tipo_preset})</span>
+                <div
+                  key={esc.id}
+                  className="flex items-center gap-2 text-xs text-app-text py-1.5 border-b border-app-border last:border-0"
+                >
+                  <div className="flex-1 min-w-0 truncate">
+                    {esc.nombre}
+                    <span className="text-app-text-secondary ml-2">({esc.tipo_preset})</span>
+                  </div>
+                  <button
+                    onClick={() => handleCargarGuardado(esc)}
+                    disabled={escenarios.length >= 6}
+                    className="text-[11px] font-semibold text-app-gold disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Cargar
+                  </button>
+                  <button
+                    onClick={() => handleDuplicarGuardado(esc)}
+                    className="text-[11px] font-semibold text-app-text-secondary hover:text-app-text"
+                  >
+                    Duplicar
+                  </button>
+                  <button
+                    onClick={() => handleEliminarGuardado(esc)}
+                    className="text-[11px] font-semibold text-app-text-secondary hover:text-app-coral"
+                  >
+                    Eliminar
+                  </button>
                 </div>
               ))}
             </div>
+            {escenarios.length >= 6 && (
+              <div className="text-[10px] text-app-text-faint mt-2">
+                Máximo de 6 paneles de escenario. Quitá alguno para cargar otro.
+              </div>
+            )}
           </Card>
         )}
       </div>
