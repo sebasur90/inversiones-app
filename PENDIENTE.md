@@ -7,9 +7,9 @@ _Actualizado: 2026-08-28_
 
 ## Estado
 
-- Todo lo hecho está en **`main`**, **sin pushear** (`main` está 7+ commits adelante de `origin/main`).
+- Todo lo hecho está en **`main`**, **sin pushear** (`main` está 8+ commits adelante de `origin/main`).
 - Últimos commits relevantes:
-  - _(sin commitear)_ — Ola 4: **Precios automáticos de acciones y CEDEARs** (data912
+  - `3a4b9ec` — Ola 4: **Precios automáticos de acciones y CEDEARs** (data912
     `/live/arg_stocks` + `/live/arg_cedears`). Ver detalle en `PLAN_MEJORAS_PENDIENTES.md`.
   - `9266157` — Ola 3 ítem 1b: **Backfill histórico de precios de renta fija**
     (`market_data/analisistecnico.py` + `precios.fetch_backfill_renta_fija_api`).
