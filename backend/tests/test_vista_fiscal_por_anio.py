@@ -102,6 +102,20 @@ def test_comisiones_por_anio_todas_las_operaciones(db: Session):
         assert a["resultado_usd"] == pytest.approx(a["realizado_usd"] + a["ingresos_usd"])
 
 
+def test_m11b_comision_ars_se_conserva_sin_conversion_usd(db: Session):
+    # Movimiento en ARS sin MEP para su fecha: monto_usd es None y la operación se saltea del
+    # realizado, pero la comisión en ARS sí es calculable y no debe perderse.
+    _inst(db, moneda="ARS")
+    _mov(db, fecha=date(2024, 5, 1), tipo_movimiento="compra", cantidad=10, precio=1000.0,
+         moneda="ARS", comision=500.0)
+
+    out = get_vista_fiscal_por_anio("test", db)
+    anios = {a["anio"]: a for a in out["por_anio"]}
+    assert anios[2024]["comisiones_ars"] == pytest.approx(500.0)
+    assert anios[2024]["comisiones_usd"] == 0.0
+    assert out["total"]["comisiones_ars"] == pytest.approx(500.0)
+
+
 def test_desglose_por_ticker_suma_al_total_del_anio(db: Session):
     _inst(db, ticker="AAA", nombre="Triple A")
     _inst(db, ticker="BBB", nombre="Triple B")

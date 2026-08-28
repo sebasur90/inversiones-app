@@ -321,6 +321,32 @@ class TestScoreFunctions:
         result = diagnostico_engine.score_diversificacion(conc)
         assert result["score"] == pytest.approx(90.0)
 
+    def test_score_diversificacion_pais_no_cuenta_si_1_real_y_resto_sin_etiquetar(self):
+        # M8: n_componentes=2 (1 país + bucket "Sin país") pero n_componentes_reales=1 -> fuera.
+        conc = [
+            {"eje": "Tipo de instrumento", "estado": "ok", "hhi_normalizado": 0.20, "n_componentes": 3},
+            {"eje": "País", "estado": "ok", "hhi_normalizado": 0.30, "n_componentes": 2,
+             "n_componentes_reales": 1},
+        ]
+        result = diagnostico_engine.score_diversificacion(conc)
+        assert result["score"] == pytest.approx(80.0)   # sólo Tipo: (1-0.20)*100
+        assert "país" not in result["detalle"]
+        assert "tipo" in result["detalle"]
+
+    def test_score_diversificacion_sector_con_bucket_residual_usa_n_reales(self):
+        # M8: Sector también tiene bucket residual ("Sin sector"): mismo guardrail que País.
+        conc = [
+            {"eje": "Tipo de instrumento", "estado": "ok", "hhi_normalizado": 0.20, "n_componentes": 3},
+            {"eje": "Sector", "estado": "ok", "hhi_normalizado": 0.10, "n_componentes": 4,
+             "n_componentes_reales": 3},
+            {"eje": "País", "estado": "ok", "hhi_normalizado": 0.90, "n_componentes": 2,
+             "n_componentes_reales": 1},
+        ]
+        result = diagnostico_engine.score_diversificacion(conc)
+        # Tipo (80) + Sector (90) contados; País (1 real) fuera -> promedio 85.
+        assert result["score"] == pytest.approx(85.0)
+        assert "sector" in result["detalle"] and "país" not in result["detalle"]
+
     def test_score_performance_vs_benchmark(self):
         calmar = {"estado": "ok", "retorno_anualizado": 0.12}
         result = diagnostico_engine.score_performance(calmar, 0.10)

@@ -338,21 +338,37 @@ def score_concentracion(concentracion: list[dict]) -> dict | None:
     return {"score": round(score, 1), "detalle": detalle}
 
 
+_ETIQUETA_EJE_DIV = {
+    "Tipo de instrumento": "tipo",
+    "Sector": "sector",
+    "Mercado": "mercado",
+    "País": "país",
+}
+# Ejes con bucket residual ("Sin sector" / "Sin país"): sólo cuentan si hay ≥2 categorías
+# reales. Si nadie etiquetó, el HHI mediría el "sin clasificar" y hundiría el score sin
+# información útil. `n_componentes_reales` lo aporta get_concentracion; se cae a `n_componentes`.
+_EJES_DIV_CON_RESIDUAL = ("Sector", "País")
+
+
 def score_diversificacion(concentracion: list[dict]) -> dict | None:
-    """Score de diversificación (promedio de HHI sobre 3 ejes)."""
-    ejes_diversificacion = ("Tipo de instrumento", "Sector", "Mercado", "País")
-    valores = [
-        (1 - c.get("hhi_normalizado", 0)) * 100
-        for c in concentracion
-        if c.get("eje") in ejes_diversificacion and c.get("estado") == "ok"
-        # País sólo cuenta si hay al menos 2 categorías reales: si nadie etiquetó el país,
-        # el único bucket "Sin país" daría HHI=1 y hundiría el score sin información útil.
-        and (c.get("eje") != "País" or (c.get("n_componentes") or 0) >= 2)
-    ]
-    if not valores:
+    """Score de diversificación: promedio de (1 - HHI) sobre los ejes con datos útiles."""
+    usados: list[tuple[float, str]] = []
+    for c in concentracion:
+        eje = c.get("eje")
+        if eje not in _ETIQUETA_EJE_DIV or c.get("estado") != "ok":
+            continue
+        if eje in _EJES_DIV_CON_RESIDUAL:
+            n_reales = c.get("n_componentes_reales", c.get("n_componentes"))
+            if n_reales is not None and n_reales < 2:
+                continue
+        usados.append(((1 - c.get("hhi_normalizado", 0)) * 100, eje))
+
+    if not usados:
         return None
-    score = _clamp(sum(valores) / len(valores))
-    detalle = f"Diversificación en {len(valores)} ejes (tipo, sector, mercado, país)"
+    score = _clamp(sum(v for v, _ in usados) / len(usados))
+    nombres = ", ".join(_ETIQUETA_EJE_DIV[e] for _, e in usados)
+    plural = "s" if len(usados) != 1 else ""
+    detalle = f"Diversificación en {len(usados)} eje{plural} ({nombres})"
     return {"score": round(score, 1), "detalle": detalle}
 
 

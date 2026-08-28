@@ -24,7 +24,7 @@ def get_calidad_datos(db: Session) -> dict:
             "issues_por_tab": {},
             "historial": [],
             "reglas_recurrentes": [],
-            "total_syncs": 0,
+            "syncs_en_ventana": 0,
         }
 
     ultimo = runs[0]
@@ -67,7 +67,15 @@ def get_calidad_datos(db: Session) -> dict:
     ]
 
     # Reglas que aparecen en 2+ corridas distintas: problemas crónicos, no ruido de un sync.
-    todos_issues = db.query(SyncIssue).filter(SyncIssue.sync_run_id.in_(run_ids)).all()
+    # Ordenado por sync_run_id ascendente (≈ cronológico) para que el tab/mensaje de muestra
+    # que gane sea el del sync más reciente en que apareció la regla, incluso si no está en el
+    # último sync (B12: antes, en ese caso, quedaba el ejemplo más viejo que devolvía la query).
+    todos_issues = (
+        db.query(SyncIssue)
+        .filter(SyncIssue.sync_run_id.in_(run_ids))
+        .order_by(SyncIssue.sync_run_id.asc())
+        .all()
+    )
     por_regla: dict[str, dict] = {}
     for iss in todos_issues:
         d = por_regla.setdefault(
@@ -77,10 +85,8 @@ def get_calidad_datos(db: Session) -> dict:
         d["run_ids"].add(iss.sync_run_id)
         if SEVERIDAD_RANK.get(iss.severidad, 2) < SEVERIDAD_RANK.get(d["severidad"], 2):
             d["severidad"] = iss.severidad
-        # El tab/mensaje de muestra sale del sync más reciente en que apareció la regla.
-        if iss.sync_run_id == ultimo.id:
-            d["tab"] = iss.tab
-            d["mensaje"] = iss.mensaje
+        d["tab"] = iss.tab
+        d["mensaje"] = iss.mensaje
 
     reglas_recurrentes = sorted(
         (
@@ -114,5 +120,5 @@ def get_calidad_datos(db: Session) -> dict:
         "issues_por_tab": issues_por_tab,
         "historial": historial,
         "reglas_recurrentes": reglas_recurrentes,
-        "total_syncs": len(runs),
+        "syncs_en_ventana": len(runs),
     }

@@ -70,3 +70,23 @@ def test_concentracion_pais_bucket_sin_pais(db: Session):
     # "Estados Unidos" 50% + "Sin país" 50% -> 2 componentes, HHI 5000
     assert pais["n_componentes"] == 2
     assert pais["hhi"] == pytest.approx(5000.0, abs=1.0)
+    # M8: pero sólo 1 país real -> el guardrail de diversificación no debe contarlo como país.
+    assert pais["n_componentes_reales"] == 1
+    sector = ejes["Sector"]
+    assert sector["n_componentes_reales"] == 0  # "Accion" no tiene sector -> todo "Sin sector"
+
+
+def test_concentracion_n_componentes_reales_cuenta_solo_los_etiquetados(db: Session):
+    _inst(db, "AAA", "Estados Unidos")
+    _inst(db, "BBB", "Brasil")
+    _inst(db, "CCC", None)
+    db.commit()
+    _pos(db, "AAA", 10, 40.0)
+    _pos(db, "BBB", 10, 30.0)
+    _pos(db, "CCC", 10, 30.0)
+    db.commit()
+
+    ejes = {c["eje"]: c for c in get_concentracion("test", db)}
+    pais = ejes["País"]
+    assert pais["n_componentes"] == 3               # EE.UU. + Brasil + "Sin país"
+    assert pais["n_componentes_reales"] == 2        # sólo EE.UU. + Brasil

@@ -160,6 +160,13 @@ def get_concentracion(cartera: str | None, db: Session) -> list[dict]:
         pesos = [it["porcentaje"] for it in items]
         return {"eje": eje, **contribucion_engine.calcular_hhi(pesos)}
 
+    def _con_hhi_residual(eje: str, items: list[dict], bucket_residual: str) -> dict:
+        """Ejes con bucket residual: además del HHI, cuántas categorías son reales
+        (M8: el guardrail de diversificación no debe contar "Sin sector"/"Sin país" como país)."""
+        d = _con_hhi(eje, items)
+        d["n_componentes_reales"] = sum(1 for it in items if it["etiqueta"] != bucket_residual)
+        return d
+
     resultado = []
 
     ticker_items = _agrupar([(t, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados])
@@ -183,7 +190,7 @@ def get_concentracion(cartera: str | None, db: Session) -> list[dict]:
         for _, t, v_usd, v_ars in clasificados
     ]
     sector_items = _agrupar_sobre_total(sector_entries, total_usd, total_ars)
-    resultado.append(_con_hhi("Sector", sector_items))
+    resultado.append(_con_hhi_residual("Sector", sector_items, "Sin sector"))
 
     # Igual que Sector: bucket explícito "Sin país" para que los pesos sumen el 100% real
     # (si no, una cartera mayormente sin país etiquetado parecería diversificada).
@@ -192,7 +199,7 @@ def get_concentracion(cartera: str | None, db: Session) -> list[dict]:
         for _, t, v_usd, v_ars in clasificados
     ]
     pais_items = _agrupar_sobre_total(pais_entries, total_usd, total_ars)
-    resultado.append(_con_hhi("País", pais_items))
+    resultado.append(_con_hhi_residual("País", pais_items, "Sin país"))
 
     return resultado
 

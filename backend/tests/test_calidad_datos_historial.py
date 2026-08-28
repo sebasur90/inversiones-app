@@ -47,7 +47,7 @@ def test_sin_syncs_devuelve_estructura_vacia(db: Session):
     assert out["ultimo_sync"] is None
     assert out["historial"] == []
     assert out["reglas_recurrentes"] == []
-    assert out["total_syncs"] == 0
+    assert out["syncs_en_ventana"] == 0
 
 
 def test_historial_ordenado_del_mas_viejo_al_mas_nuevo(db: Session):
@@ -57,7 +57,7 @@ def test_historial_ordenado_del_mas_viejo_al_mas_nuevo(db: Session):
 
     out = get_calidad_datos(db)
     assert [h["health_score"] for h in out["historial"]] == [60, 75, 90]
-    assert out["total_syncs"] == 3
+    assert out["syncs_en_ventana"] == 3
     assert out["ultimo_sync"]["health_score"] == 90
 
 
@@ -66,7 +66,7 @@ def test_historial_se_limita_a_20(db: Session):
         _run(db, dias_atras=25 - i, score=50 + i)
     out = get_calidad_datos(db)
     assert len(out["historial"]) == 20
-    assert out["total_syncs"] == 20
+    assert out["syncs_en_ventana"] == 20
     # los 20 más recientes -> scores 55..74
     assert out["historial"][0]["health_score"] == 55
     assert out["historial"][-1]["health_score"] == 74
@@ -88,6 +88,23 @@ def test_reglas_recurrentes_solo_las_que_aparecen_en_2_o_mas_corridas(db: Sessio
     assert set(recurrentes) == {"cer_faltante"}
     assert recurrentes["cer_faltante"]["apariciones"] == 3
     assert recurrentes["cer_faltante"]["en_ultimo_sync"] is True
+
+
+def test_b12_ejemplo_sale_del_sync_mas_reciente_en_que_aparecio(db: Session):
+    r1 = _run(db, dias_atras=3, score=70)
+    r2 = _run(db, dias_atras=2, score=80)
+    _run(db, dias_atras=1, score=95)  # último sync, sin este issue
+
+    _issue(db, r1, "precio_viejo", tab="Precios", mensaje="mensaje viejo")
+    _issue(db, r2, "precio_viejo", tab="Instrumentos", mensaje="mensaje nuevo")
+
+    out = get_calidad_datos(db)
+    regla = out["reglas_recurrentes"][0]
+    assert regla["regla"] == "precio_viejo"
+    assert regla["en_ultimo_sync"] is False
+    # el ejemplo es el del sync más reciente en que apareció (r2), no el primero que devuelve la query
+    assert regla["mensaje_muestra"] == "mensaje nuevo"
+    assert regla["tab"] == "Instrumentos"
 
 
 def test_regla_recurrente_no_presente_en_el_ultimo_sync(db: Session):

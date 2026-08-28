@@ -79,6 +79,42 @@ def test_sin_banda_configurada_no_cambia_nada():
     assert "peso máximo" not in aaa.motivo and "peso mínimo" not in aaa.motivo
 
 
+def test_m7_necesidad_se_recalcula_tras_recorte_por_techo():
+    # AAA sin objetivo, hoy 50%. Techo 30% -> delta_pp pasa a -20pp (>> tolerancia 2pp):
+    # deja de estar rotulado "opcional".
+    res = _propuesta({"BBB": 30.0}, peso_maximo=30.0)
+    aaa = _item(res.items, "AAA")
+    assert aaa.delta_pp == pytest.approx(-20.0)
+    assert aaa.necesidad == "necesario"
+
+
+def test_m7b_techo_aplica_a_categoria_sin_instrumento():
+    # Eje Sector: la categoría "Tech" tiene objetivo 40% pero ningún instrumento en cartera.
+    # Techo 20% -> el ítem "categoria_sin_instrumento" no debe proponer comprar 40%.
+    posiciones = [
+        PosicionActual("AAA", "Finanzas", 600.0),
+        PosicionActual("BBB", "Finanzas", 400.0),
+    ]
+    res = generar_propuesta(
+        posiciones=posiciones,
+        objetivos_categoria={"Tech": 40.0, "Finanzas": 60.0},
+        objetivos_ticker={},
+        eje="Sector",
+        total_usd=1000.0,
+        tolerancia_pp=2.0,
+        peso_maximo_pp=20.0,
+        peso_minimo_pp=None,
+        modo="completo",
+        aporte_usd=0.0,
+        tasa_comision_pct=0.0,
+    )
+    tech = next(it for it in res.items if it.categoria == "Tech")
+    assert tech.tipo == "categoria_sin_instrumento"
+    assert tech.valor_objetivo_usd == pytest.approx(200.0)
+    assert tech.importe_sugerido_usd == pytest.approx(200.0)
+    assert "Recortado al peso máximo" in tech.motivo
+
+
 def test_solo_aportes_conserva_su_comportamiento_previo():
     # En solo_aportes el techo se aplica por _aplicar_solo_aportes, no por la banda nueva.
     posiciones = [PosicionActual("AAA", "AAA", 500.0), PosicionActual("BBB", "BBB", 500.0)]

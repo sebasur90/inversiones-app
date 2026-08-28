@@ -1870,11 +1870,10 @@ def get_vista_fiscal_por_anio(cartera: str | None, db: Session) -> dict:
         cantidad_held = 0.0
         for mov in movs_ticker:
             anio = mov.fecha.year
-            monto_usd = _monto_usd(mov, db, mep_cache)
-            if monto_usd is None:
-                continue  # mismo criterio que get_resumen / get_pnl
-            monto_ars = _monto_ars(mov, db, mep_cache)
 
+            # M11b: las comisiones se acumulan antes del `continue` por falta de conversión a USD.
+            # Cada moneda se suma sólo si su propia conversión existe (convención del resto del
+            # archivo): un movimiento sin USD todavía puede aportar su comisión en ARS.
             comision = float(mov.comision or 0)
             if comision > 0:
                 b = _bucket(anio, ticker)
@@ -1884,6 +1883,11 @@ def get_vista_fiscal_por_anio(cartera: str | None, db: Session) -> dict:
                 c_ars = _comision_ars(mov, db, mep_cache)
                 if c_ars is not None:
                     b["comisiones_ars"] += c_ars
+
+            monto_usd = _monto_usd(mov, db, mep_cache)
+            if monto_usd is None:
+                continue  # mismo criterio que get_resumen / get_pnl
+            monto_ars = _monto_ars(mov, db, mep_cache)
 
             if mov.tipo_movimiento == "compra":
                 costo_usd += monto_usd

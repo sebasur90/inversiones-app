@@ -66,7 +66,7 @@ export interface CalidadDatosOut {
   issues_por_tab: Record<string, SyncIssueOut[]>
   historial: HistorialSyncItem[]
   reglas_recurrentes: ReglaRecurrenteItem[]
-  total_syncs: number
+  syncs_en_ventana: number
 }
 
 export interface CarteraInfo {

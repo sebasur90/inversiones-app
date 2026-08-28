@@ -604,6 +604,9 @@ def get_vencimientos_completo(cartera: str | None, db: Session) -> dict:
 
     por_anio_map: dict[int, dict] = {}
     for item in items:
+        if item.get("vencido"):
+            continue  # B16: el resumen "% que vence por año" es una proyección; los vencidos
+                      # (años ya pasados) siguen en `items` pero no acá.
         anio = item["fecha_vencimiento"].year
         bucket = por_anio_map.setdefault(
             anio,

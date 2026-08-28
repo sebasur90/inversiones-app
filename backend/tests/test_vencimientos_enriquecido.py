@@ -131,6 +131,24 @@ def test_bono_vencido_marca_nota(db: Session):
     assert item["metricas_nota"] == "Instrumento vencido."
 
 
+def test_b16_vencidos_fuera_del_resumen_por_anio(db: Session):
+    _mep(db)
+    _bono(db, "OLD", moneda="ARS", vto_dias=-10)     # ya venció
+    _bono(db, "FUT", moneda="ARS", vto_dias=200)     # vence a futuro
+    for t in ("OLD", "FUT"):
+        _mov(db, t, "compra", dias=-400, precio=1.0, cantidad=100)
+        _precio(db, t, 1.0, moneda="ARS")
+    db.commit()
+
+    out = get_vencimientos_completo("RF", db)
+    assert {"OLD", "FUT"} <= {i["ticker"] for i in out["items"]}   # ambos siguen en items
+
+    anios_tickers = {t for b in out["por_anio"] for t in b["tickers"]}
+    assert "OLD" not in anios_tickers                              # el vencido no está en el resumen
+    assert "FUT" in anios_tickers
+    assert all(b["anio"] >= date.today().year for b in out["por_anio"])
+
+
 def test_resumen_por_anio(db: Session):
     _mep(db)
     _bono(db, "A1", moneda="ARS", vto_dias=100)

@@ -141,7 +141,7 @@ export default function CalidadDatos() {
               Reglas que se repiten ({reglas_recurrentes.length})
             </div>
             <div className="text-[12px] text-app-text-dim mb-3">
-              Aparecieron en 2 o más de los últimos {calidad.total_syncs} syncs — conviene
+              Aparecieron en 2 o más de los últimos {calidad.syncs_en_ventana} syncs — conviene
               corregirlas en el Sheet en vez de revisarlas cada vez.
             </div>
             <div className="flex flex-col gap-2">
@@ -155,7 +155,7 @@ export default function CalidadDatos() {
                       {sevIcon(r.severidad)} {r.tab} · {r.regla}
                     </span>
                     <span className="text-[11px] text-app-text-dim shrink-0 tabular-nums">
-                      {r.apariciones}/{calidad.total_syncs} syncs
+                      {r.apariciones}/{calidad.syncs_en_ventana} syncs
                       {!r.en_ultimo_sync && ' · no en el último'}
                     </span>
                   </div>
