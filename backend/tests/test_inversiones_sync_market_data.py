@@ -136,6 +136,57 @@ def test_use_external_apis_completa_huecos_sin_pisar_sheet(monkeypatch):
         db.close()
 
 
+def test_a5_riesgo_pais_se_mergea_sobre_fila_sheet(monkeypatch):
+    """A5: el Sheet cubre una fecha con CER/MEP; el riesgo país de la API se mergea sobre esa
+    fila (fuente='sheet') sin pisar CER/MEP, en vez de descartarse por 'fecha excluida'."""
+    db = _make_db()
+    original_fetch = sync_module.fetch_sheet_data
+    sync_module.fetch_sheet_data = _mock_fetch({
+        "Tipos de Cambio": TabRaw(presente=True, header=["Fecha", "Tipo", "Valor"], rows=[
+            (2, {"Fecha": "2026-02-18", "Tipo": "CER", "Valor": "103.6"}),
+            (3, {"Fecha": "2026-02-18", "Tipo": "MEP", "Valor": "818"}),
+        ]),
+    })
+
+    def _fake_fetch_indices(fechas_excluir):
+        return [
+            {"fecha": date(2026, 2, 18), "cer": None, "mep": None, "riesgo_pais": 1200.0, "fuente": "api"},
+            {"fecha": date(2026, 2, 19), "cer": 105.0, "mep": 820.0, "riesgo_pais": 1180.0, "fuente": "api"},
+        ], []
+
+    monkeypatch.setattr(sync_module.market_data, "use_external_apis", lambda: True)
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_indices_mercado_api", _fake_fetch_indices)
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_benchmarks_api", lambda: (None, []))
+
+    try:
+        sync_from_sheet(db)
+
+        fila_sheet = db.query(IndiceMercado).filter(IndiceMercado.fecha == date(2026, 2, 18)).one()
+        assert fila_sheet.fuente == "sheet"
+        assert float(fila_sheet.cer) == 103.6          # CER/MEP del Sheet intactos
+        assert float(fila_sheet.mep) == 818.0
+        assert float(fila_sheet.riesgo_pais) == 1200.0  # riesgo país mergeado de la API
+
+        fila_api = db.query(IndiceMercado).filter(IndiceMercado.fecha == date(2026, 2, 19)).one()
+        assert fila_api.fuente == "api"
+        assert float(fila_api.riesgo_pais) == 1180.0
+
+        # Segunda corrida: el riesgo país de la API cambia → se re-mergea, sin duplicar filas.
+        def _fake_2(fechas_excluir):
+            return [{"fecha": date(2026, 2, 18), "cer": None, "mep": None,
+                     "riesgo_pais": 1150.0, "fuente": "api"}], []
+        monkeypatch.setattr(sync_module.market_data_indices, "fetch_indices_mercado_api", _fake_2)
+        sync_from_sheet(db)
+
+        fila_sheet = db.query(IndiceMercado).filter(IndiceMercado.fecha == date(2026, 2, 18)).one()
+        assert fila_sheet.fuente == "sheet"
+        assert float(fila_sheet.cer) == 103.6
+        assert float(fila_sheet.riesgo_pais) == 1150.0
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
 def test_api_caida_preserva_filas_api_de_una_corrida_anterior(monkeypatch):
     """Si la API falla en una corrida, las filas 'api' de una corrida anterior no se borran."""
     db = _make_db()

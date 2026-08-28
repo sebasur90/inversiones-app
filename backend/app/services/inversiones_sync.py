@@ -473,14 +473,32 @@ def sync_from_sheet(db: Session) -> dict:
             db.add(IndiceMercado(**indice))
 
         if market_data.use_external_apis():
+            db.flush()
             api_indices, issues_api = market_data_indices.fetch_indices_mercado_api(fechas_sheet)
             issues.extend(issues_api)
             if api_indices is not None:
                 db.query(IndiceMercado).filter(IndiceMercado.fuente == "api").delete()
                 db.flush()
+                sheet_por_fecha = {
+                    r.fecha: r
+                    for r in db.query(IndiceMercado).filter(IndiceMercado.fuente == "sheet").all()
+                }
+                n_api = 0
                 for indice in api_indices:
-                    db.add(IndiceMercado(**indice))
-                indices_mercado_api_count = len(api_indices)
+                    fila_sheet = sheet_por_fecha.get(indice["fecha"])
+                    if fila_sheet is not None:
+                        # A5: "el Sheet gana" es por campo, no por fila. El Sheet nunca aporta
+                        # riesgo país y IndiceMercado.fecha es unique → el riesgo país de la API
+                        # se mergea sobre la fila 'sheet' de esa fecha (CER/MEP del Sheet
+                        # intactos). La fila sigue siendo fuente='sheet': el campo es de la API
+                        # por construcción, ya documentado así en el modelo.
+                        if indice.get("riesgo_pais") is not None:
+                            fila_sheet.riesgo_pais = indice["riesgo_pais"]
+                    else:
+                        db.add(IndiceMercado(**indice))
+                        n_api += 1
+                db.flush()
+                indices_mercado_api_count = n_api
             else:
                 indices_mercado_api_count = db.query(IndiceMercado).filter(IndiceMercado.fuente == "api").count()
 

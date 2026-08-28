@@ -15,7 +15,9 @@ def fetch_indices_mercado_api(fechas_excluir: set[date]) -> tuple[list[dict] | N
     """Serie diaria de CER (vía UVA) y MEP para completar `IndiceMercado`.
 
     `fechas_excluir` son las fechas que ya vienen del Sheet (Movimientos/Precios/Tipos de Cambio):
-    esas fechas ganan siempre, la API sólo llena huecos.
+    para CER y MEP esas fechas ganan siempre y la API sólo llena huecos. El **riesgo país** NO
+    se excluye (A5): el Sheet nunca lo aporta, así que la API lo devuelve también para fechas
+    que el Sheet ya cubre y el llamador lo mergea sobre la fila 'sheet' de esa fecha.
 
     Devuelve None (en vez de lista vacía) cuando NINGUNA de las dos fuentes respondió, para que
     el llamador distinga "no había nada nuevo" de "la API no está disponible ahora mismo" y no
@@ -66,8 +68,8 @@ def fetch_indices_mercado_api(fechas_excluir: set[date]) -> tuple[list[dict] | N
             continue
         por_fecha.setdefault(fecha, _fila_vacia(fecha))["mep"] = valor
     for fecha, valor in (riesgo_pais or []):
-        if fecha in fechas_excluir:
-            continue
+        # A5: sin filtro por fechas_excluir. El Sheet nunca trae riesgo país; el llamador
+        # mergea este campo sobre la fila 'sheet' de la fecha si ya existe.
         por_fecha.setdefault(fecha, _fila_vacia(fecha))["riesgo_pais"] = valor
 
     filas = []

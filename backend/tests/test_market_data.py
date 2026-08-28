@@ -5,7 +5,8 @@ from backend.app.services.market_data import argentina_datos
 
 
 def test_fetch_indices_mercado_api_combina_uva_mep_y_riesgo_pais(monkeypatch):
-    """Combina las tres series por fecha y excluye las fechas que ya vienen del Sheet."""
+    """Combina las tres series por fecha. CER/MEP se excluyen en las fechas del Sheet; el
+    riesgo país igual viene en esas fechas (A5: el Sheet nunca lo aporta)."""
     monkeypatch.setattr(argentina_datos, "fetch_uva_serie", lambda: [
         (date(2026, 1, 1), 100.0),
         (date(2026, 1, 2), 101.0),
@@ -23,10 +24,13 @@ def test_fetch_indices_mercado_api_combina_uva_mep_y_riesgo_pais(monkeypatch):
 
     assert issues == []
     por_fecha = {f["fecha"]: f for f in filas}
-    # 2026-01-02 excluida (ya la trae el Sheet), aunque UVA/riesgo país tenían dato ese día.
-    assert date(2026, 1, 2) not in por_fecha
     assert por_fecha[date(2026, 1, 1)] == {
         "fecha": date(2026, 1, 1), "cer": 100.0, "mep": 1000.0, "riesgo_pais": 1500.0, "fuente": "api",
+    }
+    # 2026-01-02 la trae el Sheet: CER/MEP excluidos, pero el riesgo país igual viene para que
+    # el sync lo mergee sobre la fila 'sheet' de esa fecha (A5).
+    assert por_fecha[date(2026, 1, 2)] == {
+        "fecha": date(2026, 1, 2), "cer": None, "mep": None, "riesgo_pais": 1490.0, "fuente": "api",
     }
     # 2026-01-03 sólo tiene MEP → cer y riesgo_pais quedan None.
     assert por_fecha[date(2026, 1, 3)]["cer"] is None
