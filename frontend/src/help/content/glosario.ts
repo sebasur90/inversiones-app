@@ -34,6 +34,8 @@ export type GlosarioKey =
   | 'efecto_fx'
   | 'retorno_activo'
   | 'efectoAportes'
+  | 'twrBruto'
+  | 'costoOperar'
 
 export const GLOSARIO_HELP: Record<GlosarioKey, HelpContent> = {
   xirr: {
@@ -57,6 +59,25 @@ export const GLOSARIO_HELP: Record<GlosarioKey, HelpContent> = {
       'Positivo: tus aportes/retiros mejoraron el resultado respecto a la estrategia pura. Negativo: el timing de tus movimientos te costó rendimiento, aunque la estrategia haya sido buena.',
     limitations: 'No es "buen" o "mal" timing en un sentido predictivo — es una lectura hacia atrás de cómo coincidieron tus aportes con los movimientos de precio.',
     relatedTerms: ['xirr', 'twr'],
+  },
+  twrBruto: {
+    title: 'TWRR sin comisiones',
+    shortDescription:
+      'El mismo TWR de la estrategia, pero calculado como si operar no tuviera costo: las comisiones de compra y venta no se descuentan de los flujos.',
+    howToInterpret:
+      'Siempre es igual o mejor que el TWR real. La brecha entre ambos es lo que te costaron las comisiones, medido en puntos de rendimiento.',
+    relatedTerms: ['twr', 'costoOperar'],
+  },
+  costoOperar: {
+    title: 'Costo de operar',
+    shortDescription:
+      'Cuánto rendimiento te comieron las comisiones: TWR real menos TWR sin comisiones, en la misma moneda.',
+    whyItMatters:
+      'Las comisiones parecen chicas por operación, pero acumuladas y comparadas contra el rendimiento total pueden pesar. Este número las expresa en la misma unidad que mirás el rendimiento.',
+    howItIsCalculated: 'Costo de operar = TWR real − TWR sin comisiones (≤ 0).',
+    howToInterpret:
+      'Es negativo o cero. Cuanto más lejos de cero, más rendimiento perdiste por comisiones. Cero significa que no hubo comisiones registradas.',
+    relatedTerms: ['twr', 'twrBruto'],
   },
   simple: {
     title: 'Rendimiento simple',

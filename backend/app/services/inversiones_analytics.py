@@ -191,6 +191,18 @@ def _monto_ars(mov: MovimientoInversion, db: Session, mep_cache: dict) -> float 
     return _convertir(monto_ajustado, mov.moneda, "ARS", mov.fecha, db, mep_cache)
 
 
+def _monto_usd_bruto(mov: MovimientoInversion, db: Session, mep_cache: dict) -> float | None:
+    """Igual que `_monto_usd` pero sin aplicar la comisión: sirve para medir el TWR que se
+    habría obtenido si operar no costara nada. La diferencia con el neto es el costo de operar
+    expresado en puntos de retorno."""
+    return _to_usd(_monto_bruto(mov), mov.moneda, mov.fecha, db, mep_cache)
+
+
+def _monto_ars_bruto(mov: MovimientoInversion, db: Session, mep_cache: dict) -> float | None:
+    """`_monto_ars` sin la comisión (ver `_monto_usd_bruto`)."""
+    return _convertir(_monto_bruto(mov), mov.moneda, "ARS", mov.fecha, db, mep_cache)
+
+
 def _monto_ars_real(mov: MovimientoInversion, db: Session, cer_cache: dict, mep_cache: dict, cer_hoy: float | None) -> float | None:
     """Monto en ARS real (deflactado por CER). Devuelve None si falta CER para el período."""
     if cer_hoy is None:
@@ -504,8 +516,10 @@ def _resumen_sobre_movs(movs: list[MovimientoInversion], db: Session) -> dict:
 
     twr_usd = None
     twr_aproximado = False
+    twr_usd_bruto = None
     if hubo_compra:
         twr_usd, twr_aproximado = _calcular_twr(movs, precios_por_ticker, db, mep_cache, hoy)
+        twr_usd_bruto, _ = _calcular_twr_bruto(movs, precios_por_ticker, db, mep_cache, hoy)
 
     # === ARS nominal ===
     # Recalcular valor actual en ARS
@@ -526,8 +540,10 @@ def _resumen_sobre_movs(movs: list[MovimientoInversion], db: Session) -> dict:
         xirr_ars = _calcular_xirr(flujos_xirr_ars)
 
     twr_ars = None
+    twr_ars_bruto = None
     if hubo_compra:
         twr_ars, _ = _calcular_twr_ars(movs, precios_por_ticker, db, mep_cache, hoy)
+        twr_ars_bruto, _ = _calcular_twr_ars_bruto(movs, precios_por_ticker, db, mep_cache, hoy)
 
     # === ARS real (deflactado por CER) ===
     rendimiento_simple_ars_real = None
@@ -593,6 +609,8 @@ def _resumen_sobre_movs(movs: list[MovimientoInversion], db: Session) -> dict:
         "twr_usd": round(twr_usd, 4) if twr_usd is not None else None,
         "twr_ars": round(twr_ars, 4) if twr_ars is not None else None,
         "twr_ars_real": round(twr_ars_real, 4) if twr_ars_real is not None else None,
+        "twr_usd_bruto": round(twr_usd_bruto, 4) if twr_usd_bruto is not None else None,
+        "twr_ars_bruto": round(twr_ars_bruto, 4) if twr_ars_bruto is not None else None,
         "valor_benchmark_usd_ars": round(valor_benchmark_usd_ars, 2) if valor_benchmark_usd_ars is not None else None,
         "tiene_precios_desactualizados": aproximado or twr_aproximado,
     }
@@ -732,6 +750,36 @@ def _calcular_twr_ars(
     return _calcular_twr_encadenado(
         movs, hoy,
         lambda mov: _monto_ars(mov, db, mep_cache),
+        lambda holdings, f, costos: _valuar_holdings_ars(holdings, f, precios_por_ticker, db, mep_cache, costos),
+    )
+
+
+def _calcular_twr_bruto(
+    movs: list[MovimientoInversion],
+    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
+    db: Session,
+    mep_cache: dict,
+    hoy: date,
+) -> tuple[float | None, bool]:
+    """TWR en USD ignorando las comisiones en los cashflows (ver `_monto_usd_bruto`)."""
+    return _calcular_twr_encadenado(
+        movs, hoy,
+        lambda mov: _monto_usd_bruto(mov, db, mep_cache),
+        lambda holdings, f, costos: _valuar_holdings(holdings, f, precios_por_ticker, db, mep_cache, costos),
+    )
+
+
+def _calcular_twr_ars_bruto(
+    movs: list[MovimientoInversion],
+    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
+    db: Session,
+    mep_cache: dict,
+    hoy: date,
+) -> tuple[float | None, bool]:
+    """TWR en ARS nominal ignorando las comisiones en los cashflows (ver `_monto_ars_bruto`)."""
+    return _calcular_twr_encadenado(
+        movs, hoy,
+        lambda mov: _monto_ars_bruto(mov, db, mep_cache),
         lambda holdings, f, costos: _valuar_holdings_ars(holdings, f, precios_por_ticker, db, mep_cache, costos),
     )
 

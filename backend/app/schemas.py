@@ -70,6 +70,8 @@ class InversionesResumen(BaseModel):
     twr_usd: Optional[float] = None
     twr_ars: Optional[float] = None
     twr_ars_real: Optional[float] = None
+    twr_usd_bruto: Optional[float] = None
+    twr_ars_bruto: Optional[float] = None
     valor_benchmark_usd_ars: Optional[float] = None
     tiene_precios_desactualizados: bool = False
 

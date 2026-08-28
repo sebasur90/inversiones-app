@@ -71,6 +71,8 @@ export interface InversionesResumen {
   twr_usd: number | null
   twr_ars: number | null
   twr_ars_real: number | null
+  twr_usd_bruto: number | null
+  twr_ars_bruto: number | null
   valor_benchmark_usd_ars: number | null
   tiene_precios_desactualizados: boolean
 }
