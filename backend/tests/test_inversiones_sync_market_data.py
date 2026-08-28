@@ -198,6 +198,62 @@ def test_precio_renta_fija_api_normaliza_escala_y_persiste(monkeypatch):
         db.close()
 
 
+def _tabs_con_bono_y_movimiento():
+    return {
+        "Instrumentos": TabRaw(presente=True, header=["Ticker", "Nombre", "Tipo Instrumento", "Mercado", "Moneda"], rows=[
+            (2, {"Ticker": "TZXD7", "Nombre": "Boncer 2027", "Tipo Instrumento": "Bono", "Mercado": "MERVAL", "Moneda": "ARS"}),
+        ]),
+        "Movimientos": TabRaw(presente=True, header=["Fecha", "Cartera", "Ticker", "Tipo Movimiento", "Cantidad", "Precio", "Moneda"], rows=[
+            (2, {"Fecha": "2026-06-01", "Cartera": "P1", "Ticker": "TZXD7", "Tipo Movimiento": "Compra", "Cantidad": "1000", "Precio": "2.6", "Moneda": "ARS"}),
+        ]),
+        "Precios": TabRaw(presente=True, header=["Fecha", "Ticker", "Precio", "Moneda"], rows=[
+            (2, {"Fecha": "2026-07-27", "Ticker": "TZXD7", "Precio": "2.7135", "Moneda": "ARS"}),
+        ]),
+    }
+
+
+def test_backfill_historico_renta_fija_normaliza_escala_y_converge(monkeypatch):
+    """analisistecnico puebla la serie hacia atrás (desde el 1er movimiento); no pisa el Sheet y
+    en la corrida siguiente no vuelve a pedir la serie (ya llegó al piso)."""
+    db = _make_db()
+    original_fetch = sync_module.fetch_sheet_data
+    sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_bono_y_movimiento())
+
+    monkeypatch.setattr(sync_module.market_data, "use_external_apis", lambda: True)
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_indices_mercado_api", lambda fechas_excluir: (None, []))
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_benchmarks_api", lambda: (None, []))
+    monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_fija", lambda: {})
+
+    serie = [(date(2026, 6, 2), 265.0), (date(2026, 7, 27), 271.0), (date(2026, 7, 28), 272.5)]
+    llamadas = []
+
+    def _fake_hist(ticker, desde, hasta):
+        llamadas.append(ticker)
+        return serie
+
+    monkeypatch.setattr(sync_module.market_data_precios.analisistecnico, "fetch_historico_bono", _fake_hist)
+
+    try:
+        sync_from_sheet(db)
+        assert llamadas == ["TZXD7"]
+        api_rows = db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").all()
+        por_fecha = {r.fecha: round(float(r.precio), 4) for r in api_rows}
+        # 2026-07-27 lo trae el Sheet (fuente='sheet'): la API no lo pisa.
+        assert date(2026, 7, 27) not in por_fecha
+        assert por_fecha == {date(2026, 6, 2): 2.65, date(2026, 7, 28): 2.725}
+        sheet_row = db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "sheet").one()
+        assert float(sheet_row.precio) == 2.7135
+
+        # Segunda corrida: ya está backfilleado hasta el piso → no se vuelve a pedir la serie.
+        llamadas.clear()
+        sync_from_sheet(db)
+        assert llamadas == []
+        assert db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").count() == 2
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
 def test_precio_renta_fija_api_caida_preserva_corrida_anterior(monkeypatch):
     db = _make_db()
     original_fetch = sync_module.fetch_sheet_data

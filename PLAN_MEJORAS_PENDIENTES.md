@@ -68,9 +68,35 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
    manual** de cada ticker (decisión del usuario 2026-08-28): factor ≈100 o ≈1, cualquier otro
    ratio no se carga y se reporta; sin precio previo en el Sheet tampoco se carga. Sólo se
    agrega el precio del día (los `/live/*` son foto intradiaria); las filas `fuente='api'`
-   acumulan histórico. Pendiente de este ítem: usar `/historical/bonds/{ticker}` para backfill
-   inicial de la serie (hoy sólo crece hacia adelante). Junto con el ítem 4 de Ola 4, apunta a
-   eliminar la carga manual de `Precios` y el `UMBRAL_APROXIMADO_DIAS = 45`.
+   acumulan histórico. Junto con el ítem 4 de Ola 4, apunta a eliminar la carga manual de
+   `Precios` y el `UMBRAL_APROXIMADO_DIAS = 45`.
+
+1b. ~~**Backfill histórico de la serie de renta fija**~~ — ✅ HECHO.
+   `market_data/analisistecnico.py`: datafeed TradingView UDF de analisistecnico.com.ar
+   (público, sin auth) — `GET /services/datafeed/history?symbol={ticker}&resolution=D&from=&to=`
+   devuelve `{s,t,o,h,l,c,v}` con arrays paralelos, sin paginar, la serie completa del rango,
+   fresca al día, en ARS por lámina de 100 VN (misma escala que data912). `fetch_historico_bono`
+   devuelve `None` en fallo / símbolo desconocido (`{"s":"error"}`), `[]` en `{"s":"no_data"}`.
+   `precios.fetch_backfill_renta_fija_api` puebla `precios_instrumento` (`fuente='api'`) hacia
+   atrás por cada ticker de renta fija hasta `piso = max(fecha del 1er Movimiento del ticker,
+   hoy − 5 años)`. **Auto-limitado**: no re-pide la serie de un ticker cuando sus filas `api` ya
+   arrancan a ≤ `_TOLERANCIA_PISO_DIAS` (40 d) del piso; cota de `_MAX_BACKFILL_POR_SYNC` (15)
+   peticiones por corrida, atendiendo primero los huecos más grandes. Reusa `_factor_escala`
+   (calibración por ratio contra el último precio manual del Sheet, extraída del ítem 1); sin
+   precio manual → info `sin_precio_para_calibrar`, ratio raro → advertencia `escala_desconocida`.
+   Sólo emite fechas `< hoy` que el Sheet no cubra (hoy lo maneja la ruta 'live'). Integrado en
+   `inversiones_sync` en el mismo bloque de precios: `api_min_por_ticker` sale de un `query` a
+   `PrecioInstrumento.fuente=='api'`, `primeras_fechas_mov` de `movimientos_validos`, y el
+   upsert (purga de tickers que dejaron de ser RF + merge por `(ticker, fecha)`) se comparte
+   con la ruta 'live'.
+   **ONs corporativas**: analisistecnico no las cubre (`{"s":"error"}`) → `SyncIssue` info
+   `sin_historico_backfill`; siguen forward-only + su historia manual del Sheet. Fuentes
+   descartadas para ONs (2026-08-28): `datos.gob.ar` (catálogo viejo, series cortan ~2019),
+   `argen.bond` (API paga), `data912` (`/historical/` sólo tiene `stocks`/`cedears`/`bonds`, no
+   `corp` ni `notes`). Opción futura para ONs: IOL API (gratis, requiere cuenta + OAuth).
+   `UMBRAL_APROXIMADO_DIAS = 45` **sigue** (follow-up: sacarlo cuando toda la renta fija tenga
+   serie densa). Tests: `test_analisistecnico.py` (7), backfill en `test_market_data_precios.py`
+   (11), integración en `test_inversiones_sync_market_data.py` (1).
 2. ~~**Pantalla nueva: Flujo de caja proyectado**~~ — ✅ HECHO
    (`backend/app/services/flujo_caja_analytics.py`, endpoints
    `/{cartera|consolidado}/flujo-caja-proyectado?meses=`, `frontend/src/pages/FlujoCaja.tsx`,
@@ -166,11 +192,12 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
     -v $(pwd):/repo -w /repo -e PYTHONPATH=/repo \
     backend python -m pytest backend/tests/ -q
   ```
-  Baseline actual: **221 pasan, 0 fallan** (176 tras Ola 1-2; +29 con Ola 3 ítem 1:
+  Baseline actual: **240 pasan, 0 fallan** (176 tras Ola 1-2; +29 con Ola 3 ítem 1:
   `test_data912.py`, `test_market_data_precios.py`, 2 de integración en
   `test_inversiones_sync_market_data.py`; +9 con Ola 3 ítem 2:
   `test_flujo_caja_analytics.py`; +7 con Ola 3 ítem 3:
-  `test_vencimientos_enriquecido.py`).
+  `test_vencimientos_enriquecido.py`; +19 con Ola 3 ítem 1b: `test_analisistecnico.py` (7),
+  backfill en `test_market_data_precios.py` (11), 1 de integración).
 - **Build frontend** (verifica TypeScript): `docker compose -f docker-compose.yml -f docker-compose.corporate.yml build frontend`.
 - Cualquier fetch nuevo a una API externa va en `backend/app/services/market_data/`, con el
   mismo patrón: nunca lanza (devuelve `None` en fallo total), se llama sólo si

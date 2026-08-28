@@ -7,25 +7,42 @@ _Actualizado: 2026-08-28_
 
 ## Estado
 
-- Todo lo hecho está en **`main`**, **sin pushear** (`main` está 5+ commits adelante de `origin/main`).
+- Todo lo hecho está en **`main`**, **sin pushear** (`main` está 6+ commits adelante de `origin/main`).
 - Últimos commits relevantes:
-  - _(sin commitear)_ — Ola 3 ítem 3: **Vencimientos enriquecido** (paridad, TIR al vto.,
-    duration, "% de la cartera que vence por año"). Ver detalle en `PLAN_MEJORAS_PENDIENTES.md`.
+  - _(sin commitear)_ — Ola 3 ítem 1b: **Backfill histórico de precios de renta fija**
+    (`market_data/analisistecnico.py` + `precios.fetch_backfill_renta_fija_api`). Ver detalle
+    en `PLAN_MEJORAS_PENDIENTES.md`.
+  - `14077b7` — Ola 3 ítem 3: **Vencimientos enriquecido** (paridad, TIR al vto., duration,
+    "% de la cartera que vence por año").
   - `a60ffe0` — Ola 3 ítem 2: pantalla **Flujo de caja proyectado**.
   - `4f8eb9c` / `f29123e` — Ola 3 ítem 1: precios automáticos de renta fija (data912).
   - `0316e24` — Ola 1-2: market_data (CER/MEP/inflación) + menú "Más".
-- Tests backend: **221 pasan, 0 fallan** (+7 con `test_vencimientos_enriquecido.py`).
+- Tests backend: **240 pasan, 0 fallan** (+7 `test_analisistecnico.py`, +11 backfill en
+  `test_market_data_precios.py`, +1 integración en `test_inversiones_sync_market_data.py`).
 - QA visual en navegador de Flujo de caja y Vencimientos: **pendiente** (no hubo browser en
   la sesión). Verificado sólo que compila (`tsc && vite build`) y que la salida valida contra
   el schema Pydantic + tests.
 
 ## Lo que sigue, en orden
 
-### 1. Ola 3 ítem 1b — Backfill histórico de precios de renta fija  ← SIGUIENTE
+### 1. Ola 3 ítem 1b — Backfill histórico de precios de renta fija  ✅ HECHO
 
-`data912 /historical/bonds/{ticker}` para poblar hacia atrás la serie `precios_instrumento`
-con `fuente='api'` (hoy sólo crece hacia adelante desde que se prende `USE_EXTERNAL_APIS`).
-Patrón: `backend/app/services/market_data/precios.py`.
+`market_data/analisistecnico.py` (datafeed TradingView UDF de analisistecnico.com.ar, público,
+sin auth, `GET /services/datafeed/history?symbol=&resolution=D&from=&to=` → `{s,t,o,h,l,c,v}`,
+sin paginar, series frescas al día, escala ARS por lámina de 100 VN igual que data912).
+`precios.fetch_backfill_renta_fija_api` puebla `precios_instrumento` (`fuente='api'`) hacia
+atrás por cada ticker de renta fija hasta `piso = max(1er movimiento, hoy-5 años)`. Se
+auto-limita: no re-pide la serie una vez que las filas `api` llegan a ~el piso
+(`_TOLERANCIA_PISO_DIAS=40`), y hay cota de `_MAX_BACKFILL_POR_SYNC=15` peticiones/corrida
+(huecos más grandes primero). Reusa la calibración por ratio del ítem 1 (`_factor_escala`).
+Sólo emite fechas `< hoy` que el Sheet no cubra (hoy lo maneja la ruta 'live'). Integrado en
+`inversiones_sync` en el mismo bloque de precios (upsert compartido con la ruta 'live').
+**ONs corporativas**: analisistecnico no las tiene (`{"s":"error"}`) → `SyncIssue` info
+`sin_historico_backfill`, siguen forward-only + su historia manual del Sheet. Descartadas para
+ONs: `datos.gob.ar` (catálogo viejo), `argen.bond` (API paga), `data912` (no tiene
+`/historical/corp`). Pendiente futuro: IOL API (gratis, con OAuth) para cerrar el hueco de ONs.
+`UMBRAL_APROXIMADO_DIAS = 45` **sigue** — se saca en un ítem posterior cuando toda la renta
+fija tenga cobertura densa.
 
 ### 2. Ola 4 — Precios automáticos de acciones y CEDEARs
 
@@ -65,7 +82,7 @@ fila basura en `Configuracion`, `TipoCambio` código muerto, `es_jubilacion` hu�
 docker compose -f docker-compose.yml -f docker-compose.corporate.yml run --rm \
   -v $(pwd):/repo -w /repo -e PYTHONPATH=/repo \
   backend python -m pytest backend/tests/ -q
-# Baseline: 214 pasan, 0 fallan
+# Baseline: 240 pasan, 0 fallan
 
 # Build frontend (verifica TypeScript)
 docker compose -f docker-compose.yml -f docker-compose.corporate.yml build frontend

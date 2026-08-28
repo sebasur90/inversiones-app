@@ -61,9 +61,10 @@ class PrecioInstrumento(Base):
     ticker = Column(String, ForeignKey("instrumentos_inversion.ticker"), nullable=False)
     precio = Column(Numeric(18, 6), nullable=False)
     moneda = Column(String, nullable=False)
-    # "sheet" (pestaña Precios, cargada a mano) | "api" (completado automáticamente desde
-    # data912, ver services/market_data/precios.py). El Sheet siempre gana; "api" sólo agrega
-    # el precio del día para tickers que el Sheet no cubre para esa fecha.
+    # "sheet" (pestaña Precios, cargada a mano) | "api" (completado automáticamente, ver
+    # services/market_data/precios.py: data912 para el precio del día + analisistecnico para el
+    # backfill histórico hacia atrás). El Sheet siempre gana; "api" sólo cubre (ticker, fecha)
+    # que el Sheet no trae.
     fuente = Column(String, nullable=False, default="sheet", server_default="sheet")
 
     __table_args__ = (UniqueConstraint("fecha", "ticker", name="uq_precio_instrumento"),)

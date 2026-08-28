@@ -341,9 +341,9 @@ def sync_from_sheet(db: Session) -> dict:
 
     precios_api_count = 0
     if "Precios" not in tabs_bloqueadas:
-        # El Sheet se reescribe entero en cada sync; las filas 'api' (precio del día de renta
-        # fija, ver más abajo) se manejan aparte por (ticker, fecha) para no perder el histórico
-        # que van acumulando día a día — data912 sólo da la foto de hoy, no una serie.
+        # El Sheet se reescribe entero en cada sync; las filas 'api' de renta fija (precio del día
+        # vía data912 + backfill histórico vía analisistecnico, ver más abajo) se manejan aparte
+        # por (ticker, fecha) para no perder la serie que van acumulando.
         db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "sheet").delete()
         db.flush()
         claves_sheet: set = set()
@@ -353,11 +353,33 @@ def sync_from_sheet(db: Session) -> dict:
             db.add(PrecioInstrumento(**precio))
 
         if market_data.use_external_apis():
+            # Precio del día (data912) — None si data912 no respondió.
             api_precios, issues_api_px = market_data_precios.fetch_precios_renta_fija_api(
                 instrumentos_validos, precios_validos, claves_sheet
             )
             issues.extend(issues_api_px)
-            if api_precios is not None:
+
+            # Backfill histórico hacia atrás (analisistecnico). Se auto-limita: sólo pide la serie
+            # de los tickers de renta fija cuyas filas 'api' todavía no llegan al piso
+            # (max(1er movimiento, hoy-5 años)). Devuelve siempre una lista.
+            primeras_fechas_mov: dict = {}
+            for mov in movimientos_validos:
+                t, f = mov["ticker"], mov["fecha"]
+                if t not in primeras_fechas_mov or f < primeras_fechas_mov[t]:
+                    primeras_fechas_mov[t] = f
+            api_min_por_ticker: dict = {}
+            for t, f in db.query(PrecioInstrumento.ticker, PrecioInstrumento.fecha).filter(
+                PrecioInstrumento.fuente == "api"
+            ):
+                if t not in api_min_por_ticker or f < api_min_por_ticker[t]:
+                    api_min_por_ticker[t] = f
+            backfill_precios, issues_backfill = market_data_precios.fetch_backfill_renta_fija_api(
+                instrumentos_validos, precios_validos, claves_sheet,
+                primeras_fechas_mov, api_min_por_ticker,
+            )
+            issues.extend(issues_backfill)
+
+            if api_precios is not None or backfill_precios:
                 db.flush()
                 # Purga las filas 'api' de tickers que ya no son renta fija del Sheet (p.ej. un
                 # bono que venció y se sacó de Instrumentos): quedarían huérfanas para siempre.
@@ -372,12 +394,14 @@ def sync_from_sheet(db: Session) -> dict:
                     (r.ticker, r.fecha): r
                     for r in db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").all()
                 }
-                for p in api_precios:
+                for p in (api_precios or []) + backfill_precios:
                     fila = existentes.get((p["ticker"], p["fecha"]))
                     if fila is not None:
                         fila.precio, fila.moneda = p["precio"], p["moneda"]
                     else:
-                        db.add(PrecioInstrumento(**p))
+                        nueva = PrecioInstrumento(**p)
+                        existentes[(p["ticker"], p["fecha"])] = nueva
+                        db.add(nueva)
                 db.flush()
             precios_api_count = db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").count()
 

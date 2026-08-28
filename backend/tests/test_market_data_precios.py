@@ -4,7 +4,7 @@ from datetime import date, timedelta
 import pytest
 
 from backend.app.services.market_data import precios as mdp
-from backend.app.services.market_data import data912
+from backend.app.services.market_data import analisistecnico, data912
 
 
 @pytest.mark.parametrize("tipo, esperado", [
@@ -136,3 +136,178 @@ def test_usa_el_ultimo_precio_del_sheet_para_calibrar(monkeypatch):
     )
     assert issues == []
     assert round(filas[0]["precio"], 4) == 2.7285
+
+
+# --- Backfill histórico (analisistecnico) --------------------------------------------------
+
+def _serie(*pares):
+    return [(f, px) for f, px in pares]
+
+
+def _backfill(monkeypatch, serie, *, instrumentos, precios_sheet, primeras, api_min=None,
+              claves_excluir=None, hoy=HOY):
+    llamadas = []
+
+    def _fake(ticker, desde, hasta):
+        llamadas.append((ticker, desde, hasta))
+        return serie(ticker) if callable(serie) else serie
+
+    monkeypatch.setattr(analisistecnico, "fetch_historico_bono", _fake)
+    filas, issues = mdp.fetch_backfill_renta_fija_api(
+        instrumentos, precios_sheet, claves_excluir or set(),
+        primeras, api_min or {}, hoy=hoy,
+    )
+    return filas, issues, llamadas
+
+
+def test_backfill_normaliza_escala_100_y_marca_fuente(monkeypatch):
+    serie = _serie((date(2025, 6, 2), 270.0), (date(2025, 6, 3), 272.5))
+    filas, issues, llamadas = _backfill(
+        monkeypatch, serie,
+        instrumentos=[_inst("TZXD7")],
+        precios_sheet=[_px("TZXD7", 2.7135, fecha=date(2026, 7, 27))],
+        primeras={"TZXD7": date(2025, 6, 1)},
+    )
+    assert issues == []
+    assert len(llamadas) == 1 and llamadas[0][0] == "TZXD7"
+    assert {f["fecha"] for f in filas} == {date(2025, 6, 2), date(2025, 6, 3)}
+    assert all(f["fuente"] == "api" and f["moneda"] == "ARS" for f in filas)
+    assert round(filas[0]["precio"], 4) == 2.70 and round(filas[1]["precio"], 4) == 2.725
+
+
+def test_backfill_escala_1_se_deja_igual(monkeypatch):
+    serie = _serie((date(2025, 6, 2), 84000.0))
+    filas, issues, _ = _backfill(
+        monkeypatch, serie,
+        instrumentos=[_inst("AL30")],
+        precios_sheet=[_px("AL30", 83000.0, fecha=date(2026, 7, 27))],
+        primeras={"AL30": date(2025, 6, 1)},
+    )
+    assert issues == []
+    assert filas[0]["precio"] == 84000.0
+
+
+def test_backfill_excluye_fechas_del_sheet_y_la_de_hoy(monkeypatch):
+    serie = _serie(
+        (date(2025, 6, 2), 270.0),
+        (date(2026, 7, 27), 271.0),   # ya está en el Sheet
+        (HOY, 272.0),                  # hoy lo cubre la ruta 'live'
+    )
+    filas, issues, _ = _backfill(
+        monkeypatch, serie,
+        instrumentos=[_inst("TZXD7")],
+        precios_sheet=[_px("TZXD7", 2.7135, fecha=date(2026, 7, 27))],
+        primeras={"TZXD7": date(2025, 6, 1)},
+        claves_excluir={("TZXD7", date(2026, 7, 27))},
+    )
+    assert issues == []
+    assert {f["fecha"] for f in filas} == {date(2025, 6, 2)}
+
+
+def test_backfill_converge_no_vuelve_a_pedir_si_ya_llego_al_piso(monkeypatch):
+    def _boom(*a, **kw):
+        raise AssertionError("no debería pedir la serie: ya está backfilleado hasta el piso")
+
+    monkeypatch.setattr(analisistecnico, "fetch_historico_bono", _boom)
+    filas, issues = mdp.fetch_backfill_renta_fija_api(
+        [_inst("TZXD7")], [_px("TZXD7", 2.7135)], set(),
+        {"TZXD7": date(2025, 6, 1)},
+        {"TZXD7": date(2025, 6, 10)},   # la serie 'api' ya arranca a 9 días del piso (< 40)
+        hoy=HOY,
+    )
+    assert filas == [] and issues == []
+
+
+def test_backfill_pide_si_el_hueco_supera_la_tolerancia(monkeypatch):
+    serie = _serie((date(2025, 6, 2), 270.0))
+    filas, issues, llamadas = _backfill(
+        monkeypatch, serie,
+        instrumentos=[_inst("TZXD7")],
+        precios_sheet=[_px("TZXD7", 2.7135, fecha=date(2026, 7, 27))],
+        primeras={"TZXD7": date(2025, 6, 1)},
+        api_min={"TZXD7": date(2026, 8, 1)},   # la serie 'api' sólo llega ~forward: hay hueco
+    )
+    assert len(llamadas) == 1 and filas
+
+
+def test_backfill_sin_movimientos_no_pide(monkeypatch):
+    def _boom(*a, **kw):
+        raise AssertionError("sin movimientos no hay posición que valuar")
+
+    monkeypatch.setattr(analisistecnico, "fetch_historico_bono", _boom)
+    filas, issues = mdp.fetch_backfill_renta_fija_api(
+        [_inst("TZXD7")], [_px("TZXD7", 2.7135)], set(), {}, {}, hoy=HOY,
+    )
+    assert filas == [] and issues == []
+
+
+def test_backfill_ticker_no_cubierto_reporta_info(monkeypatch):
+    filas, issues, _ = _backfill(
+        monkeypatch, None,   # analisistecnico -> None (ON u otro no listado)
+        instrumentos=[_inst("MGCJO", tipo="ON")],
+        precios_sheet=[_px("MGCJO", 105000.0, fecha=date(2026, 7, 27))],
+        primeras={"MGCJO": date(2025, 6, 1)},
+    )
+    assert filas == []
+    assert len(issues) == 1
+    assert issues[0].regla == "sin_historico_backfill"
+    assert issues[0].severidad.value == "info"
+
+
+def test_backfill_sin_precio_para_calibrar_reporta_info(monkeypatch):
+    serie = _serie((date(2025, 6, 2), 270.0))
+    filas, issues, _ = _backfill(
+        monkeypatch, serie,
+        instrumentos=[_inst("TZXD7")],
+        precios_sheet=[],
+        primeras={"TZXD7": date(2025, 6, 1)},
+    )
+    assert filas == []
+    assert issues[0].regla == "sin_precio_para_calibrar"
+    assert issues[0].severidad.value == "info"
+
+
+def test_backfill_escala_rara_advierte(monkeypatch):
+    serie = _serie((date(2025, 6, 2), 27.0))
+    filas, issues, _ = _backfill(
+        monkeypatch, serie,
+        instrumentos=[_inst("TZXD7")],
+        precios_sheet=[_px("TZXD7", 2.7, fecha=date(2026, 7, 27))],
+        primeras={"TZXD7": date(2025, 6, 1)},
+    )
+    assert filas == []
+    assert issues[0].regla == "escala_desconocida"
+    assert issues[0].severidad.value == "advertencia"
+
+
+def test_backfill_respeta_tope_de_5_anios(monkeypatch):
+    serie = _serie((date(2025, 6, 2), 270.0))
+    _, _, llamadas = _backfill(
+        monkeypatch, serie,
+        instrumentos=[_inst("TZXD7")],
+        precios_sheet=[_px("TZXD7", 2.7135, fecha=date(2026, 7, 27))],
+        primeras={"TZXD7": date(2010, 1, 1)},   # mucho más viejo que el tope
+    )
+    _, desde, hasta = llamadas[0]
+    assert desde == HOY - timedelta(days=366 * 5)
+    assert hasta == HOY - timedelta(days=1)
+
+
+def test_backfill_atiende_primero_los_huecos_mas_grandes(monkeypatch):
+    tope = mdp._MAX_BACKFILL_POR_SYNC
+    n = tope + 2
+    piso = date(2025, 1, 1)
+    instrumentos = [_inst(f"B{i}") for i in range(n)]
+    precios_sheet = [_px(f"B{i}", 100.0, fecha=date(2026, 7, 27)) for i in range(n)]
+    primeras = {f"B{i}": piso for i in range(n)}
+    # B0 sin api (hueco infinito); B1..B(n-1) con hueco creciente, todos > la tolerancia de 40d.
+    api_min = {f"B{i}": piso + timedelta(days=50 + i) for i in range(1, n)}
+    llamados = []
+    monkeypatch.setattr(analisistecnico, "fetch_historico_bono",
+                        lambda t, d, h: llamados.append(t) or _serie((date(2025, 6, 2), 100.0)))
+    mdp.fetch_backfill_renta_fija_api(instrumentos, precios_sheet, set(), primeras, api_min, hoy=HOY)
+    assert len(llamados) == tope
+    assert "B0" in llamados        # hueco infinito, primero
+    assert "B1" not in llamados    # hueco más chico, queda afuera este sync
+    assert "B2" not in llamados
+
