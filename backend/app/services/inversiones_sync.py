@@ -341,9 +341,9 @@ def sync_from_sheet(db: Session) -> dict:
 
     precios_api_count = 0
     if "Precios" not in tabs_bloqueadas:
-        # El Sheet se reescribe entero en cada sync; las filas 'api' de renta fija (precio del día
-        # vía data912 + backfill histórico vía analisistecnico, ver más abajo) se manejan aparte
-        # por (ticker, fecha) para no perder la serie que van acumulando.
+        # El Sheet se reescribe entero en cada sync; las filas 'api' (renta fija y renta variable:
+        # precio del día vía data912 + backfill histórico de renta fija vía analisistecnico, ver
+        # más abajo) se manejan aparte por (ticker, fecha) para no perder la serie que acumulan.
         db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "sheet").delete()
         db.flush()
         claves_sheet: set = set()
@@ -359,9 +359,16 @@ def sync_from_sheet(db: Session) -> dict:
             )
             issues.extend(issues_api_px)
 
-            # Backfill histórico hacia atrás (analisistecnico). Se auto-limita: sólo pide la serie
-            # de los tickers de renta fija cuyas filas 'api' todavía no llegan al piso
-            # (max(1er movimiento, hoy-5 años)). Devuelve siempre una lista.
+            # Ídem para acciones y CEDEARs (Ola 4): mismo motor, sin backfill histórico (no hay
+            # fuente pública de serie diaria para renta variable).
+            api_precios_rv, issues_api_rv = market_data_precios.fetch_precios_renta_variable_api(
+                instrumentos_validos, precios_validos, claves_sheet
+            )
+            issues.extend(issues_api_rv)
+
+            # Backfill histórico hacia atrás (analisistecnico), sólo renta fija. Se auto-limita:
+            # sólo pide la serie de los tickers de renta fija cuyas filas 'api' todavía no llegan
+            # al piso (max(1er movimiento, hoy-5 años)). Devuelve siempre una lista.
             primeras_fechas_mov: dict = {}
             for mov in movimientos_validos:
                 t, f = mov["ticker"], mov["fecha"]
@@ -379,22 +386,26 @@ def sync_from_sheet(db: Session) -> dict:
             )
             issues.extend(issues_backfill)
 
-            if api_precios is not None or backfill_precios:
+            if api_precios is not None or api_precios_rv is not None or backfill_precios:
                 db.flush()
-                # Purga las filas 'api' de tickers que ya no son renta fija del Sheet (p.ej. un
-                # bono que venció y se sacó de Instrumentos): quedarían huérfanas para siempre.
-                tickers_rf = {i["ticker"] for i in instrumentos_validos
-                              if market_data_precios._es_renta_fija(i.get("tipo_instrumento", ""))}
+                # Purga las filas 'api' de tickers que ya no son renta fija/variable del Sheet
+                # (p.ej. un bono que venció y se sacó de Instrumentos): quedarían huérfanas para
+                # siempre.
+                tickers_api = {
+                    i["ticker"] for i in instrumentos_validos
+                    if market_data_precios._es_renta_fija(i.get("tipo_instrumento", ""))
+                    or market_data_precios._es_renta_variable(i.get("tipo_instrumento", ""))
+                }
                 purga = db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api")
-                if tickers_rf:
-                    purga = purga.filter(PrecioInstrumento.ticker.notin_(tickers_rf))
+                if tickers_api:
+                    purga = purga.filter(PrecioInstrumento.ticker.notin_(tickers_api))
                 purga.delete(synchronize_session=False)
                 db.flush()
                 existentes = {
                     (r.ticker, r.fecha): r
                     for r in db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").all()
                 }
-                for p in (api_precios or []) + backfill_precios:
+                for p in (api_precios or []) + (api_precios_rv or []) + backfill_precios:
                     fila = existentes.get((p["ticker"], p["fecha"]))
                     if fila is not None:
                         fila.precio, fila.moneda = p["precio"], p["moneda"]

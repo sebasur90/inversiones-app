@@ -1,16 +1,21 @@
-"""Precios automáticos de renta fija (bonos soberanos, ONs, letras/LECAPs) vía data912.
+"""Precios automáticos de renta fija (bonos soberanos, ONs, letras/LECAPs) y renta variable
+(acciones, CEDEARs) vía data912.
 
-El Sheet siempre gana. La API sólo agrega el precio **del día** para tickers de renta fija que:
+El Sheet siempre gana. La API sólo agrega el precio **del día** para tickers que:
   1. existen en la pestaña Instrumentos del Sheet,
   2. tienen al menos un precio manual previo en la pestaña Precios (necesario para calibrar la
      escala — ver abajo), y
   3. no tienen precio manual cargado para hoy.
 
 Escala: data912 cotiza la renta fija ARS por lámina de 100 VN y el Sheet la carga por 1 VN
-(factor 100). No se asume el factor a ciegas: para cada ticker se compara la cotización de la
-API contra el último precio manual del Sheet y se aplica 1/100 si el ratio cae cerca de 100, o
-1 si cae cerca de 1. Cualquier otro ratio -> no se carga y se reporta (elección del usuario:
-"normalizar por ratio observado", 2026-08-28).
+(factor 100); para renta variable no hay una convención de lámina documentada, así que se aplica
+el mismo tratamiento sin asumir 1:1. En ambos casos no se asume el factor a ciegas: para cada
+ticker se compara la cotización de la API contra el último precio manual del Sheet y se aplica
+1/100 si el ratio cae cerca de 100, o 1 si cae cerca de 1. Cualquier otro ratio -> no se carga y
+se reporta (elección del usuario: "normalizar por ratio observado", 2026-08-28).
+
+Renta variable no tiene backfill histórico (a diferencia de la renta fija vía analisistecnico,
+ver `fetch_backfill_renta_fija_api`): sólo se agrega el precio del día.
 """
 from datetime import date, timedelta
 from unicodedata import combining, normalize
@@ -23,6 +28,9 @@ from . import analisistecnico, data912
 _SUBCADENAS_RENTA_FIJA = ("bono", "boncer", "obligacion negociable", "letra", "lecap", "lede")
 # ...y tokens sueltos (para no confundir "ON" con la "on" de "accion" / "bono").
 _TOKENS_RENTA_FIJA = {"on", "ons"}
+# Renta variable (Ola 4): ninguna de las dos subcadenas aparece dentro de otra palabra del
+# dominio, no hace falta el tratamiento por tokens sueltos de renta fija.
+_SUBCADENAS_RENTA_VARIABLE = ("accion", "cedear")
 
 # Ventanas de tolerancia alrededor de los dos factores de escala plausibles (1:1 y 1:100).
 _RATIO_CERCA_DE_100 = (40.0, 250.0)
@@ -59,31 +67,37 @@ def _es_renta_fija(tipo_instrumento: str) -> bool:
     return bool(tokens & _TOKENS_RENTA_FIJA)
 
 
-def fetch_precios_renta_fija_api(
+def _es_renta_variable(tipo_instrumento: str) -> bool:
+    t = _sin_acentos(tipo_instrumento or "")
+    return any(sub in t for sub in _SUBCADENAS_RENTA_VARIABLE)
+
+
+def _fetch_precios_live_api(
     instrumentos: list[dict],
     precios_sheet: list[dict],
     claves_excluir: set[tuple[str, date]],
-    hoy: date | None = None,
+    hoy: date,
+    predicate,
+    fetch_fn,
+    endpoints_label: str,
 ) -> tuple[list[dict] | None, list[ValidationIssue]]:
-    """Devuelve (filas, issues). `filas` son dicts listos para `PrecioInstrumento(**fila)` con
-    `fuente="api"`. Devuelve None (no []) si data912 no respondió en absoluto, para que el sync
-    preserve las filas 'api' de una corrida anterior.
-
-    `instrumentos` / `precios_sheet`: los dicts ya validados del Sheet (mismo formato que
-    persiste el sync). `claves_excluir`: pares (ticker, fecha) que ya trae el Sheet.
+    """Motor común de `fetch_precios_renta_fija_api` y `fetch_precios_renta_variable_api`: matchea
+    instrumentos por `predicate`, pide el precio del día con `fetch_fn` y calibra la escala contra
+    el último precio del Sheet. Devuelve (filas, issues); `filas` son dicts listos para
+    `PrecioInstrumento(**fila)` con `fuente="api"`. Devuelve None (no []) si la API no respondió en
+    absoluto, para que el sync preserve las filas 'api' de una corrida anterior.
     """
     issues: list[ValidationIssue] = []
-    hoy = hoy or date.today()
 
-    objetivo = [i for i in instrumentos if _es_renta_fija(i.get("tipo_instrumento", ""))]
+    objetivo = [i for i in instrumentos if predicate(i.get("tipo_instrumento", ""))]
     if not objetivo:
         return [], issues
 
-    api_por_symbol = data912.fetch_precios_renta_fija()
+    api_por_symbol = fetch_fn()
     if api_por_symbol is None:
         issues.append(ValidationIssue(
             tab="Precios (API)", regla="data912_no_disponible",
-            mensaje="No se pudieron obtener precios de renta fija de data912",
+            mensaje=f"No se pudieron obtener precios de {endpoints_label} de data912",
             impacto="Se mantiene el último precio automático guardado, si existía",
             severidad=Severity.ADVERTENCIA,
         ))
@@ -107,7 +121,7 @@ def fetch_precios_renta_fija_api(
         if px_api is None:
             issues.append(ValidationIssue(
                 tab="Precios (API)", campo=ticker, regla="ticker_no_mapeado",
-                mensaje=f"{ticker}: sin cotización en data912 (arg_bonds/arg_corp/arg_notes)",
+                mensaje=f"{ticker}: sin cotización en data912 ({endpoints_label})",
                 impacto="Se sigue usando el precio manual del Sheet para este instrumento",
                 severidad=Severity.INFO,
             ))
@@ -147,6 +161,35 @@ def fetch_precios_renta_fija_api(
         })
 
     return filas, issues
+
+
+def fetch_precios_renta_fija_api(
+    instrumentos: list[dict],
+    precios_sheet: list[dict],
+    claves_excluir: set[tuple[str, date]],
+    hoy: date | None = None,
+) -> tuple[list[dict] | None, list[ValidationIssue]]:
+    """`instrumentos` / `precios_sheet`: los dicts ya validados del Sheet (mismo formato que
+    persiste el sync). `claves_excluir`: pares (ticker, fecha) que ya trae el Sheet."""
+    return _fetch_precios_live_api(
+        instrumentos, precios_sheet, claves_excluir, hoy or date.today(),
+        _es_renta_fija, data912.fetch_precios_renta_fija, "arg_bonds/arg_corp/arg_notes",
+    )
+
+
+def fetch_precios_renta_variable_api(
+    instrumentos: list[dict],
+    precios_sheet: list[dict],
+    claves_excluir: set[tuple[str, date]],
+    hoy: date | None = None,
+) -> tuple[list[dict] | None, list[ValidationIssue]]:
+    """Ídem `fetch_precios_renta_fija_api` para acciones y CEDEARs (Ola 4). Sin backfill
+    histórico: no hay fuente pública de serie diaria para renta variable, sólo el precio del día
+    vía data912 `/live/arg_stocks` + `/live/arg_cedears`."""
+    return _fetch_precios_live_api(
+        instrumentos, precios_sheet, claves_excluir, hoy or date.today(),
+        _es_renta_variable, data912.fetch_precios_renta_variable, "arg_stocks/arg_cedears",
+    )
 
 
 def fetch_backfill_renta_fija_api(

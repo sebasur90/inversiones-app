@@ -75,6 +75,7 @@ def test_sin_use_external_apis_no_llama_market_data(monkeypatch):
     monkeypatch.setattr(sync_module.market_data_indices, "fetch_indices_mercado_api", _boom)
     monkeypatch.setattr(sync_module.market_data_indices, "fetch_benchmarks_api", _boom)
     monkeypatch.setattr(sync_module.market_data_precios, "fetch_precios_renta_fija_api", _boom)
+    monkeypatch.setattr(sync_module.market_data_precios, "fetch_precios_renta_variable_api", _boom)
 
     try:
         sync_from_sheet(db)
@@ -272,6 +273,91 @@ def test_precio_renta_fija_api_caida_preserva_corrida_anterior(monkeypatch):
         monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_fija", lambda: None)
         sync_from_sheet(db)
         assert db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").count() == 1
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
+def _tabs_con_accion():
+    return {
+        "Instrumentos": TabRaw(presente=True, header=["Ticker", "Nombre", "Tipo Instrumento", "Mercado", "Moneda"], rows=[
+            (2, {"Ticker": "GGAL", "Nombre": "Grupo Galicia", "Tipo Instrumento": "Accion", "Mercado": "MERVAL", "Moneda": "ARS"}),
+        ]),
+        "Precios": TabRaw(presente=True, header=["Fecha", "Ticker", "Precio", "Moneda"], rows=[
+            (2, {"Fecha": "2026-07-27", "Ticker": "GGAL", "Precio": "5100", "Moneda": "ARS"}),
+        ]),
+    }
+
+
+def test_precio_renta_variable_api_persiste_sin_backfill(monkeypatch):
+    """Ola 4: data912 arg_stocks/arg_cedears agrega el precio del día para acciones/CEDEARs."""
+    db = _make_db()
+    original_fetch = sync_module.fetch_sheet_data
+    sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_accion())
+
+    monkeypatch.setattr(sync_module.market_data, "use_external_apis", lambda: True)
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_indices_mercado_api", lambda fechas_excluir: (None, []))
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_benchmarks_api", lambda: (None, []))
+    monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_variable", lambda: {"GGAL": 5230.0})
+
+    try:
+        result = sync_from_sheet(db)
+        sheet_row = db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "sheet").one()
+        assert float(sheet_row.precio) == 5100.0
+        api_row = db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").one()
+        assert api_row.ticker == "GGAL"
+        assert float(api_row.precio) == 5230.0  # ratio ~1: no se normaliza
+        assert result["precios"] == 2
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
+def test_precio_renta_variable_api_caida_preserva_corrida_anterior(monkeypatch):
+    db = _make_db()
+    original_fetch = sync_module.fetch_sheet_data
+    sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_accion())
+
+    monkeypatch.setattr(sync_module.market_data, "use_external_apis", lambda: True)
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_indices_mercado_api", lambda fechas_excluir: (None, []))
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_benchmarks_api", lambda: (None, []))
+    monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_variable", lambda: {"GGAL": 5230.0})
+
+    try:
+        sync_from_sheet(db)
+        assert db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").count() == 1
+
+        monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_variable", lambda: None)
+        sync_from_sheet(db)
+        assert db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").count() == 1
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
+def test_purga_no_borra_filas_api_de_renta_variable_al_purgar_renta_fija(monkeypatch):
+    """La purga de filas 'api' huérfanas debe considerar renta fija Y variable, no sólo una."""
+    db = _make_db()
+    original_fetch = sync_module.fetch_sheet_data
+    tabs = _tabs_con_accion()
+    tabs["Instrumentos"].rows.append(
+        (3, {"Ticker": "TZXD7", "Nombre": "Boncer 2027", "Tipo Instrumento": "Bono", "Mercado": "MERVAL", "Moneda": "ARS"})
+    )
+    tabs["Precios"].rows.append(
+        (3, {"Fecha": "2026-07-27", "Ticker": "TZXD7", "Precio": "2.7135", "Moneda": "ARS"})
+    )
+    sync_module.fetch_sheet_data = _mock_fetch(tabs)
+
+    monkeypatch.setattr(sync_module.market_data, "use_external_apis", lambda: True)
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_indices_mercado_api", lambda fechas_excluir: (None, []))
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_benchmarks_api", lambda: (None, []))
+    monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_variable", lambda: {"GGAL": 5230.0})
+    monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_fija", lambda: {"TZXD7": 272.85})
+
+    try:
+        sync_from_sheet(db)
+        api_rows = {r.ticker for r in db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").all()}
+        assert api_rows == {"GGAL", "TZXD7"}
     finally:
         sync_module.fetch_sheet_data = original_fetch
         db.close()

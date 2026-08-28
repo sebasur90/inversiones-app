@@ -1,4 +1,5 @@
-"""Tests de `market_data.precios` (renta fija vía data912) — sin red: mockea `data912`."""
+"""Tests de `market_data.precios` (renta fija y renta variable vía data912) — sin red: mockea
+`data912`."""
 from datetime import date, timedelta
 
 import pytest
@@ -26,6 +27,23 @@ from backend.app.services.market_data import analisistecnico, data912
 ])
 def test_es_renta_fija(tipo, esperado):
     assert mdp._es_renta_fija(tipo) is esperado
+
+
+@pytest.mark.parametrize("tipo, esperado", [
+    ("Acción", True),
+    ("Accion", True),
+    ("ACCIONES", True),
+    ("CEDEAR", True),
+    ("cedear", True),
+    ("Cedears", True),
+    ("Bono", False),
+    ("ON", False),
+    ("FCI", False),
+    ("", False),
+    (None, False),
+])
+def test_es_renta_variable(tipo, esperado):
+    assert mdp._es_renta_variable(tipo) is esperado
 
 
 def _inst(ticker, tipo="Bono", moneda="ARS"):
@@ -136,6 +154,90 @@ def test_usa_el_ultimo_precio_del_sheet_para_calibrar(monkeypatch):
     )
     assert issues == []
     assert round(filas[0]["precio"], 4) == 2.7285
+
+
+# --- Renta variable (acciones/CEDEARs, Ola 4) — mismo motor, sin backfill ------------------
+
+def test_rv_escala_1_se_deja_igual(monkeypatch):
+    monkeypatch.setattr(data912, "fetch_precios_renta_variable", lambda: {"GGAL": 5230.0})
+    filas, issues = mdp.fetch_precios_renta_variable_api(
+        [_inst("GGAL", tipo="Accion")], [_px("GGAL", 5100.0)], claves_excluir=set(), hoy=HOY
+    )
+    assert issues == []
+    assert filas[0]["ticker"] == "GGAL"
+    assert filas[0]["fuente"] == "api"
+    assert filas[0]["precio"] == 5230.0
+
+
+def test_rv_escala_100_se_normaliza(monkeypatch):
+    monkeypatch.setattr(data912, "fetch_precios_renta_variable", lambda: {"KO": 850.0})
+    filas, issues = mdp.fetch_precios_renta_variable_api(
+        [_inst("KO", tipo="CEDEAR")], [_px("KO", 8.4)], claves_excluir=set(), hoy=HOY
+    )
+    assert issues == []
+    assert round(filas[0]["precio"], 4) == 8.5  # 850 / 100
+
+
+def test_rv_sin_precio_previo_no_carga_y_reporta(monkeypatch):
+    monkeypatch.setattr(data912, "fetch_precios_renta_variable", lambda: {"GGAL": 5230.0})
+    filas, issues = mdp.fetch_precios_renta_variable_api(
+        [_inst("GGAL", tipo="Accion")], [], claves_excluir=set(), hoy=HOY
+    )
+    assert filas == []
+    assert issues[0].regla == "sin_precio_para_calibrar"
+    assert issues[0].severidad.value == "info"
+
+
+def test_rv_ticker_no_encontrado_en_data912(monkeypatch):
+    monkeypatch.setattr(data912, "fetch_precios_renta_variable", lambda: {"OTRO": 100.0})
+    filas, issues = mdp.fetch_precios_renta_variable_api(
+        [_inst("GGAL", tipo="Accion")], [_px("GGAL", 5100.0)], claves_excluir=set(), hoy=HOY
+    )
+    assert filas == []
+    assert issues[0].regla == "ticker_no_mapeado"
+    assert "arg_stocks/arg_cedears" in issues[0].mensaje
+    assert issues[0].severidad.value == "info"
+
+
+def test_rv_ratio_raro_no_carga_y_advierte(monkeypatch):
+    monkeypatch.setattr(data912, "fetch_precios_renta_variable", lambda: {"GGAL": 500.0})
+    filas, issues = mdp.fetch_precios_renta_variable_api(
+        [_inst("GGAL", tipo="Accion")], [_px("GGAL", 5100.0)], claves_excluir=set(), hoy=HOY
+    )
+    assert filas == []
+    assert issues[0].regla == "escala_desconocida"
+    assert issues[0].severidad.value == "advertencia"
+
+
+def test_rv_api_caida_devuelve_none(monkeypatch):
+    monkeypatch.setattr(data912, "fetch_precios_renta_variable", lambda: None)
+    filas, issues = mdp.fetch_precios_renta_variable_api(
+        [_inst("GGAL", tipo="Accion")], [_px("GGAL", 5100.0)], claves_excluir=set(), hoy=HOY
+    )
+    assert filas is None
+    assert issues[0].regla == "data912_no_disponible"
+
+
+def test_rv_fecha_ya_cubierta_por_el_sheet_se_saltea(monkeypatch):
+    monkeypatch.setattr(data912, "fetch_precios_renta_variable", lambda: {"GGAL": 5230.0})
+    filas, issues = mdp.fetch_precios_renta_variable_api(
+        [_inst("GGAL", tipo="Accion")], [_px("GGAL", 5100.0)],
+        claves_excluir={("GGAL", HOY)}, hoy=HOY,
+    )
+    assert filas == []
+    assert issues == []
+
+
+def test_sin_instrumentos_de_renta_variable_no_llama_api(monkeypatch):
+    def _boom():
+        raise AssertionError("no debería pegarle a data912 si no hay renta variable")
+
+    monkeypatch.setattr(data912, "fetch_precios_renta_variable", _boom)
+    filas, issues = mdp.fetch_precios_renta_variable_api(
+        [_inst("AL30", tipo="Bono")], [], claves_excluir=set(), hoy=HOY
+    )
+    assert filas == []
+    assert issues == []
 
 
 # --- Backfill histórico (analisistecnico) --------------------------------------------------

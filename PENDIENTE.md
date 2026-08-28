@@ -7,21 +7,23 @@ _Actualizado: 2026-08-28_
 
 ## Estado
 
-- Todo lo hecho está en **`main`**, **sin pushear** (`main` está 6+ commits adelante de `origin/main`).
+- Todo lo hecho está en **`main`**, **sin pushear** (`main` está 7+ commits adelante de `origin/main`).
 - Últimos commits relevantes:
-  - _(sin commitear)_ — Ola 3 ítem 1b: **Backfill histórico de precios de renta fija**
-    (`market_data/analisistecnico.py` + `precios.fetch_backfill_renta_fija_api`). Ver detalle
-    en `PLAN_MEJORAS_PENDIENTES.md`.
+  - _(sin commitear)_ — Ola 4: **Precios automáticos de acciones y CEDEARs** (data912
+    `/live/arg_stocks` + `/live/arg_cedears`). Ver detalle en `PLAN_MEJORAS_PENDIENTES.md`.
+  - `9266157` — Ola 3 ítem 1b: **Backfill histórico de precios de renta fija**
+    (`market_data/analisistecnico.py` + `precios.fetch_backfill_renta_fija_api`).
   - `14077b7` — Ola 3 ítem 3: **Vencimientos enriquecido** (paridad, TIR al vto., duration,
     "% de la cartera que vence por año").
   - `a60ffe0` — Ola 3 ítem 2: pantalla **Flujo de caja proyectado**.
   - `4f8eb9c` / `f29123e` — Ola 3 ítem 1: precios automáticos de renta fija (data912).
   - `0316e24` — Ola 1-2: market_data (CER/MEP/inflación) + menú "Más".
-- Tests backend: **240 pasan, 0 fallan** (+7 `test_analisistecnico.py`, +11 backfill en
-  `test_market_data_precios.py`, +1 integración en `test_inversiones_sync_market_data.py`).
-- QA visual en navegador de Flujo de caja y Vencimientos: **pendiente** (no hubo browser en
-  la sesión). Verificado sólo que compila (`tsc && vite build`) y que la salida valida contra
-  el schema Pydantic + tests.
+- Tests backend: **265 pasan, 0 fallan** (+25 con Ola 4: `test_data912.py` +3,
+  `test_market_data_precios.py` +17, `test_inversiones_sync_market_data.py` +4).
+- Ola 4 es puro backend (ingesta en el sync, sin pantalla nueva) — no requiere QA visual.
+- QA visual en navegador de Flujo de caja y Vencimientos: **sigue pendiente** (no hubo browser
+  en la sesión). Verificado sólo que compila (`tsc && vite build`) y que la salida valida
+  contra el schema Pydantic + tests.
 
 ## Lo que sigue, en orden
 
@@ -44,12 +46,18 @@ ONs: `datos.gob.ar` (catálogo viejo), `argen.bond` (API paga), `data912` (no ti
 `UMBRAL_APROXIMADO_DIAS = 45` **sigue** — se saca en un ítem posterior cuando toda la renta
 fija tenga cobertura densa.
 
-### 2. Ola 4 — Precios automáticos de acciones y CEDEARs
+### 2. Ola 4 — Precios automáticos de acciones y CEDEARs  ✅ HECHO
 
-`data912 /live/arg_stocks` + `/live/arg_cedears`, modo híbrido (Sheet manda, API rellena).
-Ya existe `data912.fetch_precios_renta_variable()` escrito; falta la orquestación estilo
-`precios.py` y la integración al sync. Mismo cuidado con el mapeo de tickers y la escala
-(lámina) que en el ítem 1.
+`data912.fetch_precios_renta_variable()` (`/live/arg_stocks` + `/live/arg_cedears`, ya estaba
+escrito) orquestado en `market_data/precios.py`: `fetch_precios_renta_variable_api` comparte
+motor con la renta fija (`_fetch_precios_live_api`, parametrizado por predicate/fetch_fn/label)
+— modo híbrido, Sheet manda, sólo agrega el precio del día. Clasificación por
+`tipo_instrumento`: subcadenas `"accion"`/`"cedear"` sin acentos (`_es_renta_variable`).
+Escala calibrada por ratio contra el Sheet igual que el ítem 1 (no se asume 1:1, aunque en la
+práctica acciones/CEDEARs suelen cotizar a la par, sin lámina de 100 VN). Integrado en el mismo
+bloque de `inversiones_sync`; la purga de filas `api` huérfanas ahora es unión renta
+fija+variable. **Sin backfill** — no hay fuente pública de serie diaria para renta variable.
+Tests: +25 (240 → 265).
 
 ### 3. Ola 5 (sin API, con datos que ya hay)
 
@@ -82,7 +90,7 @@ fila basura en `Configuracion`, `TipoCambio` código muerto, `es_jubilacion` hu�
 docker compose -f docker-compose.yml -f docker-compose.corporate.yml run --rm \
   -v $(pwd):/repo -w /repo -e PYTHONPATH=/repo \
   backend python -m pytest backend/tests/ -q
-# Baseline: 240 pasan, 0 fallan
+# Baseline: 265 pasan, 0 fallan
 
 # Build frontend (verifica TypeScript)
 docker compose -f docker-compose.yml -f docker-compose.corporate.yml build frontend

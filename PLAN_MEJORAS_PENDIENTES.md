@@ -135,9 +135,25 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
 
 ### Ola 4 — el resto de los precios
 
-4. **Precios automáticos de acciones y CEDEARs** — `data912 /live/arg_stocks` y
-   `/live/arg_cedears`, modo híbrido (Sheet manda, API rellena). Mismo cuidado con el mapeo de
-   tickers que en el ítem 1.
+4. ~~**Precios automáticos de acciones y CEDEARs**~~ — ✅ HECHO. `data912.fetch_precios_renta_variable()`
+   (`/live/arg_stocks` + `/live/arg_cedears`, ya estaba escrito desde el ítem 1) orquestado en
+   `market_data/precios.py`: `fetch_precios_renta_variable_api` es el mismo motor que
+   `fetch_precios_renta_fija_api` (extraído a `_fetch_precios_live_api`, parametrizado por
+   predicate/fetch_fn/label) — modo híbrido, Sheet manda, sólo agrega el precio **del día**.
+   Clasificación por `tipo_instrumento`: subcadenas `"accion"`/`"cedear"` sin acentos
+   (`_es_renta_variable`; sin ambigüedad de tokens sueltos como la "on" de renta fija). Escala:
+   igual que el ítem 1, **no se asume 1:1** — se calibra por ratio contra el último precio
+   manual del Sheet (`_factor_escala` reusado tal cual), aunque en la práctica las acciones y
+   CEDEARs suelen cotizar 1:1 (a diferencia de la lámina de 100 VN de los bonos). Integrado en
+   el mismo bloque de `inversiones_sync` que renta fija, compartiendo `claves_sheet` y el
+   upsert por `(ticker, fecha)`; la purga de filas `api` huérfanas ahora es unión de tickers de
+   renta fija **y** variable (antes sólo miraba renta fija, hubiera borrado esto). **Sin
+   backfill histórico** — no hay fuente pública de serie diaria para renta variable (a
+   diferencia de analisistecnico para renta fija); sólo crece hacia adelante desde que se activó
+   la API. Tests: +25 (`test_data912.py` +3, `test_market_data_precios.py` +9 clasificador +8
+   motor, `test_inversiones_sync_market_data.py` +1 mock extendido +3 integración).
+   `UMBRAL_APROXIMADO_DIAS = 45` sigue (ver nota del ítem 1b: sacarlo cuando toda la renta fija
+   *y* variable tengan cobertura densa — la variable recién empieza a acumular serie).
 
 ### Ola 5 — información nueva con los datos que ya hay (sin API)
 
@@ -192,12 +208,14 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
     -v $(pwd):/repo -w /repo -e PYTHONPATH=/repo \
     backend python -m pytest backend/tests/ -q
   ```
-  Baseline actual: **240 pasan, 0 fallan** (176 tras Ola 1-2; +29 con Ola 3 ítem 1:
+  Baseline actual: **265 pasan, 0 fallan** (176 tras Ola 1-2; +29 con Ola 3 ítem 1:
   `test_data912.py`, `test_market_data_precios.py`, 2 de integración en
   `test_inversiones_sync_market_data.py`; +9 con Ola 3 ítem 2:
   `test_flujo_caja_analytics.py`; +7 con Ola 3 ítem 3:
   `test_vencimientos_enriquecido.py`; +19 con Ola 3 ítem 1b: `test_analisistecnico.py` (7),
-  backfill en `test_market_data_precios.py` (11), 1 de integración).
+  backfill en `test_market_data_precios.py` (11), 1 de integración; +25 con Ola 4 ítem 4:
+  `test_data912.py` (3), `test_market_data_precios.py` (17), `test_inversiones_sync_market_data.py`
+  (3 integración + 1 mock extendido)).
 - **Build frontend** (verifica TypeScript): `docker compose -f docker-compose.yml -f docker-compose.corporate.yml build frontend`.
 - Cualquier fetch nuevo a una API externa va en `backend/app/services/market_data/`, con el
   mismo patrón: nunca lanza (devuelve `None` en fallo total), se llama sólo si
