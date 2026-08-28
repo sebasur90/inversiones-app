@@ -340,16 +340,19 @@ def score_concentracion(concentracion: list[dict]) -> dict | None:
 
 def score_diversificacion(concentracion: list[dict]) -> dict | None:
     """Score de diversificación (promedio de HHI sobre 3 ejes)."""
-    ejes_diversificacion = ("Tipo de instrumento", "Sector", "Mercado")
+    ejes_diversificacion = ("Tipo de instrumento", "Sector", "Mercado", "País")
     valores = [
         (1 - c.get("hhi_normalizado", 0)) * 100
         for c in concentracion
         if c.get("eje") in ejes_diversificacion and c.get("estado") == "ok"
+        # País sólo cuenta si hay al menos 2 categorías reales: si nadie etiquetó el país,
+        # el único bucket "Sin país" daría HHI=1 y hundiría el score sin información útil.
+        and (c.get("eje") != "País" or (c.get("n_componentes") or 0) >= 2)
     ]
     if not valores:
         return None
     score = _clamp(sum(valores) / len(valores))
-    detalle = f"Diversificación en {len(valores)} ejes (tipo, sector, mercado)"
+    detalle = f"Diversificación en {len(valores)} ejes (tipo, sector, mercado, país)"
     return {"score": round(score, 1), "detalle": detalle}
 
 

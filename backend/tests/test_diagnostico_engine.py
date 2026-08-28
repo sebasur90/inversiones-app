@@ -302,6 +302,25 @@ class TestScoreFunctions:
         assert result is not None
         assert 0 <= result["score"] <= 100
 
+    def test_score_diversificacion_incluye_pais_si_hay_2_o_mas(self):
+        conc = [
+            {"eje": "Tipo de instrumento", "estado": "ok", "hhi_normalizado": 0.10, "n_componentes": 3},
+            {"eje": "País", "estado": "ok", "hhi_normalizado": 0.50, "n_componentes": 3},
+        ]
+        result = diagnostico_engine.score_diversificacion(conc)
+        # promedio de (1-0.10)*100=90 y (1-0.50)*100=50 -> 70
+        assert result["score"] == pytest.approx(70.0)
+        assert "país" in result["detalle"]
+
+    def test_score_diversificacion_ignora_pais_sin_etiquetar(self):
+        # Sólo el bucket "Sin país": n_componentes=1 -> no cuenta, no hunde el score.
+        conc = [
+            {"eje": "Tipo de instrumento", "estado": "ok", "hhi_normalizado": 0.10, "n_componentes": 3},
+            {"eje": "País", "estado": "ok", "hhi_normalizado": 1.0, "n_componentes": 1},
+        ]
+        result = diagnostico_engine.score_diversificacion(conc)
+        assert result["score"] == pytest.approx(90.0)
+
     def test_score_performance_vs_benchmark(self):
         calmar = {"estado": "ok", "retorno_anualizado": 0.12}
         result = diagnostico_engine.score_performance(calmar, 0.10)

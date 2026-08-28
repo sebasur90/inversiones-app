@@ -185,6 +185,15 @@ def get_concentracion(cartera: str | None, db: Session) -> list[dict]:
     sector_items = _agrupar_sobre_total(sector_entries, total_usd, total_ars)
     resultado.append(_con_hhi("Sector", sector_items))
 
+    # Igual que Sector: bucket explícito "Sin país" para que los pesos sumen el 100% real
+    # (si no, una cartera mayormente sin país etiquetado parecería diversificada).
+    pais_entries = [
+        (instrumentos[t].pais if instrumentos[t].pais else "Sin país", v_usd, v_ars)
+        for _, t, v_usd, v_ars in clasificados
+    ]
+    pais_items = _agrupar_sobre_total(pais_entries, total_usd, total_ars)
+    resultado.append(_con_hhi("País", pais_items))
+
     return resultado
 
 
