@@ -7,48 +7,34 @@ _Actualizado: 2026-08-28_
 
 ## Estado
 
-- Todo lo hecho está en **`main`**, **sin pushear** (`main` está 4 commits adelante de `origin/main`).
+- Todo lo hecho está en **`main`**, **sin pushear** (`main` está 5+ commits adelante de `origin/main`).
 - Últimos commits relevantes:
-  - `a60ffe0` — Ola 3 ítem 2: pantalla **Flujo de caja proyectado** (recién hecho).
+  - _(sin commitear)_ — Ola 3 ítem 3: **Vencimientos enriquecido** (paridad, TIR al vto.,
+    duration, "% de la cartera que vence por año"). Ver detalle en `PLAN_MEJORAS_PENDIENTES.md`.
+  - `a60ffe0` — Ola 3 ítem 2: pantalla **Flujo de caja proyectado**.
   - `4f8eb9c` / `f29123e` — Ola 3 ítem 1: precios automáticos de renta fija (data912).
   - `0316e24` — Ola 1-2: market_data (CER/MEP/inflación) + menú "Más".
-- Tests backend: **214 pasan, 0 fallan**.
-- QA visual en navegador de la pantalla nueva: **pendiente** (no hubo browser en la sesión).
-  Verificado sólo que compila (`vite build`) y que la salida valida contra el schema Pydantic.
+- Tests backend: **221 pasan, 0 fallan** (+7 con `test_vencimientos_enriquecido.py`).
+- QA visual en navegador de Flujo de caja y Vencimientos: **pendiente** (no hubo browser en
+  la sesión). Verificado sólo que compila (`tsc && vite build`) y que la salida valida contra
+  el schema Pydantic + tests.
 
 ## Lo que sigue, en orden
 
-### 1. Ola 3 ítem 3 — Vencimientos enriquecido  ← SIGUIENTE
-
-Sobre `frontend/src/pages/Vencimientos.tsx` y su endpoint (`get_vencimientos` en
-`backend/app/services/inversiones_analytics.py:2010`). Agregar por instrumento:
-
-- **Paridad**: precio de mercado vs. valor técnico (precio / valor técnico).
-- **TIR al vencimiento**: reutilizar `_calcular_xirr` (`inversiones_analytics.py:601`) aplicado
-  al flujo proyectado. Ese flujo ya lo arma
-  `flujo_caja_analytics.get_flujo_caja_proyectado()` (cobros de cupón + amortización con
-  fecha y monto) — se puede exponer una variante que devuelva los cobros crudos por ticker,
-  o reconstruir el flujo desde `instrumentos[].proximo_cobro` + la periodicidad.
-- **Duration modificada** (a partir del mismo flujo).
-- Resumen **"% de la cartera que vence por año"**.
-
-Ojo: la proyección del ítem 2 es *inferida* del historial de cupones; la TIR/duration que
-salga de ahí hereda esa incertidumbre → marcarlo en la UI igual que en Flujo de caja.
-
-### 2. Ola 3 ítem 1b — Backfill histórico de precios de renta fija
+### 1. Ola 3 ítem 1b — Backfill histórico de precios de renta fija  ← SIGUIENTE
 
 `data912 /historical/bonds/{ticker}` para poblar hacia atrás la serie `precios_instrumento`
 con `fuente='api'` (hoy sólo crece hacia adelante desde que se prende `USE_EXTERNAL_APIS`).
 Patrón: `backend/app/services/market_data/precios.py`.
 
-### 3. Ola 4 — Precios automáticos de acciones y CEDEARs
+### 2. Ola 4 — Precios automáticos de acciones y CEDEARs
 
 `data912 /live/arg_stocks` + `/live/arg_cedears`, modo híbrido (Sheet manda, API rellena).
 Ya existe `data912.fetch_precios_renta_variable()` escrito; falta la orquestación estilo
 `precios.py` y la integración al sync. Mismo cuidado con el mapeo de tickers y la escala
 (lámina) que en el ítem 1.
 
-### 4. Ola 5 (sin API, con datos que ya hay)
+### 3. Ola 5 (sin API, con datos que ya hay)
 
 5. Vista fiscal por año · 6. TWR bruto vs. neto de comisiones · 7. Historial de calidad de
 datos (sparkline health score) · 8. Escenarios (`variacion_por_instrumento` ya en backend,
@@ -56,7 +42,7 @@ frontend manda vacío) · 9. Config declarada y no aplicada (`peso_minimo`, `pes
 `rendimiento_objetivo`) · 10. Riesgo país + inflación mensual en Indicadores Macro ·
 11. Exposición/concentración por país.
 
-### 5. Ola 6 (opcional)
+### 4. Ola 6 (opcional)
 
 12. Alertas push stop-loss/precio objetivo · 13. Volatilidad implícita/opciones.
 

@@ -91,10 +91,21 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
    **Pendiente opcional** (no bloqueante): pestaña `Cronograma` en el Sheet
    (`Ticker, Fecha, Tipo, Monto por unidad`) que pise lo inferido — no implementada; hoy todo
    es inferencia.
-3. **Vencimientos enriquecido** — sobre `pages/Vencimientos.tsx`: paridad (precio vs. valor
-   técnico), TIR al vencimiento (reutilizar `_calcular_xirr`,
-   `inversiones_analytics.py:601`, aplicado al flujo del ítem 2), duration modificada, resumen
-   "% de la cartera que vence por año".
+3. ~~**Vencimientos enriquecido**~~ — ✅ HECHO. `flujo_caja_analytics.py` ahora expone
+   `_proyectar_cobros_ticker` (extraído del ítem 2, mismo motor de inferencia) y
+   `get_vencimientos_completo`, que devuelve `{items, por_anio, cartera_valor_*}`. Por
+   instrumento se agregan: **paridad** = precio / valor técnico (valor residual + interés
+   corrido; residual = par 1, ajustado por el conteo de cuotas de amortización inferidas),
+   **TIR al vencimiento** (`_calcular_xirr` sobre `[(hoy, -valor_mercado)] + cobros` de toda
+   la vida del bono) y **duration** Macaulay + modificada (misma capitalización que la XIRR).
+   Resumen **"% de la cartera que vence por año"** = valor de mercado por año calendario ÷
+   `get_resumen`. Todo lo derivado del flujo inferido va marcado (`metricas_estimadas`,
+   `metricas_nota`) y la UI lo rotula "est." + nota al pie. `get_vencimientos` sigue
+   devolviendo `list[dict]` (lo consume `diagnostico_analytics`); el endpoint cambió a
+   `VencimientosOut`. Tests: `backend/tests/test_vencimientos_enriquecido.py` (7).
+   **Caveat conocido**: para bonos *bullet* el capital al vto. se estima con el precio de
+   mercado actual → la TIR tiende a la TIR corriente (no capta ganancia/pérdida de capital
+   contra la par). Se avisa en `metricas_nota` y en el tooltip.
 
 ### Ola 4 — el resto de los precios
 
@@ -155,10 +166,11 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
     -v $(pwd):/repo -w /repo -e PYTHONPATH=/repo \
     backend python -m pytest backend/tests/ -q
   ```
-  Baseline actual: **214 pasan, 0 fallan** (176 tras Ola 1-2; +29 con Ola 3 ítem 1:
+  Baseline actual: **221 pasan, 0 fallan** (176 tras Ola 1-2; +29 con Ola 3 ítem 1:
   `test_data912.py`, `test_market_data_precios.py`, 2 de integración en
   `test_inversiones_sync_market_data.py`; +9 con Ola 3 ítem 2:
-  `test_flujo_caja_analytics.py`).
+  `test_flujo_caja_analytics.py`; +7 con Ola 3 ítem 3:
+  `test_vencimientos_enriquecido.py`).
 - **Build frontend** (verifica TypeScript): `docker compose -f docker-compose.yml -f docker-compose.corporate.yml build frontend`.
 - Cualquier fetch nuevo a una API externa va en `backend/app/services/market_data/`, con el
   mismo patrón: nunca lanza (devuelve `None` en fallo total), se llama sólo si

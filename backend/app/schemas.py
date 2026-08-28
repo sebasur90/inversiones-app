@@ -472,6 +472,37 @@ class VencimientoItem(BaseModel):
     valor_actual_usd: float | None = None
     valor_actual_ars: float | None = None
     moneda: str
+    # Métricas de bono estimadas sobre el flujo de caja inferido (ver flujo_caja_analytics).
+    # Todas None si no hay cupones cobrados de los que inferir, o si falta precio.
+    tir_vencimiento: float | None = None       # TIR anual (decimal) al vencimiento
+    duration_macaulay: float | None = None     # años
+    duration_modificada: float | None = None   # años
+    paridad: float | None = None               # precio / valor técnico
+    valor_tecnico: float | None = None          # por unidad, en moneda_metricas
+    interes_corrido: float | None = None        # por unidad
+    valor_residual: float | None = None         # por unidad, base par = 1
+    moneda_metricas: str | None = None
+    metricas_estimadas: bool = False
+    metricas_nota: str | None = None
+
+
+class VencimientoAnioItem(BaseModel):
+    anio: int
+    valor_usd: float
+    valor_ars: float
+    pct_cartera_usd: float | None = None
+    pct_cartera_ars: float | None = None
+    cantidad_instrumentos: int
+    instrumentos_sin_valuar: int
+    tickers: list[str]
+
+
+class VencimientosOut(BaseModel):
+    generado: date
+    items: list[VencimientoItem]
+    por_anio: list[VencimientoAnioItem]
+    cartera_valor_usd: float
+    cartera_valor_ars: float
 
 
 # --- Flujo de caja proyectado (renta fija) ---

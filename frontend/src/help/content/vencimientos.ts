@@ -6,6 +6,11 @@ export type VencimientosHelpKey =
   | 'vencimientos_fecha_vencimiento'
   | 'vencimientos_vencido'
   | 'vencimientos_valor_actual'
+  | 'vencimientos_inferido'
+  | 'vencimientos_paridad'
+  | 'vencimientos_tir'
+  | 'vencimientos_duration'
+  | 'vencimientos_por_anio'
 
 export const VENCIMIENTOS_HELP: Record<VencimientosHelpKey, HelpContent> = {
   vencimientos_titulo: {
@@ -33,5 +38,40 @@ export const VENCIMIENTOS_HELP: Record<VencimientosHelpKey, HelpContent> = {
     title: 'Valor actual',
     shortDescription: 'El valor de mercado actual del instrumento, mostrado en la moneda seleccionada (USD o ARS). Es lo que obtendrías si vendieras ahora, o lo que recuperarás al vencimiento (si todo va según lo planeado).',
     whyItMatters: 'Te permite evaluar si el precio actual del bono cambió (por suba/baja de tasas o cambios de riesgo del emisor) desde que lo compraste. Importante para decidir si mantener hasta vencimiento o vender antes.',
+  },
+  vencimientos_inferido: {
+    title: 'Métricas estimadas',
+    shortDescription:
+      'La paridad, la TIR al vencimiento y la duration se calculan sobre un cronograma de cupones y amortizaciones inferido de tu propio historial de cobros, no de un cronograma oficial. Es el mismo motor que la pantalla Flujo de caja proyectado.',
+    whyItMatters:
+      'Sirven para comparar bonos entre sí y ver un orden de magnitud, no para operar al punto básico. Cuando cobres el próximo cupón real, la estimación se recalibra sola. Los bonos sin cupones cobrados todavía no muestran estas métricas.',
+  },
+  vencimientos_paridad: {
+    title: 'Paridad',
+    shortDescription:
+      'Precio de mercado dividido el valor técnico (valor residual del capital + intereses corridos), ambos por unidad. Arriba de 1 (100%) el bono cotiza sobre la par; abajo de 1, bajo la par.',
+    whyItMatters:
+      'Es la forma estándar de comparar bonos con distinto cupón y amortización. Una paridad baja puede indicar castigo por riesgo o tasas altas; una alta, que ya descontó buena parte del recorrido. Acá el valor residual se estima (par = 1, ajustado por las cuotas de amortización ya inferidas), así que tomala como referencia.',
+  },
+  vencimientos_tir: {
+    title: 'TIR al vencimiento',
+    shortDescription:
+      'Tasa interna de retorno anualizada si comprás hoy al precio de mercado y mantenés hasta el vencimiento, cobrando todos los cupones y amortizaciones proyectados. Se calcula con el mismo método que la TIR de la cartera.',
+    whyItMatters:
+      'Es el rendimiento comparable entre bonos. Ojo: para los bonos bullet el capital al vencimiento se estima con el precio de mercado actual, así que la TIR tiende a parecerse a la TIR corriente (cupón ÷ precio) y no captura la ganancia o pérdida de capital contra la par.',
+  },
+  vencimientos_duration: {
+    title: 'Duration modificada',
+    shortDescription:
+      'Sensibilidad aproximada del precio del bono a un cambio de 1 punto porcentual en su tasa: una duration modificada de 2 significa que el precio cae ~2% si la tasa sube 1 pp. Se deriva de la duration de Macaulay (plazo promedio ponderado de los cobros) dividida por (1 + TIR).',
+    whyItMatters:
+      'Mide el riesgo de tasa. Más duration = más volatilidad ante movimientos de tasas. Útil para dimensionar cuánto pega una suba de tasas en la parte de renta fija de la cartera.',
+  },
+  vencimientos_por_anio: {
+    title: '% de la cartera que vence por año',
+    shortDescription:
+      'Agrupa el valor de mercado de los instrumentos con vencimiento por año calendario y lo divide por el valor total de la cartera. Muestra qué porción del patrimonio vuelve a efectivo cada año.',
+    whyItMatters:
+      'Concentrar muchos vencimientos en un mismo año expone a reinvertir todo junto a la tasa que haya en ese momento (riesgo de reinversión). Escalonar los vencimientos suaviza ese riesgo.',
   },
 }

@@ -24,6 +24,7 @@ from ..schemas import (
     TickerConPrecioItem,
     IndicesMercadoOut,
     VencimientoItem,
+    VencimientosOut,
     FlujoCajaProyectadoOut,
     ComisionesOut,
     PnlRealizadoNoRealizadoOut,
@@ -59,12 +60,11 @@ from ..services.inversiones_analytics import (
     get_tickers_con_precios,
     get_precios_historicos_ticker,
     get_indices_mercado,
-    get_vencimientos,
     get_comisiones,
     get_pnl_realizado_no_realizado,
     get_rendimiento_mensual,
 )
-from ..services.flujo_caja_analytics import get_flujo_caja_proyectado
+from ..services.flujo_caja_analytics import get_flujo_caja_proyectado, get_vencimientos_completo
 from ..services.patrimonio_analytics import get_patrimonio_history, get_patrimonio_summary
 from ..services.riesgo_analytics import get_riesgo, get_benchmarks_disponibles, MONEDAS_VALIDAS
 from ..services.benchmarks_analytics import get_performance_relativa, get_performance_compare
@@ -269,15 +269,15 @@ def indices_mercado(dias: int = Query(3650, ge=1, le=3650), db: Session = Depend
     return get_indices_mercado(dias, db)
 
 
-@router.get("/carteras/{nombre}/vencimientos", response_model=list[VencimientoItem])
+@router.get("/carteras/{nombre}/vencimientos", response_model=VencimientosOut)
 def vencimientos_cartera(nombre: str, db: Session = Depends(get_db)):
     _validar_cartera(nombre, db)
-    return get_vencimientos(nombre, db)
+    return get_vencimientos_completo(nombre, db)
 
 
-@router.get("/consolidado/vencimientos", response_model=list[VencimientoItem])
+@router.get("/consolidado/vencimientos", response_model=VencimientosOut)
 def vencimientos_consolidado(db: Session = Depends(get_db)):
-    return get_vencimientos(None, db)
+    return get_vencimientos_completo(None, db)
 
 
 @router.get("/carteras/{nombre}/flujo-caja-proyectado", response_model=FlujoCajaProyectadoOut)

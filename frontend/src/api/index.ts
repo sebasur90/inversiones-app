@@ -416,10 +416,40 @@ export interface VencimientoItem {
   valor_actual_usd: number | null
   valor_actual_ars: number | null
   moneda: string
+  // Métricas de bono estimadas sobre el flujo de caja inferido. null si falta historial/precio.
+  tir_vencimiento: number | null      // TIR anual (decimal) al vencimiento
+  duration_macaulay: number | null    // años
+  duration_modificada: number | null  // años
+  paridad: number | null              // precio / valor técnico
+  valor_tecnico: number | null        // por unidad, en moneda_metricas
+  interes_corrido: number | null      // por unidad
+  valor_residual: number | null       // por unidad, base par = 1
+  moneda_metricas: string | null
+  metricas_estimadas: boolean
+  metricas_nota: string | null
+}
+
+export interface VencimientoAnioItem {
+  anio: number
+  valor_usd: number
+  valor_ars: number
+  pct_cartera_usd: number | null
+  pct_cartera_ars: number | null
+  cantidad_instrumentos: number
+  instrumentos_sin_valuar: number
+  tickers: string[]
+}
+
+export interface VencimientosOut {
+  generado: string
+  items: VencimientoItem[]
+  por_anio: VencimientoAnioItem[]
+  cartera_valor_usd: number
+  cartera_valor_ars: number
 }
 
 export const getVencimientos = (cartera: string | null) =>
-  api.get<VencimientoItem[]>(`${carteraPath(cartera)}/vencimientos`).then(r => r.data)
+  api.get<VencimientosOut>(`${carteraPath(cartera)}/vencimientos`).then(r => r.data)
 
 // --- Flujo de caja proyectado (renta fija) ---
 
