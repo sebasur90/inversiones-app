@@ -221,10 +221,20 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
      (`score = CAGR / objetivo`), con el benchmark sólo mencionado en el detalle; si no, cae
      al comportamiento previo (exceso vs. benchmark / `CAGR_REF_ABSOLUTO`).
    Tests: `backend/tests/test_rebalanceo_banda_pesos.py` (6), +3 en `test_diagnostico_engine.py`.
-10. **Riesgo país e inflación mensual en Indicadores Macro** — riesgo país ya está disponible
-    vía ArgentinaDatos (`/v1/finanzas/indices/riesgo-pais`, probado en la exploración), sólo
-    falta sumarlo como serie en `IndicadoresMacro.tsx` (no es un benchmark de retorno, es
-    información macro).
+10. ~~**Riesgo país e inflación mensual en Indicadores Macro**~~ — ✅ HECHO.
+    - **Riesgo país**: `argentina_datos.fetch_riesgo_pais()`
+      (`/v1/finanzas/indices/riesgo-pais`, EMBI+ en puntos básicos) → columna nueva
+      `IndiceMercado.riesgo_pais` (nullable, sólo `fuente='api'`; migración `ALTER TABLE` en
+      `init_db`). `market_data.indices.fetch_indices_mercado_api` mergea la serie por fecha
+      junto a CER/MEP (misma lógica de `fechas_excluir` y de "None si TODO cayó").
+    - **Inflación mensual**: se **deriva** del benchmark automático "Inflación (INDEC)"
+      (que ya se guarda como nivel compuesto) — variación mes a mes en `get_indices_mercado`,
+      sin storage nuevo.
+    - `get_indices_mercado` devuelve `riesgo_pais` por punto, `variacion_riesgo_pais_pct` e
+      `inflacion_mensual: [{fecha, valor_pct}]`. `IndicadoresMacro.tsx`: `Segmented` de 4
+      vistas (CER · MEP · Riesgo país · Inflación); inflación se dibuja como barras (var. %),
+      el resto como línea.
+    Tests: +5 en `test_market_data.py`, `test_indices_mercado_macro.py` (4).
 11. **Exposición y concentración por país** — `InstrumentoInversion.pais` casi sin explotar.
 
 ### Ola 6 — opcional
@@ -258,7 +268,7 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
     -v $(pwd):/repo -w /repo -e PYTHONPATH=/repo \
     backend python -m pytest backend/tests/ -q
   ```
-  Baseline actual: **289 pasan, 0 fallan** (176 tras Ola 1-2; +29 con Ola 3 ítem 1:
+  Baseline actual: **294 pasan, 0 fallan** (176 tras Ola 1-2; +29 con Ola 3 ítem 1:
   `test_data912.py`, `test_market_data_precios.py`, 2 de integración en
   `test_inversiones_sync_market_data.py`; +9 con Ola 3 ítem 2:
   `test_flujo_caja_analytics.py`; +7 con Ola 3 ítem 3:
@@ -268,7 +278,8 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
   (3 integración + 1 mock extendido); +7 con Ola 5 ítem 5: `test_vista_fiscal_por_anio.py`;
   +3 con Ola 5 ítem 6: `test_twr_costo_operar.py`; +5 con Ola 5 ítem 7:
   `test_calidad_datos_historial.py`; +9 con Ola 5 ítem 9: `test_rebalanceo_banda_pesos.py` (6)
-  + 3 en `test_diagnostico_engine.py`).
+  + 3 en `test_diagnostico_engine.py`; +5 con Ola 5 ítem 10: `test_indices_mercado_macro.py` (4)
+  + 1 en `test_market_data.py`).
 - **Build frontend** (verifica TypeScript): `docker compose -f docker-compose.yml -f docker-compose.corporate.yml build frontend`.
 - Cualquier fetch nuevo a una API externa va en `backend/app/services/market_data/`, con el
   mismo patrón: nunca lanza (devuelve `None` en fallo total), se llama sólo si

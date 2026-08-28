@@ -76,6 +76,7 @@ class IndiceMercado(Base):
     fecha = Column(Date, nullable=False, unique=True)
     cer = Column(Numeric(18, 6), nullable=True)
     mep = Column(Numeric(18, 6), nullable=True)
+    riesgo_pais = Column(Numeric(18, 6), nullable=True)  # puntos básicos (EMBI+), sólo fuente='api'
     # "sheet" (Movimientos/Precios/Tipos de Cambio) | "api" (completado automáticamente, ver
     # services/market_data). El Sheet siempre gana; "api" sólo llena fechas que el Sheet no cubre.
     fuente = Column(String, nullable=False, default="sheet", server_default="sheet")
@@ -203,3 +204,10 @@ def init_db():
             if 'fuente' not in cols:
                 conn.execute(text(f"ALTER TABLE {tabla} ADD COLUMN fuente TEXT NOT NULL DEFAULT 'sheet'"))
                 conn.commit()
+
+        # aseguramos compatibilidad con DB antiguas que no tenían riesgo_pais en indices_mercado.
+        result = conn.execute(text("PRAGMA table_info(indices_mercado)"))
+        cols = [row[1] for row in result.fetchall()]
+        if 'riesgo_pais' not in cols:
+            conn.execute(text("ALTER TABLE indices_mercado ADD COLUMN riesgo_pais NUMERIC"))
+            conn.commit()

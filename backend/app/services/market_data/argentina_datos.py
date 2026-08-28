@@ -63,6 +63,29 @@ def fetch_dolar_mep_historico() -> list[tuple[date, float]] | None:
     return out or None
 
 
+def fetch_riesgo_pais() -> list[tuple[date, float]] | None:
+    """Serie diaria del riesgo país argentino (EMBI+, JP Morgan) en puntos básicos.
+
+    Es información macro, no un benchmark de retorno: se guarda junto a CER/MEP en
+    `IndiceMercado` (columna `riesgo_pais`) para verlo en Indicadores macro.
+    """
+    data = get_json(f"{BASE_URL}/finanzas/indices/riesgo-pais")
+    if not isinstance(data, list):
+        return None
+    out = []
+    for item in data:
+        fecha = _parse_fecha(item.get("fecha", ""))
+        valor = item.get("valor")
+        if fecha is None or valor is None:
+            continue
+        try:
+            out.append((fecha, float(valor)))
+        except (TypeError, ValueError):
+            continue
+    out.sort(key=lambda t: t[0])
+    return out or None
+
+
 def fetch_inflacion_mensual() -> list[tuple[date, float]] | None:
     """Serie mensual de inflación INDEC: (fecha_fin_de_mes, variación % de ese mes)."""
     data = get_json(f"{BASE_URL}/finanzas/indices/inflacion")

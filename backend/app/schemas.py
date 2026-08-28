@@ -473,12 +473,20 @@ class IndiceMercadoPunto(BaseModel):
     fecha: date
     cer: Optional[float] = None
     mep: Optional[float] = None
+    riesgo_pais: Optional[float] = None
+
+
+class InflacionMensualPunto(BaseModel):
+    fecha: date
+    valor_pct: float
 
 
 class IndicesMercadoOut(BaseModel):
     puntos: list[IndiceMercadoPunto]
     variacion_cer_pct: Optional[float] = None
     variacion_mep_pct: Optional[float] = None
+    variacion_riesgo_pais_pct: Optional[float] = None
+    inflacion_mensual: list[InflacionMensualPunto] = []
 
 
 # --- Vencimientos ---

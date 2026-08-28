@@ -9,6 +9,9 @@ _Actualizado: 2026-08-28_
 
 - Todo lo hecho está en **`main`**, **sin pushear** (`main` está 9+ commits adelante de `origin/main`).
 - Últimos commits relevantes:
+  - Ola 5 ítem 10: **Riesgo país e inflación mensual en Indicadores Macro** — columna
+    `IndiceMercado.riesgo_pais` + `argentina_datos.fetch_riesgo_pais`, inflación mensual
+    derivada del benchmark INDEC en `get_indices_mercado`; `IndicadoresMacro.tsx` con 4 vistas.
   - Ola 5 ítem 9: **Config declarada y no aplicada** — `rebalanceo_engine._aplicar_banda_pesos`
     (peso_minimo/peso_maximo en modo `completo`) + `rendimiento_objetivo` en
     `diagnostico_engine.score_performance`.
@@ -34,10 +37,11 @@ _Actualizado: 2026-08-28_
   - `a60ffe0` — Ola 3 ítem 2: pantalla **Flujo de caja proyectado**.
   - `4f8eb9c` / `f29123e` — Ola 3 ítem 1: precios automáticos de renta fija (data912).
   - `0316e24` — Ola 1-2: market_data (CER/MEP/inflación) + menú "Más".
-- Tests backend: **289 pasan, 0 fallan** (+25 con Ola 4; +7 ítem 5:
+- Tests backend: **294 pasan, 0 fallan** (+25 con Ola 4; +7 ítem 5:
   `test_vista_fiscal_por_anio.py`; +3 ítem 6: `test_twr_costo_operar.py`; +5 ítem 7:
   `test_calidad_datos_historial.py`; +9 ítem 9: `test_rebalanceo_banda_pesos.py` + 3 en
-  `test_diagnostico_engine.py`).
+  `test_diagnostico_engine.py`; +5 ítem 10: `test_indices_mercado_macro.py` + 1 en
+  `test_market_data.py`).
 - Ola 4 es puro backend (ingesta en el sync, sin pantalla nueva) — no requiere QA visual.
 - QA visual en navegador de Flujo de caja y Vencimientos: **sigue pendiente** (no hubo browser
   en la sesión). Verificado sólo que compila (`tsc && vite build`) y que la salida valida
@@ -83,7 +87,7 @@ Tests: +25 (240 → 265).
 7. ~~Historial de calidad de datos (sparkline health score)~~ ✅ ·
 8. ~~Escenarios (`variacion_por_instrumento` en el frontend)~~ ✅ ·
 9. ~~Config declarada y no aplicada (`peso_minimo`, `peso_maximo`, `rendimiento_objetivo`)~~ ✅ ·
-10. Riesgo país + inflación mensual en Indicadores Macro · 11. Exposición/concentración por país.
+10. ~~Riesgo país + inflación mensual en Indicadores Macro~~ ✅ · 11. Exposición/concentración por país.
 
 ### 4. Ola 6 (opcional)
 

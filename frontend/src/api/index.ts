@@ -414,12 +414,20 @@ export interface IndiceMercadoPunto {
   fecha: string
   cer: number | null
   mep: number | null
+  riesgo_pais: number | null
+}
+
+export interface InflacionMensualPunto {
+  fecha: string
+  valor_pct: number
 }
 
 export interface IndicesMercadoOut {
   puntos: IndiceMercadoPunto[]
   variacion_cer_pct: number | null
   variacion_mep_pct: number | null
+  variacion_riesgo_pais_pct: number | null
+  inflacion_mensual: InflacionMensualPunto[]
 }
 
 export const getIndicesMercado = (dias = 3650) =>

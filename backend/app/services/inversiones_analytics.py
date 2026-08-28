@@ -2163,8 +2163,16 @@ def get_precios_historicos_ticker(ticker: str, dias: int, db: Session) -> dict:
 
 # ── Indicadores macro (CER/MEP) ──────────────────────────────────────────────
 
+# Nombre del benchmark automático de inflación (ver market_data/indices.py). Se referencia
+# como literal para no importar market_data desde acá (evita un ciclo de imports).
+_BENCHMARK_INFLACION_INDEC = "Inflación (INDEC)"
+
+
 def get_indices_mercado(dias: int, db: Session) -> dict:
-    """Serie histórica de CER y MEP, para verlos como indicadores propios."""
+    """Serie histórica de CER, MEP y riesgo país (macro), más la inflación mensual derivada
+    del benchmark automático de INDEC."""
+    from ..database import BenchmarkValor
+
     desde = date.today() - timedelta(days=dias)
     rows = (
         db.query(IndiceMercado)
@@ -2177,6 +2185,7 @@ def get_indices_mercado(dias: int, db: Session) -> dict:
             "fecha": r.fecha,
             "cer": float(r.cer) if r.cer is not None else None,
             "mep": float(r.mep) if r.mep is not None else None,
+            "riesgo_pais": float(r.riesgo_pais) if r.riesgo_pais is not None else None,
         }
         for r in rows
     ]
@@ -2187,10 +2196,30 @@ def get_indices_mercado(dias: int, db: Session) -> dict:
             return None
         return round((valores[-1] / valores[0] - 1) * 100, 2)
 
+    # Inflación mensual = variación mes a mes del índice de nivel del benchmark INDEC
+    # (que se guarda como nivel compuesto, ver market_data/indices.fetch_benchmarks_api).
+    inflacion_rows = (
+        db.query(BenchmarkValor)
+        .filter(BenchmarkValor.benchmark == _BENCHMARK_INFLACION_INDEC, BenchmarkValor.fecha >= desde)
+        .order_by(BenchmarkValor.fecha)
+        .all()
+    )
+    inflacion_mensual = []
+    for prev, cur in zip(inflacion_rows, inflacion_rows[1:]):
+        nivel_prev = float(prev.valor)
+        nivel_cur = float(cur.valor)
+        if nivel_prev > 0:
+            inflacion_mensual.append({
+                "fecha": cur.fecha,
+                "valor_pct": round((nivel_cur / nivel_prev - 1) * 100, 2),
+            })
+
     return {
         "puntos": puntos,
         "variacion_cer_pct": variacion("cer"),
         "variacion_mep_pct": variacion("mep"),
+        "variacion_riesgo_pais_pct": variacion("riesgo_pais"),
+        "inflacion_mensual": inflacion_mensual,
     }
 
 

@@ -41,7 +41,7 @@ const GRUPOS: Grupo[] = [
     items: [
       { to: '/diagnostico', label: 'Diagnóstico', desc: 'Score de salud de la cartera y hallazgos', icon: 'check' },
       { to: '/calidad-datos', label: 'Calidad de datos', desc: 'Estado del último sync y problemas detectados', icon: 'info' },
-      { to: '/indicadores', label: 'Indicadores macro', desc: 'Evolución de CER y MEP', icon: 'trend' },
+      { to: '/indicadores', label: 'Indicadores macro', desc: 'CER, MEP, riesgo país e inflación mensual', icon: 'trend' },
     ],
   },
 ]

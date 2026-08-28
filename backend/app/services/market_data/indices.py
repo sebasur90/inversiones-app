@@ -41,18 +41,34 @@ def fetch_indices_mercado_api(fechas_excluir: set[date]) -> tuple[list[dict] | N
             severidad=Severity.ADVERTENCIA,
         ))
 
-    if uva is None and mep is None:
+    riesgo_pais = argentina_datos.fetch_riesgo_pais()
+    if riesgo_pais is None:
+        issues.append(ValidationIssue(
+            tab="CER/MEP (API)", regla="riesgo_pais_no_disponible",
+            mensaje="No se pudo obtener el riesgo país de ArgentinaDatos",
+            impacto="Se mantiene el histórico automático de riesgo país previamente guardado, si existía",
+            severidad=Severity.ADVERTENCIA,
+        ))
+
+    if uva is None and mep is None and riesgo_pais is None:
         return None, issues
+
+    def _fila_vacia(fecha: date) -> dict:
+        return {"fecha": fecha, "cer": None, "mep": None, "riesgo_pais": None}
 
     por_fecha: dict[date, dict] = {}
     for fecha, valor in (uva or []):
         if fecha in fechas_excluir:
             continue
-        por_fecha.setdefault(fecha, {"fecha": fecha, "cer": None, "mep": None})["cer"] = valor
+        por_fecha.setdefault(fecha, _fila_vacia(fecha))["cer"] = valor
     for fecha, valor in (mep or []):
         if fecha in fechas_excluir:
             continue
-        por_fecha.setdefault(fecha, {"fecha": fecha, "cer": None, "mep": None})["mep"] = valor
+        por_fecha.setdefault(fecha, _fila_vacia(fecha))["mep"] = valor
+    for fecha, valor in (riesgo_pais or []):
+        if fecha in fechas_excluir:
+            continue
+        por_fecha.setdefault(fecha, _fila_vacia(fecha))["riesgo_pais"] = valor
 
     filas = []
     for row in por_fecha.values():
