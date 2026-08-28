@@ -450,7 +450,8 @@ export interface VencimientoItem {
   tir_vencimiento: number | null      // TIR anual (decimal) al vencimiento
   duration_macaulay: number | null    // años
   duration_modificada: number | null  // años
-  paridad: number | null              // precio / valor técnico
+  paridad: number | null              // precio / valor técnico (base par = 1)
+  par_asumido: number | null          // 1 | 100 si la escala se infirió del precio; null si es dato duro
   valor_tecnico: number | null        // por unidad, en moneda_metricas
   interes_corrido: number | null      // por unidad
   valor_residual: number | null       // por unidad, base par = 1
@@ -522,6 +523,8 @@ export interface FlujoCajaInstrumento {
   cupon_por_unidad: number | null
   confianza: 'alta' | 'media' | 'baja' | null
   metodo_capital: 'bullet' | 'amortizacion_inferida' | 'sin_estimacion'
+  amort_historicas: number
+  amort_futuras: number
   cobros_proyectados: number
   proximo_cobro: FlujoCajaProximoCobro | null
   total_proyectado_usd: number

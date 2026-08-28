@@ -140,9 +140,9 @@ def test_amortizacion_inferida(db: Session):
     _mep(db)
     _bono(db, "TZXD7", moneda="ARS", vto_dias=400)
     _mov(db, "TZXD7", "compra", dias=-400, precio=1.0, cantidad=1000)
-    # dos amortizaciones trimestrales, 10 ARS por unidad
-    _mov(db, "TZXD7", "amortizacion", dias=-180, precio=10.0, cantidad=100)
-    _mov(db, "TZXD7", "amortizacion", dias=-90, precio=10.0, cantidad=100)
+    # dos amortizaciones trimestrales del 10% del par (0.1 por unidad, escala par = 1)
+    _mov(db, "TZXD7", "amortizacion", dias=-180, precio=0.1, cantidad=100)
+    _mov(db, "TZXD7", "amortizacion", dias=-90, precio=0.1, cantidad=100)
     db.add(PrecioInstrumento(fecha=date.today(), ticker="TZXD7", precio=1.0, moneda="ARS"))
     db.commit()
 
@@ -153,8 +153,46 @@ def test_amortizacion_inferida(db: Session):
         d for mes in out["meses"] for d in mes["detalle"] if d["tipo"] == "amortizacion"
     ]
     assert amorts
-    # 10 ARS/unidad * tenencia actual (1000 - 200 amortizadas = 800)
-    assert all(a["monto_nativo"] == pytest.approx(8000.0) for a in amorts)
+    # 0.1/unidad * tenencia actual (1000 - 200 amortizadas = 800)
+    assert all(a["monto_nativo"] == pytest.approx(80.0) for a in amorts)
+
+
+def test_a6_amort_futuras_topeadas_al_capital_restante(db: Session):
+    # Bono con período de gracia: 2 cuotas históricas del 10% del par -> total 10 cuotas ->
+    # como máximo 8 futuras, aunque la grilla trimestral hasta el vto tenga más lugares.
+    _mep(db)
+    _bono(db, "GRACIA", moneda="ARS", vto_dias=365 * 4)
+    _mov(db, "GRACIA", "compra", dias=-800, precio=1.0, cantidad=1000)
+    _mov(db, "GRACIA", "amortizacion", dias=-180, precio=0.1, cantidad=0)
+    _mov(db, "GRACIA", "amortizacion", dias=-90, precio=0.1, cantidad=0)
+    _mov(db, "GRACIA", "cupon", dias=-180, precio=30.0)
+    _mov(db, "GRACIA", "cupon", dias=-90, precio=30.0)
+    db.add(PrecioInstrumento(fecha=date.today(), ticker="GRACIA", precio=0.9, moneda="ARS"))
+    db.commit()
+
+    out = get_flujo_caja_proyectado("RF", db)
+    inst = next(i for i in out["instrumentos"] if i["ticker"] == "GRACIA")
+    assert inst["metodo_capital"] == "amortizacion_inferida"
+    assert inst["amort_futuras"] <= 8
+
+
+def test_a6_amort_sin_escala_degrada_a_bullet(db: Session):
+    # amortización 10 ARS/unidad con precio ~1: no se puede estimar qué fracción del par es
+    # (escala desconocida) -> se degrada a bullet en vez de proyectar una serie sin tope.
+    _mep(db)
+    _bono(db, "ESCX", moneda="ARS", vto_dias=400)
+    _mov(db, "ESCX", "compra", dias=-400, precio=1.0, cantidad=1000)
+    _mov(db, "ESCX", "amortizacion", dias=-180, precio=10.0, cantidad=100)
+    _mov(db, "ESCX", "amortizacion", dias=-90, precio=10.0, cantidad=100)
+    _mov(db, "ESCX", "cupon", dias=-180, precio=30.0)
+    _mov(db, "ESCX", "cupon", dias=-90, precio=30.0)
+    db.add(PrecioInstrumento(fecha=date.today(), ticker="ESCX", precio=1.0, moneda="ARS"))
+    db.commit()
+
+    out = get_flujo_caja_proyectado("RF", db)
+    inst = next(i for i in out["instrumentos"] if i["ticker"] == "ESCX")
+    assert inst["metodo_capital"] == "bullet"
+    assert inst["amort_futuras"] == 0
 
 
 def test_bono_sin_cupones_ni_precio_va_a_sin_proyeccion(db: Session):

@@ -101,6 +101,35 @@ def _grilla_hacia_atras(venc: date, hoy: date, horizonte_fin: date, paso_meses: 
     return sorted(fechas)
 
 
+def _n_cuotas_amort_total(amort_por_unidad: float | None) -> int | None:
+    """Nº total de cuotas de amortización de la vida del bono ≈ 1 / (amortización por unidad,
+    sobre par = 1). None si el dato no permite estimarlo con sentido: si el Sheet carga el precio
+    por lámina de 100 VN, `amort_por_unidad` viene ~100x y el recíproco redondea a 0 (A6/M9)."""
+    if not amort_por_unidad or amort_por_unidad <= 0:
+        return None
+    n = round(1.0 / amort_por_unidad)
+    return n if 1 <= n <= 600 else None
+
+
+def _estimar_par(precio_actual: float | None, amort_por_unidad: float | None) -> tuple[float | None, bool]:
+    """Escala del par contra la que está cargado el precio: 1.0 | 100.0, o None si no se puede
+    determinar. El segundo valor es True cuando salió del orden de magnitud del precio (una
+    suposición) y no de la amortización inferida (dato duro). Ver M9."""
+    if amort_por_unidad and amort_por_unidad > 0:
+        recip = 1.0 / amort_por_unidad
+        if 1 <= round(recip) <= 600:          # nº de cuotas plausible → precio en escala par = 1
+            return 1.0, False
+        if 1 <= round(recip * 100) <= 600:    # recíproco ~100x chico → precio en escala par = 100
+            return 100.0, False
+    if precio_actual is None or precio_actual <= 0:
+        return None, False
+    if 0.05 <= precio_actual <= 5:
+        return 1.0, True
+    if 5 < precio_actual <= 500:
+        return 100.0, True
+    return None, False
+
+
 def _proyectar_cobros_ticker(
     ticker: str,
     cantidad: float,
@@ -193,10 +222,30 @@ def _proyectar_cobros_ticker(
             cobros.append({"fecha": f, "tipo": "cupon", "monto_nativo": monto_cupon})
 
     metodo_capital: str
-    if amort_por_unidad is not None and amort_periodicidad_meses:
+    n_hist_amort = len(fechas_amort)
+    n_total_amort = _n_cuotas_amort_total(amort_por_unidad)
+    usar_amort_inferida = (
+        amort_por_unidad is not None and amort_periodicidad_meses and n_total_amort is not None
+    )
+    if amort_por_unidad is not None and amort_periodicidad_meses and not usar_amort_inferida:
+        # A6/M9: hay amortizaciones pero no se puede acotar el capital proyectado (no se sabe
+        # qué fracción del par representa cada cuota → la escala del precio es desconocida).
+        # Antes se proyectaba una serie de cuotas sin tope, sobre-estimando el capital varias
+        # veces; ahora se degrada a bullet explícito.
+        notas.append(
+            "Hay amortizaciones en el historial pero no se puede estimar qué fracción del par "
+            "representan (escala del precio desconocida): el capital se trata como bullet al "
+            "vencimiento."
+        )
+
+    if usar_amort_inferida:
         metodo_capital = "amortizacion_inferida"
         monto_amort = amort_por_unidad * cantidad
         grilla_amort = _grilla_hacia_atras(venc, hoy, horizonte_fin, amort_periodicidad_meses)
+        # A6: acotar las cuotas futuras a lo que queda de capital (n_total - n_hist). Las
+        # amortizaciones se concentran al final de la vida del bono → se toman las últimas.
+        n_max_fut = max(0, n_total_amort - n_hist_amort)
+        grilla_amort = grilla_amort[-n_max_fut:] if n_max_fut > 0 else []
         amort_futuras = len(grilla_amort)
         for f in grilla_amort:
             cobros.append({"fecha": f, "tipo": "amortizacion", "monto_nativo": monto_amort})
@@ -245,6 +294,7 @@ def _proyectar_cobros_ticker(
         "cupon_por_unidad": cupon_por_unidad,
         "confianza": confianza,
         "metodo_capital": metodo_capital,
+        "amort_por_unidad": amort_por_unidad,
         "amort_historicas": len(fechas_amort),
         "amort_futuras": amort_futuras,
         "amort_por_unidad": amort_por_unidad,
@@ -357,6 +407,8 @@ def get_flujo_caja_proyectado(
                 "cupon_por_unidad": round(cupon_por_unidad, 6) if cupon_por_unidad is not None else None,
                 "confianza": proj["confianza"],
                 "metodo_capital": proj["metodo_capital"],
+                "amort_historicas": proj["amort_historicas"],
+                "amort_futuras": proj["amort_futuras"],
                 "cobros_proyectados": len(cobros),
                 "proximo_cobro": proximo_cobro,
                 "total_proyectado_usd": round(total_inst_usd, 2),
@@ -468,15 +520,17 @@ def _metricas_renta_fija(
 ) -> dict:
     """TIR al vencimiento, duration y paridad de un bono, a partir del flujo inferido.
 
-    Todo estimado: el cronograma no es oficial (`proj` viene de `_proyectar_cobros_ticker`) y
-    la paridad asume valor nominal residual = par (1 por unidad), aproximando la fracción
-    amortizada por el conteo de cuotas inferidas.
+    Todo estimado: el cronograma no es oficial (`proj` viene de `_proyectar_cobros_ticker`). La
+    paridad necesita saber la escala del par contra la que está cargado el precio (1 vs 100 VN);
+    se deriva de la amortización inferida o, si no, del orden de magnitud del precio (`par_asumido`
+    en la respuesta). Si no se puede determinar, no se muestra paridad (M9).
     """
     vacio = {
         "tir_vencimiento": None,
         "duration_macaulay": None,
         "duration_modificada": None,
         "paridad": None,
+        "par_asumido": None,
         "valor_tecnico": None,
         "interes_corrido": None,
         "valor_residual": None,
@@ -527,37 +581,50 @@ def _metricas_renta_fija(
     elif not cobros:
         notas.append("Sin cobros dentro de la vida restante del bono.")
 
-    # ── paridad = precio / valor técnico (valor residual + interés corrido) ──
+    # ── paridad = precio / valor técnico (valor residual + interés corrido), en par = 1 ──
     cupon_unit = proj.get("cupon_por_unidad")
     periodicidad = proj.get("periodicidad_meses")
     if precio_actual is not None and cupon_unit is not None and periodicidad:
-        # fracción del período de cupón ya transcurrida
-        prox = next((c["fecha"] for c in cobros if c["tipo"] == "cupon"), None)
-        if prox is None:
-            prox = venc
-        anterior = _sumar_meses(prox, -periodicidad)
-        largo = (prox - anterior).days
-        transcurrido = (hoy - anterior).days
-        frac = min(max(transcurrido / largo, 0.0), 1.0) if largo > 0 else 0.0
-        interes_corrido = cupon_unit * frac
-
-        # valor residual por unidad, en términos de par = 1
-        if metodo == "amortizacion_inferida":
-            n_hist = proj.get("amort_historicas", 0)
-            n_fut = proj.get("amort_futuras", 0)
-            residual = n_fut / (n_hist + n_fut) if (n_hist + n_fut) > 0 else 1.0
+        par, par_asumido = _estimar_par(precio_actual, proj.get("amort_por_unidad"))
+        if par is None:
+            # M9: sin saber si el precio está por 1 o por 100 VN, cualquier paridad sería un
+            # número sin sentido (~7000% si el Sheet carga por 100). Mejor no mostrarla.
             notas.append(
-                "Valor residual estimado por el conteo de cuotas de amortización inferidas."
+                "No se puede determinar la escala del precio (par 1 vs 100): no se estima la paridad."
             )
         else:
-            residual = 1.0
+            # fracción del período de cupón ya transcurrida
+            prox = next((c["fecha"] for c in cobros if c["tipo"] == "cupon"), None)
+            if prox is None:
+                prox = venc
+            anterior = _sumar_meses(prox, -periodicidad)
+            largo = (prox - anterior).days
+            transcurrido = (hoy - anterior).days
+            frac = min(max(transcurrido / largo, 0.0), 1.0) if largo > 0 else 0.0
+            interes_corrido = (cupon_unit / par) * frac   # normalizado a par = 1
 
-        valor_tecnico = residual + interes_corrido
-        out["interes_corrido"] = round(interes_corrido, 6)
-        out["valor_residual"] = round(residual, 6)
-        out["valor_tecnico"] = round(valor_tecnico, 6)
-        if valor_tecnico > EPS:
-            out["paridad"] = round(precio_actual / valor_tecnico, 4)
+            # valor residual por unidad, en términos de par = 1
+            if metodo == "amortizacion_inferida":
+                n_hist = proj.get("amort_historicas", 0)
+                n_fut = proj.get("amort_futuras", 0)
+                residual = n_fut / (n_hist + n_fut) if (n_hist + n_fut) > 0 else 1.0
+                notas.append(
+                    "Valor residual estimado por el conteo de cuotas de amortización inferidas."
+                )
+            else:
+                residual = 1.0
+
+            valor_tecnico = residual + interes_corrido
+            out["interes_corrido"] = round(interes_corrido, 6)
+            out["valor_residual"] = round(residual, 6)
+            out["valor_tecnico"] = round(valor_tecnico, 6)
+            if par_asumido and par != 1.0:
+                out["par_asumido"] = par
+                notas.append(
+                    f"Paridad calculada asumiendo que el precio está cargado por {par:g} VN."
+                )
+            if valor_tecnico > EPS:
+                out["paridad"] = round((precio_actual / par) / valor_tecnico, 4)
     elif precio_actual is not None:
         notas.append("Sin cupones inferidos: no se estima el valor técnico ni la paridad.")
 
@@ -585,6 +652,7 @@ def get_vencimientos_completo(cartera: str | None, db: Session) -> dict:
                     "duration_macaulay": None,
                     "duration_modificada": None,
                     "paridad": None,
+                    "par_asumido": None,
                     "valor_tecnico": None,
                     "interes_corrido": None,
                     "valor_residual": None,

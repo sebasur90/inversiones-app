@@ -102,6 +102,38 @@ def test_bono_bullet_bajo_la_par(db: Session):
     assert item["paridad"] is not None and item["paridad"] < 1.0
 
 
+def test_m9_precio_en_escala_100_no_da_paridad_de_70(db: Session):
+    # El Sheet carga el precio por lámina de 100 VN: paridad tiene que salir ~0.7, no ~70.
+    _mep(db)
+    _bono(db, "S100", moneda="ARS", vto_dias=400)
+    _mov(db, "S100", "compra", dias=-540, precio=70.0, cantidad=1000)
+    for d in (-540, -360, -180):
+        _mov(db, "S100", "cupon", dias=d, precio=3000.0)          # 3.0 por unidad (par = 100)
+    _mov(db, "S100", "amortizacion", dias=-360, precio=10.0, cantidad=0)  # 10% de par = 100
+    _mov(db, "S100", "amortizacion", dias=-180, precio=10.0, cantidad=0)
+    _precio(db, "S100", 70.0, moneda="ARS")
+    db.commit()
+
+    out = get_vencimientos_completo("RF", db)
+    item = next(i for i in out["items"] if i["ticker"] == "S100")
+    assert item["paridad"] is None or 0.3 < item["paridad"] < 3.0
+
+
+def test_m9_escala_del_precio_indeterminada_no_muestra_paridad(db: Session):
+    _mep(db)
+    _bono(db, "AMBX", moneda="ARS", vto_dias=400)
+    _mov(db, "AMBX", "compra", dias=-540, precio=2000.0, cantidad=100)
+    for d in (-540, -360, -180):
+        _mov(db, "AMBX", "cupon", dias=d, precio=5000.0)
+    _precio(db, "AMBX", 2000.0, moneda="ARS")   # ni ~1 ni ~100: no se puede inferir el par
+    db.commit()
+
+    out = get_vencimientos_completo("RF", db)
+    item = next(i for i in out["items"] if i["ticker"] == "AMBX")
+    assert item["paridad"] is None
+    assert "escala del precio" in (item["metricas_nota"] or "").lower()
+
+
 def test_sin_precio_no_calcula_metricas(db: Session):
     _mep(db)
     _bono(db, "NOPX", moneda="ARS", vto_dias=200)
