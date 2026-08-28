@@ -60,12 +60,17 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
 
 ### Ola 3 — renta fija (la parte que el usuario marcó como importante)
 
-1. **Precios automáticos de bonos/ONs/letras** — `data912`: `/live/arg_bonds`,
-   `/live/arg_corp`, `/live/arg_notes`, `/historical/bonds/{ticker}`. Requiere resolver el
-   mapeo de tickers entre la nomenclatura del Sheet y la del proveedor (reportar los no
-   mapeados como `SyncIssue` informativo, nunca adivinar). Junto con el ítem 4 de Ola 4,
-   elimina la carga manual de la pestaña `Precios` y el `UMBRAL_APROXIMADO_DIAS = 45` que hoy
-   marca posiciones como "precio desactualizado".
+1. ~~**Precios automáticos de bonos/ONs/letras**~~ — ✅ HECHO (`market_data/data912.py` +
+   `market_data/precios.py`, columna `precios_instrumento.fuente`, integrado en el sync).
+   `/live/arg_bonds` + `/live/arg_corp` + `/live/arg_notes`; match por símbolo exacto, los no
+   encontrados son `SyncIssue` info (tab "Precios (API)"), nunca se adivina. Escala data912
+   (lámina de 100 VN) vs. Sheet (1 VN) resuelta **por ratio observado contra el último precio
+   manual** de cada ticker (decisión del usuario 2026-08-28): factor ≈100 o ≈1, cualquier otro
+   ratio no se carga y se reporta; sin precio previo en el Sheet tampoco se carga. Sólo se
+   agrega el precio del día (los `/live/*` son foto intradiaria); las filas `fuente='api'`
+   acumulan histórico. Pendiente de este ítem: usar `/historical/bonds/{ticker}` para backfill
+   inicial de la serie (hoy sólo crece hacia adelante). Junto con el ítem 4 de Ola 4, apunta a
+   eliminar la carga manual de `Precios` y el `UMBRAL_APROXIMADO_DIAS = 45`.
 2. **Pantalla nueva: Flujo de caja proyectado** — cuánto se va a cobrar por mes en los próximos
    12-24 meses (cupones + amortizaciones), apilado por instrumento. No hay API gratuita de
    cronogramas de bonos argentinos: inferir la periodicidad de la historia de cupones ya
@@ -136,7 +141,9 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
     -v $(pwd):/repo -w /repo -e PYTHONPATH=/repo \
     backend python -m pytest backend/tests/ -q
   ```
-  Baseline actual: **176 pasan, 0 fallan**.
+  Baseline actual: **205 pasan, 0 fallan** (176 tras Ola 1-2; +29 con Ola 3 ítem 1:
+  `test_data912.py`, `test_market_data_precios.py`, 2 de integración en
+  `test_inversiones_sync_market_data.py`).
 - **Build frontend** (verifica TypeScript): `docker compose -f docker-compose.yml -f docker-compose.corporate.yml build frontend`.
 - Cualquier fetch nuevo a una API externa va en `backend/app/services/market_data/`, con el
   mismo patrón: nunca lanza (devuelve `None` en fallo total), se llama sólo si

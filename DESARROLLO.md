@@ -72,9 +72,20 @@ gratuitas y sin API key (ver `backend/app/services/market_data/`):
 - **Benchmark "Inflación (INDEC)"**: índice mensual construido por interés compuesto sobre la
   inflación publicada por ArgentinaDatos. Activa Performance relativa, Comparar benchmarks y el
   Sharpe de Riesgo con un benchmark real además de Dólar (MEP) e Inflación (CER).
+- **Precios de renta fija** (bonos soberanos, ONs, letras/LECAPs): [data912](https://data912.com)
+  (`/live/arg_bonds`, `/live/arg_corp`, `/live/arg_notes`), vía
+  `market_data/data912.py` + `market_data/precios.py`. El match Sheet↔data912 es por símbolo
+  exacto; los no encontrados quedan como info en Calidad de datos (nunca se adivina). data912
+  cotiza por lámina de 100 VN y el Sheet por 1 VN: la escala se calibra **por ticker**
+  comparando la cotización de la API contra el último precio manual del Sheet (factor ≈100 o
+  ≈1); cualquier otro ratio no se carga y se reporta. Sólo se agrega el precio **del día**
+  (data912 `/live/*` es una foto intradiaria, no una serie); las filas `fuente='api'` van
+  acumulando histórico día a día. Si no hay precio previo en el Sheet para un ticker, no se
+  carga hasta tener esa referencia.
 
 **El Sheet siempre gana**: estos valores sólo completan huecos, nunca pisan una fecha que ya
-esté cargada a mano (en `Movimientos`, `Precios`, `Tipos de Cambio` o `Benchmarks`). Si la API
+esté cargada a mano (en `Movimientos`, `Precios`, `Tipos de Cambio` o `Benchmarks`). En la
+tabla `precios_instrumento` la columna `fuente` (`sheet`|`api`) marca el origen de cada fila. Si la API
 no responde (proxy caído, sin internet), el sync no falla: queda una advertencia en Calidad de
 datos y se preserva lo último que sí se pudo traer. Para apagarlo (comportamiento 100% manual,
 como antes), `USE_EXTERNAL_APIS=false`.

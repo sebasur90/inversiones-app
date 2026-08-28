@@ -61,6 +61,10 @@ class PrecioInstrumento(Base):
     ticker = Column(String, ForeignKey("instrumentos_inversion.ticker"), nullable=False)
     precio = Column(Numeric(18, 6), nullable=False)
     moneda = Column(String, nullable=False)
+    # "sheet" (pestaña Precios, cargada a mano) | "api" (completado automáticamente desde
+    # data912, ver services/market_data/precios.py). El Sheet siempre gana; "api" sólo agrega
+    # el precio del día para tickers que el Sheet no cubre para esa fecha.
+    fuente = Column(String, nullable=False, default="sheet", server_default="sheet")
 
     __table_args__ = (UniqueConstraint("fecha", "ticker", name="uq_precio_instrumento"),)
 
@@ -192,7 +196,7 @@ def init_db():
                 conn.commit()
 
         # aseguramos compatibilidad con DB antiguas que no tenían fuente (sheet vs api).
-        for tabla in ("indices_mercado", "benchmarks_mercado"):
+        for tabla in ("indices_mercado", "benchmarks_mercado", "precios_instrumento"):
             result = conn.execute(text(f"PRAGMA table_info({tabla})"))
             cols = [row[1] for row in result.fetchall()]
             if 'fuente' not in cols:
