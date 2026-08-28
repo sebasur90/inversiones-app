@@ -28,20 +28,47 @@ function VariacionPorInstrumento({
   onChange: (next: Record<string, number>) => void
 }) {
   const [abierto, setAbierto] = useState(false)
+  // B14: texto crudo por ticker mientras se edita (permite tipear "-" antes del dígito en un
+  // input controlado). Se sincroniza con `overrides` cuando el texto parsea a un número
+  // completo, y al blur.
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
   const nOverrides = Object.keys(overrides).length
 
   if (tickers.length === 0) return null
 
-  const setTicker = (ticker: string, raw: string) => {
+  const NUM_COMPLETO = /^-?\d+(\.\d+)?$/
+
+  const valorMostrado = (ticker: string) =>
+    drafts[ticker] ?? (overrides[ticker] !== undefined ? String(overrides[ticker]) : '')
+
+  const aplicar = (ticker: string, n: number | null) => {
     const next = { ...overrides }
-    if (raw.trim() === '') {
-      delete next[ticker]
-    } else {
-      const n = parseFloat(raw)
-      if (Number.isNaN(n)) return
-      next[ticker] = n
-    }
-    onChange(next)
+    if (n === null) delete next[ticker]
+    else next[ticker] = n
+    if (JSON.stringify(next) !== JSON.stringify(overrides)) onChange(next)
+  }
+
+  const onInputTicker = (ticker: string, raw: string) => {
+    setDrafts(d => ({ ...d, [ticker]: raw }))
+    const t = raw.trim()
+    if (t === '') aplicar(ticker, null)
+    else if (NUM_COMPLETO.test(t)) aplicar(ticker, parseFloat(t))
+  }
+
+  const onBlurTicker = (ticker: string) => {
+    const t = (drafts[ticker] ?? '').trim()
+    if (t !== '' && !Number.isNaN(parseFloat(t))) aplicar(ticker, parseFloat(t))
+    else if (t === '') aplicar(ticker, null)
+    setDrafts(d => {
+      const c = { ...d }
+      delete c[ticker]
+      return c
+    })
+  }
+
+  const limpiar = () => {
+    setDrafts({})
+    onChange({})
   }
 
   return (
@@ -63,18 +90,19 @@ function VariacionPorInstrumento({
                 <span className="font-semibold">{t.ticker}</span>
               </span>
               <input
-                type="number"
-                step="0.1"
-                value={overrides[t.ticker] ?? ''}
+                type="text"
+                inputMode="decimal"
+                value={valorMostrado(t.ticker)}
                 placeholder={String(porDefecto)}
-                onChange={e => setTicker(t.ticker, e.target.value)}
+                onChange={e => onInputTicker(t.ticker, e.target.value)}
+                onBlur={() => onBlurTicker(t.ticker)}
                 className="w-24 h-8 rounded-lg bg-app-surface-2 border border-app-border px-2 text-xs focus:border-app-gold/60 tabular-nums"
               />
             </div>
           ))}
           {nOverrides > 0 && (
             <button
-              onClick={() => onChange({})}
+              onClick={limpiar}
               className="text-[10px] text-app-text-secondary hover:text-app-coral"
             >
               Limpiar overrides

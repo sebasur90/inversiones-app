@@ -1457,11 +1457,19 @@ def _recorrer_movs_ticker(
     cer_cache: dict,
     cer_hoy: float | None,
     ars_real_valido_inicial: bool = True,
+    on_realizado=None,
+    on_ingreso=None,
 ) -> _RecorridoTicker:
     """Recorre los movimientos de un ticker acumulando costo remanente, realizado e ingresos.
 
-    Fuente única de la convención de costo promedio, compartida por `get_rendimiento_por_ticker`
-    y `get_pnl_realizado_no_realizado` para que ambas pantallas cuenten el mismo capital.
+    Fuente única de la convención de costo promedio, compartida por `get_rendimiento_por_ticker`,
+    `get_pnl_realizado_no_realizado` y `get_vista_fiscal_por_anio` para que todas cuenten el
+    mismo capital.
+
+    `on_realizado(mov, monto_usd, monto_ars, costo_removido_usd, costo_removido_ars)` y
+    `on_ingreso(mov, monto_usd, monto_ars)` (opcionales) se invocan por cada venta/amortización
+    y por cada ingreso: la vista fiscal se cuelga de ahí para bucketizar por año sin recopiar
+    el bucle (M11a).
     """
     est = _RecorridoTicker(ars_real_valido_inicial)
 
@@ -1502,12 +1510,18 @@ def _recorrer_movs_ticker(
             est.costo_ars -= costo_removido_ars
             est.costo_ars_real -= costo_removido_ars_real
             est.cantidad_held -= cantidad_vendida
+
+            if on_realizado is not None:
+                on_realizado(mov, monto_usd, monto_ars, costo_removido_usd, costo_removido_ars)
         elif mov.tipo_movimiento in TIPOS_INGRESO:
             est.ingresos_usd += monto_usd
             if monto_ars is not None:
                 est.ingresos_ars += monto_ars
             if est.ars_real_valido and monto_ars_real is not None:
                 est.ingresos_ars_real += monto_ars_real
+
+            if on_ingreso is not None:
+                on_ingreso(mov, monto_usd, monto_ars)
 
     return est
 
@@ -1850,56 +1864,42 @@ def get_vista_fiscal_por_anio(cartera: str | None, db: Session) -> dict:
             acc[clave] = _clave_fiscal_ticker()
         return acc[clave]
 
+    def _on_realizado(ticker, mov, monto_usd, monto_ars, costo_removido_usd, costo_removido_ars):
+        b = _bucket(mov.fecha.year, ticker)
+        b["realizado_usd"] += monto_usd - costo_removido_usd
+        if monto_ars is not None:
+            b["realizado_ars"] += monto_ars - costo_removido_ars
+
+    def _on_ingreso(ticker, mov, monto_usd, monto_ars):
+        b = _bucket(mov.fecha.year, ticker)
+        b["ingresos_usd"] += monto_usd
+        if monto_ars is not None:
+            b["ingresos_ars"] += monto_ars
+
     for ticker, movs_ticker in movimientos_por_ticker.items():
-        costo_usd = 0.0
-        costo_ars = 0.0
-        cantidad_held = 0.0
+        # Comisiones: caja efectivamente pagada en el año por **todas** las operaciones
+        # (informativa, no entra en `resultado`). Se acumulan aparte del recorrido de
+        # realizado/ingresos porque cuentan aunque el movimiento no convierta a USD (M11b):
+        # cada moneda se suma sólo si su propia conversión existe.
         for mov in movs_ticker:
-            anio = mov.fecha.year
+            if float(mov.comision or 0) <= 0:
+                continue
+            b = _bucket(mov.fecha.year, ticker)
+            c_usd = _comision_usd(mov, db, mep_cache)
+            if c_usd is not None:
+                b["comisiones_usd"] += c_usd
+            c_ars = _comision_ars(mov, db, mep_cache)
+            if c_ars is not None:
+                b["comisiones_ars"] += c_ars
 
-            # M11b: las comisiones se acumulan antes del `continue` por falta de conversión a USD.
-            # Cada moneda se suma sólo si su propia conversión existe (convención del resto del
-            # archivo): un movimiento sin USD todavía puede aportar su comisión en ARS.
-            comision = float(mov.comision or 0)
-            if comision > 0:
-                b = _bucket(anio, ticker)
-                c_usd = _comision_usd(mov, db, mep_cache)
-                if c_usd is not None:
-                    b["comisiones_usd"] += c_usd
-                c_ars = _comision_ars(mov, db, mep_cache)
-                if c_ars is not None:
-                    b["comisiones_ars"] += c_ars
-
-            monto_usd = _monto_usd(mov, db, mep_cache)
-            if monto_usd is None:
-                continue  # mismo criterio que get_resumen / get_pnl
-            monto_ars = _monto_ars(mov, db, mep_cache)
-
-            if mov.tipo_movimiento == "compra":
-                costo_usd += monto_usd
-                if monto_ars is not None:
-                    costo_ars += monto_ars
-                cantidad_held += float(mov.cantidad or 0)
-            elif mov.tipo_movimiento in ("venta", "amortizacion"):
-                cant = float(mov.cantidad or 0)
-                cantidad_vendida = min(cant, cantidad_held) if cantidad_held > EPS else 0.0
-                frac = cantidad_vendida / cantidad_held if cantidad_held > EPS else 0.0
-                costo_removido_usd = costo_usd * frac
-                costo_removido_ars = costo_ars * frac
-
-                b = _bucket(anio, ticker)
-                b["realizado_usd"] += monto_usd - costo_removido_usd
-                if monto_ars is not None:
-                    b["realizado_ars"] += monto_ars - costo_removido_ars
-
-                costo_usd -= costo_removido_usd
-                costo_ars -= costo_removido_ars
-                cantidad_held -= cantidad_vendida
-            elif mov.tipo_movimiento in TIPOS_INGRESO:
-                b = _bucket(anio, ticker)
-                b["ingresos_usd"] += monto_usd
-                if monto_ars is not None:
-                    b["ingresos_ars"] += monto_ars
+        # Realizado + ingresos por año: se cuelgan del recorrido canónico de costo promedio
+        # (M11a) — antes esto era una copia del bucle de `_recorrer_movs_ticker`.
+        _recorrer_movs_ticker(
+            movs_ticker, db, mep_cache, {}, None,
+            ars_real_valido_inicial=False,
+            on_realizado=lambda mov, m_usd, m_ars, cr_usd, cr_ars, _t=ticker: _on_realizado(_t, mov, m_usd, m_ars, cr_usd, cr_ars),
+            on_ingreso=lambda mov, m_usd, m_ars, _t=ticker: _on_ingreso(_t, mov, m_usd, m_ars),
+        )
 
     por_anio_map: dict[int, dict] = {}
     for (anio, ticker), b in acc.items():
@@ -2188,21 +2188,35 @@ def get_indices_mercado(dias: int, db: Session) -> dict:
 
     # Inflación mensual = variación mes a mes del índice de nivel del benchmark INDEC
     # (que se guarda como nivel compuesto, ver market_data/indices.fetch_benchmarks_api).
+    # B15: sólo filas fuente='api' (una fila manual en Benchmarks con el mismo nombre
+    # intercalaría niveles); se trae un mes extra hacia atrás para tener el nivel previo del
+    # primer mes de la ventana; y se saltea el punto si entre dos filas falta algún mes (la
+    # variación de dos meses no debe mostrarse como si fuera de uno).
     inflacion_rows = (
         db.query(BenchmarkValor)
-        .filter(BenchmarkValor.benchmark == _BENCHMARK_INFLACION_INDEC, BenchmarkValor.fecha >= desde)
+        .filter(
+            BenchmarkValor.benchmark == _BENCHMARK_INFLACION_INDEC,
+            BenchmarkValor.fuente == "api",
+            BenchmarkValor.fecha >= desde - timedelta(days=35),
+        )
         .order_by(BenchmarkValor.fecha)
         .all()
     )
     inflacion_mensual = []
     for prev, cur in zip(inflacion_rows, inflacion_rows[1:]):
+        if cur.fecha < desde:
+            continue  # el mes extra sólo sirve como nivel previo del primer mes de la ventana
         nivel_prev = float(prev.valor)
         nivel_cur = float(cur.valor)
-        if nivel_prev > 0:
-            inflacion_mensual.append({
-                "fecha": cur.fecha,
-                "valor_pct": round((nivel_cur / nivel_prev - 1) * 100, 2),
-            })
+        if nivel_prev <= 0:
+            continue
+        meses_gap = (cur.fecha.year - prev.fecha.year) * 12 + (cur.fecha.month - prev.fecha.month)
+        if meses_gap != 1:
+            continue  # falta al menos un mes entre prev y cur: la variación no sería mensual
+        inflacion_mensual.append({
+            "fecha": cur.fecha,
+            "valor_pct": round((nivel_cur / nivel_prev - 1) * 100, 2),
+        })
 
     return {
         "puntos": puntos,

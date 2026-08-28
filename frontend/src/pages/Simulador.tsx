@@ -10,6 +10,7 @@ import {
   duplicarEscenario,
   eliminarEscenario,
   getRendimientoPorTicker,
+  getMovimientosInversion,
   EscenarioSimulacionRequest,
   EscenarioSimulacionItem,
   EscenarioSimulacionOut,
@@ -56,22 +57,38 @@ export default function Simulador() {
   const [escenariosSaved, setEscenariosSaved] = useState<Escenario[]>([])
   const [tickersDisponibles, setTickersDisponibles] = useState<{ ticker: string; nombre: string }[]>([])
   const [mostrarConfigPersonalizado, setMostrarConfigPersonalizado] = useState(false)
+  const [confirmandoEliminar, setConfirmandoEliminar] = useState<number | null>(null)
 
   // Cargar escenarios guardados + tickers en cartera
   useEffect(() => {
     let cancelado = false
     const fetchData = async () => {
       try {
-        const [saved, rendimiento] = await Promise.all([
+        const [saved, rendimiento, movimientos] = await Promise.all([
           listarEscenarios(carteraSeleccionada),
           getRendimientoPorTicker(carteraSeleccionada).catch(() => []),
+          getMovimientosInversion(carteraSeleccionada ? { cartera: carteraSeleccionada } : {}).catch(() => []),
         ])
         if (cancelado) return
         setEscenariosSaved(saved)
+
+        // B14: `getRendimientoPorTicker` descarta las posiciones sin cotización cargada, así que
+        // esas no se podrían override-ear. Se une con las tenencias derivadas de los movimientos.
+        const tenencia = new Map<string, number>()
+        for (const m of movimientos) {
+          const q = m.cantidad ?? 0
+          const signo = m.tipo_movimiento === 'compra' ? 1
+            : (m.tipo_movimiento === 'venta' || m.tipo_movimiento === 'amortizacion') ? -1 : 0
+          tenencia.set(m.ticker, (tenencia.get(m.ticker) ?? 0) + signo * q)
+        }
+        const nombrePorTicker = new Map(rendimiento.map(r => [r.ticker, r.nombre]))
+        const universo = new Set<string>([
+          ...rendimiento.filter(r => r.cantidad_actual > 0).map(r => r.ticker),
+          ...[...tenencia.entries()].filter(([, q]) => q > 1e-9).map(([t]) => t),
+        ])
         setTickersDisponibles(
-          rendimiento
-            .filter(r => r.cantidad_actual > 0)
-            .map(r => ({ ticker: r.ticker, nombre: r.nombre }))
+          [...universo]
+            .map(t => ({ ticker: t, nombre: nombrePorTicker.get(t) ?? t }))
             .sort((a, b) => a.ticker.localeCompare(b.ticker)),
         )
       } catch (err) {
@@ -110,7 +127,16 @@ export default function Simulador() {
     }
   }
 
+  // B13: eliminar es irreversible → requiere un segundo click ("¿Eliminar?"), con timeout.
   const handleEliminarGuardado = async (esc: Escenario) => {
+    if (confirmandoEliminar !== esc.id) {
+      setConfirmandoEliminar(esc.id)
+      window.setTimeout(() => {
+        setConfirmandoEliminar(prev => (prev === esc.id ? null : prev))
+      }, 3000)
+      return
+    }
+    setConfirmandoEliminar(null)
     try {
       await eliminarEscenario(esc.id)
       await recargarGuardados()
@@ -340,9 +366,13 @@ export default function Simulador() {
                   </button>
                   <button
                     onClick={() => handleEliminarGuardado(esc)}
-                    className="text-[11px] font-semibold text-app-text-secondary hover:text-app-coral"
+                    className={`text-[11px] font-semibold ${
+                      confirmandoEliminar === esc.id
+                        ? 'text-app-coral'
+                        : 'text-app-text-secondary hover:text-app-coral'
+                    }`}
                   >
-                    Eliminar
+                    {confirmandoEliminar === esc.id ? '¿Eliminar?' : 'Eliminar'}
                   </button>
                 </div>
               ))}

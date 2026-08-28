@@ -63,3 +63,47 @@ def test_inflacion_mensual_vacia_sin_benchmark(db: Session):
     db.commit()
     out = get_indices_mercado(3650, db)
     assert out["inflacion_mensual"] == []
+
+
+def test_b15_inflacion_mensual_ignora_filas_manuales(db: Session):
+    # Una fila manual (fuente='sheet') con el mismo nombre no debe intercalar niveles.
+    db.add_all([
+        BenchmarkValor(fecha=date(2026, 1, 31), benchmark="Inflación (INDEC)", valor=100.0, fuente="api"),
+        BenchmarkValor(fecha=date(2026, 2, 10), benchmark="Inflación (INDEC)", valor=999.0, fuente="sheet"),
+        BenchmarkValor(fecha=date(2026, 2, 28), benchmark="Inflación (INDEC)", valor=105.0, fuente="api"),
+    ])
+    db.commit()
+    out = get_indices_mercado(3650, db)
+    assert [p["valor_pct"] for p in out["inflacion_mensual"]] == [pytest.approx(5.0)]
+
+
+def test_b15_inflacion_mensual_saltea_meses_faltantes(db: Session):
+    # Falta marzo: la variación ene->feb es mensual (se muestra); feb->abr es de dos meses
+    # (no se muestra como si fuera de uno).
+    db.add_all([
+        BenchmarkValor(fecha=date(2026, 1, 31), benchmark="Inflación (INDEC)", valor=100.0, fuente="api"),
+        BenchmarkValor(fecha=date(2026, 2, 28), benchmark="Inflación (INDEC)", valor=104.0, fuente="api"),
+        BenchmarkValor(fecha=date(2026, 4, 30), benchmark="Inflación (INDEC)", valor=115.0, fuente="api"),
+    ])
+    db.commit()
+    out = get_indices_mercado(3650, db)
+    infl = out["inflacion_mensual"]
+    assert [p["fecha"] for p in infl] == [date(2026, 2, 28)]
+    assert infl[0]["valor_pct"] == pytest.approx(4.0)
+
+
+def test_b15_inflacion_primer_mes_de_la_ventana_no_se_pierde(db: Session):
+    # Con un mes extra hacia atrás, el primer mes dentro de la ventana conserva su variación.
+    hoy = date.today()
+    m0 = (hoy.replace(day=1) - timedelta(days=1)).replace(day=1)     # mes pasado
+    m_prev = (m0 - timedelta(days=1)).replace(day=1)                  # dos meses atrás
+    db.add_all([
+        BenchmarkValor(fecha=m_prev, benchmark="Inflación (INDEC)", valor=100.0, fuente="api"),
+        BenchmarkValor(fecha=m0, benchmark="Inflación (INDEC)", valor=103.0, fuente="api"),
+    ])
+    db.commit()
+    # ventana que arranca justo en m0: sin el mes extra, m0 no tendría nivel previo.
+    dias = (hoy - m0).days + 1
+    out = get_indices_mercado(dias, db)
+    assert [p["fecha"] for p in out["inflacion_mensual"]] == [m0]
+    assert out["inflacion_mensual"][0]["valor_pct"] == pytest.approx(3.0)
