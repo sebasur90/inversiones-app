@@ -13,8 +13,10 @@ from .sheets_client import fetch_sheet_data, fetch_objetivos_tab, fetch_rebalanc
 from .inversiones_analytics import get_carteras
 from .validation.types import ValidationIssue, Severity
 from .validation.reglas_estructura import validar_estructura_tab
-from .validation import reglas_instrumentos, reglas_movimientos, reglas_precios, reglas_objetivos, reglas_rebalanceo, reglas_benchmarks, reglas_configuracion
+from .validation import reglas_instrumentos, reglas_movimientos, reglas_precios, reglas_objetivos, reglas_rebalanceo, reglas_benchmarks, reglas_configuracion, reglas_tipos_cambio
 from .validation.health_score import calcular_health_score
+from . import market_data
+from .market_data import indices as market_data_indices
 
 logger = logging.getLogger("calidad_datos")
 
@@ -289,6 +291,31 @@ def sync_from_sheet(db: Session) -> dict:
             configuracion_validos, issues_cfg = reglas_configuracion.validar_configuracion(raw_cfg.rows)
             issues.extend(issues_cfg)
 
+    # Validar Tipos de Cambio (opcional): fuente dedicada de CER/MEP, tiene prioridad sobre las
+    # columnas CER/MEP embebidas en Movimientos/Precios (que sólo traen valor en fechas con
+    # operación o carga de precio).
+    tipos_cambio_validos = []
+    raw_tc = raw_data.get("Tipos de Cambio")
+    if raw_tc and raw_tc.error_lectura:
+        issues.append(ValidationIssue(
+            tab="Tipos de Cambio", regla="lectura_fallo",
+            mensaje=f"Error leyendo Tipos de Cambio: {raw_tc.error_lectura}",
+            impacto="No se aplicó como fuente prioritaria de CER/MEP",
+            severidad=Severity.ADVERTENCIA
+        ))
+    elif raw_tc and raw_tc.presente:
+        bloqueada_est, issues_est = validar_estructura_tab(
+            "Tipos de Cambio", raw_tc.header, raw_tc.rows,
+            tab_requerida=False, tab_actual_no_vacia=False
+        )
+        issues.extend(issues_est)
+        if not bloqueada_est:
+            tipos_cambio_validos, issues_tc = reglas_tipos_cambio.validar_tipos_cambio(raw_tc.rows)
+            issues.extend(issues_tc)
+
+    if tipos_cambio_validos and not fuentes_cer_mep_bloqueadas:
+        indices_mercado = _aplicar_tipos_cambio(indices_mercado, tipos_cambio_validos)
+
     # Persistencia selectiva: DELETE + INSERT solo para tablas NO bloqueadas
     if "Instrumentos" not in tabs_bloqueadas:
         db.query(InstrumentoInversion).delete()
@@ -317,11 +344,29 @@ def sync_from_sheet(db: Session) -> dict:
         for precio in precios_validos:
             db.add(PrecioInstrumento(**precio))
 
+    indices_mercado_api_count = 0
     if not fuentes_cer_mep_bloqueadas:
-        db.query(IndiceMercado).delete()
+        # El Sheet se recalcula por completo en cada sync; las filas de la API (si las hay,
+        # ver más abajo) se preservan aparte para no perderlas por una falla de red transitoria.
+        db.query(IndiceMercado).filter(IndiceMercado.fuente == "sheet").delete()
         db.flush()
+        fechas_sheet = set()
         for indice in indices_mercado:
+            indice.setdefault("fuente", "sheet")
+            fechas_sheet.add(indice["fecha"])
             db.add(IndiceMercado(**indice))
+
+        if market_data.use_external_apis():
+            api_indices, issues_api = market_data_indices.fetch_indices_mercado_api(fechas_sheet)
+            issues.extend(issues_api)
+            if api_indices is not None:
+                db.query(IndiceMercado).filter(IndiceMercado.fuente == "api").delete()
+                db.flush()
+                for indice in api_indices:
+                    db.add(IndiceMercado(**indice))
+                indices_mercado_api_count = len(api_indices)
+            else:
+                indices_mercado_api_count = db.query(IndiceMercado).filter(IndiceMercado.fuente == "api").count()
 
     if "Objetivos" not in tabs_bloqueadas:
         db.query(ObjetivoInversion).delete()
@@ -335,11 +380,25 @@ def sync_from_sheet(db: Session) -> dict:
         for rebalanceo in rebalanceo_validos:
             db.add(RebalanceoObjetivo(**rebalanceo))
 
+    benchmarks_api_count = 0
     if "Benchmarks" not in tabs_bloqueadas:
-        db.query(BenchmarkValor).delete()
+        db.query(BenchmarkValor).filter(BenchmarkValor.fuente == "sheet").delete()
         db.flush()
         for benchmark in benchmarks_validos:
+            benchmark.setdefault("fuente", "sheet")
             db.add(BenchmarkValor(**benchmark))
+
+        if market_data.use_external_apis():
+            api_benchmarks, issues_api_bench = market_data_indices.fetch_benchmarks_api()
+            issues.extend(issues_api_bench)
+            if api_benchmarks is not None:
+                db.query(BenchmarkValor).filter(BenchmarkValor.fuente == "api").delete()
+                db.flush()
+                for benchmark in api_benchmarks:
+                    db.add(BenchmarkValor(**benchmark))
+                benchmarks_api_count = len(api_benchmarks)
+            else:
+                benchmarks_api_count = db.query(BenchmarkValor).filter(BenchmarkValor.fuente == "api").count()
 
     if "Configuracion" not in tabs_bloqueadas:
         db.query(ConfiguracionCartera).delete()
@@ -392,8 +451,8 @@ def sync_from_sheet(db: Session) -> dict:
         "precios": len(precios_validos),
         "objetivos": len(objetivos_validos),
         "rebalanceo": len(rebalanceo_validos),
-        "indices_mercado": 0 if fuentes_cer_mep_bloqueadas else len(indices_mercado),
-        "benchmarks": len(benchmarks_validos),
+        "indices_mercado": 0 if fuentes_cer_mep_bloqueadas else len(indices_mercado) + indices_mercado_api_count,
+        "benchmarks": len(benchmarks_validos) + benchmarks_api_count,
         "configuracion": len(configuracion_validos),
         "health_score": score_result["score"],
         "resultado": score_result["resultado"],
@@ -438,3 +497,15 @@ def _consolidar_indices_mercado(cer_mep_movimientos: list[dict], cer_mep_precios
                 existente["mep"] = mep
 
     return list(indices_por_fecha.values()), advertencias
+
+
+def _aplicar_tipos_cambio(indices_existentes: list[dict], tipos_cambio: list[dict]) -> list[dict]:
+    """Sobrescribe/completa `indices_existentes` (de Movimientos/Precios) con los valores de la
+    pestaña "Tipos de Cambio", que tiene prioridad por ser la fuente dedicada."""
+    por_fecha = {row["fecha"]: dict(row) for row in indices_existentes}
+    for item in tipos_cambio:
+        fecha = item["fecha"]
+        if fecha not in por_fecha:
+            por_fecha[fecha] = {"fecha": fecha, "cer": None, "mep": None}
+        por_fecha[fecha][item["campo"]] = item["valor"]
+    return list(por_fecha.values())

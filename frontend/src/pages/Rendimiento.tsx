@@ -76,11 +76,25 @@ export default function Rendimiento() {
   const ingresos = c ? (esARS ? c.ingresos_ars : c.ingresos_usd) : null
   const total = c ? (esARS ? c.total_ars : c.total_usd) : null
 
+  // XIRR pondera por cuánta plata había invertida en cada momento, TWR no: la diferencia entre
+  // ambas es el efecto de CUÁNDO aportaste/retiraste, aislado de cómo rindió la estrategia.
+  const diff = (xirr: number | null | undefined, twr: number | null | undefined) =>
+    xirr != null && twr != null ? xirr - twr : null
+
   const filas: { label: string; infoTerm: HelpKey; valores: (number | null | undefined)[] }[] = resumen
     ? [
         { label: 'Simple', infoTerm: 'simple', valores: [resumen.rendimiento_simple_ars, resumen.rendimiento_simple_ars_real, resumen.rendimiento_simple_usd] },
         { label: 'TIR (XIRR)', infoTerm: 'xirr', valores: [resumen.xirr_ars, resumen.xirr_ars_real, resumen.xirr_usd] },
         { label: 'TWRR', infoTerm: 'twr', valores: [resumen.twr_ars, resumen.twr_ars_real, resumen.twr_usd] },
+        {
+          label: 'Efecto de tus aportes',
+          infoTerm: 'efectoAportes',
+          valores: [
+            diff(resumen.xirr_ars, resumen.twr_ars),
+            diff(resumen.xirr_ars_real, resumen.twr_ars_real),
+            diff(resumen.xirr_usd, resumen.twr_usd),
+          ],
+        },
       ]
     : []
 

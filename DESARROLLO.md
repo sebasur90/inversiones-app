@@ -45,13 +45,44 @@ inversiones-app/
 │       ├── Instrumentos          # Metadata de tickers
 │       ├── Precios               # Series históricas
 │       ├── Objetivos             # Opcional: metas financieras por cartera
-│       └── Rebalanceo            # Opcional: % objetivo de asignación
+│       ├── Rebalanceo            # Opcional: % objetivo de asignación
+│       ├── Benchmarks            # Opcional: series de benchmarks (además de los automáticos)
+│       ├── Configuracion         # Opcional: benchmark/pesos objetivo por cartera
+│       └── Tipos de Cambio       # Opcional: CER/MEP dedicados (Fecha, Tipo, Valor)
 ├── credentials/
 │   └── google-service-account.json  # Para modo Google Sheets
 └── backend/
     └── app/services/
-        └── sheets_client.py       # Implementación (detecta USE_LOCAL_SHEET)
+        ├── sheets_client.py       # Implementación (detecta USE_LOCAL_SHEET)
+        └── market_data/           # APIs externas gratuitas (detecta USE_EXTERNAL_APIS)
 ```
+
+## CER/MEP y benchmarks automáticos (USE_EXTERNAL_APIS)
+
+```
+USE_EXTERNAL_APIS=true   # default en docker-compose.yml y docker-compose.corporate.yml
+```
+
+Con el flag prendido, el sync completa automáticamente lo que el Sheet no cubre, usando APIs
+gratuitas y sin API key (ver `backend/app/services/market_data/`):
+
+- **CER/MEP diario**: [ArgentinaDatos](https://argentinadatos.com/docs/) (índice UVA como
+  deflactor equivalente al CER, y dólar MEP histórico). Antes, si faltaba el MEP de una fecha
+  el movimiento se descartaba en silencio; con la serie diaria eso deja de pasar.
+- **Benchmark "Inflación (INDEC)"**: índice mensual construido por interés compuesto sobre la
+  inflación publicada por ArgentinaDatos. Activa Performance relativa, Comparar benchmarks y el
+  Sharpe de Riesgo con un benchmark real además de Dólar (MEP) e Inflación (CER).
+
+**El Sheet siempre gana**: estos valores sólo completan huecos, nunca pisan una fecha que ya
+esté cargada a mano (en `Movimientos`, `Precios`, `Tipos de Cambio` o `Benchmarks`). Si la API
+no responde (proxy caído, sin internet), el sync no falla: queda una advertencia en Calidad de
+datos y se preserva lo último que sí se pudo traer. Para apagarlo (comportamiento 100% manual,
+como antes), `USE_EXTERNAL_APIS=false`.
+
+No se automatizaron MERVAL, S&P 500 ni una tasa libre de riesgo histórica: no encontramos una
+API gratuita y confiable con esas series (Stooq bloquea el acceso programático con un desafío
+JS, y no hay endpoint público con el nivel histórico del MERVAL). Para esos casos seguí
+cargando la pestaña `Benchmarks` a mano.
 
 ## Sincronización en la UI
 

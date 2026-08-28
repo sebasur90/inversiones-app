@@ -71,6 +71,9 @@ class IndiceMercado(Base):
     fecha = Column(Date, nullable=False, unique=True)
     cer = Column(Numeric(18, 6), nullable=True)
     mep = Column(Numeric(18, 6), nullable=True)
+    # "sheet" (Movimientos/Precios/Tipos de Cambio) | "api" (completado automáticamente, ver
+    # services/market_data). El Sheet siempre gana; "api" sólo llena fechas que el Sheet no cubre.
+    fuente = Column(String, nullable=False, default="sheet", server_default="sheet")
 
 
 class BenchmarkValor(Base):
@@ -79,6 +82,7 @@ class BenchmarkValor(Base):
     fecha = Column(Date, nullable=False)
     benchmark = Column(String, nullable=False)
     valor = Column(Numeric(18, 6), nullable=False)
+    fuente = Column(String, nullable=False, default="sheet", server_default="sheet")
 
     __table_args__ = (UniqueConstraint("fecha", "benchmark", name="uq_benchmark_valor"),)
 
@@ -185,4 +189,12 @@ def init_db():
         ):
             if columna not in cols:
                 conn.execute(text(f"ALTER TABLE instrumentos_inversion ADD COLUMN {columna} {tipo}"))
+                conn.commit()
+
+        # aseguramos compatibilidad con DB antiguas que no tenían fuente (sheet vs api).
+        for tabla in ("indices_mercado", "benchmarks_mercado"):
+            result = conn.execute(text(f"PRAGMA table_info({tabla})"))
+            cols = [row[1] for row in result.fetchall()]
+            if 'fuente' not in cols:
+                conn.execute(text(f"ALTER TABLE {tabla} ADD COLUMN fuente TEXT NOT NULL DEFAULT 'sheet'"))
                 conn.commit()

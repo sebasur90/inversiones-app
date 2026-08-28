@@ -33,6 +33,7 @@ export type GlosarioKey =
   | 'rendimiento_usd'
   | 'efecto_fx'
   | 'retorno_activo'
+  | 'efectoAportes'
 
 export const GLOSARIO_HELP: Record<GlosarioKey, HelpContent> = {
   xirr: {
@@ -44,6 +45,18 @@ export const GLOSARIO_HELP: Record<GlosarioKey, HelpContent> = {
     title: 'TWR / TWRR (Time-Weighted Return)',
     shortDescription:
       'Mide el rendimiento de la estrategia en sí misma, sin que importe cuándo depositaste o retiraste plata. Se usa para comparar tu cartera contra un índice o benchmark de forma justa, ya que tus aportes y retiros no distorsionan el número.',
+  },
+  efectoAportes: {
+    title: 'Efecto de tus aportes',
+    shortDescription:
+      'La diferencia entre XIRR y TWR. Te dice si el momento en que pusiste o sacaste plata jugó a tu favor o en tu contra, más allá de cómo rindió la estrategia en sí.',
+    whyItMatters:
+      'XIRR y TWR miden cosas distintas: XIRR pondera por cuánta plata había invertida en cada momento, TWR no. Si sumaste aportes justo antes de una suba, tu XIRR va a ser mejor que tu TWR (el timing jugó a favor); si aportaste antes de una baja, va a ser peor.',
+    howItIsCalculated: 'Efecto = XIRR − TWR, en la misma moneda.',
+    howToInterpret:
+      'Positivo: tus aportes/retiros mejoraron el resultado respecto a la estrategia pura. Negativo: el timing de tus movimientos te costó rendimiento, aunque la estrategia haya sido buena.',
+    limitations: 'No es "buen" o "mal" timing en un sentido predictivo — es una lectura hacia atrás de cómo coincidieron tus aportes con los movimientos de precio.',
+    relatedTerms: ['xirr', 'twr'],
   },
   simple: {
     title: 'Rendimiento simple',

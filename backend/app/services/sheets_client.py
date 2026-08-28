@@ -27,6 +27,8 @@ BENCHMARKS_TAB = "Benchmarks"
 
 CONFIGURACION_TAB = "Configuracion"
 
+TIPOS_CAMBIO_TAB = "Tipos de Cambio"
+
 
 class SheetsClientError(Exception):
     pass
@@ -108,7 +110,7 @@ def _fetch_from_excel() -> dict[str, TabRaw]:
                     result[tab] = TabRaw(presente=True, header=[], rows=[], error_lectura=str(exc))
 
         # Agregar pestañas opcionales
-        for opt_tab in [OBJETIVOS_TAB, REBALANCEO_TAB, BENCHMARKS_TAB, CONFIGURACION_TAB]:
+        for opt_tab in [OBJETIVOS_TAB, REBALANCEO_TAB, BENCHMARKS_TAB, CONFIGURACION_TAB, TIPOS_CAMBIO_TAB]:
             if opt_tab not in excel_file.sheet_names:
                 result[opt_tab] = TabRaw(presente=False, header=[], rows=[])
             else:
@@ -163,7 +165,7 @@ def fetch_sheet_data() -> dict[str, TabRaw]:
                     result[tab] = TabRaw(presente=True, header=[], rows=[], error_lectura=str(exc))
 
         # Agregar pestañas opcionales
-        for opt_tab in [OBJETIVOS_TAB, REBALANCEO_TAB, BENCHMARKS_TAB, CONFIGURACION_TAB]:
+        for opt_tab in [OBJETIVOS_TAB, REBALANCEO_TAB, BENCHMARKS_TAB, CONFIGURACION_TAB, TIPOS_CAMBIO_TAB]:
             try:
                 resp = (
                     service.spreadsheets()

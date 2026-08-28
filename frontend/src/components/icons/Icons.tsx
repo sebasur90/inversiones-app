@@ -20,6 +20,7 @@ export type IconName =
   | 'trend'
   | 'info'
   | 'scale'
+  | 'more'
 
 export function IconSprite() {
   return (
@@ -113,6 +114,12 @@ export function IconSprite() {
           <path d="M5 7l-3 6a3 3 0 006 0z" />
           <path d="M19 7l-3 6a3 3 0 006 0z" />
           <line x1="8" y1="21" x2="16" y2="21" />
+        </symbol>
+        <symbol id="i-more" viewBox="0 0 24 24">
+          <rect x="4" y="4" width="6.5" height="6.5" rx="1.5" />
+          <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" />
+          <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" />
+          <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" />
         </symbol>
       </defs>
     </svg>

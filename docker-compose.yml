@@ -6,6 +6,7 @@ services:
       - NO_PROXY=localhost,127.0.0.1,.googleapis.com,.google.com
       - no_proxy=localhost,127.0.0.1,.googleapis.com,.google.com
       - USE_LOCAL_SHEET=false
+      - USE_EXTERNAL_APIS=true
     volumes:
       # Google Service Account - mount from local credentials directory (read-only)
       - ./credentials/google-service-account.json:/app/data/google-service-account.json:ro

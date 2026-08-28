@@ -9,6 +9,7 @@ from backend.app.services.validation import (
     reglas_rebalanceo,
     reglas_benchmarks,
     reglas_configuracion,
+    reglas_tipos_cambio,
 )
 
 
@@ -136,6 +137,50 @@ def test_benchmarks_valor_negativo():
     validos, issues = reglas_benchmarks.validar_benchmarks(rows)
     assert len(validos) == 0
     assert any("valor_no_positivo" in i.regla for i in issues)
+
+
+def test_tipos_cambio_ok():
+    """Fila válida de CER y de MEP → ambas se parsean con su campo correspondiente."""
+    rows = [
+        (2, {"Fecha": "2026-02-18", "Tipo": "CER", "Valor": "103.6"}),
+        (3, {"Fecha": "2026-02-18", "Tipo": "MEP", "Valor": "818"}),
+    ]
+    validos, issues = reglas_tipos_cambio.validar_tipos_cambio(rows)
+    assert len(validos) == 2
+    assert not issues
+    campos = {v["campo"]: v["valor"] for v in validos}
+    assert campos["cer"] == 103.6
+    assert campos["mep"] == 818.0
+
+
+def test_tipos_cambio_tipo_no_reconocido():
+    """Tipo distinto de CER/MEP → advertencia/drop, no bloquea el resto."""
+    rows = [(2, {"Fecha": "2026-02-18", "Tipo": "UVA", "Valor": "100"})]
+    validos, issues = reglas_tipos_cambio.validar_tipos_cambio(rows)
+    assert len(validos) == 0
+    assert any("tipo_no_reconocido" in i.regla for i in issues)
+    assert issues[0].severidad == Severity.ADVERTENCIA
+
+
+def test_tipos_cambio_valor_no_positivo():
+    """Valor <= 0 → crítico/drop."""
+    rows = [(2, {"Fecha": "2026-02-18", "Tipo": "CER", "Valor": "-1"})]
+    validos, issues = reglas_tipos_cambio.validar_tipos_cambio(rows)
+    assert len(validos) == 0
+    assert any("valor_no_positivo" in i.regla for i in issues)
+    assert issues[0].severidad == Severity.CRITICO
+
+
+def test_tipos_cambio_duplicado():
+    """Misma fecha+tipo repetida → se descarta la segunda como advertencia."""
+    rows = [
+        (2, {"Fecha": "2026-02-18", "Tipo": "CER", "Valor": "103.6"}),
+        (3, {"Fecha": "2026-02-18", "Tipo": "CER", "Valor": "999"}),
+    ]
+    validos, issues = reglas_tipos_cambio.validar_tipos_cambio(rows)
+    assert len(validos) == 1
+    assert validos[0]["valor"] == 103.6
+    assert any("valor_duplicado" in i.regla for i in issues)
 
 
 def test_configuracion_peso_minimo_mayor_maximo():

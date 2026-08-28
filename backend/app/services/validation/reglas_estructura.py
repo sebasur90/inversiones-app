@@ -10,6 +10,7 @@ COLUMNAS_REQUERIDAS = {
     "Rebalanceo": ["Cartera", "Eje", "Categoría", "Porcentaje Objetivo"],
     "Benchmarks": ["Fecha", "Benchmark", "Valor"],
     "Configuracion": ["Cartera"],
+    "Tipos de Cambio": ["Fecha", "Tipo", "Valor"],
 }
 
 COLUMNAS_CONOCIDAS = {
@@ -30,6 +31,7 @@ COLUMNAS_CONOCIDAS = {
         "Cartera", "Benchmark", "Rendimiento Objetivo",
         "Peso Máximo", "Peso Mínimo", "Tolerancia"
     ],
+    "Tipos de Cambio": ["Fecha", "Tipo", "Valor"],
 }
 
 

@@ -7,9 +7,9 @@ const ITEMS: { to: string; label: string; icon: IconName }[] = [
   { to: '/rendimiento', label: 'Rendim.', icon: 'up' },
   { to: '/exposicion', label: 'Exposición', icon: 'pie' },
   { to: '/movimientos', label: 'Movim.', icon: 'list' },
-  { to: '/precios', label: 'Precios', icon: 'trend' },
   { to: '/objetivo', label: 'Objetivo', icon: 'target' },
   { to: '/rebalanceo', label: 'Rebal.', icon: 'scale' },
+  { to: '/mas', label: 'Más', icon: 'more' },
 ]
 
 export default function BottomNav() {
