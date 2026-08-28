@@ -81,6 +81,7 @@ def get_diagnostico(cartera: str | None, db: Session) -> dict:
         "performance": diagnostico_engine.score_performance(
             riesgo.get("calmar", {}),
             riesgo.get("benchmark_retorno_anualizado"),
+            config.get("rendimiento_objetivo"),
         ),
         "objetivo": diagnostico_engine.score_objetivo(objetivo),
     })

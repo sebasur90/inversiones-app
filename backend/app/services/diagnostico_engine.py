@@ -353,11 +353,31 @@ def score_diversificacion(concentracion: list[dict]) -> dict | None:
     return {"score": round(score, 1), "detalle": detalle}
 
 
-def score_performance(calmar: dict, benchmark_retorno_anualizado: float | None) -> dict | None:
-    """Score de performance (CAGR vs benchmark o vs referencia absoluta)."""
+def score_performance(
+    calmar: dict,
+    benchmark_retorno_anualizado: float | None,
+    rendimiento_objetivo_pct: float | None = None,
+) -> dict | None:
+    """Score de performance (CAGR vs objetivo declarado, o vs benchmark, o vs referencia
+    absoluta).
+
+    `rendimiento_objetivo_pct` es el objetivo de rendimiento anual configurado para la
+    cartera (en %, misma escala que se muestra en la app). Si está seteado y es positivo,
+    manda como vara: el score es CAGR / objetivo. Si no, se cae al comportamiento previo
+    (exceso vs. benchmark, o CAGR / `CAGR_REF_ABSOLUTO`).
+    """
     if calmar.get("estado") != "ok" or calmar.get("retorno_anualizado") is None:
         return None
     cagr = calmar["retorno_anualizado"]
+
+    if rendimiento_objetivo_pct is not None and rendimiento_objetivo_pct > 0:
+        objetivo_ratio = rendimiento_objetivo_pct / 100
+        score = _clamp((cagr / objetivo_ratio) * 100)
+        detalle = f"CAGR {cagr*100:.1f}% vs objetivo {rendimiento_objetivo_pct:.1f}%"
+        if benchmark_retorno_anualizado is not None:
+            detalle += f" (benchmark {benchmark_retorno_anualizado*100:+.1f}%)"
+        return {"score": round(score, 1), "detalle": detalle}
+
     if benchmark_retorno_anualizado is not None:
         exceso = cagr - benchmark_retorno_anualizado
         score = _clamp(50 + (exceso / EXCESO_REF_VS_BENCHMARK) * 50)

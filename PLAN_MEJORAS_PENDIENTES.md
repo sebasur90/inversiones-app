@@ -205,10 +205,22 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
    escenario como panel editable, tope 6), **Duplicar** (`duplicarEscenario`, nombre
    "… (copia)") y **Eliminar** (`eliminarEscenario`), con refresco de la lista — antes esas
    dos funciones de `api/index.ts` no tenían consumidor. Sin tests nuevos (cambio de UI).
-9. **Config declarada y no aplicada** — `peso_minimo` se lee/valida/persiste y
-   `rebalanceo_engine.generar_propuesta` nunca lo usa (`rebalanceo_engine.py:80`);
-   `peso_maximo` sólo aplica en modo `solo_aportes`; `rendimiento_objetivo` no entra en
-   `diagnostico_engine.score_performance`.
+9. ~~**Config declarada y no aplicada**~~ — ✅ HECHO.
+   - **`rebalanceo_engine`**: nuevo `_aplicar_banda_pesos`, corre en modo `completo` (antes
+     `peso_*` sólo se usaba en `solo_aportes`). Recorta el objetivo de cada instrumento a
+     `[peso_minimo, peso_maximo]`: el **techo** a todo instrumento en cartera (una
+     sobreponderación se corrige vendiendo hasta el máximo, tenga o no objetivo propio); el
+     **piso** sólo a instrumentos con `delta_pp != 0` (un "mantener sin objetivo" no dispara
+     compras hacia el mínimo → no fuerza comprar posiciones ínfimas dejadas chicas a
+     propósito). Recalcula `importe/accion/peso_objetivo/delta/comisión` y lo anota en
+     `motivo` (que la UI ya muestra en `PropuestaRebalanceoRow`). Rompe a propósito la
+     identidad "objetivos suman 100%" — inherente a un guardrail duro.
+   - **`diagnostico_engine.score_performance`**: 3er parámetro opcional
+     `rendimiento_objetivo_pct` (viene de `config["rendimiento_objetivo"]` vía
+     `diagnostico_analytics`). Si está seteado y es > 0, manda como vara absoluta
+     (`score = CAGR / objetivo`), con el benchmark sólo mencionado en el detalle; si no, cae
+     al comportamiento previo (exceso vs. benchmark / `CAGR_REF_ABSOLUTO`).
+   Tests: `backend/tests/test_rebalanceo_banda_pesos.py` (6), +3 en `test_diagnostico_engine.py`.
 10. **Riesgo país e inflación mensual en Indicadores Macro** — riesgo país ya está disponible
     vía ArgentinaDatos (`/v1/finanzas/indices/riesgo-pais`, probado en la exploración), sólo
     falta sumarlo como serie en `IndicadoresMacro.tsx` (no es un benchmark de retorno, es
@@ -246,7 +258,7 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
     -v $(pwd):/repo -w /repo -e PYTHONPATH=/repo \
     backend python -m pytest backend/tests/ -q
   ```
-  Baseline actual: **280 pasan, 0 fallan** (176 tras Ola 1-2; +29 con Ola 3 ítem 1:
+  Baseline actual: **289 pasan, 0 fallan** (176 tras Ola 1-2; +29 con Ola 3 ítem 1:
   `test_data912.py`, `test_market_data_precios.py`, 2 de integración en
   `test_inversiones_sync_market_data.py`; +9 con Ola 3 ítem 2:
   `test_flujo_caja_analytics.py`; +7 con Ola 3 ítem 3:
@@ -255,7 +267,8 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
   `test_data912.py` (3), `test_market_data_precios.py` (17), `test_inversiones_sync_market_data.py`
   (3 integración + 1 mock extendido); +7 con Ola 5 ítem 5: `test_vista_fiscal_por_anio.py`;
   +3 con Ola 5 ítem 6: `test_twr_costo_operar.py`; +5 con Ola 5 ítem 7:
-  `test_calidad_datos_historial.py`).
+  `test_calidad_datos_historial.py`; +9 con Ola 5 ítem 9: `test_rebalanceo_banda_pesos.py` (6)
+  + 3 en `test_diagnostico_engine.py`).
 - **Build frontend** (verifica TypeScript): `docker compose -f docker-compose.yml -f docker-compose.corporate.yml build frontend`.
 - Cualquier fetch nuevo a una API externa va en `backend/app/services/market_data/`, con el
   mismo patrón: nunca lanza (devuelve `None` en fallo total), se llama sólo si

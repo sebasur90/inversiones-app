@@ -314,6 +314,28 @@ class TestScoreFunctions:
         assert result is not None
         assert 0 <= result["score"] <= 100
 
+    def test_score_performance_con_objetivo_declarado(self):
+        # CAGR 12% vs objetivo 10% -> score = 12/10 * 100 = 120 -> clamp 100.
+        calmar = {"estado": "ok", "retorno_anualizado": 0.12}
+        result = diagnostico_engine.score_performance(calmar, None, 10.0)
+        assert result["score"] == 100.0
+        assert "objetivo 10.0%" in result["detalle"]
+
+    def test_score_performance_objetivo_manda_sobre_benchmark(self):
+        # CAGR 6% vs objetivo 12% -> score = 50; el benchmark (10%) sólo se menciona.
+        calmar = {"estado": "ok", "retorno_anualizado": 0.06}
+        result = diagnostico_engine.score_performance(calmar, 0.10, 12.0)
+        assert result["score"] == 50.0
+        assert "objetivo 12.0%" in result["detalle"]
+        assert "benchmark" in result["detalle"]
+
+    def test_score_performance_objetivo_none_o_cero_usa_camino_previo(self):
+        calmar = {"estado": "ok", "retorno_anualizado": 0.12}
+        assert diagnostico_engine.score_performance(calmar, 0.10, None) == \
+            diagnostico_engine.score_performance(calmar, 0.10)
+        assert diagnostico_engine.score_performance(calmar, 0.10, 0.0) == \
+            diagnostico_engine.score_performance(calmar, 0.10)
+
     def test_score_objetivo_alcanzable(self):
         objetivo = {"alcanzable": True, "monto_usd": 10000}
         result = diagnostico_engine.score_objetivo(objetivo)

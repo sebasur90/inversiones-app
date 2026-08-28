@@ -14,7 +14,7 @@ Algoritmo, por eje:
   objetivo pero sin ningún instrumento en cartera no inventa un ticker: se marca como
   "categoria_sin_instrumento" para que el usuario elija manualmente qué comprar.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 EPS_USD = 0.01
 EPS_PCT = 1e-9
@@ -253,9 +253,69 @@ def generar_propuesta(
                 ))
 
     if modo != "solo_aportes":
+        items = _aplicar_banda_pesos(items, peso_minimo_pp, peso_maximo_pp, total_efectivo, tasa_comision_pct)
         return ResultadoPropuesta(items=items, sobrante_usd=0.0)
 
     return _aplicar_solo_aportes(items, aporte_usd, peso_maximo_pp, total_efectivo, tasa_comision_pct)
+
+
+def _aplicar_banda_pesos(
+    items: list[PropuestaItem],
+    peso_minimo_pp: float | None,
+    peso_maximo_pp: float | None,
+    total_efectivo: float,
+    tasa_comision_pct: float,
+) -> list[PropuestaItem]:
+    """En modo rebalanceo completo, recorta el objetivo de cada instrumento a la banda
+    [peso_minimo, peso_maximo] configurada.
+
+    - El **techo** se aplica a todo instrumento en cartera: una sobreponderación se corrige
+      vendiendo hasta el máximo, tenga o no un objetivo propio cargado.
+    - El **piso** sólo se aplica a instrumentos que ya apuntan a un cambio (`delta_pp != 0`):
+      un "mantener sin objetivo" no dispara compras hacia el mínimo, para no forzar la compra
+      de posiciones ínfimas que el usuario dejó chicas a propósito.
+
+    Recortar contra una banda dura rompe la identidad "los objetivos suman 100%": es inherente
+    a un guardrail y queda anotado en el `motivo` de cada ítem tocado.
+    """
+    if total_efectivo <= EPS_USD or (peso_maximo_pp is None and peso_minimo_pp is None):
+        return items
+
+    techo_usd = peso_maximo_pp / 100 * total_efectivo if peso_maximo_pp is not None else None
+    piso_usd = peso_minimo_pp / 100 * total_efectivo if peso_minimo_pp is not None else None
+
+    ajustados: list[PropuestaItem] = []
+    for it in items:
+        if it.tipo != "ticker" or it.posicion is None:
+            ajustados.append(it)
+            continue
+
+        objetivo = it.valor_objetivo_usd
+        nuevo = objetivo
+        toco: str | None = None
+        if techo_usd is not None and nuevo > techo_usd + EPS_USD:
+            nuevo, toco = techo_usd, f"peso máximo ({peso_maximo_pp:.1f}%)"
+        elif piso_usd is not None and nuevo < piso_usd - EPS_USD and abs(it.delta_pp) > EPS_PCT:
+            nuevo, toco = piso_usd, f"peso mínimo ({peso_minimo_pp:.1f}%)"
+
+        if toco is None or abs(nuevo - objetivo) <= EPS_USD:
+            ajustados.append(it)
+            continue
+
+        importe = nuevo - it.valor_actual_usd
+        accion = _accion_desde_importe(importe)
+        peso_objetivo_pct = round(nuevo / total_efectivo * 100, 2)
+        ajustados.append(replace(
+            it,
+            peso_objetivo_pct=peso_objetivo_pct,
+            valor_objetivo_usd=round(nuevo, 2),
+            importe_sugerido_usd=round(importe, 2),
+            delta_pp=round(peso_objetivo_pct - it.peso_actual_pct, 2),
+            accion=accion,
+            comision_estimada_usd=_comision(importe, accion, tasa_comision_pct),
+            motivo=it.motivo + f" Recortado al {toco} configurado para la cartera.",
+        ))
+    return ajustados
 
 
 def _aplicar_solo_aportes(
