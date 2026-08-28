@@ -9,6 +9,9 @@ _Actualizado: 2026-08-28_
 
 - Todo lo hecho está en **`main`**, **sin pushear** (`main` está 9+ commits adelante de `origin/main`).
 - Últimos commits relevantes:
+  - Ola 5 ítem 7: **Historial de calidad de datos** — `get_calidad_datos` agrega `historial`,
+    `reglas_recurrentes` y `total_syncs`; `CalidadDatos.tsx` muestra sparkline del health
+    score + sección "Reglas que se repiten".
   - Ola 5 ítem 6: **Costo real de operar** — TWR bruto (sin comisiones) vs. neto en
     `_resumen_sobre_movs` (`twr_usd_bruto`/`twr_ars_bruto`); filas "TWRR sin comisiones" y
     "Costo de operar" en la tabla de `Rendimiento.tsx`.
@@ -25,8 +28,9 @@ _Actualizado: 2026-08-28_
   - `a60ffe0` — Ola 3 ítem 2: pantalla **Flujo de caja proyectado**.
   - `4f8eb9c` / `f29123e` — Ola 3 ítem 1: precios automáticos de renta fija (data912).
   - `0316e24` — Ola 1-2: market_data (CER/MEP/inflación) + menú "Más".
-- Tests backend: **275 pasan, 0 fallan** (+25 con Ola 4; +7 con Ola 5 ítem 5:
-  `test_vista_fiscal_por_anio.py`; +3 con Ola 5 ítem 6: `test_twr_costo_operar.py`).
+- Tests backend: **280 pasan, 0 fallan** (+25 con Ola 4; +7 ítem 5:
+  `test_vista_fiscal_por_anio.py`; +3 ítem 6: `test_twr_costo_operar.py`; +5 ítem 7:
+  `test_calidad_datos_historial.py`).
 - Ola 4 es puro backend (ingesta en el sync, sin pantalla nueva) — no requiere QA visual.
 - QA visual en navegador de Flujo de caja y Vencimientos: **sigue pendiente** (no hubo browser
   en la sesión). Verificado sólo que compila (`tsc && vite build`) y que la salida valida
@@ -68,11 +72,11 @@ Tests: +25 (240 → 265).
 
 ### 3. Ola 5 (sin API, con datos que ya hay)
 
-5. ~~Vista fiscal por año~~ ✅ · 6. ~~TWR bruto vs. neto de comisiones~~ ✅ · 7. Historial de
-calidad de datos (sparkline health score) · 8. Escenarios (`variacion_por_instrumento` ya en backend,
-frontend manda vacío) · 9. Config declarada y no aplicada (`peso_minimo`, `peso_maximo`,
-`rendimiento_objetivo`) · 10. Riesgo país + inflación mensual en Indicadores Macro ·
-11. Exposición/concentración por país.
+5. ~~Vista fiscal por año~~ ✅ · 6. ~~TWR bruto vs. neto de comisiones~~ ✅ ·
+7. ~~Historial de calidad de datos (sparkline health score)~~ ✅ · 8. Escenarios
+(`variacion_por_instrumento` ya en backend, frontend manda vacío) · 9. Config declarada y no
+aplicada (`peso_minimo`, `peso_maximo`, `rendimiento_objetivo`) · 10. Riesgo país + inflación
+mensual en Indicadores Macro · 11. Exposición/concentración por país.
 
 ### 4. Ola 6 (opcional)
 

@@ -186,8 +186,15 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
    **"Costo de operar"** (= TWR neto − TWR bruto, ≤ 0), con glosario `twrBruto` / `costoOperar`.
    La columna ARS real queda vacía (el framing es nominal). Tests:
    `backend/tests/test_twr_costo_operar.py` (3).
-7. **Historial de calidad de datos** — se guardan 20 `SyncRun`, se expone sólo el último
-   (`calidad_datos.py:9`). Agregar sparkline del health score y reglas que se repiten.
+7. ~~**Historial de calidad de datos**~~ — ✅ HECHO. `get_calidad_datos` ahora también
+   devuelve `historial` (los ≤20 `SyncRun` guardados, del más viejo al más nuevo:
+   `timestamp`, `health_score`, `resultado`, `filas_advertencia`, `filas_error`),
+   `reglas_recurrentes` (cada `regla` que aparece en 2+ corridas distintas — `apariciones`,
+   `en_ultimo_sync`, `severidad` = la más grave observada, `tab`/`mensaje_muestra` del sync
+   más reciente en que apareció) y `total_syncs`. Frontend `CalidadDatos.tsx`: `Sparkline` del
+   health score dentro de la card de score (color según el último score, delta vs. sync
+   previo, fechas y `min→max` al pie) + sección "Reglas que se repiten". Tests:
+   `backend/tests/test_calidad_datos_historial.py` (5).
 8. **Escenarios** — `EscenarioParamsIn.variacion_por_instrumento` está implementado en el
    backend y el frontend lo manda siempre vacío (`Simulador.tsx`); `duplicarEscenario`/
    `eliminarEscenario` existen en `api/index.ts` sin consumidor.
@@ -232,7 +239,7 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
     -v $(pwd):/repo -w /repo -e PYTHONPATH=/repo \
     backend python -m pytest backend/tests/ -q
   ```
-  Baseline actual: **275 pasan, 0 fallan** (176 tras Ola 1-2; +29 con Ola 3 ítem 1:
+  Baseline actual: **280 pasan, 0 fallan** (176 tras Ola 1-2; +29 con Ola 3 ítem 1:
   `test_data912.py`, `test_market_data_precios.py`, 2 de integración en
   `test_inversiones_sync_market_data.py`; +9 con Ola 3 ítem 2:
   `test_flujo_caja_analytics.py`; +7 con Ola 3 ítem 3:
@@ -240,7 +247,8 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
   backfill en `test_market_data_precios.py` (11), 1 de integración; +25 con Ola 4 ítem 4:
   `test_data912.py` (3), `test_market_data_precios.py` (17), `test_inversiones_sync_market_data.py`
   (3 integración + 1 mock extendido); +7 con Ola 5 ítem 5: `test_vista_fiscal_por_anio.py`;
-  +3 con Ola 5 ítem 6: `test_twr_costo_operar.py`).
+  +3 con Ola 5 ítem 6: `test_twr_costo_operar.py`; +5 con Ola 5 ítem 7:
+  `test_calidad_datos_historial.py`).
 - **Build frontend** (verifica TypeScript): `docker compose -f docker-compose.yml -f docker-compose.corporate.yml build frontend`.
 - Cualquier fetch nuevo a una API externa va en `backend/app/services/market_data/`, con el
   mismo patrón: nunca lanza (devuelve `None` en fallo total), se llama sólo si

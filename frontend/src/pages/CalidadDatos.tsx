@@ -4,6 +4,7 @@ import ScreenHeader from '../components/layout/ScreenHeader'
 import { getCalidadDatos } from '../api'
 import type { CalidadDatosOut, SyncIssueOut } from '../api'
 import CalidadIssueRow from '../components/inversiones/CalidadIssueRow'
+import Sparkline from '../components/charts/Sparkline'
 import { parseApiError, type ParsedApiError } from '../help/errors/apiErrors'
 import ErrorBanner from '../help/components/ErrorBanner'
 import InfoTooltip from '../help/components/InfoTooltip'
@@ -50,7 +51,15 @@ export default function CalidadDatos() {
     )
   }
 
-  const { ultimo_sync, issues, issues_por_tab } = calidad
+  const { ultimo_sync, issues, issues_por_tab, historial, reglas_recurrentes } = calidad
+
+  const sevColor = (s: string) =>
+    s === 'critico' ? 'text-app-coral' : s === 'advertencia' ? 'text-app-gold' : 'text-app-text-dim'
+  const sevIcon = (s: string) => (s === 'critico' ? '🔴' : s === 'advertencia' ? '🟡' : 'ℹ️')
+
+  const scores = historial.map(h => h.health_score)
+  const scoreDelta =
+    scores.length >= 2 ? scores[scores.length - 1] - scores[scores.length - 2] : null
 
   return (
     <>
@@ -88,6 +97,72 @@ export default function CalidadDatos() {
                 )}
               </div>
             )}
+
+            {historial.length >= 2 && (
+              <div className="mt-4 pt-3 border-t border-app-border">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] uppercase tracking-wide text-app-text-faint">
+                    Health score · últimos {historial.length} syncs
+                  </span>
+                  {scoreDelta !== null && (
+                    <span
+                      className={`text-[11px] font-mono tabular-nums ${
+                        scoreDelta > 0 ? 'text-app-teal' : scoreDelta < 0 ? 'text-app-coral' : 'text-app-text-dim'
+                      }`}
+                    >
+                      {scoreDelta > 0 ? '+' : ''}
+                      {scoreDelta} vs. sync previo
+                    </span>
+                  )}
+                </div>
+                <Sparkline
+                  data={scores}
+                  color={
+                    ultimo_sync.health_score >= 80
+                      ? '#4bbf9a'
+                      : ultimo_sync.health_score >= 50
+                        ? '#d8b14a'
+                        : '#e0685f'
+                  }
+                />
+                <div className="flex justify-between text-[10px] text-app-text-faint mt-0.5 tabular-nums">
+                  <span>{new Date(historial[0].timestamp).toLocaleDateString()}</span>
+                  <span>{scores[0]} → {scores[scores.length - 1]}</span>
+                  <span>{new Date(historial[historial.length - 1].timestamp).toLocaleDateString()}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {reglas_recurrentes.length > 0 && (
+          <div className="mb-6">
+            <div className="text-[14px] font-semibold text-app-text mb-2">
+              Reglas que se repiten ({reglas_recurrentes.length})
+            </div>
+            <div className="text-[12px] text-app-text-dim mb-3">
+              Aparecieron en 2 o más de los últimos {calidad.total_syncs} syncs — conviene
+              corregirlas en el Sheet en vez de revisarlas cada vez.
+            </div>
+            <div className="flex flex-col gap-2">
+              {reglas_recurrentes.map(r => (
+                <div
+                  key={r.regla}
+                  className="p-3 bg-app-surface-2 border border-app-border rounded-xl"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className={`text-[12.5px] font-semibold ${sevColor(r.severidad)}`}>
+                      {sevIcon(r.severidad)} {r.tab} · {r.regla}
+                    </span>
+                    <span className="text-[11px] text-app-text-dim shrink-0 tabular-nums">
+                      {r.apariciones}/{calidad.total_syncs} syncs
+                      {!r.en_ultimo_sync && ' · no en el último'}
+                    </span>
+                  </div>
+                  <div className="text-[11.5px] text-app-text-dim">{r.mensaje_muestra}</div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

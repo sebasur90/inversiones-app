@@ -43,10 +43,30 @@ export interface SyncRunResumenOut {
   resultado: string
 }
 
+export interface HistorialSyncItem {
+  timestamp: string
+  health_score: number
+  resultado: string
+  filas_advertencia: number
+  filas_error: number
+}
+
+export interface ReglaRecurrenteItem {
+  regla: string
+  tab: string
+  severidad: string
+  mensaje_muestra: string
+  apariciones: number
+  en_ultimo_sync: boolean
+}
+
 export interface CalidadDatosOut {
   ultimo_sync: SyncRunResumenOut | null
   issues: SyncIssueOut[]
   issues_por_tab: Record<string, SyncIssueOut[]>
+  historial: HistorialSyncItem[]
+  reglas_recurrentes: ReglaRecurrenteItem[]
+  total_syncs: number
 }
 
 export interface CarteraInfo {

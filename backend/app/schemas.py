@@ -42,10 +42,30 @@ class SyncRunResumenOut(BaseModel):
     resultado: str
 
 
+class HistorialSyncItem(BaseModel):
+    timestamp: datetime
+    health_score: int
+    resultado: str
+    filas_advertencia: int
+    filas_error: int
+
+
+class ReglaRecurrenteItem(BaseModel):
+    regla: str
+    tab: str
+    severidad: str
+    mensaje_muestra: str
+    apariciones: int
+    en_ultimo_sync: bool
+
+
 class CalidadDatosOut(BaseModel):
     ultimo_sync: Optional[SyncRunResumenOut] = None
     issues: list[SyncIssueOut]
     issues_por_tab: dict[str, list[SyncIssueOut]]
+    historial: list[HistorialSyncItem] = []
+    reglas_recurrentes: list[ReglaRecurrenteItem] = []
+    total_syncs: int = 0
 
 
 class CarteraInfo(BaseModel):
