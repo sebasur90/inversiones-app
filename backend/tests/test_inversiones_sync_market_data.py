@@ -6,7 +6,7 @@ Todos mockean `fetch_sheet_data` (sin red hacia Sheets) y, cuando corresponde, l
 from datetime import date, datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from backend.app.database import Base, IndiceMercado, BenchmarkValor
+from backend.app.database import Base, IndiceMercado, BenchmarkValor, PrecioInstrumento
 from backend.app.services.inversiones_sync import sync_from_sheet
 from backend.app.services.sheets_client import TabRaw
 import backend.app.services.inversiones_sync as sync_module
@@ -74,11 +74,13 @@ def test_sin_use_external_apis_no_llama_market_data(monkeypatch):
     monkeypatch.setattr(sync_module.market_data, "use_external_apis", lambda: False)
     monkeypatch.setattr(sync_module.market_data_indices, "fetch_indices_mercado_api", _boom)
     monkeypatch.setattr(sync_module.market_data_indices, "fetch_benchmarks_api", _boom)
+    monkeypatch.setattr(sync_module.market_data_precios, "fetch_precios_renta_fija_api", _boom)
 
     try:
         sync_from_sheet(db)
         assert db.query(IndiceMercado).filter(IndiceMercado.fuente == "api").count() == 0
         assert db.query(BenchmarkValor).filter(BenchmarkValor.fuente == "api").count() == 0
+        assert db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").count() == 0
     finally:
         sync_module.fetch_sheet_data = original_fetch
         db.close()
@@ -155,6 +157,65 @@ def test_api_caida_preserva_filas_api_de_una_corrida_anterior(monkeypatch):
 
         assert db.query(IndiceMercado).filter(IndiceMercado.fuente == "api").count() == 1
         assert result["indices_mercado"] == 1
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
+def _tabs_con_bono():
+    return {
+        "Instrumentos": TabRaw(presente=True, header=["Ticker", "Nombre", "Tipo Instrumento", "Mercado", "Moneda"], rows=[
+            (2, {"Ticker": "TZXD7", "Nombre": "Boncer 2027", "Tipo Instrumento": "Bono", "Mercado": "MERVAL", "Moneda": "ARS"}),
+        ]),
+        "Precios": TabRaw(presente=True, header=["Fecha", "Ticker", "Precio", "Moneda"], rows=[
+            (2, {"Fecha": "2026-07-27", "Ticker": "TZXD7", "Precio": "2.7135", "Moneda": "ARS"}),
+        ]),
+    }
+
+
+def test_precio_renta_fija_api_normaliza_escala_y_persiste(monkeypatch):
+    """data912 cotiza por lámina de 100; se calibra contra el último precio del Sheet y se divide."""
+    db = _make_db()
+    original_fetch = sync_module.fetch_sheet_data
+    sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_bono())
+
+    monkeypatch.setattr(sync_module.market_data, "use_external_apis", lambda: True)
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_indices_mercado_api", lambda fechas_excluir: (None, []))
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_benchmarks_api", lambda: (None, []))
+    monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_fija", lambda: {"TZXD7": 272.85})
+
+    try:
+        result = sync_from_sheet(db)
+        sheet_row = db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "sheet").one()
+        assert float(sheet_row.precio) == 2.7135
+        api_row = db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").one()
+        assert api_row.ticker == "TZXD7"
+        assert api_row.moneda == "ARS"
+        assert round(float(api_row.precio), 4) == 2.7285  # 272.85 / 100
+        assert result["precios"] == 2
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
+def test_precio_renta_fija_api_caida_preserva_corrida_anterior(monkeypatch):
+    db = _make_db()
+    original_fetch = sync_module.fetch_sheet_data
+    sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_bono())
+
+    monkeypatch.setattr(sync_module.market_data, "use_external_apis", lambda: True)
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_indices_mercado_api", lambda fechas_excluir: (None, []))
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_benchmarks_api", lambda: (None, []))
+    monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_fija", lambda: {"TZXD7": 272.85})
+
+    try:
+        sync_from_sheet(db)
+        assert db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").count() == 1
+
+        # data912 se cae (None) → la fila 'api' de la corrida anterior no se borra.
+        monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_fija", lambda: None)
+        sync_from_sheet(db)
+        assert db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").count() == 1
     finally:
         sync_module.fetch_sheet_data = original_fetch
         db.close()

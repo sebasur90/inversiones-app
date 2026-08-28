@@ -17,6 +17,7 @@ from .validation import reglas_instrumentos, reglas_movimientos, reglas_precios,
 from .validation.health_score import calcular_health_score
 from . import market_data
 from .market_data import indices as market_data_indices
+from .market_data import precios as market_data_precios
 
 logger = logging.getLogger("calidad_datos")
 
@@ -338,11 +339,47 @@ def sync_from_sheet(db: Session) -> dict:
                 comision=mov["comision"],
             ))
 
+    precios_api_count = 0
     if "Precios" not in tabs_bloqueadas:
-        db.query(PrecioInstrumento).delete()
+        # El Sheet se reescribe entero en cada sync; las filas 'api' (precio del día de renta
+        # fija, ver más abajo) se manejan aparte por (ticker, fecha) para no perder el histórico
+        # que van acumulando día a día — data912 sólo da la foto de hoy, no una serie.
+        db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "sheet").delete()
         db.flush()
+        claves_sheet: set = set()
         for precio in precios_validos:
+            precio.setdefault("fuente", "sheet")
+            claves_sheet.add((precio["ticker"], precio["fecha"]))
             db.add(PrecioInstrumento(**precio))
+
+        if market_data.use_external_apis():
+            api_precios, issues_api_px = market_data_precios.fetch_precios_renta_fija_api(
+                instrumentos_validos, precios_validos, claves_sheet
+            )
+            issues.extend(issues_api_px)
+            if api_precios is not None:
+                db.flush()
+                # Purga las filas 'api' de tickers que ya no son renta fija del Sheet (p.ej. un
+                # bono que venció y se sacó de Instrumentos): quedarían huérfanas para siempre.
+                tickers_rf = {i["ticker"] for i in instrumentos_validos
+                              if market_data_precios._es_renta_fija(i.get("tipo_instrumento", ""))}
+                purga = db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api")
+                if tickers_rf:
+                    purga = purga.filter(PrecioInstrumento.ticker.notin_(tickers_rf))
+                purga.delete(synchronize_session=False)
+                db.flush()
+                existentes = {
+                    (r.ticker, r.fecha): r
+                    for r in db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").all()
+                }
+                for p in api_precios:
+                    fila = existentes.get((p["ticker"], p["fecha"]))
+                    if fila is not None:
+                        fila.precio, fila.moneda = p["precio"], p["moneda"]
+                    else:
+                        db.add(PrecioInstrumento(**p))
+                db.flush()
+            precios_api_count = db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").count()
 
     indices_mercado_api_count = 0
     if not fuentes_cer_mep_bloqueadas:
@@ -448,7 +485,7 @@ def sync_from_sheet(db: Session) -> dict:
     return {
         "movimientos": len(movimientos_validos),
         "instrumentos": len(instrumentos_validos),
-        "precios": len(precios_validos),
+        "precios": len(precios_validos) + precios_api_count,
         "objetivos": len(objetivos_validos),
         "rebalanceo": len(rebalanceo_validos),
         "indices_mercado": 0 if fuentes_cer_mep_bloqueadas else len(indices_mercado) + indices_mercado_api_count,
