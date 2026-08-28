@@ -15,6 +15,7 @@ import Objetivo from './pages/Objetivo'
 import Precios from './pages/Precios'
 import IndicadoresMacro from './pages/IndicadoresMacro'
 import Vencimientos from './pages/Vencimientos'
+import FlujoCaja from './pages/FlujoCaja'
 import Comparador from './pages/Comparador'
 import Comisiones from './pages/Comisiones'
 import Patrimonio from './pages/Patrimonio'
@@ -135,6 +136,7 @@ function Root() {
             <Route path="precios" element={<Precios />} />
             <Route path="indicadores" element={<IndicadoresMacro />} />
             <Route path="vencimientos" element={<Vencimientos />} />
+            <Route path="flujo-caja" element={<FlujoCaja />} />
             <Route path="comparar" element={<Comparador />} />
             <Route path="comisiones" element={<Comisiones />} />
             <Route path="patrimonio" element={<Patrimonio />} />

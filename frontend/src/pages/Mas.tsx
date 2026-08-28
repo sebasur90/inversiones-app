@@ -24,6 +24,7 @@ const GRUPOS: Grupo[] = [
       { to: '/posiciones', label: 'Posiciones', desc: 'Tenencias actuales con precio y objetivo/stop-loss', icon: 'list' },
       { to: '/precios', label: 'Precios', desc: 'Evolución histórica por ticker', icon: 'trend' },
       { to: '/vencimientos', label: 'Vencimientos', desc: 'Calendario de vencimientos de bonos', icon: 'alert' },
+      { to: '/flujo-caja', label: 'Flujo de caja proyectado', desc: 'Cupones y amortizaciones a cobrar mes a mes', icon: 'trend' },
       { to: '/comisiones', label: 'Comisiones', desc: 'Desglose por cartera, ticker, mes y año', icon: 'scale' },
     ],
   },

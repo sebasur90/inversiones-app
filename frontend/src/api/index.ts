@@ -421,6 +421,80 @@ export interface VencimientoItem {
 export const getVencimientos = (cartera: string | null) =>
   api.get<VencimientoItem[]>(`${carteraPath(cartera)}/vencimientos`).then(r => r.data)
 
+// --- Flujo de caja proyectado (renta fija) ---
+
+export interface FlujoCajaCobroDetalle {
+  ticker: string
+  nombre: string
+  tipo: 'cupon' | 'amortizacion'
+  moneda: string
+  monto_nativo: number
+  monto_usd: number
+  monto_ars: number
+}
+
+export interface FlujoCajaMes {
+  periodo: string
+  cupones_usd: number
+  cupones_ars: number
+  amortizaciones_usd: number
+  amortizaciones_ars: number
+  total_usd: number
+  total_ars: number
+  detalle: FlujoCajaCobroDetalle[]
+}
+
+export interface FlujoCajaProximoCobro {
+  fecha: string
+  tipo: 'cupon' | 'amortizacion'
+  monto_usd: number
+  monto_ars: number
+}
+
+export interface FlujoCajaInstrumento {
+  ticker: string
+  nombre: string
+  moneda: string
+  cantidad_actual: number
+  fecha_vencimiento: string
+  periodicidad_meses: number | null
+  periodicidad_label: string | null
+  cupon_por_unidad: number | null
+  confianza: 'alta' | 'media' | 'baja' | null
+  metodo_capital: 'bullet' | 'amortizacion_inferida' | 'sin_estimacion'
+  cobros_proyectados: number
+  proximo_cobro: FlujoCajaProximoCobro | null
+  total_proyectado_usd: number
+  total_proyectado_ars: number
+  notas: string[]
+}
+
+export interface FlujoCajaSinProyeccion {
+  ticker: string
+  nombre: string
+  fecha_vencimiento: string
+  motivo: string
+}
+
+export interface FlujoCajaProyectadoOut {
+  horizonte_meses: number
+  generado: string
+  total_cupones_usd: number
+  total_cupones_ars: number
+  total_amortizaciones_usd: number
+  total_amortizaciones_ars: number
+  total_usd: number
+  total_ars: number
+  meses: FlujoCajaMes[]
+  instrumentos: FlujoCajaInstrumento[]
+  sin_proyeccion: FlujoCajaSinProyeccion[]
+}
+
+export const getFlujoCajaProyectado = (cartera: string | null, meses = 24) =>
+  api
+    .get<FlujoCajaProyectadoOut>(`${carteraPath(cartera)}/flujo-caja-proyectado`, { params: { meses } })
+    .then(r => r.data)
+
 // --- Comisiones ---
 
 export interface ComisionPorCarteraItem {

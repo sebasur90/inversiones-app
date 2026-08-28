@@ -474,6 +474,75 @@ class VencimientoItem(BaseModel):
     moneda: str
 
 
+# --- Flujo de caja proyectado (renta fija) ---
+
+class FlujoCajaCobroDetalle(BaseModel):
+    ticker: str
+    nombre: str
+    tipo: str  # "cupon" | "amortizacion"
+    moneda: str
+    monto_nativo: float
+    monto_usd: float
+    monto_ars: float
+
+
+class FlujoCajaMes(BaseModel):
+    periodo: str  # "YYYY-MM"
+    cupones_usd: float
+    cupones_ars: float
+    amortizaciones_usd: float
+    amortizaciones_ars: float
+    total_usd: float
+    total_ars: float
+    detalle: list[FlujoCajaCobroDetalle]
+
+
+class FlujoCajaProximoCobro(BaseModel):
+    fecha: date
+    tipo: str
+    monto_usd: float
+    monto_ars: float
+
+
+class FlujoCajaInstrumento(BaseModel):
+    ticker: str
+    nombre: str
+    moneda: str
+    cantidad_actual: float
+    fecha_vencimiento: date
+    periodicidad_meses: int | None = None
+    periodicidad_label: str | None = None
+    cupon_por_unidad: float | None = None
+    confianza: str | None = None  # "alta" | "media" | "baja"
+    metodo_capital: str  # "bullet" | "amortizacion_inferida" | "sin_estimacion"
+    cobros_proyectados: int
+    proximo_cobro: FlujoCajaProximoCobro | None = None
+    total_proyectado_usd: float
+    total_proyectado_ars: float
+    notas: list[str]
+
+
+class FlujoCajaSinProyeccion(BaseModel):
+    ticker: str
+    nombre: str
+    fecha_vencimiento: date
+    motivo: str
+
+
+class FlujoCajaProyectadoOut(BaseModel):
+    horizonte_meses: int
+    generado: date
+    total_cupones_usd: float
+    total_cupones_ars: float
+    total_amortizaciones_usd: float
+    total_amortizaciones_ars: float
+    total_usd: float
+    total_ars: float
+    meses: list[FlujoCajaMes]
+    instrumentos: list[FlujoCajaInstrumento]
+    sin_proyeccion: list[FlujoCajaSinProyeccion]
+
+
 # --- Comisiones ---
 
 class ComisionPorCarteraItem(BaseModel):

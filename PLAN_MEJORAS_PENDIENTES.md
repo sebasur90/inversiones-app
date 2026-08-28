@@ -71,12 +71,26 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
    acumulan histórico. Pendiente de este ítem: usar `/historical/bonds/{ticker}` para backfill
    inicial de la serie (hoy sólo crece hacia adelante). Junto con el ítem 4 de Ola 4, apunta a
    eliminar la carga manual de `Precios` y el `UMBRAL_APROXIMADO_DIAS = 45`.
-2. **Pantalla nueva: Flujo de caja proyectado** — cuánto se va a cobrar por mes en los próximos
-   12-24 meses (cupones + amortizaciones), apilado por instrumento. No hay API gratuita de
-   cronogramas de bonos argentinos: inferir la periodicidad de la historia de cupones ya
-   cobrados por ticker (frecuencia + monto por unidad) y proyectarla hasta el vencimiento;
-   marcar en la UI qué está inferido. Opcionalmente, una pestaña `Cronograma` en el Sheet
-   (`Ticker, Fecha, Tipo, Monto por unidad`) que pise lo inferido.
+2. ~~**Pantalla nueva: Flujo de caja proyectado**~~ — ✅ HECHO
+   (`backend/app/services/flujo_caja_analytics.py`, endpoints
+   `/{cartera|consolidado}/flujo-caja-proyectado?meses=`, `frontend/src/pages/FlujoCaja.tsx`,
+   ruta `/flujo-caja`, entrada en el menú "Más" grupo Cartera). Proyección mes a mes de
+   cupones + amortizaciones, apilada por instrumento, horizonte 12/24/36.
+   **Inferencia**: periodicidad = gap mediano entre `cupon` cobrados por ticker (clasificado a
+   1/2/3/6/12 meses); monto por unidad = mediana de `precio / tenencia` de cada cupón; la
+   grilla se **ancla a la fecha de vencimiento y retrocede** (los cupones caen en fechas fijas
+   que terminan el día del vto., anclar al último cupón cobrado desalinea). Confianza
+   alta/media/baja (3+ cupones parejos / hay historial / un solo cupón → asume semestral).
+   **Capital**: si hay historial de `amortizacion` se infiere y proyecta esa serie
+   (`metodo_capital='amortizacion_inferida'`); si no, se asume *bullet* y se estima el capital
+   al vto. con `precio_actual * cantidad_actual` de `get_rendimiento_por_ticker`
+   (`'bullet'`); sin precio → `'sin_estimacion'`. Bonos sin ningún cupón cobrado no se
+   proyectan y van a `sin_proyeccion` con motivo. FX = MEP más reciente (constante).
+   Todo lo estimado se marca en la respuesta (`confianza`, `notas`, `metodo_capital`) y en la
+   UI. Tests: `backend/tests/test_flujo_caja_analytics.py` (9).
+   **Pendiente opcional** (no bloqueante): pestaña `Cronograma` en el Sheet
+   (`Ticker, Fecha, Tipo, Monto por unidad`) que pise lo inferido — no implementada; hoy todo
+   es inferencia.
 3. **Vencimientos enriquecido** — sobre `pages/Vencimientos.tsx`: paridad (precio vs. valor
    técnico), TIR al vencimiento (reutilizar `_calcular_xirr`,
    `inversiones_analytics.py:601`, aplicado al flujo del ítem 2), duration modificada, resumen
@@ -131,7 +145,7 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
   devuelve 200 con curva vacía en vez de 404.
 - `README.md` describe `services/cotizaciones.py`/dolarapi como dependencia — ya no existe tal
   cual (ahora SÍ hay APIs externas reales, pero por `market_data/`, no por ese archivo).
-- `FUNCIONALIDADES.md` dice 14 pantallas; ahora son 22 (21 + "Más").
+- `FUNCIONALIDADES.md` dice 14 pantallas; ahora son 23 (21 + "Más" + "Flujo de caja proyectado").
 
 ## Notas técnicas para retomar
 
@@ -141,9 +155,10 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
     -v $(pwd):/repo -w /repo -e PYTHONPATH=/repo \
     backend python -m pytest backend/tests/ -q
   ```
-  Baseline actual: **205 pasan, 0 fallan** (176 tras Ola 1-2; +29 con Ola 3 ítem 1:
+  Baseline actual: **214 pasan, 0 fallan** (176 tras Ola 1-2; +29 con Ola 3 ítem 1:
   `test_data912.py`, `test_market_data_precios.py`, 2 de integración en
-  `test_inversiones_sync_market_data.py`).
+  `test_inversiones_sync_market_data.py`; +9 con Ola 3 ítem 2:
+  `test_flujo_caja_analytics.py`).
 - **Build frontend** (verifica TypeScript): `docker compose -f docker-compose.yml -f docker-compose.corporate.yml build frontend`.
 - Cualquier fetch nuevo a una API externa va en `backend/app/services/market_data/`, con el
   mismo patrón: nunca lanza (devuelve `None` en fallo total), se llama sólo si

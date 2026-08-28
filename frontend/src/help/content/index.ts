@@ -17,8 +17,9 @@ import { PERFORMANCERELATIVA_HELP, type PerformanceRelativaHelpKey } from './per
 import { TICKERDETALLE_HELP, type TickerDetalleHelpKey } from './tickerdetalle'
 import { COMISIONES_HELP, type ComisionesHelpKey } from './comisiones'
 import { REBALANCEO_HELP, type RebalanceoHelpKey } from './rebalanceo'
+import { FLUJOCAJA_HELP, type FlujoCajaHelpKey } from './flujocaja'
 
-export type HelpKey = GlosarioKey | SimuladorHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey | ComisionesHelpKey | RebalanceoHelpKey
+export type HelpKey = GlosarioKey | SimuladorHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey | ComisionesHelpKey | RebalanceoHelpKey | FlujoCajaHelpKey
 
 export const HELP: Record<HelpKey, HelpContent> = {
   ...GLOSARIO_HELP,
@@ -39,6 +40,7 @@ export const HELP: Record<HelpKey, HelpContent> = {
   ...TICKERDETALLE_HELP,
   ...COMISIONES_HELP,
   ...REBALANCEO_HELP,
+  ...FLUJOCAJA_HELP,
 }
 
 export {
@@ -60,4 +62,5 @@ export {
   TICKERDETALLE_HELP,
   COMISIONES_HELP,
   REBALANCEO_HELP,
+  FLUJOCAJA_HELP,
 }

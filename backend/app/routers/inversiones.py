@@ -24,6 +24,7 @@ from ..schemas import (
     TickerConPrecioItem,
     IndicesMercadoOut,
     VencimientoItem,
+    FlujoCajaProyectadoOut,
     ComisionesOut,
     PnlRealizadoNoRealizadoOut,
     RendimientoMensualOut,
@@ -63,6 +64,7 @@ from ..services.inversiones_analytics import (
     get_pnl_realizado_no_realizado,
     get_rendimiento_mensual,
 )
+from ..services.flujo_caja_analytics import get_flujo_caja_proyectado
 from ..services.patrimonio_analytics import get_patrimonio_history, get_patrimonio_summary
 from ..services.riesgo_analytics import get_riesgo, get_benchmarks_disponibles, MONEDAS_VALIDAS
 from ..services.benchmarks_analytics import get_performance_relativa, get_performance_compare
@@ -276,6 +278,24 @@ def vencimientos_cartera(nombre: str, db: Session = Depends(get_db)):
 @router.get("/consolidado/vencimientos", response_model=list[VencimientoItem])
 def vencimientos_consolidado(db: Session = Depends(get_db)):
     return get_vencimientos(None, db)
+
+
+@router.get("/carteras/{nombre}/flujo-caja-proyectado", response_model=FlujoCajaProyectadoOut)
+def flujo_caja_proyectado_cartera(
+    nombre: str,
+    meses: int = Query(24, ge=6, le=48),
+    db: Session = Depends(get_db),
+):
+    _validar_cartera(nombre, db)
+    return get_flujo_caja_proyectado(nombre, db, meses)
+
+
+@router.get("/consolidado/flujo-caja-proyectado", response_model=FlujoCajaProyectadoOut)
+def flujo_caja_proyectado_consolidado(
+    meses: int = Query(24, ge=6, le=48),
+    db: Session = Depends(get_db),
+):
+    return get_flujo_caja_proyectado(None, db, meses)
 
 
 @router.get("/carteras/{nombre}/comisiones", response_model=ComisionesOut)
