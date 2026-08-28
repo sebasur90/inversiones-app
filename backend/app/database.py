@@ -153,6 +153,24 @@ class SyncIssue(Base):
     impacto = Column(String, nullable=False)
 
 
+class EstadoMarketDataTicker(Base):
+    """Estado persistente por ticker de la integración automática de precios (market_data).
+
+    Evita recalibrar/reintentar contra referencias que envejecen:
+      - `factor_escala`: 1.0 | 0.01, la escala ya determinada contra el último precio manual.
+        Se reusa tal cual mientras no aparezca un precio manual más nuevo que `factor_fecha`.
+      - `backfill_estado`: None | 'sin_serie' (la fuente no cubre el ticker) | 'completo' (la
+        serie histórica ya no baja más). Los dos primeros no vuelven a consumir cupo de backfill.
+      - `backfill_intento`: fecha del último intento (para reintentar 'sin_serie' cada ~90 días).
+    """
+    __tablename__ = "estado_market_data_ticker"
+    ticker = Column(String, primary_key=True)
+    factor_escala = Column(Numeric(10, 6), nullable=True)
+    factor_fecha = Column(Date, nullable=True)
+    backfill_estado = Column(String, nullable=True)
+    backfill_intento = Column(Date, nullable=True)
+
+
 class EscenarioSimulacion(Base):
     __tablename__ = "escenarios_simulacion"
     id = Column(Integer, primary_key=True, index=True)

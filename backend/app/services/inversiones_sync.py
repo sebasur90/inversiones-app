@@ -2,12 +2,13 @@
 import time
 import logging
 from datetime import datetime, UTC
+from sqlalchemy import tuple_
 from sqlalchemy.orm import Session
 
 from ..database import (
     InstrumentoInversion, MovimientoInversion, PrecioInstrumento, IndiceMercado,
     ObjetivoInversion, RebalanceoObjetivo, BenchmarkValor, ConfiguracionCartera,
-    SyncRun, SyncIssue
+    SyncRun, SyncIssue, EstadoMarketDataTicker
 )
 from .sheets_client import fetch_sheet_data, fetch_objetivos_tab, fetch_rebalanceo_tab, fetch_benchmarks_tab, fetch_configuracion_tab
 from .inversiones_analytics import get_carteras
@@ -350,19 +351,49 @@ def sync_from_sheet(db: Session) -> dict:
         for precio in precios_validos:
             precio.setdefault("fuente", "sheet")
             claves_sheet.add((precio["ticker"], precio["fecha"]))
+
+        # A4: una fila 'api' guardada para (ticker, fecha) que el Sheet después empezó a cubrir
+        # convive con la fila 'sheet' (`_precios_por_ticker` no deduplica y el orden dentro del
+        # grupo de igual fecha no es determinístico → el precio manual puede perder). El Sheet
+        # siempre gana: se borra la 'api' antes de insertar las filas 'sheet' (además evita chocar
+        # con el UNIQUE (fecha, ticker)). Corre siempre, no sólo si la API respondió, así que de
+        # paso limpia las filas ya duplicadas en la DB.
+        claves_lista = list(claves_sheet)
+        for i in range(0, len(claves_lista), 400):
+            lote = claves_lista[i:i + 400]
+            db.query(PrecioInstrumento).filter(
+                PrecioInstrumento.fuente == "api",
+                tuple_(PrecioInstrumento.ticker, PrecioInstrumento.fecha).in_(lote),
+            ).delete(synchronize_session=False)
+        db.flush()
+
+        for precio in precios_validos:
             db.add(PrecioInstrumento(**precio))
+        db.flush()
 
         if market_data.use_external_apis():
+            # Estado persistente por ticker (A1: factor de escala ya calibrado; A3: backfill que
+            # no converge). Se pasa a las tres rutas y ellas lo mutan in place.
+            estado_por_ticker: dict = {
+                r.ticker: {
+                    "factor_escala": float(r.factor_escala) if r.factor_escala is not None else None,
+                    "factor_fecha": r.factor_fecha,
+                    "backfill_estado": r.backfill_estado,
+                    "backfill_intento": r.backfill_intento,
+                }
+                for r in db.query(EstadoMarketDataTicker).all()
+            }
+
             # Precio del día (data912) — None si data912 no respondió.
             api_precios, issues_api_px = market_data_precios.fetch_precios_renta_fija_api(
-                instrumentos_validos, precios_validos, claves_sheet
+                instrumentos_validos, precios_validos, claves_sheet, estado_por_ticker=estado_por_ticker
             )
             issues.extend(issues_api_px)
 
             # Ídem para acciones y CEDEARs (Ola 4): mismo motor, sin backfill histórico (no hay
             # fuente pública de serie diaria para renta variable).
             api_precios_rv, issues_api_rv = market_data_precios.fetch_precios_renta_variable_api(
-                instrumentos_validos, precios_validos, claves_sheet
+                instrumentos_validos, precios_validos, claves_sheet, estado_por_ticker=estado_por_ticker
             )
             issues.extend(issues_api_rv)
 
@@ -382,7 +413,7 @@ def sync_from_sheet(db: Session) -> dict:
                     api_min_por_ticker[t] = f
             backfill_precios, issues_backfill = market_data_precios.fetch_backfill_renta_fija_api(
                 instrumentos_validos, precios_validos, claves_sheet,
-                primeras_fechas_mov, api_min_por_ticker,
+                primeras_fechas_mov, api_min_por_ticker, estado_por_ticker=estado_por_ticker,
             )
             issues.extend(issues_backfill)
 
@@ -414,6 +445,19 @@ def sync_from_sheet(db: Session) -> dict:
                         existentes[(p["ticker"], p["fecha"])] = nueva
                         db.add(nueva)
                 db.flush()
+
+            # A1/A3: persistir el factor de escala calibrado y el estado de backfill por ticker.
+            for tk, est in estado_por_ticker.items():
+                fila_est = db.get(EstadoMarketDataTicker, tk)
+                if fila_est is None:
+                    fila_est = EstadoMarketDataTicker(ticker=tk)
+                    db.add(fila_est)
+                fila_est.factor_escala = est.get("factor_escala")
+                fila_est.factor_fecha = est.get("factor_fecha")
+                fila_est.backfill_estado = est.get("backfill_estado")
+                fila_est.backfill_intento = est.get("backfill_intento")
+            db.flush()
+
             precios_api_count = db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").count()
 
     indices_mercado_api_count = 0

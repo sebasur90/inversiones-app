@@ -335,6 +335,39 @@ def test_precio_renta_variable_api_caida_preserva_corrida_anterior(monkeypatch):
         db.close()
 
 
+def test_a4_fila_api_que_el_sheet_ahora_cubre_se_borra(monkeypatch):
+    """Una fila 'api' para (ticker, fecha) que el Sheet empieza a cubrir no debe quedar
+    conviviendo con la fila 'sheet'. La purga corre aunque USE_EXTERNAL_APIS esté apagado."""
+    db = _make_db()
+    original_fetch = sync_module.fetch_sheet_data
+    sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_bono())  # Sheet trae TZXD7 @ 2026-07-27
+    monkeypatch.setattr(sync_module.market_data, "use_external_apis", lambda: False)
+
+    try:
+        db.add(PrecioInstrumento(fecha=date(2026, 7, 27), ticker="TZXD7", precio=999.0,
+                                 moneda="ARS", fuente="api"))   # colisiona con el Sheet
+        db.add(PrecioInstrumento(fecha=date(2026, 6, 1), ticker="TZXD7", precio=2.5,
+                                 moneda="ARS", fuente="api"))    # fecha que el Sheet no cubre
+        db.commit()
+
+        sync_from_sheet(db)
+
+        colision = db.query(PrecioInstrumento).filter(
+            PrecioInstrumento.ticker == "TZXD7", PrecioInstrumento.fecha == date(2026, 7, 27)
+        ).all()
+        assert len(colision) == 1 and colision[0].fuente == "sheet"
+        assert float(colision[0].precio) == 2.7135
+
+        # La fila 'api' de una fecha que el Sheet no cubre sigue intacta.
+        libre = db.query(PrecioInstrumento).filter(
+            PrecioInstrumento.ticker == "TZXD7", PrecioInstrumento.fecha == date(2026, 6, 1)
+        ).one()
+        assert libre.fuente == "api"
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
 def test_purga_no_borra_filas_api_de_renta_variable_al_purgar_renta_fija(monkeypatch):
     """La purga de filas 'api' huérfanas debe considerar renta fija Y variable, no sólo una."""
     db = _make_db()

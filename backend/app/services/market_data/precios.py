@@ -40,6 +40,7 @@ _RATIO_CERCA_DE_1 = (0.4, 2.5)
 _TOPE_BACKFILL = timedelta(days=366 * 5)   # piso duro: nunca más de ~5 años hacia atrás
 _TOLERANCIA_PISO_DIAS = 40                 # "ya llegué al piso" si la serie 'api' arranca a <=40d de él
 _MAX_BACKFILL_POR_SYNC = 15               # cota de peticiones por corrida (se atienden los huecos más grandes primero)
+_REINTENTO_SIN_SERIE_DIAS = 90            # A3: un ticker sin serie histórica se reintenta cada ~90 días
 
 
 def _sin_acentos(s: str) -> str:
@@ -72,6 +73,51 @@ def _es_renta_variable(tipo_instrumento: str) -> bool:
     return any(sub in t for sub in _SUBCADENAS_RENTA_VARIABLE)
 
 
+def _resolver_factor(
+    ticker: str,
+    px_api: float,
+    px_sheet: float,
+    f_sheet: date,
+    estado_por_ticker: dict[str, dict] | None,
+) -> tuple[float | None, bool]:
+    """Devuelve `(factor, calibrado_ahora)`.
+
+    A1: si hay un `factor_escala` persistido para el ticker se reusa tal cual, salvo que haya
+    aparecido un precio manual más nuevo que `factor_fecha` (referencia fresca → se revalida).
+    Si no hay factor guardado se calibra por ratio contra el último precio manual (como siempre)
+    y, cuando `estado_por_ticker` está disponible, se persiste."""
+    est = estado_por_ticker.get(ticker) if estado_por_ticker is not None else None
+    guardado = est.get("factor_escala") if est else None
+    factor_fecha = est.get("factor_fecha") if est else None
+    manual_mas_nuevo = factor_fecha is None or f_sheet > factor_fecha
+
+    if guardado is not None and not manual_mas_nuevo:
+        return float(guardado), False
+
+    factor = _factor_escala(px_api, px_sheet)
+    if factor is not None and estado_por_ticker is not None:
+        entry = estado_por_ticker.setdefault(ticker, {})
+        entry["factor_escala"] = factor
+        entry["factor_fecha"] = f_sheet
+    return factor, True
+
+
+def _issue_moneda_difiere(ticker: str, moneda_sheet: str, moneda_inst: str) -> ValidationIssue | None:
+    """A2: la fila 'api' se calibra y persiste en la moneda de la serie de Precios (contra la que
+    se calibró el número), no en la declarada en Instrumentos. Si difieren, es un dato a revisar."""
+    ms = (moneda_sheet or "").strip().upper()
+    mi = (moneda_inst or "").strip().upper()
+    if ms and mi and ms != mi:
+        return ValidationIssue(
+            tab="Precios (API)", campo=ticker, regla="moneda_sheet_difiere_instrumento",
+            mensaje=(f"{ticker}: la serie de Precios está en {ms} pero Instrumentos lo declara "
+                     f"en {mi}; la fila automática se guarda en {ms} (la escala se calibró contra esa serie)"),
+            impacto="Revisar la moneda declarada del instrumento o la carga en la pestaña Precios",
+            severidad=Severity.INFO,
+        )
+    return None
+
+
 def _fetch_precios_live_api(
     instrumentos: list[dict],
     precios_sheet: list[dict],
@@ -80,12 +126,16 @@ def _fetch_precios_live_api(
     predicate,
     fetch_fn,
     endpoints_label: str,
+    estado_por_ticker: dict[str, dict] | None = None,
 ) -> tuple[list[dict] | None, list[ValidationIssue]]:
     """Motor común de `fetch_precios_renta_fija_api` y `fetch_precios_renta_variable_api`: matchea
     instrumentos por `predicate`, pide el precio del día con `fetch_fn` y calibra la escala contra
     el último precio del Sheet. Devuelve (filas, issues); `filas` son dicts listos para
     `PrecioInstrumento(**fila)` con `fuente="api"`. Devuelve None (no []) si la API no respondió en
     absoluto, para que el sync preserve las filas 'api' de una corrida anterior.
+
+    `estado_por_ticker` (opcional): ticker -> dict con `factor_escala`/`factor_fecha` persistidos.
+    Se muta in place con las (re)calibraciones para que el llamador las guarde (ver A1).
     """
     issues: list[ValidationIssue] = []
 
@@ -105,11 +155,11 @@ def _fetch_precios_live_api(
 
     api_por_symbol = {sym.upper().strip(): px for sym, px in api_por_symbol.items()}
 
-    ultimo_sheet: dict[str, tuple[date, float]] = {}
+    ultimo_sheet: dict[str, tuple[date, float, str]] = {}
     for p in precios_sheet:
         t, f, px = p["ticker"], p["fecha"], float(p["precio"])
         if t not in ultimo_sheet or f > ultimo_sheet[t][0]:
-            ultimo_sheet[t] = (f, px)
+            ultimo_sheet[t] = (f, px, p.get("moneda") or "")
 
     filas: list[dict] = []
     for inst in objetivo:
@@ -138,10 +188,10 @@ def _fetch_precios_live_api(
             ))
             continue
 
-        _, px_sheet = prev
-        if px_sheet <= 0:
+        f_sheet, px_sheet, moneda_sheet = prev
+        if px_sheet <= 0 or px_api <= 0:
             continue
-        factor = _factor_escala(px_api, px_sheet)
+        factor, calibrado_ahora = _resolver_factor(ticker, px_api, px_sheet, f_sheet, estado_por_ticker)
         if factor is None:
             issues.append(ValidationIssue(
                 tab="Precios (API)", campo=ticker, regla="escala_desconocida",
@@ -152,11 +202,15 @@ def _fetch_precios_live_api(
             ))
             continue
 
+        issue_moneda = _issue_moneda_difiere(ticker, moneda_sheet, inst.get("moneda", ""))
+        if issue_moneda is not None:
+            issues.append(issue_moneda)
+
         filas.append({
             "fecha": hoy,
             "ticker": ticker,
             "precio": round(px_api * factor, 6),
-            "moneda": inst.get("moneda") or "ARS",
+            "moneda": (moneda_sheet or inst.get("moneda") or "ARS").strip().upper(),
             "fuente": "api",
         })
 
@@ -168,12 +222,14 @@ def fetch_precios_renta_fija_api(
     precios_sheet: list[dict],
     claves_excluir: set[tuple[str, date]],
     hoy: date | None = None,
+    estado_por_ticker: dict[str, dict] | None = None,
 ) -> tuple[list[dict] | None, list[ValidationIssue]]:
     """`instrumentos` / `precios_sheet`: los dicts ya validados del Sheet (mismo formato que
     persiste el sync). `claves_excluir`: pares (ticker, fecha) que ya trae el Sheet."""
     return _fetch_precios_live_api(
         instrumentos, precios_sheet, claves_excluir, hoy or date.today(),
         _es_renta_fija, data912.fetch_precios_renta_fija, "arg_bonds/arg_corp/arg_notes",
+        estado_por_ticker,
     )
 
 
@@ -182,6 +238,7 @@ def fetch_precios_renta_variable_api(
     precios_sheet: list[dict],
     claves_excluir: set[tuple[str, date]],
     hoy: date | None = None,
+    estado_por_ticker: dict[str, dict] | None = None,
 ) -> tuple[list[dict] | None, list[ValidationIssue]]:
     """Ídem `fetch_precios_renta_fija_api` para acciones y CEDEARs (Ola 4). Sin backfill
     histórico: no hay fuente pública de serie diaria para renta variable, sólo el precio del día
@@ -189,6 +246,7 @@ def fetch_precios_renta_variable_api(
     return _fetch_precios_live_api(
         instrumentos, precios_sheet, claves_excluir, hoy or date.today(),
         _es_renta_variable, data912.fetch_precios_renta_variable, "arg_stocks/arg_cedears",
+        estado_por_ticker,
     )
 
 
@@ -199,6 +257,7 @@ def fetch_backfill_renta_fija_api(
     primeras_fechas_mov: dict[str, date],
     api_existentes_por_ticker: dict[str, date],
     hoy: date | None = None,
+    estado_por_ticker: dict[str, dict] | None = None,
 ) -> tuple[list[dict], list[ValidationIssue]]:
     """Puebla *hacia atrás* la serie `precios_instrumento` (`fuente='api'`) de renta fija con la
     serie diaria de analisistecnico. Complementa a `fetch_precios_renta_fija_api`, que sólo agrega
@@ -214,8 +273,13 @@ def fetch_backfill_renta_fija_api(
     antigua que ya tiene con `fuente='api'` (para la convergencia). Devuelve `(filas, issues)`;
     `filas` es siempre una lista (nunca None): un fallo puntual sólo se reintenta el próximo sync.
 
-    ONs corporativas: analisistecnico no las tiene (`fetch_historico_bono` -> None) y se reportan
-    como SyncIssue info — siguen con la serie forward-only y su historia manual del Sheet.
+    `estado_por_ticker` (opcional, A1/A3): ticker -> dict con `factor_escala`/`factor_fecha` y
+    `backfill_estado`/`backfill_intento`. Se muta in place. Un ticker marcado `'sin_serie'` o
+    `'completo'` no vuelve a consumir cupo (los `'sin_serie'` se reintentan cada ~90 días).
+
+    ONs corporativas: analisistecnico no las tiene (`fetch_historico_bono` -> None). Se marcan
+    `'sin_serie'` y se reporta un SyncIssue info **una sola vez** — siguen con la serie
+    forward-only y su historia manual del Sheet.
     """
     issues: list[ValidationIssue] = []
     hoy = hoy or date.today()
@@ -225,11 +289,11 @@ def fetch_backfill_renta_fija_api(
     if not objetivo:
         return [], issues
 
-    ultimo_sheet: dict[str, tuple[date, float]] = {}
+    ultimo_sheet: dict[str, tuple[date, float, str]] = {}
     for p in precios_sheet:
         t, f, px = p["ticker"], p["fecha"], float(p["precio"])
         if t not in ultimo_sheet or f > ultimo_sheet[t][0]:
-            ultimo_sheet[t] = (f, px)
+            ultimo_sheet[t] = (f, px, p.get("moneda") or "")
 
     # Qué tickers necesitan backfill y cuánto; se atienden los huecos más grandes primero.
     pendientes: list[tuple[int, dict, date]] = []
@@ -242,6 +306,17 @@ def fetch_backfill_renta_fija_api(
         ya = api_existentes_por_ticker.get(ticker)
         if ya is not None and ya <= piso + timedelta(days=_TOLERANCIA_PISO_DIAS):
             continue  # la serie 'api' ya cubre hasta ~el piso
+
+        est = estado_por_ticker.get(ticker) if estado_por_ticker is not None else None
+        if est is not None:
+            bf = est.get("backfill_estado")
+            if bf == "completo":
+                continue  # A3: la serie histórica ya no baja más, no gastar cupo
+            if bf == "sin_serie":
+                intento = est.get("backfill_intento")
+                if intento is None or (hoy - intento).days < _REINTENTO_SIN_SERIE_DIAS:
+                    continue  # A3: la fuente no lo cubre; se reintenta recién a los ~90 días
+
         hueco = (ya - piso).days if ya is not None else 10 ** 6
         pendientes.append((hueco, inst, piso))
 
@@ -250,17 +325,30 @@ def fetch_backfill_renta_fija_api(
     filas: list[dict] = []
     for _, inst, piso in pendientes[:_MAX_BACKFILL_POR_SYNC]:
         ticker = inst["ticker"]
+        ya = api_existentes_por_ticker.get(ticker)
+        est_entry = estado_por_ticker.setdefault(ticker, {}) if estado_por_ticker is not None else None
         serie = analisistecnico.fetch_historico_bono(ticker, piso, ayer)
+
         if serie is None:
-            issues.append(ValidationIssue(
-                tab="Precios (API)", campo=ticker, regla="sin_historico_backfill",
-                mensaje=(f"{ticker}: sin serie histórica en analisistecnico "
-                         "(ON corporativa u otro instrumento no listado)"),
-                impacto=("La serie automática de este instrumento sólo crece hacia adelante; su "
-                         "historia previa queda con lo cargado a mano en el Sheet"),
-                severidad=Severity.INFO,
-            ))
+            ya_reportado = est_entry is not None and est_entry.get("backfill_estado") == "sin_serie"
+            if est_entry is not None:
+                est_entry["backfill_estado"] = "sin_serie"
+                est_entry["backfill_intento"] = hoy
+            if not ya_reportado:
+                issues.append(ValidationIssue(
+                    tab="Precios (API)", campo=ticker, regla="sin_historico_backfill",
+                    mensaje=(f"{ticker}: sin serie histórica en analisistecnico "
+                             "(ON corporativa u otro instrumento no listado)"),
+                    impacto=("La serie automática de este instrumento sólo crece hacia adelante; su "
+                             "historia previa queda con lo cargado a mano en el Sheet"),
+                    severidad=Severity.INFO,
+                ))
             continue
+
+        if est_entry is not None:
+            est_entry["backfill_intento"] = hoy
+            if est_entry.get("backfill_estado") == "sin_serie":
+                est_entry["backfill_estado"] = None  # la fuente empezó a cubrirlo
         if not serie:
             continue
 
@@ -275,12 +363,12 @@ def fetch_backfill_renta_fija_api(
             ))
             continue
 
-        f_sheet, px_sheet = prev
+        f_sheet, px_sheet, moneda_sheet = prev
         if px_sheet <= 0:
             continue
         # Calibra contra el cierre de analisistecnico más cercano a la última fecha del Sheet.
         px_ref = min(serie, key=lambda fp: abs((fp[0] - f_sheet).days))[1]
-        factor = _factor_escala(px_ref, px_sheet)
+        factor, _ = _resolver_factor(ticker, px_ref, px_sheet, f_sheet, estado_por_ticker)
         if factor is None:
             issues.append(ValidationIssue(
                 tab="Precios (API)", campo=ticker, regla="escala_desconocida",
@@ -291,7 +379,11 @@ def fetch_backfill_renta_fija_api(
             ))
             continue
 
-        moneda = inst.get("moneda") or "ARS"
+        issue_moneda = _issue_moneda_difiere(ticker, moneda_sheet, inst.get("moneda", ""))
+        if issue_moneda is not None:
+            issues.append(issue_moneda)
+
+        moneda = (moneda_sheet or inst.get("moneda") or "ARS").strip().upper()
         for f, px in serie:
             if f >= hoy or (ticker, f) in claves_excluir:
                 continue
@@ -302,5 +394,11 @@ def fetch_backfill_renta_fija_api(
                 "moneda": moneda,
                 "fuente": "api",
             })
+
+        # A3: convergencia por "ya no baja más" — si la fecha más vieja devuelta no mejora
+        # respecto de lo que ya hay en la DB, la serie no va a crecer hacia atrás: marcar completo.
+        min_serie = min((f for f, _ in serie), default=None)
+        if est_entry is not None and ya is not None and min_serie is not None and min_serie >= ya:
+            est_entry["backfill_estado"] = "completo"
 
     return filas, issues
