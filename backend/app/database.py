@@ -61,10 +61,11 @@ class PrecioInstrumento(Base):
     ticker = Column(String, ForeignKey("instrumentos_inversion.ticker"), nullable=False)
     precio = Column(Numeric(18, 6), nullable=False)
     moneda = Column(String, nullable=False)
-    # "sheet" (pestaña Precios, cargada a mano) | "api" (completado automáticamente, ver
-    # services/market_data/precios.py: data912 para el precio del día + analisistecnico para el
-    # backfill histórico hacia atrás). El Sheet siempre gana; "api" sólo cubre (ticker, fecha)
-    # que el Sheet no trae.
+    # "iol" (API autenticada de InvertirOnline) | "sheet" (pestaña Precios, cargada a mano) |
+    # "api" (fuentes públicas de fallback: data912 para el precio del día + analisistecnico para
+    # el backfill histórico). Precedencia por (ticker, fecha): iol > sheet > api — IOL es la
+    # fuente primaria de cotizaciones y el Sheet cubre lo que IOL no cotiza (ver
+    # services/market_data/precios.py).
     fuente = Column(String, nullable=False, default="sheet", server_default="sheet")
 
     __table_args__ = (UniqueConstraint("fecha", "ticker", name="uq_precio_instrumento"),)
@@ -159,8 +160,9 @@ class EstadoMarketDataTicker(Base):
     Evita recalibrar/reintentar contra referencias que envejecen:
       - `factor_escala`: 1.0 | 0.01, la escala ya determinada contra el último precio manual.
         Se reusa tal cual mientras no aparezca un precio manual más nuevo que `factor_fecha`.
-      - `backfill_estado`: None | 'sin_serie' (la fuente no cubre el ticker) | 'completo' (la
-        serie histórica ya no baja más). Los dos primeros no vuelven a consumir cupo de backfill.
+      - `backfill_estado`: None | 'sin_serie' (analisistecnico no cubre el ticker) |
+        'sin_serie_iol' (tampoco lo cubre IOL, la última fuente) | 'completo' (la serie histórica
+        ya no baja más). Ninguno de los tres vuelve a consumir cupo de backfill.
       - `backfill_intento`: fecha del último intento (para reintentar 'sin_serie' cada ~90 días).
     """
     __tablename__ = "estado_market_data_ticker"
@@ -169,6 +171,22 @@ class EstadoMarketDataTicker(Base):
     factor_fecha = Column(Date, nullable=True)
     backfill_estado = Column(String, nullable=True)
     backfill_intento = Column(Date, nullable=True)
+
+
+class EstadoApiIol(Base):
+    """Contador mensual de llamadas a la API de IOL, para no pasarse del cupo bonificado.
+
+    IOL bonifica 25.000 llamadas por mes calendario; a partir de ahí cobra por bloque adicional.
+    Se cuenta *toda* petición HTTP a api.invertironline.com, incluida la del token. El tope
+    efectivo (`IOL_LIMITE_MENSUAL`, default 22.000) deja colchón sobre el límite real: al
+    alcanzarlo la integración deja de llamar a IOL por lo que queda del mes y cae a data912.
+
+    Vive en la DB (y no en memoria) para sobrevivir al reinicio del contenedor — requiere que
+    /app/data esté en un volumen, ver docker-compose.yml.
+    """
+    __tablename__ = "estado_api_iol"
+    periodo = Column(String, primary_key=True)  # "YYYY-MM" (UTC)
+    llamadas = Column(Integer, nullable=False, default=0)
 
 
 class EscenarioSimulacion(Base):

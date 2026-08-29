@@ -32,3 +32,36 @@ def get_json(url: str, timeout: float = DEFAULT_TIMEOUT):
     except Exception as exc:
         logger.warning("market_data: fallo GET %s: %s", url, exc)
         return None
+
+
+def request_json(
+    method: str,
+    url: str,
+    *,
+    headers: dict | None = None,
+    data: dict | None = None,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> tuple[int | None, object]:
+    """Como `get_json`, pero para clientes autenticados (IOL): soporta POST/headers propios y
+    devuelve `(status_code, json)` en vez de sólo el body, porque el llamador necesita distinguir
+    401 (token vencido -> refrescar y reintentar una vez) de otros códigos (rendirse).
+
+    Devuelve `(None, None)` si ni siquiera hubo respuesta (timeout, proxy caído, DNS). Si hubo
+    respuesta pero el body no es JSON válido, devuelve `(status_code, None)`. Nunca lanza.
+
+    IMPORTANTE: nunca loguea `headers` ni `data` — pueden traer credenciales o el bearer token.
+    Sólo se loguean method, url y la excepción (nunca el body de la respuesta, que en un 401/403
+    de IOL podría ecoar el token enviado).
+    """
+    merged_headers = {"User-Agent": USER_AGENT, **(headers or {})}
+    try:
+        with httpx.Client(trust_env=True, timeout=timeout, headers=merged_headers) as client:
+            resp = client.request(method, url, data=data)
+            try:
+                body = resp.json()
+            except ValueError:
+                body = None
+            return resp.status_code, body
+    except Exception as exc:
+        logger.warning("market_data: fallo %s %s: %s", method, url, exc)
+        return None, None

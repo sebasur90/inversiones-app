@@ -7,9 +7,18 @@ services:
       - no_proxy=localhost,127.0.0.1,.googleapis.com,.google.com
       - USE_LOCAL_SHEET=false
       - USE_EXTERNAL_APIS=true
+      # API de IOL (cotizaciones primarias) — ver DESARROLLO.md. Credenciales en
+      # credentials/iol.json (montado abajo), nunca acá.
+      - IOL_ENABLED=${IOL_ENABLED:-true}
+      - IOL_LIMITE_MENSUAL=${IOL_LIMITE_MENSUAL:-22000}
     volumes:
+      # /app/data en un volumen nombrado: la DB (contador de cupo de IOL incluido) y la serie
+      # histórica bajada por market_data sobreviven a un `docker compose up --build`.
+      - backend_data:/app/data
       # Google Service Account - mount from local credentials directory (read-only)
       - ./credentials/google-service-account.json:/app/data/google-service-account.json:ro
+      # Credenciales de IOL (usuario/contraseña) - montadas read-only, nunca en el entorno
+      - ./credentials/iol.json:/app/data/iol.json:ro
       # Local Excel file for development environment (read-only)
       - ./sheet_local:/app/sheet_local:ro
     restart: unless-stopped
@@ -27,3 +36,6 @@ services:
       backend:
         condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  backend_data:

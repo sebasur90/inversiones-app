@@ -6,7 +6,7 @@ Todos mockean `fetch_sheet_data` (sin red hacia Sheets) y, cuando corresponde, l
 from datetime import date, datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from backend.app.database import Base, IndiceMercado, BenchmarkValor, PrecioInstrumento
+from backend.app.database import Base, IndiceMercado, BenchmarkValor, PrecioInstrumento, SyncIssue
 from backend.app.services.inversiones_sync import sync_from_sheet
 from backend.app.services.sheets_client import TabRaw
 import backend.app.services.inversiones_sync as sync_module
@@ -442,6 +442,140 @@ def test_purga_no_borra_filas_api_de_renta_variable_al_purgar_renta_fija(monkeyp
         sync_from_sheet(db)
         api_rows = {r.ticker for r in db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").all()}
         assert api_rows == {"GGAL", "TZXD7"}
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
+# --- IOL como fuente primaria: precedencia iol > sheet > api dentro del sync -------------------
+
+def test_iol_desplaza_precio_manual_del_sheet_y_reporta(monkeypatch):
+    """IOL cotiza la misma fecha que ya trae el Sheet: gana IOL, el Sheet queda desplazado y se
+    reporta con un ValidationIssue (nunca es silencioso). El precio del día lo calcula
+    `fetch_precios_api` contra `date.today()` (el sync no fija una fecha), así que la carga
+    manual del Sheet tiene que ser justamente la de hoy para que colisionen."""
+    hoy = date.today()
+    db = _make_db()
+    original_fetch = sync_module.fetch_sheet_data
+    sync_module.fetch_sheet_data = _mock_fetch({
+        "Instrumentos": TabRaw(presente=True, header=["Ticker", "Nombre", "Tipo Instrumento", "Mercado", "Moneda"], rows=[
+            (2, {"Ticker": "TZXD7", "Nombre": "Boncer 2027", "Tipo Instrumento": "Bono", "Mercado": "MERVAL", "Moneda": "ARS"}),
+        ]),
+        "Precios": TabRaw(presente=True, header=["Fecha", "Ticker", "Precio", "Moneda"], rows=[
+            (2, {"Fecha": hoy.isoformat(), "Ticker": "TZXD7", "Precio": "2.7135", "Moneda": "ARS"}),
+        ]),
+    })
+
+    monkeypatch.setattr(sync_module.market_data, "use_external_apis", lambda: True)
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_indices_mercado_api", lambda fechas_excluir: (None, []))
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_benchmarks_api", lambda: (None, []))
+    monkeypatch.setattr(sync_module.market_data_precios.iol_client, "fetch_precios_paneles",
+                         lambda db: {"TZXD7": (2.72, "ARS")})
+    monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_fija", lambda: {})
+    monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_variable", lambda: {})
+
+    try:
+        result = sync_from_sheet(db)
+
+        filas = db.query(PrecioInstrumento).filter(
+            PrecioInstrumento.ticker == "TZXD7", PrecioInstrumento.fecha == hoy
+        ).all()
+        assert len(filas) == 1  # nunca conviven 'sheet' e 'iol' para la misma clave
+        assert filas[0].fuente == "iol"
+        assert float(filas[0].precio) == 2.72
+
+        issue = db.query(SyncIssue).filter(SyncIssue.regla == "precio_manual_reemplazado_por_iol").one()
+        assert "TZXD7" in issue.mensaje
+        assert result["precios"] >= 1
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
+def test_iol_no_reclama_la_fecha_el_sheet_conserva(monkeypatch):
+    """Si IOL no cotiza ese ticker (caído o sin ese símbolo), el Sheet sigue ganando -- ninguna
+    fila 'api' de data912 puede pisar una fecha que el Sheet ya cubre."""
+    db = _make_db()
+    original_fetch = sync_module.fetch_sheet_data
+    sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_bono())
+
+    monkeypatch.setattr(sync_module.market_data, "use_external_apis", lambda: True)
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_indices_mercado_api", lambda fechas_excluir: (None, []))
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_benchmarks_api", lambda: (None, []))
+    monkeypatch.setattr(sync_module.market_data_precios.iol_client, "fetch_precios_paneles", lambda db: None)
+    # data912 "cotiza" la misma fecha que ya trae el Sheet (con otro valor): no debe pisarla.
+    monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_fija",
+                         lambda: {"TZXD7": 999999.0})
+    monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_variable", lambda: {})
+
+    try:
+        sync_from_sheet(db)
+        filas = db.query(PrecioInstrumento).filter(
+            PrecioInstrumento.ticker == "TZXD7", PrecioInstrumento.fecha == date(2026, 7, 27)
+        ).all()
+        assert len(filas) == 1
+        assert filas[0].fuente == "sheet"
+        assert float(filas[0].precio) == 2.7135
+
+        sin_reemplazo = db.query(SyncIssue).filter(
+            SyncIssue.regla == "precio_manual_reemplazado_por_iol"
+        ).count()
+        assert sin_reemplazo == 0
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
+def test_iol_caida_preserva_fila_iol_de_una_corrida_anterior(monkeypatch):
+    """Si IOL falla en una corrida, las filas 'iol' de la corrida anterior no se pierden."""
+    db = _make_db()
+    original_fetch = sync_module.fetch_sheet_data
+    sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_accion())  # Sheet: GGAL @ 2026-07-27
+
+    monkeypatch.setattr(sync_module.market_data, "use_external_apis", lambda: True)
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_indices_mercado_api", lambda fechas_excluir: (None, []))
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_benchmarks_api", lambda: (None, []))
+    monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_variable", lambda: {})
+    monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_fija", lambda: {})
+    monkeypatch.setattr(sync_module.market_data_precios.iol_client, "fetch_precios_paneles",
+                         lambda db: {"GGAL": (5230.0, "ARS")})
+
+    try:
+        sync_from_sheet(db)
+        assert db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "iol").count() == 1
+
+        # IOL se cae (None) en la corrida siguiente -> la fila 'iol' previa no se borra, y como
+        # el Sheet ya no está desplazado (claves_iol queda vacío), no reaparece una fila 'sheet'
+        # duplicada: la purga de huérfanos tampoco la toca (GGAL sigue siendo Acción del Sheet).
+        monkeypatch.setattr(sync_module.market_data_precios.iol_client, "fetch_precios_paneles", lambda db: None)
+        sync_from_sheet(db)
+        assert db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "iol").count() == 1
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
+def test_purga_orfanos_incluye_fuente_iol(monkeypatch):
+    """Un ticker que ya no es renta fija/variable/FCI del Sheet no debe dejar una fila 'iol'
+    huérfana para siempre. El Sheet trae otro instrumento (GGAL) con precio válido -- una pestaña
+    Precios vacía dispararía el guard de "vaciamiento sospechoso" y bloquearía todo el tab."""
+    db = _make_db()
+    original_fetch = sync_module.fetch_sheet_data
+    sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_accion())  # Sheet: sólo GGAL
+
+    monkeypatch.setattr(sync_module.market_data, "use_external_apis", lambda: True)
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_indices_mercado_api", lambda fechas_excluir: (None, []))
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_benchmarks_api", lambda: (None, []))
+    monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_fija", lambda: {})
+    monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_variable", lambda: {})
+    monkeypatch.setattr(sync_module.market_data_precios.iol_client, "fetch_precios_paneles", lambda db: None)
+
+    try:
+        db.add(PrecioInstrumento(fecha=date(2026, 6, 1), ticker="VENCIDO", precio=1.0,
+                                  moneda="ARS", fuente="iol"))
+        db.commit()
+        sync_from_sheet(db)
+        assert db.query(PrecioInstrumento).filter(PrecioInstrumento.ticker == "VENCIDO").count() == 0
     finally:
         sync_module.fetch_sheet_data = original_fetch
         db.close()

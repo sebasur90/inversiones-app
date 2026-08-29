@@ -93,7 +93,9 @@ tampoco respondió en la prueba). Si en algún momento aparece una fuente viable
    `sin_historico_backfill`; siguen forward-only + su historia manual del Sheet. Fuentes
    descartadas para ONs (2026-08-28): `datos.gob.ar` (catálogo viejo, series cortan ~2019),
    `argen.bond` (API paga), `data912` (`/historical/` sólo tiene `stocks`/`cedears`/`bonds`, no
-   `corp` ni `notes`). Opción futura para ONs: IOL API (gratis, requiere cuenta + OAuth).
+   `corp` ni `notes`). ✅ HECHO (2026-08-29): API de IOL integrada como fuente primaria de
+   cotizaciones, precedencia `iol > sheet > api`; `fetch_backfill_iol` cierra el hueco de ONs y
+   de renta variable. Ver `DESARROLLO.md`.
    `UMBRAL_APROXIMADO_DIAS = 45` **sigue** (follow-up: sacarlo cuando toda la renta fija tenga
    serie densa). Tests: `test_analisistecnico.py` (7), backfill en `test_market_data_precios.py`
    (11), integración en `test_inversiones_sync_market_data.py` (1).

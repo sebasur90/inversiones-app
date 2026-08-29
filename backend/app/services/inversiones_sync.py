@@ -342,38 +342,20 @@ def sync_from_sheet(db: Session) -> dict:
 
     precios_api_count = 0
     if "Precios" not in tabs_bloqueadas:
-        # El Sheet se reescribe entero en cada sync; las filas 'api' (renta fija y renta variable:
-        # precio del día vía data912 + backfill histórico de renta fija vía analisistecnico, ver
-        # más abajo) se manejan aparte por (ticker, fecha) para no perder la serie que acumulan.
-        db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "sheet").delete()
-        db.flush()
-        claves_sheet: set = set()
         for precio in precios_validos:
             precio.setdefault("fuente", "sheet")
-            claves_sheet.add((precio["ticker"], precio["fecha"]))
+        claves_sheet: set = {(p["ticker"], p["fecha"]) for p in precios_validos}
+        manual_por_clave: dict = {(p["ticker"], p["fecha"]): float(p["precio"]) for p in precios_validos}
 
-        # A4: una fila 'api' guardada para (ticker, fecha) que el Sheet después empezó a cubrir
-        # convive con la fila 'sheet' (`_precios_por_ticker` no deduplica y el orden dentro del
-        # grupo de igual fecha no es determinístico → el precio manual puede perder). El Sheet
-        # siempre gana: se borra la 'api' antes de insertar las filas 'sheet' (además evita chocar
-        # con el UNIQUE (fecha, ticker)). Corre siempre, no sólo si la API respondió, así que de
-        # paso limpia las filas ya duplicadas en la DB.
-        claves_lista = list(claves_sheet)
-        for i in range(0, len(claves_lista), 400):
-            lote = claves_lista[i:i + 400]
-            db.query(PrecioInstrumento).filter(
-                PrecioInstrumento.fuente == "api",
-                tuple_(PrecioInstrumento.ticker, PrecioInstrumento.fecha).in_(lote),
-            ).delete(synchronize_session=False)
-        db.flush()
-
-        for precio in precios_validos:
-            db.add(PrecioInstrumento(**precio))
-        db.flush()
-
+        # Precedencia por (ticker, fecha): iol > sheet > api. Se calcula ANTES de tocar la DB —
+        # `fetch_precios_api`/`fetch_backfill_*` sólo necesitan el Sheet en memoria (igual que
+        # antes) — para saber qué claves va a reclamar IOL y así no insertar la fila 'sheet' que
+        # esa (ticker, fecha) va a perder.
+        filas_iol: list[dict] = []
+        filas_api: list[dict] = []
         if market_data.use_external_apis():
             # Estado persistente por ticker (A1: factor de escala ya calibrado; A3: backfill que
-            # no converge). Se pasa a las tres rutas y ellas lo mutan in place.
+            # no converge). Se pasa a las cuatro rutas y ellas lo mutan in place.
             estado_por_ticker: dict = {
                 r.ticker: {
                     "factor_escala": float(r.factor_escala) if r.factor_escala is not None else None,
@@ -384,67 +366,52 @@ def sync_from_sheet(db: Session) -> dict:
                 for r in db.query(EstadoMarketDataTicker).all()
             }
 
-            # Precio del día (data912) — None si data912 no respondió.
-            api_precios, issues_api_px = market_data_precios.fetch_precios_renta_fija_api(
-                instrumentos_validos, precios_validos, claves_sheet, estado_por_ticker=estado_por_ticker
+            # Precio del día: IOL primero (paneles, una llamada trae docenas de símbolos),
+            # data912 como red de contención para lo que IOL no cotizó. Sin `claves_excluir`
+            # (set()): IOL puede reclamar una fecha que el Sheet ya cubre —es la fuente primaria—,
+            # la precedencia final se resuelve más abajo al escribir en la DB.
+            precios_auto, issues_precios_auto = market_data_precios.fetch_precios_api(
+                instrumentos_validos, precios_validos, set(), db, estado_por_ticker=estado_por_ticker
             )
-            issues.extend(issues_api_px)
+            issues.extend(issues_precios_auto)
+            for p in precios_auto:
+                (filas_iol if p["fuente"] == "iol" else filas_api).append(p)
 
-            # Ídem para acciones y CEDEARs (Ola 4): mismo motor, sin backfill histórico (no hay
-            # fuente pública de serie diaria para renta variable).
-            api_precios_rv, issues_api_rv = market_data_precios.fetch_precios_renta_variable_api(
-                instrumentos_validos, precios_validos, claves_sheet, estado_por_ticker=estado_por_ticker
-            )
-            issues.extend(issues_api_rv)
-
-            # Backfill histórico hacia atrás (analisistecnico), sólo renta fija. Se auto-limita:
-            # sólo pide la serie de los tickers de renta fija cuyas filas 'api' todavía no llegan
-            # al piso (max(1er movimiento, hoy-5 años)). Devuelve siempre una lista.
+            # Backfill histórico hacia atrás. Ninguno de los dos pisa fechas que el Sheet ya trae
+            # (son para llenar huecos, no para reemplazar una carga manual pasada) — a diferencia
+            # del precio del día, que sí puede desplazar al Sheet.
             primeras_fechas_mov: dict = {}
             for mov in movimientos_validos:
                 t, f = mov["ticker"], mov["fecha"]
                 if t not in primeras_fechas_mov or f < primeras_fechas_mov[t]:
                     primeras_fechas_mov[t] = f
-            api_min_por_ticker: dict = {}
-            for t, f in db.query(PrecioInstrumento.ticker, PrecioInstrumento.fecha).filter(
-                PrecioInstrumento.fuente == "api"
-            ):
-                if t not in api_min_por_ticker or f < api_min_por_ticker[t]:
-                    api_min_por_ticker[t] = f
-            backfill_precios, issues_backfill = market_data_precios.fetch_backfill_renta_fija_api(
-                instrumentos_validos, precios_validos, claves_sheet,
-                primeras_fechas_mov, api_min_por_ticker, estado_por_ticker=estado_por_ticker,
-            )
-            issues.extend(issues_backfill)
 
-            if api_precios is not None or api_precios_rv is not None or backfill_precios:
-                db.flush()
-                # Purga las filas 'api' de tickers que ya no son renta fija/variable del Sheet
-                # (p.ej. un bono que venció y se sacó de Instrumentos): quedarían huérfanas para
-                # siempre.
-                tickers_api = {
-                    i["ticker"] for i in instrumentos_validos
-                    if market_data_precios._es_renta_fija(i.get("tipo_instrumento", ""))
-                    or market_data_precios._es_renta_variable(i.get("tipo_instrumento", ""))
-                }
-                purga = db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api")
-                if tickers_api:
-                    purga = purga.filter(PrecioInstrumento.ticker.notin_(tickers_api))
-                purga.delete(synchronize_session=False)
-                db.flush()
-                existentes = {
-                    (r.ticker, r.fecha): r
-                    for r in db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").all()
-                }
-                for p in (api_precios or []) + (api_precios_rv or []) + backfill_precios:
-                    fila = existentes.get((p["ticker"], p["fecha"]))
-                    if fila is not None:
-                        fila.precio, fila.moneda = p["precio"], p["moneda"]
-                    else:
-                        nueva = PrecioInstrumento(**p)
-                        existentes[(p["ticker"], p["fecha"])] = nueva
-                        db.add(nueva)
-                db.flush()
+            def _min_por_ticker(fuente: str) -> dict:
+                out: dict = {}
+                for t, f in db.query(PrecioInstrumento.ticker, PrecioInstrumento.fecha).filter(
+                    PrecioInstrumento.fuente == fuente
+                ):
+                    if t not in out or f < out[t]:
+                        out[t] = f
+                return out
+
+            # analisistecnico (renta fija soberana/letras, no ONs) — se auto-limita: sólo pide la
+            # serie de tickers cuyas filas 'api' todavía no llegan al piso.
+            backfill_api, issues_backfill_api = market_data_precios.fetch_backfill_renta_fija_api(
+                instrumentos_validos, precios_validos, claves_sheet,
+                primeras_fechas_mov, _min_por_ticker("api"), estado_por_ticker=estado_por_ticker,
+            )
+            issues.extend(issues_backfill_api)
+            filas_api.extend(backfill_api)
+
+            # IOL para lo que analisistecnico no cubre: ONs (backfill_estado 'sin_serie'/
+            # 'sin_serie_iol') y renta variable (sin ninguna otra fuente de historia).
+            backfill_iol, issues_backfill_iol = market_data_precios.fetch_backfill_iol(
+                instrumentos_validos, precios_validos, claves_sheet,
+                primeras_fechas_mov, _min_por_ticker("iol"), db, estado_por_ticker=estado_por_ticker,
+            )
+            issues.extend(issues_backfill_iol)
+            filas_iol.extend(backfill_iol)
 
             # A1/A3: persistir el factor de escala calibrado y el estado de backfill por ticker.
             for tk, est in estado_por_ticker.items():
@@ -458,7 +425,91 @@ def sync_from_sheet(db: Session) -> dict:
                 fila_est.backfill_intento = est.get("backfill_intento")
             db.flush()
 
-            precios_api_count = db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "api").count()
+        claves_iol: set = {(p["ticker"], p["fecha"]) for p in filas_iol}
+
+        # Válvula de seguridad: un precio manual del Sheet que IOL desplaza nunca es silencioso.
+        for ticker, fecha in claves_iol & claves_sheet:
+            px_manual = manual_por_clave[(ticker, fecha)]
+            px_iol = next(p["precio"] for p in filas_iol if (p["ticker"], p["fecha"]) == (ticker, fecha))
+            delta_pct = abs(px_iol - px_manual) / px_manual * 100 if px_manual else 0.0
+            issues.append(ValidationIssue(
+                tab="Precios (API)", campo=ticker, regla="precio_manual_reemplazado_por_iol",
+                mensaje=(f"{ticker} ({fecha}): IOL reemplaza el precio manual del Sheet "
+                         f"({px_manual:g} -> {px_iol:g}, {delta_pct:.1f}% de diferencia)"),
+                impacto="Se usa el precio de IOL; revisar si el ticker o la escala están bien mapeados",
+                severidad=Severity.ADVERTENCIA if delta_pct > 20 else Severity.INFO,
+            ))
+
+        # El Sheet se reescribe entero en cada sync, salvo las claves que IOL reclama esta corrida
+        # (para esas, sólo queda la fila 'iol' — es la fuente primaria). Las filas 'iol'/'api' se
+        # manejan aparte por (ticker, fecha) para no perder la serie que acumulan.
+        db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "sheet").delete()
+        db.flush()
+
+        # A4: una fila 'iol'/'api' guardada para (ticker, fecha) que el Sheet está por (re)cubrir
+        # no puede convivir con la fila 'sheet' que se inserta a continuación (chocan contra el
+        # UNIQUE (fecha, ticker)) — hay que borrarla ANTES de insertar, no después. Corre siempre,
+        # no sólo si alguna API respondió, así que de paso limpia filas ya duplicadas en la DB.
+        claves_a_liberar = list(claves_sheet - claves_iol)
+        for i in range(0, len(claves_a_liberar), 400):
+            lote = claves_a_liberar[i:i + 400]
+            db.query(PrecioInstrumento).filter(
+                PrecioInstrumento.fuente.in_(("iol", "api")),
+                tuple_(PrecioInstrumento.ticker, PrecioInstrumento.fecha).in_(lote),
+            ).delete(synchronize_session=False)
+        db.flush()
+
+        for precio in precios_validos:
+            if (precio["ticker"], precio["fecha"]) in claves_iol:
+                continue
+            db.add(PrecioInstrumento(**precio))
+        db.flush()
+
+        if market_data.use_external_apis():
+            # Purga las filas 'iol'/'api' de tickers que ya no son renta fija/variable/FCI del
+            # Sheet (p.ej. un bono que venció y se sacó de Instrumentos): quedarían huérfanas.
+            # Sólo si hay al menos un ticker automático: con el conjunto vacío (la pestaña
+            # Instrumentos bloqueada por un error de lectura, p.ej.) el DELETE no llevaría filtro
+            # de ticker y se llevaría puesta TODA la serie automática acumulada.
+            tickers_auto = {
+                i["ticker"] for i in instrumentos_validos
+                if market_data_precios._es_renta_fija(i.get("tipo_instrumento", ""))
+                or market_data_precios._es_renta_variable(i.get("tipo_instrumento", ""))
+                or market_data_precios._es_fci(i.get("tipo_instrumento", ""))
+            }
+            if tickers_auto:
+                db.query(PrecioInstrumento).filter(
+                    PrecioInstrumento.fuente.in_(("iol", "api")),
+                    PrecioInstrumento.ticker.notin_(tickers_auto),
+                ).delete(synchronize_session=False)
+                db.flush()
+
+            # 'api' nunca pisa una fecha que el Sheet cubre ni una que IOL reclamó (precedencia
+            # iol > sheet > api): se descartan acá, no en el fetch, para no tener que duplicar
+            # `claves_excluir` contra tres precedencias distintas dentro de `fetch_precios_api`.
+            filas_api = [
+                p for p in filas_api
+                if (p["ticker"], p["fecha"]) not in claves_sheet
+                and (p["ticker"], p["fecha"]) not in claves_iol
+            ]
+
+            existentes = {
+                (r.ticker, r.fecha): r
+                for r in db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente.in_(("iol", "api"))).all()
+            }
+            for p in filas_iol + filas_api:
+                fila = existentes.get((p["ticker"], p["fecha"]))
+                if fila is not None:
+                    fila.precio, fila.moneda, fila.fuente = p["precio"], p["moneda"], p["fuente"]
+                else:
+                    nueva = PrecioInstrumento(**p)
+                    existentes[(p["ticker"], p["fecha"])] = nueva
+                    db.add(nueva)
+            db.flush()
+
+            precios_api_count = db.query(PrecioInstrumento).filter(
+                PrecioInstrumento.fuente.in_(("iol", "api"))
+            ).count()
 
     indices_mercado_api_count = 0
     if not fuentes_cer_mep_bloqueadas:

@@ -10,6 +10,8 @@ backend/sheet_local
 # Credentials - never commit
 google-service-account.json
 backend/data/google-service-account.json
+iol.json
+backend/data/iol.json
 **/credentials/
 CREDENTIALS.md
 .env

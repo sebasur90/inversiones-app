@@ -67,7 +67,10 @@ Sólo emite fechas `< hoy` que el Sheet no cubra (hoy lo maneja la ruta 'live').
 **ONs corporativas**: analisistecnico no las tiene (`{"s":"error"}`) → `SyncIssue` info
 `sin_historico_backfill`, siguen forward-only + su historia manual del Sheet. Descartadas para
 ONs: `datos.gob.ar` (catálogo viejo), `argen.bond` (API paga), `data912` (no tiene
-`/historical/corp`). Pendiente futuro: IOL API (gratis, con OAuth) para cerrar el hueco de ONs.
+`/historical/corp`). ✅ HECHO (2026-08-29): API de IOL integrada como fuente primaria de
+cotizaciones (`market_data/iol.py` + `iol_auth.py`), con precedencia `iol > sheet > api` para
+precios; cierra el hueco de ONs vía `fetch_backfill_iol` (backfill de lo que analisistecnico no
+cubre: ONs y renta variable). Detalle en `DESARROLLO.md` ("Precios: IOL como fuente primaria").
 `UMBRAL_APROXIMADO_DIAS = 45` **sigue** — se saca en un ítem posterior cuando toda la renta
 fija tenga cobertura densa.
 

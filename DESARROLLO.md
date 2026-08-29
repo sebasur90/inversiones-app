@@ -50,7 +50,8 @@ inversiones-app/
 │       ├── Configuracion         # Opcional: benchmark/pesos objetivo por cartera
 │       └── Tipos de Cambio       # Opcional: CER/MEP dedicados (Fecha, Tipo, Valor)
 ├── credentials/
-│   └── google-service-account.json  # Para modo Google Sheets
+│   ├── google-service-account.json  # Para modo Google Sheets
+│   └── iol.json                     # Opcional: API de IOL (ver "Precios: IOL" más abajo)
 └── backend/
     └── app/services/
         ├── sheets_client.py       # Implementación (detecta USE_LOCAL_SHEET)
@@ -83,17 +84,55 @@ gratuitas y sin API key (ver `backend/app/services/market_data/`):
   acumulando histórico día a día. Si no hay precio previo en el Sheet para un ticker, no se
   carga hasta tener esa referencia.
 
-**El Sheet siempre gana**: estos valores sólo completan huecos, nunca pisan una fecha que ya
-esté cargada a mano (en `Movimientos`, `Precios`, `Tipos de Cambio` o `Benchmarks`). En la
-tabla `precios_instrumento` la columna `fuente` (`sheet`|`api`) marca el origen de cada fila. Si la API
-no responde (proxy caído, sin internet), el sync no falla: queda una advertencia en Calidad de
-datos y se preserva lo último que sí se pudo traer. Para apagarlo (comportamiento 100% manual,
-como antes), `USE_EXTERNAL_APIS=false`.
+**El Sheet siempre gana para CER/MEP y Benchmarks**: estos dos valores sólo completan huecos,
+nunca pisan una fecha que ya esté cargada a mano (en `Movimientos`, `Precios`, `Tipos de Cambio`
+o `Benchmarks`). Si la API no responde (proxy caído, sin internet), el sync no falla: queda una
+advertencia en Calidad de datos y se preserva lo último que sí se pudo traer. Para apagarlo
+(comportamiento 100% manual, como antes), `USE_EXTERNAL_APIS=false`.
+
+Los **precios de instrumentos** son la excepción: ver la sección siguiente, la precedencia ahí es
+distinta (IOL puede pisar al Sheet).
 
 No se automatizaron MERVAL, S&P 500 ni una tasa libre de riesgo histórica: no encontramos una
 API gratuita y confiable con esas series (Stooq bloquea el acceso programático con un desafío
 JS, y no hay endpoint público con el nivel histórico del MERVAL). Para esos casos seguí
 cargando la pestaña `Benchmarks` a mano.
+
+## Precios: IOL como fuente primaria (con fallback a data912/analisistecnico)
+
+Desde que la cuenta tiene credenciales de IOL configuradas (`credentials/iol.json`, ver
+`CREDENTIALS.md`), la precedencia por `(ticker, fecha)` para **precios de instrumentos** es:
+
+```
+iol > sheet > api
+```
+
+- **IOL** es la fuente primaria: `market_data/iol.py` trae el precio del día vía paneles
+  (`GET /api/v2/Cotizaciones/{instrumento}/{panel}/{pais}`, una llamada trae docenas de
+  símbolos) para renta fija, renta variable y FCI. Si IOL cotiza una fecha que el Sheet
+  también cubre, **IOL gana** — el precio manual queda desplazado y se reporta en Calidad de
+  Datos (`precio_manual_reemplazado_por_iol`), nunca en silencio.
+- El **Sheet** sigue siendo necesario para lo que IOL no cotiza (fondos propios, instrumentos
+  ilíquidos, etc.) y para movimientos.
+- **data912/analisistecnico** (`fuente='api'`) quedan como red de contención: sólo entran para
+  un ticker que IOL no cubrió esa corrida (caída, sin cupo, o sin ese símbolo), y nunca pisan una
+  fecha que el Sheet ya trae (ahí sólo IOL puede hacerlo).
+- El backfill histórico usa primero analisistecnico (soberanos/letras/CER) y después IOL para lo
+  que analisistecnico no cubre: ONs corporativas y renta variable (acciones/CEDEARs), que antes
+  no tenían ninguna fuente de historia.
+- La columna `fuente` de `precios_instrumento` ahora tiene tres valores: `sheet` | `iol` | `api`.
+
+**Cupo mensual**: la API de IOL bonifica 25.000 llamadas por mes calendario; pasado eso cobra por
+bloque adicional. Como los paneles traen docenas de símbolos por llamada, un sync típico gasta
+~7 llamadas (1 token + paneles) en régimen normal, más hasta 15 llamadas de backfill mientras hay
+historia pendiente de bajar. El contador (tabla `estado_api_iol`, persistido en el volumen
+`backend_data`) corta las llamadas a IOL al llegar a `IOL_LIMITE_MENSUAL` (default 22.000, ~12%
+de colchón bajo el límite real) y cae a data912 por el resto del mes. `IOL_ENABLED=false` apaga
+sólo IOL sin tocar data912/analisistecnico.
+
+Sin `credentials/iol.json` (o con `IOL_ENABLED=false`), la integración con IOL simplemente no
+hace ninguna llamada — el comportamiento es el mismo de antes (data912/analisistecnico completan
+huecos, el Sheet siempre gana).
 
 ## Sincronización en la UI
 
