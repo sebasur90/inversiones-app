@@ -81,12 +81,12 @@ function VariacionPorInstrumento({
       </button>
       {abierto && (
         <div className="mt-2 space-y-1.5">
-          <div className="text-[10px] text-app-text-faint">
+          <div className="text-label text-app-text-faint">
             Variación anual % por ticker. Vacío = usa la var. default ({porDefecto}%).
           </div>
           {tickers.map(t => (
             <div key={t.ticker} className="flex items-center gap-2">
-              <span className="text-[11px] text-app-text flex-1 min-w-0 truncate" title={t.nombre}>
+              <span className="text-label text-app-text flex-1 min-w-0 truncate" title={t.nombre}>
                 <span className="font-semibold">{t.ticker}</span>
               </span>
               <input
@@ -103,7 +103,7 @@ function VariacionPorInstrumento({
           {nOverrides > 0 && (
             <button
               onClick={limpiar}
-              className="text-[10px] text-app-text-secondary hover:text-app-coral"
+              className="text-label text-app-text-secondary hover:text-app-coral"
             >
               Limpiar overrides
             </button>

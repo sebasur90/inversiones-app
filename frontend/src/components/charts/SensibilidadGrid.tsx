@@ -27,7 +27,7 @@ export default function SensibilidadGrid({
 }: SensibilidadGridProps) {
   if (grilla.length === 0 || grilla[0].length === 0) {
     return (
-      <div className="text-center py-8 text-app-text-dim text-[12.5px]">
+      <div className="text-center py-8 text-app-text-dim text-caption">
         Sin datos para la grilla de sensibilidad
       </div>
     )
@@ -35,19 +35,19 @@ export default function SensibilidadGrid({
 
   return (
     <Card className="mb-4 overflow-x-auto">
-      <table className="w-full text-[10px] border-separate border-spacing-0">
+      <table className="w-full text-label border-separate border-spacing-0">
         <thead>
           <tr>
-            <th className="sticky left-0 z-10 bg-app-surface text-left text-app-text-faint font-bold uppercase text-[9px] pb-2 pr-2 min-w-[50px]">
+            <th className="sticky left-0 z-10 bg-app-surface text-left text-app-text-faint font-bold uppercase text-label pb-2 pr-2 min-w-[50px]">
               Tasa
             </th>
             {aportes.map((aporte, idx) => (
               <th
                 key={idx}
-                className="text-center text-app-text-faint font-bold uppercase text-[9px] pb-2 px-0.5 min-w-[60px]"
+                className="text-center text-app-text-faint font-bold uppercase text-label pb-2 px-0.5 min-w-[60px]"
               >
                 <div>{formatUSD(aporte)}</div>
-                <div className="text-[8px] font-normal">/mes</div>
+                <div className="text-label font-normal">/mes</div>
               </th>
             ))}
           </tr>
@@ -55,7 +55,7 @@ export default function SensibilidadGrid({
         <tbody>
           {grilla.map((fila, idxFila) => (
             <tr key={idxFila}>
-              <td className="sticky left-0 z-10 bg-app-surface font-semibold text-app-text py-1.5 pr-2 text-[9px]">
+              <td className="sticky left-0 z-10 bg-app-surface font-semibold text-app-text py-1.5 pr-2 text-label">
                 {tasas[idxFila] >= 0 ? '+' : ''}{tasas[idxFila].toFixed(1)}%
               </td>
               {fila.map((celda, idxCol) => {
@@ -75,7 +75,7 @@ export default function SensibilidadGrid({
         </tbody>
       </table>
 
-      <div className="text-[9px] text-app-text-faint mt-3">
+      <div className="text-label text-app-text-faint mt-3">
         <div className="mb-1">Celda = meses para alcanzar la meta</div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1">

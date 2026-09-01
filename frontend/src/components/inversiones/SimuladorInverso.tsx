@@ -139,13 +139,13 @@ export default function SimuladorInverso({
 
   return (
     <div>
-      <h3 className="text-[13.5px] font-bold text-app-text mb-2.5 flex items-center gap-1.5">
+      <h3 className="text-body font-bold text-app-text mb-2.5 flex items-center gap-1.5">
         🔄 Simulador inverso
       </h3>
 
       <Card>
         <div className="mb-4">
-          <label className="block text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2 flex items-center gap-1.5">
+          <label className="block text-label font-bold uppercase tracking-wide text-app-text-dim mb-2 flex items-center gap-1.5">
             ¿Qué querés resolver?
             <InfoTooltip term="objetivo_modo_solver" />
           </label>
@@ -170,7 +170,7 @@ export default function SimuladorInverso({
               min={0}
               value={form.objetivo}
               onChange={e => handleFormChange('objetivo', parseFloat(e.target.value) || 0)}
-              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-[12px] text-app-text outline-none focus:border-app-gold/60 tabular-nums"
+              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-caption text-app-text outline-none focus:border-app-gold/60 tabular-nums"
             />
           </div>
 
@@ -181,7 +181,7 @@ export default function SimuladorInverso({
               type="date"
               value={form.fechaObjetivo}
               onChange={e => handleFormChange('fechaObjetivo', e.target.value)}
-              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-[12px] text-app-text outline-none focus:border-app-gold/60"
+              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-caption text-app-text outline-none focus:border-app-gold/60"
             />
           </div>
 
@@ -193,7 +193,7 @@ export default function SimuladorInverso({
               min={0}
               value={form.patrimonioInicial}
               onChange={e => handleFormChange('patrimonioInicial', parseFloat(e.target.value) || 0)}
-              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-[12px] text-app-text outline-none focus:border-app-gold/60 tabular-nums"
+              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-caption text-app-text outline-none focus:border-app-gold/60 tabular-nums"
             />
           </div>
 
@@ -207,13 +207,13 @@ export default function SimuladorInverso({
               value={form.aporteMensual}
               onChange={e => handleFormChange('aporteMensual', parseFloat(e.target.value) || 0)}
               disabled={mode === 'aporte'}
-              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-[12px] text-app-text outline-none focus:border-app-gold/60 tabular-nums disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-caption text-app-text outline-none focus:border-app-gold/60 tabular-nums disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </div>
 
           {/* Crecimiento del aporte anual */}
           <div>
-            <label className="block text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
+            <label className="block text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">
               Crec. aporte anual (%)
             </label>
             <input
@@ -222,7 +222,7 @@ export default function SimuladorInverso({
               step={0.5}
               value={form.crecimientoAporteAnual}
               onChange={e => handleFormChange('crecimientoAporteAnual', parseFloat(e.target.value) || 0)}
-              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-[12px] text-app-text outline-none focus:border-app-gold/60 tabular-nums"
+              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-caption text-app-text outline-none focus:border-app-gold/60 tabular-nums"
             />
           </div>
 
@@ -236,10 +236,10 @@ export default function SimuladorInverso({
               value={form.rentabilidadAnual}
               onChange={e => handleFormChange('rentabilidadAnual', parseFloat(e.target.value) || 0)}
               disabled={mode === 'tasa'}
-              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-[12px] text-app-text outline-none focus:border-app-gold/60 tabular-nums disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-caption text-app-text outline-none focus:border-app-gold/60 tabular-nums disabled:opacity-50 disabled:cursor-not-allowed"
             />
             {mode !== 'tasa' && (
-              <div className="text-[8px] text-app-text-faint mt-0.5">
+              <div className="text-label text-app-text-faint mt-0.5">
                 Fuente: {tasaBaseSource}
               </div>
             )}
@@ -250,60 +250,60 @@ export default function SimuladorInverso({
         <div className="bg-app-surface-2 rounded-lg p-3 mt-4">
           {mode === 'aporte' && resultado.aporte ? (
             <div>
-              <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
+              <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">
                 Aporte mensual requerido
               </div>
               {resultado.aporte.aporteMensualUsd != null ? (
                 <div>
-                  <div className="font-mono text-[16px] font-bold text-app-text tabular-nums">
+                  <div className="font-mono text-title font-bold text-app-text tabular-nums">
                     {formatUSD(resultado.aporte.aporteMensualUsd)}
                   </div>
-                  <div className="text-[9px] text-app-text-dim mt-1">
+                  <div className="text-label text-app-text-dim mt-1">
                     Para alcanzar {formatUSD(form.objetivo)} en {mesesRestantes} meses
                   </div>
                 </div>
               ) : (
-                <div className={`font-mono text-[14px] font-semibold tabular-nums ${resultado.aporte.motivo ? 'text-app-coral' : 'text-app-text'}`}>
+                <div className={`font-mono text-strong font-semibold tabular-nums ${resultado.aporte.motivo ? 'text-app-coral' : 'text-app-text'}`}>
                   {resultado.aporte.motivo ? mensajeMotivo(resultado.aporte.motivo) : '—'}
                 </div>
               )}
             </div>
           ) : mode === 'fecha' && resultado.fecha ? (
             <div>
-              <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
+              <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">
                 Fecha de alcance
               </div>
               {resultado.fecha.fecha ? (
                 <div>
-                  <div className="font-mono text-[16px] font-bold text-app-text tabular-nums">
+                  <div className="font-mono text-title font-bold text-app-text tabular-nums">
                     {dayjs(resultado.fecha.fecha).format('MMM DD, YYYY')}
                   </div>
-                  <div className="text-[9px] text-app-text-dim mt-1">
+                  <div className="text-label text-app-text-dim mt-1">
                     En {resultado.fecha.meses} meses ({resultado.fecha.meses && resultado.fecha.meses > mesesRestantes ? 'después' : 'antes'} del límite)
                   </div>
                 </div>
               ) : (
-                <div className={`font-mono text-[14px] font-semibold tabular-nums ${resultado.fecha.motivo ? 'text-app-coral' : 'text-app-text'}`}>
+                <div className={`font-mono text-strong font-semibold tabular-nums ${resultado.fecha.motivo ? 'text-app-coral' : 'text-app-text'}`}>
                   {resultado.fecha.motivo ? mensajeMotivo(resultado.fecha.motivo) : '—'}
                 </div>
               )}
             </div>
           ) : mode === 'tasa' && resultado.tasa ? (
             <div>
-              <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
+              <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">
                 Rentabilidad anual requerida
               </div>
               {resultado.tasa.tasaAnualPct != null ? (
                 <div>
-                  <div className="font-mono text-[16px] font-bold text-app-text tabular-nums">
+                  <div className="font-mono text-title font-bold text-app-text tabular-nums">
                     {formatPct(resultado.tasa.tasaAnualPct)}
                   </div>
-                  <div className="text-[9px] text-app-text-dim mt-1">
+                  <div className="text-label text-app-text-dim mt-1">
                     Para alcanzar {formatUSD(form.objetivo)} en {mesesRestantes} meses
                   </div>
                 </div>
               ) : (
-                <div className={`font-mono text-[14px] font-semibold tabular-nums ${resultado.tasa.motivo ? 'text-app-coral' : 'text-app-text'}`}>
+                <div className={`font-mono text-strong font-semibold tabular-nums ${resultado.tasa.motivo ? 'text-app-coral' : 'text-app-text'}`}>
                   {resultado.tasa.motivo ? mensajeMotivo(resultado.tasa.motivo) : '—'}
                 </div>
               )}

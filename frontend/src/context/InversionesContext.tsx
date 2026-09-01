@@ -19,9 +19,9 @@ interface InversionesContextValue extends ReturnType<typeof useInversiones> {
   syncResultado: string
   syncResumenTexto: string
   /**
-   * Se incrementa después de cada sincronización. El botón de sync está en el header de
-   * todas las pantallas, pero cada una hace su propio fetch: sin esto en las dependencias
-   * de su useEffect, seguirían mostrando los números anteriores al sync.
+   * Se incrementa después de cada sincronización. Las pantallas que todavía traen sus datos
+   * con `useEffect` propio lo usan como dependencia para volver a pedirlos; las migradas a
+   * React Query no lo necesitan (`sincronizar` invalida la caché de queries).
    */
   syncVersion: number
 }
@@ -48,7 +48,7 @@ export function InversionesProvider({ children }: { children: ReactNode }) {
       setSyncHealthScore(resultado.health_score)
       setSyncResultado(resultado.resultado)
       setSyncResumenTexto(resumenTexto)
-      // Avisa a las pantallas que traen sus propios datos que tienen que volver a pedirlos
+      // Avisa a las pantallas que todavía no usan React Query que vuelvan a pedir sus datos
       setSyncVersion(v => v + 1)
       if (resultado.issues.length > 0) {
         setSyncSheetOpen(true)

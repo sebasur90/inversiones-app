@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..database import MovimientoInversion, InstrumentoInversion, PrecioInstrumento, IndiceMercado, RebalanceoObjetivo, ConfiguracionCartera
 from . import rebalanceo_engine
+from .cache import cache_por_sync
 
 DEFAULT_TOLERANCIA_PP = 2.0
 
@@ -424,6 +425,7 @@ def get_carteras(db: Session) -> list[str]:
 
 # ── Resumen ───────────────────────────────────────────────────────────────
 
+@cache_por_sync
 def get_resumen(cartera: str | None, db: Session) -> dict:
     movs = _movimientos_ordenados(db, cartera)
     return _resumen_sobre_movs(movs, db)
@@ -1125,6 +1127,7 @@ def _clasificados_valorizados(cartera: str | None, db: Session) -> tuple[list[tu
     return valores, clasificados, instrumentos
 
 
+@cache_por_sync
 def get_exposicion(cartera: str | None, db: Session) -> dict:
     valores, clasificados, instrumentos = _clasificados_valorizados(cartera, db)
     hoy = date.today()
@@ -1231,6 +1234,7 @@ def _targets_por_eje(eje: str, cartera: str | None, objetivos: list[RebalanceoOb
     }
 
 
+@cache_por_sync
 def get_rebalanceo(cartera: str | None, db: Session) -> dict:
     valores, clasificados, instrumentos = _clasificados_valorizados(cartera, db)
 
@@ -1526,6 +1530,7 @@ def _recorrer_movs_ticker(
     return est
 
 
+@cache_por_sync
 def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
     """Rendimiento individual por ticker con análisis por moneda.
 
@@ -1982,6 +1987,7 @@ def _fechas_por_granularidad(desde: date, hasta: date) -> list[date]:
     return _fin_de_mes_range(desde, hasta)
 
 
+@cache_por_sync
 def get_evolucion(cartera: str | None, db: Session, desde: date | None = None, max_puntos: int = 24) -> dict:
     """Serie histórica del valor de la cartera (nominal USD/ARS y ARS real vía CER).
 

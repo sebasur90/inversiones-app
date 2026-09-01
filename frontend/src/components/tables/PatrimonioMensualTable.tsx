@@ -31,7 +31,7 @@ function formatPctRatio(v: number | null): string {
 
 export default function PatrimonioMensualTable({ puntos, esUSD }: PatrimonioMensualTableProps) {
   if (puntos.length === 0) {
-    return <div className="text-[12px] text-app-text-dim text-center py-4">Sin datos para mostrar</div>
+    return <div className="text-caption text-app-text-dim text-center py-4">Sin datos para mostrar</div>
   }
 
   const datos = puntos.map((p, i) => {
@@ -52,14 +52,14 @@ export default function PatrimonioMensualTable({ puntos, esUSD }: PatrimonioMens
 
   return (
     <Card className="mb-4 overflow-x-auto">
-      <table className="w-full text-[11px] border-separate border-spacing-0">
+      <table className="w-full text-label border-separate border-spacing-0">
         <thead>
           <tr className="border-b border-app-border">
-            <th className="text-left text-app-text-faint font-bold uppercase text-[9.5px] pb-2 px-2">Fecha</th>
-            <th className="text-right text-app-text-faint font-bold uppercase text-[9.5px] pb-2 px-2">Aportes</th>
-            <th className="text-right text-app-text-faint font-bold uppercase text-[9.5px] pb-2 px-2">Patrimonio</th>
-            <th className="text-right text-app-text-faint font-bold uppercase text-[9.5px] pb-2 px-2">Ganancia</th>
-            <th className="text-right text-app-text-faint font-bold uppercase text-[9.5px] pb-2 px-2">Rendimiento</th>
+            <th className="text-left text-app-text-faint font-bold uppercase text-label pb-2 px-2">Fecha</th>
+            <th className="text-right text-app-text-faint font-bold uppercase text-label pb-2 px-2">Aportes</th>
+            <th className="text-right text-app-text-faint font-bold uppercase text-label pb-2 px-2">Patrimonio</th>
+            <th className="text-right text-app-text-faint font-bold uppercase text-label pb-2 px-2">Ganancia</th>
+            <th className="text-right text-app-text-faint font-bold uppercase text-label pb-2 px-2">Rendimiento</th>
           </tr>
         </thead>
         <tbody>

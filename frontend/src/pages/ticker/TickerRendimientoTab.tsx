@@ -53,9 +53,9 @@ export default function TickerRendimientoTab({ performance, position, monedaSele
       </div>
 
       <Card>
-        <h3 className="text-[12px] font-bold text-app-text mb-3">Desglose por moneda</h3>
+        <h3 className="text-caption font-bold text-app-text mb-3">Desglose por moneda</h3>
         <div className="overflow-x-auto">
-          <table className="w-full text-[11px]">
+          <table className="w-full text-label">
             <thead>
               <tr className="border-b border-app-border">
                 <th className="text-left py-2 px-2 text-app-text-dim font-semibold">Moneda</th>

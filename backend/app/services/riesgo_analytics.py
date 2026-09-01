@@ -20,6 +20,7 @@ from .inversiones_analytics import (
     _valuar_holdings_ars,
     _cer_indice,
 )
+from .cache import cache_por_sync
 
 MONEDAS_VALIDAS = ("ars_nominal", "ars_real", "usd")
 
@@ -41,6 +42,7 @@ def get_benchmarks_disponibles(db: Session) -> list[str]:
 
 
 
+@cache_por_sync
 def get_riesgo(cartera: str | None, moneda: str, benchmark: str | None, db: Session) -> dict:
     if moneda not in MONEDAS_VALIDAS:
         raise ValueError(f"moneda inválida: {moneda}")

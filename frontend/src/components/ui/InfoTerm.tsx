@@ -21,7 +21,7 @@ export default function InfoTerm({ term, label, className = '' }: { term: HelpKe
         <Icon name="info" className="w-3.5 h-3.5" />
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={entry.title}>
-        <p className="text-[13px] text-app-text-dim leading-relaxed">{entry.shortDescription}</p>
+        <p className="text-body text-app-text-dim leading-relaxed">{entry.shortDescription}</p>
       </Modal>
     </span>
   )

@@ -13,7 +13,9 @@ import Segmented from '../components/ui/Segmented'
 import EmptyState from '../components/ui/EmptyState'
 import Card from '../components/ui/Card'
 import InfoTooltip from '../help/components/InfoTooltip'
-import { useInversionesContext } from '../context/InversionesContext'
+import SkeletonPantalla, { Skeleton } from '../components/ui/Skeleton'
+import { useQuery } from '@tanstack/react-query'
+import { qk } from '../api/queryClient'
 
 type Vista = 'nominal' | 'usd' | 'cer'
 
@@ -75,44 +77,27 @@ function formatValor(v: number, vista: Vista, normalizado: boolean): string {
 }
 
 export default function Comparador() {
-  const { syncVersion } = useInversionesContext()
   const navigate = useNavigate()
-  const [tickers, setTickers] = useState<TickerConPrecio[]>([])
   const [tickersSel, setTickersSel] = useState<string[]>([])
-  const [series, setSeries] = useState<PrecioHistoricoOut[]>([])
   const [vista, setVista] = useState<Vista>('usd')
   const [normalizado, setNormalizado] = useState(true)
-  const [loading, setLoading] = useState(true)
-  const [loadingChart, setLoadingChart] = useState(false)
 
-  useEffect(() => {
-    getTickersConPrecios()
-      .then(setTickers)
-      .catch(() => setTickers([]))
-      .finally(() => setLoading(false))
-  }, [syncVersion])
+  const tickersQuery = useQuery({
+    queryKey: qk.de('tickers-con-precios'),
+    queryFn: () => getTickersConPrecios(),
+  })
+  const tickers: TickerConPrecio[] = tickersQuery.data ?? []
+  const loading = tickersQuery.isLoading
 
-  useEffect(() => {
-    if (tickersSel.length === 0) {
-      setSeries([])
-      return
-    }
-    let cancelado = false
-    setLoadingChart(true)
-    Promise.all(tickersSel.map(t => getPreciosHistoricos(t)))
-      .then(data => {
-        if (!cancelado) setSeries(data)
-      })
-      .catch(() => {
-        if (!cancelado) setSeries([])
-      })
-      .finally(() => {
-        if (!cancelado) setLoadingChart(false)
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [tickersSel, syncVersion])
+  // Las series de cada ticker se cachean por separado: agregar un sexto ticker no vuelve a
+  // pedir los cinco que ya estaban.
+  const seriesQuery = useQuery({
+    queryKey: qk.de('precios-historicos-multi', [...tickersSel].sort()),
+    queryFn: () => Promise.all(tickersSel.map(t => getPreciosHistoricos(t))),
+    enabled: tickersSel.length > 0,
+  })
+  const series: PrecioHistoricoOut[] = tickersSel.length === 0 ? [] : seriesQuery.data ?? []
+  const loadingChart = tickersSel.length > 0 && seriesQuery.isLoading
 
   const monedasSel = useMemo(
     () => new Set(tickers.filter(t => tickersSel.includes(t.ticker)).map(t => t.moneda)),
@@ -147,7 +132,7 @@ export default function Comparador() {
     return (
       <div className="pb-4">
         <ScreenHeader title="Comparador" onBack={() => navigate(-1)} />
-        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+        <SkeletonPantalla />
       </div>
     )
   }
@@ -165,7 +150,7 @@ export default function Comparador() {
     <div className="pb-4">
       <ScreenHeader title="Comparador" onBack={() => navigate(-1)} />
 
-      <div className="text-[11px] text-app-text-dim mb-2">Elegí hasta {MAX_TICKERS} tickers para comparar</div>
+      <div className="text-label text-app-text-dim mb-2">Elegí hasta {MAX_TICKERS} tickers para comparar</div>
 
       <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 mb-3 -mx-4 px-4">
         {tickers.map(t => {
@@ -175,7 +160,7 @@ export default function Comparador() {
               key={t.ticker}
               onClick={() => toggleTicker(t.ticker)}
               disabled={!activo && tickersSel.length >= MAX_TICKERS}
-              className={`shrink-0 font-semibold text-[11.5px] px-3 py-1.5 rounded-[10px] border transition-colors disabled:opacity-40 ${
+              className={`shrink-0 font-semibold text-caption px-3 py-1.5 rounded-[10px] border transition-colors disabled:opacity-40 ${
                 activo
                   ? 'bg-app-gold-soft border-app-gold text-app-gold'
                   : 'bg-app-surface border-app-border text-app-text-dim'
@@ -192,7 +177,7 @@ export default function Comparador() {
       ) : (
         <>
           <div className="px-4 mb-4 pt-2">
-            <div className="text-[12px] text-app-text-dim space-y-1.5 mb-3">
+            <div className="text-caption text-app-text-dim space-y-1.5 mb-3">
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-app-text">USD (MEP)</span>
                 <InfoTooltip term="precios_usd_mep" />
@@ -215,7 +200,7 @@ export default function Comparador() {
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setNormalizado(v => !v)}
-                className={`shrink-0 font-semibold text-[11px] px-2.5 py-1.5 rounded-lg border ${
+                className={`shrink-0 font-semibold text-label px-2.5 py-1.5 rounded-lg border ${
                   normalizado ? 'bg-app-gold-soft border-app-gold text-app-gold' : 'bg-app-surface border-app-border text-app-text-dim'
                 }`}
               >
@@ -227,9 +212,9 @@ export default function Comparador() {
 
           <Card>
             {loadingChart ? (
-              <div className="h-[240px] flex items-center justify-center text-app-text-dim text-[12.5px]">Cargando…</div>
+              <Skeleton className="h-[240px] rounded-xl" />
             ) : datosGrafico.length === 0 ? (
-              <div className="h-[240px] flex items-center justify-center text-app-text-dim text-[12.5px]">Sin datos para esta vista</div>
+              <div className="h-[240px] flex items-center justify-center text-app-text-dim text-caption">Sin datos para esta vista</div>
             ) : (
               <ResponsiveContainer width="100%" height={280}>
                 <LineChart data={datosGrafico} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>

@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useInversionesContext } from '../context/InversionesContext'
-import { getDiagnostico, type DiagnosticoOut } from '../api'
+import { getDiagnostico } from '../api'
+import { qk } from '../api/queryClient'
 import { useObjetivoInversion } from '../hooks/useObjetivoInversion'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
@@ -11,41 +13,21 @@ import { priorizarHallazgos, evaluarDesviacionPlan } from '../utils/hallazgos'
 import { parseApiError, type ParsedApiError } from '../help/errors/apiErrors'
 import ErrorBanner from '../help/components/ErrorBanner'
 import InfoTooltip from '../help/components/InfoTooltip'
+import SkeletonPantalla from '../components/ui/Skeleton'
 
 export default function Diagnostico() {
   const navigate = useNavigate()
-  const { carteraSeleccionada, loading: contextLoading, syncVersion } = useInversionesContext()
-  const [diagnostico, setDiagnostico] = useState<DiagnosticoOut | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<ParsedApiError | null>(null)
+  const { carteraSeleccionada, loading: contextLoading } = useInversionesContext()
   const [expandido, setExpandido] = useState(false)
 
   const { objetivo } = useObjetivoInversion(carteraSeleccionada)
 
-  useEffect(() => {
-    let cancelado = false
-    setLoading(true)
-    setError(null)
-    getDiagnostico(carteraSeleccionada)
-      .then(d => {
-        if (!cancelado) {
-          setDiagnostico(d)
-          setError(null)
-        }
-      })
-      .catch(err => {
-        if (!cancelado) {
-          setDiagnostico(null)
-          setError(parseApiError(err))
-        }
-      })
-      .finally(() => {
-        if (!cancelado) setLoading(false)
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [carteraSeleccionada, syncVersion])
+  const diagnosticoQuery = useQuery({
+    queryKey: qk.diagnostico(carteraSeleccionada),
+    queryFn: () => getDiagnostico(carteraSeleccionada),
+  })
+  const diagnostico = diagnosticoQuery.data ?? null
+  const error: ParsedApiError | null = diagnosticoQuery.error ? parseApiError(diagnosticoQuery.error) : null
 
   const hallazgos = useMemo(() => {
     if (!diagnostico) return []
@@ -55,11 +37,11 @@ export default function Diagnostico() {
 
   const visibles = expandido ? hallazgos : hallazgos.slice(0, 5)
 
-  if (contextLoading || loading) {
+  if (contextLoading || diagnosticoQuery.isLoading) {
     return (
       <div className="pb-4">
         <ScreenHeader title="Diagnóstico" onBack={() => navigate('/resumen')} />
-        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+        <SkeletonPantalla />
       </div>
     )
   }
@@ -158,7 +140,7 @@ export default function Diagnostico() {
           <EmptyState title="Sin hallazgos" description="No detectamos puntos de atención en esta cartera." />
         ) : (
           <div>
-            <div className="text-[13.5px] font-bold text-app-text mb-2.5">
+            <div className="text-body font-bold text-app-text mb-2.5">
               {hallazgos.length} hallazgo{hallazgos.length !== 1 ? 's' : ''}
             </div>
             {visibles.map(h => (
@@ -173,7 +155,7 @@ export default function Diagnostico() {
             {hallazgos.length > 5 && (
               <button
                 onClick={() => setExpandido(v => !v)}
-                className="w-full text-center py-2.5 text-[12.5px] font-semibold text-app-text-dim hover:text-app-text transition-colors"
+                className="w-full text-center py-2.5 text-caption font-semibold text-app-text-dim hover:text-app-text transition-colors"
               >
                 {expandido ? 'Ver menos' : `Ver más (${hallazgos.length - 5})`}
               </button>

@@ -98,7 +98,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
 
   return (
     <div className="w-full">
-      <h1 className="text-[18px] font-bold text-app-text mb-4">Comparación de Benchmarks</h1>
+      <h1 className="text-heading font-bold text-app-text mb-4">Comparación de Benchmarks</h1>
 
       <div className="bg-app-surface border border-app-border rounded-2xl p-4 mb-4">
         <div className="space-y-4">
@@ -110,7 +110,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
                   <button
                     key={p}
                     onClick={() => setPeriodo(p)}
-                    className={`px-2.5 py-1.5 rounded text-[11px] font-semibold ${
+                    className={`px-2.5 py-1.5 rounded text-label font-semibold ${
                       periodo === p
                         ? 'bg-app-teal text-app-bg'
                         : 'bg-app-border text-app-text-dim hover:text-app-text'
@@ -128,7 +128,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
                   <button
                     key={m}
                     onClick={() => setMoneda(m)}
-                    className={`px-2.5 py-1.5 rounded text-[11px] font-semibold ${
+                    className={`px-2.5 py-1.5 rounded text-label font-semibold ${
                       moneda === m
                         ? 'bg-app-teal text-app-bg'
                         : 'bg-app-border text-app-text-dim hover:text-app-text'
@@ -154,7 +154,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
                         : [...benchmarks, b]
                       )
                     }
-                    className={`px-2 py-1 rounded text-[11px] ${
+                    className={`px-2 py-1 rounded text-label ${
                       benchmarks.includes(b)
                         ? 'bg-app-teal text-app-bg'
                         : 'bg-app-border text-app-text-dim'
@@ -177,7 +177,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
                         : [...tickers, t]
                       )
                     }
-                    className={`px-2 py-1 rounded text-[11px] whitespace-nowrap ${
+                    className={`px-2 py-1 rounded text-label whitespace-nowrap ${
                       tickers.includes(t)
                         ? 'bg-app-teal text-app-bg'
                         : 'bg-app-border text-app-text-dim'
@@ -207,7 +207,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-3 py-2 text-[12px] font-semibold border-b-2 ${
+                className={`px-3 py-2 text-caption font-semibold border-b-2 ${
                   activeTab === tab
                     ? 'border-app-teal text-app-teal'
                     : 'border-transparent text-app-text-dim hover:text-app-text'
@@ -221,7 +221,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
           {activeTab === 'comparacion' && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-[13px] font-bold text-app-text mb-3">Rendimientos</h3>
+                <h3 className="text-body font-bold text-app-text mb-3">Rendimientos</h3>
                 <div className="bg-app-surface border border-app-border rounded-2xl p-3 overflow-x-auto">
                   <BenchmarkComparisonTable filas={performanceData.filas} />
                 </div>
@@ -229,7 +229,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
 
               {performanceData.serie && performanceData.serie.length > 0 && (
                 <div>
-                  <h3 className="text-[13px] font-bold text-app-text mb-3">Evolución del Índice</h3>
+                  <h3 className="text-body font-bold text-app-text mb-3">Evolución del Índice</h3>
                   <div className="bg-app-surface border border-app-border rounded-2xl p-4">
                     <PerformanceCompareChart serie={performanceData.serie} />
                   </div>
@@ -243,7 +243,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
               {opportunityCostData ? (
                 <>
                   <div>
-                    <h3 className="text-[13px] font-bold text-app-text mb-3">Resumen</h3>
+                    <h3 className="text-body font-bold text-app-text mb-3">Resumen</h3>
                     {opportunityCostData.estado === 'ok' ? (
                       <div className="grid grid-cols-2 gap-2">
                         <MetricTile
@@ -273,7 +273,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
                         />
                       </div>
                     ) : (
-                      <div className="bg-app-surface border border-app-border rounded-lg p-3 text-app-text-dim text-[12px]">
+                      <div className="bg-app-surface border border-app-border rounded-lg p-3 text-app-text-dim text-caption">
                         {opportunityCostData.estado === 'sin_benchmark'
                           ? 'No hay benchmark configurado'
                           : 'Datos insuficientes'}
@@ -283,9 +283,9 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
 
                   {opportunityCostData.estado === 'ok' && opportunityCostData.por_posicion.length > 0 && (
                     <div>
-                      <h3 className="text-[13px] font-bold text-app-text mb-3">Por Posición</h3>
+                      <h3 className="text-body font-bold text-app-text mb-3">Por Posición</h3>
                       <div className="bg-app-surface border border-app-border rounded-2xl p-3 overflow-x-auto">
-                        <table className="w-full text-[11px]">
+                        <table className="w-full text-label">
                           <thead>
                             <tr className="border-b border-app-border">
                               <th className="text-left py-2 px-2 text-app-text-faint font-bold">Ticker</th>
@@ -318,7 +318,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
                   )}
                 </>
               ) : (
-                <div className="bg-app-surface border border-app-border rounded-lg p-3 text-app-text-dim text-[12px]">
+                <div className="bg-app-surface border border-app-border rounded-lg p-3 text-app-text-dim text-caption">
                   Selecciona un benchmark para ver el análisis de costo de oportunidad
                 </div>
               )}

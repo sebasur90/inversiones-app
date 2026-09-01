@@ -6,7 +6,7 @@ interface BenchmarkComparisonTableProps {
 }
 
 function EstadoBadge({ estado }: { estado: string }) {
-  const baseClasses = 'inline-block px-2 py-1 rounded text-[11px] font-semibold'
+  const baseClasses = 'inline-block px-2 py-1 rounded text-label font-semibold'
   switch (estado) {
     case 'ok':
       return <span className={`${baseClasses} bg-app-teal text-app-bg`}>OK</span>
@@ -27,7 +27,7 @@ export default function BenchmarkComparisonTable({ filas }: BenchmarkComparisonT
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-[12px]">
+      <table className="w-full text-caption">
         <thead>
           <tr className="border-b border-app-border">
             <th className="text-left py-2 px-3 text-app-text-faint font-bold uppercase">Fuente</th>
@@ -43,7 +43,7 @@ export default function BenchmarkComparisonTable({ filas }: BenchmarkComparisonT
           {filas.map((fila) => (
             <tr key={fila.fuente} className="border-b border-app-border hover:bg-app-surface">
               <td className="py-2.5 px-3 font-semibold text-app-text">{fila.fuente}</td>
-              <td className="py-2.5 px-3 text-app-text-dim text-[11px]">{fila.tipo}</td>
+              <td className="py-2.5 px-3 text-app-text-dim text-label">{fila.tipo}</td>
               <td className="py-2.5 px-3"><EstadoBadge estado={fila.estado} /></td>
               <td className="py-2.5 px-3 text-right font-mono">
                 {fila.estado === 'ok' ? formatValue(fila.retorno_pct) : '—'}

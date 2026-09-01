@@ -1,17 +1,21 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import dayjs from 'dayjs'
 import { useInversionesContext } from '../context/InversionesContext'
-import { getFlujoCajaProyectado, type FlujoCajaProyectadoOut } from '../api'
+import { getFlujoCajaProyectado } from '../api'
+import { qk } from '../api/queryClient'
 import { formatARS, formatUSD } from '../utils'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
 import InfoTooltip from '../help/components/InfoTooltip'
+import SkeletonPantalla from '../components/ui/Skeleton'
+import QueryBoundary from '../components/ui/QueryBoundary'
 
 const COLOR_CUPON = '#d8b14a'
 const COLOR_AMORT = '#5b8ba0'
@@ -42,31 +46,17 @@ function mesLabel(periodo: string): string {
 
 export default function FlujoCaja() {
   const navigate = useNavigate()
-  const { carteraSeleccionada, monedaSeleccionada, syncVersion } = useInversionesContext()
-  const [datos, setDatos] = useState<FlujoCajaProyectadoOut | null>(null)
+  const { carteraSeleccionada, monedaSeleccionada } = useInversionesContext()
   const [horizonte, setHorizonte] = useState<Horizonte>('24')
-  const [loading, setLoading] = useState(true)
 
   const esARS = monedaSeleccionada === 'ARS'
   const fmt = esARS ? formatARS : formatUSD
 
-  useEffect(() => {
-    let cancelado = false
-    setLoading(true)
-    getFlujoCajaProyectado(carteraSeleccionada, Number(horizonte))
-      .then(data => {
-        if (!cancelado) setDatos(data)
-      })
-      .catch(() => {
-        if (!cancelado) setDatos(null)
-      })
-      .finally(() => {
-        if (!cancelado) setLoading(false)
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [carteraSeleccionada, horizonte, syncVersion])
+  const flujoQuery = useQuery({
+    queryKey: qk.de('flujo-caja', carteraSeleccionada, horizonte),
+    queryFn: () => getFlujoCajaProyectado(carteraSeleccionada, Number(horizonte)),
+  })
+  const datos = flujoQuery.data ?? null
 
   const chartData = useMemo(() => {
     if (!datos) return []
@@ -84,7 +74,7 @@ export default function FlujoCaja() {
     <div className="pb-4">
       <ScreenHeader title="Flujo de caja proyectado" onBack={() => navigate(-1)} />
 
-      <div className="px-4 pt-2 mb-3 flex items-center gap-2 text-[12px] text-app-text-dim">
+      <div className="px-4 pt-2 mb-3 flex items-center gap-2 text-caption text-app-text-dim">
         <span className="font-semibold text-app-text">Cómo se calcula</span>
         <InfoTooltip term="flujocaja_titulo" />
         <InfoTooltip term="flujocaja_inferido" />
@@ -102,9 +92,13 @@ export default function FlujoCaja() {
         />
       </div>
 
-      {loading ? (
-        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
-      ) : !datos || (datos.instrumentos.length === 0 && datos.sin_proyeccion.length === 0) ? (
+      <QueryBoundary
+        isLoading={flujoQuery.isLoading}
+        error={flujoQuery.error}
+        onRetry={() => void flujoQuery.refetch()}
+        fallback={<SkeletonPantalla />}
+      >
+      {!datos || (datos.instrumentos.length === 0 && datos.sin_proyeccion.length === 0) ? (
         <EmptyState
           title="Sin renta fija proyectable"
           description="No hay bonos, ON ni letras con tenencia activa y fecha de vencimiento en esta cartera."
@@ -112,13 +106,13 @@ export default function FlujoCaja() {
       ) : (
         <div className="px-4 flex flex-col gap-4">
           <Card>
-            <div className="text-[10px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
+            <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">
               Total a cobrar · próximos {datos.horizonte_meses} meses
             </div>
-            <div className="font-mono text-[26px] font-bold text-app-text tabular-nums">
+            <div className="font-mono text-metric-lg font-bold text-app-text tabular-nums">
               {fmt(esARS ? datos.total_ars : datos.total_usd)}
             </div>
-            <div className="text-[11.5px] text-app-text-dim mt-2 flex flex-wrap gap-x-4 gap-y-1">
+            <div className="text-caption text-app-text-dim mt-2 flex flex-wrap gap-x-4 gap-y-1">
               <span>
                 <span className="inline-block w-2 h-2 rounded-sm mr-1.5 align-middle" style={{ background: COLOR_CUPON }} />
                 Cupones {fmt(esARS ? datos.total_cupones_ars : datos.total_cupones_usd)}
@@ -128,14 +122,14 @@ export default function FlujoCaja() {
                 Amortizaciones {fmt(esARS ? datos.total_amortizaciones_ars : datos.total_amortizaciones_usd)}
               </span>
             </div>
-            <div className="text-[11px] text-app-text-faint mt-2">
+            <div className="text-label text-app-text-faint mt-2">
               Todo estimado a partir de tu historial de cobros. Tipo de cambio: MEP más reciente.
             </div>
           </Card>
 
           {hayCobros ? (
             <Card>
-              <div className="text-[12px] font-semibold text-app-text mb-2">Cobros por mes</div>
+              <div className="text-caption font-semibold text-app-text mb-2">Cobros por mes</div>
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={chartData} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#223028" />
@@ -171,7 +165,7 @@ export default function FlujoCaja() {
             </Card>
           ) : (
             <Card>
-              <div className="text-[12px] text-app-text-dim text-center py-6">
+              <div className="text-caption text-app-text-dim text-center py-6">
                 No hay cobros proyectados dentro del horizonte elegido.
               </div>
             </Card>
@@ -179,7 +173,7 @@ export default function FlujoCaja() {
 
           {datos.instrumentos.length > 0 && (
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2 px-0.5 flex items-center gap-2">
+              <div className="text-label font-bold uppercase tracking-wide text-app-text-dim mb-2 px-0.5 flex items-center gap-2">
                 Por instrumento
                 <InfoTooltip term="flujocaja_confianza" />
               </div>
@@ -188,34 +182,34 @@ export default function FlujoCaja() {
                   <Card key={inst.ticker} className="!p-3.5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="text-[13.5px] font-semibold text-app-text truncate">{inst.ticker}</div>
-                        <div className="text-[11.5px] text-app-text-dim truncate">{inst.nombre}</div>
+                        <div className="text-body font-semibold text-app-text truncate">{inst.ticker}</div>
+                        <div className="text-caption text-app-text-dim truncate">{inst.nombre}</div>
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="font-mono text-[14px] font-bold text-app-text tabular-nums">
+                        <div className="font-mono text-strong font-bold text-app-text tabular-nums">
                           {fmt(esARS ? inst.total_proyectado_ars : inst.total_proyectado_usd)}
                         </div>
-                        <div className="text-[10.5px] text-app-text-faint">{inst.cobros_proyectados} cobro{inst.cobros_proyectados !== 1 ? 's' : ''}</div>
+                        <div className="text-label text-app-text-faint">{inst.cobros_proyectados} cobro{inst.cobros_proyectados !== 1 ? 's' : ''}</div>
                       </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
                       {inst.periodicidad_label && (
-                        <span className="text-[10.5px] px-1.5 py-0.5 rounded bg-app-surface-2 text-app-text-dim">
+                        <span className="text-label px-1.5 py-0.5 rounded bg-app-surface-2 text-app-text-dim">
                           {inst.periodicidad_label}
                         </span>
                       )}
                       {inst.confianza && (
-                        <span className={`text-[10.5px] px-1.5 py-0.5 rounded ${CONFIANZA_CLASE[inst.confianza] ?? 'bg-app-surface-2 text-app-text-dim'}`}>
+                        <span className={`text-label px-1.5 py-0.5 rounded ${CONFIANZA_CLASE[inst.confianza] ?? 'bg-app-surface-2 text-app-text-dim'}`}>
                           {CONFIANZA_LABEL[inst.confianza] ?? inst.confianza}
                         </span>
                       )}
-                      <span className="text-[10.5px] px-1.5 py-0.5 rounded bg-app-surface-2 text-app-text-dim">
+                      <span className="text-label px-1.5 py-0.5 rounded bg-app-surface-2 text-app-text-dim">
                         {METODO_LABEL[inst.metodo_capital] ?? inst.metodo_capital}
                       </span>
                     </div>
 
-                    <div className="text-[11.5px] text-app-text-dim mt-2 space-y-0.5">
+                    <div className="text-caption text-app-text-dim mt-2 space-y-0.5">
                       <div>
                         Vence {dayjs(inst.fecha_vencimiento).format('DD/MM/YYYY')}
                         {inst.proximo_cobro && (
@@ -240,7 +234,7 @@ export default function FlujoCaja() {
 
           {datos.sin_proyeccion.length > 0 && (
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2 px-0.5">
+              <div className="text-label font-bold uppercase tracking-wide text-app-text-dim mb-2 px-0.5">
                 Sin proyección
               </div>
               <div className="flex flex-col gap-2">
@@ -248,14 +242,14 @@ export default function FlujoCaja() {
                   <Card key={item.ticker} className="!p-3.5">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="text-[13px] font-semibold text-app-text truncate">{item.ticker}</div>
-                        <div className="text-[11.5px] text-app-text-dim truncate">{item.nombre}</div>
+                        <div className="text-body font-semibold text-app-text truncate">{item.ticker}</div>
+                        <div className="text-caption text-app-text-dim truncate">{item.nombre}</div>
                       </div>
-                      <div className="text-[11px] text-app-text-faint shrink-0">
+                      <div className="text-label text-app-text-faint shrink-0">
                         vence {dayjs(item.fecha_vencimiento).format('DD/MM/YYYY')}
                       </div>
                     </div>
-                    <div className="text-[11.5px] text-app-text-faint mt-1.5">{item.motivo}</div>
+                    <div className="text-caption text-app-text-faint mt-1.5">{item.motivo}</div>
                   </Card>
                 ))}
               </div>
@@ -263,6 +257,7 @@ export default function FlujoCaja() {
           )}
         </div>
       )}
+      </QueryBoundary>
     </div>
   )
 }

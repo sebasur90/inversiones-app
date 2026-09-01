@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { useInversionesContext } from '../context/InversionesContext'
 import { getVencimientos, type VencimientoItem, type VencimientoAnioItem } from '../api'
 import { formatARS, formatUSD } from '../utils'
@@ -8,6 +8,9 @@ import VencimientoRow from '../components/inversiones/VencimientoRow'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
 import InfoTooltip from '../help/components/InfoTooltip'
+import SkeletonPantalla from '../components/ui/Skeleton'
+import QueryBoundary from '../components/ui/QueryBoundary'
+import { qk } from '../api/queryClient'
 
 function ResumenPorAnio({
   porAnio,
@@ -25,7 +28,7 @@ function ResumenPorAnio({
   return (
     <Card>
       <div className="flex items-center gap-2 mb-2.5">
-        <span className="text-[12px] font-semibold text-app-text">% de la cartera que vence por año</span>
+        <span className="text-caption font-semibold text-app-text">% de la cartera que vence por año</span>
         <InfoTooltip term="vencimientos_por_anio" />
       </div>
       <div className="flex flex-col gap-2">
@@ -34,7 +37,7 @@ function ResumenPorAnio({
           const valor = esARS ? a.valor_ars : a.valor_usd
           return (
             <div key={a.anio}>
-              <div className="flex items-baseline justify-between text-[11.5px]">
+              <div className="flex items-baseline justify-between text-caption">
                 <span className="font-semibold text-app-text tabular-nums">{a.anio}</span>
                 <span className="text-app-text-dim tabular-nums">
                   {(pct * 100).toFixed(1)}% · {fmt(valor)}
@@ -47,7 +50,7 @@ function ResumenPorAnio({
                 />
               </div>
               {a.instrumentos_sin_valuar > 0 && (
-                <div className="text-[9.5px] text-app-text-faint mt-0.5">
+                <div className="text-label text-app-text-faint mt-0.5">
                   {a.instrumentos_sin_valuar} sin cotización cargada (no suman al %)
                 </div>
               )}
@@ -61,41 +64,23 @@ function ResumenPorAnio({
 
 export default function Vencimientos() {
   const navigate = useNavigate()
-  const { carteraSeleccionada, monedaSeleccionada, syncVersion } = useInversionesContext()
-  const [items, setItems] = useState<VencimientoItem[]>([])
-  const [porAnio, setPorAnio] = useState<VencimientoAnioItem[]>([])
-  const [loading, setLoading] = useState(true)
+  const { carteraSeleccionada, monedaSeleccionada } = useInversionesContext()
 
-  const esARS = monedaSeleccionada === 'ARS'
+  const vencimientosQuery = useQuery({
+    queryKey: qk.de('vencimientos', carteraSeleccionada),
+    queryFn: () => getVencimientos(carteraSeleccionada),
+  })
 
-  useEffect(() => {
-    let cancelado = false
-    setLoading(true)
-    getVencimientos(carteraSeleccionada)
-      .then(data => {
-        if (cancelado) return
-        setItems(data.items)
-        setPorAnio(data.por_anio)
-      })
-      .catch(() => {
-        if (cancelado) return
-        setItems([])
-        setPorAnio([])
-      })
-      .finally(() => {
-        if (!cancelado) setLoading(false)
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [carteraSeleccionada, syncVersion])
+  const items: VencimientoItem[] = vencimientosQuery.data?.items ?? []
+  const porAnio: VencimientoAnioItem[] = vencimientosQuery.data?.por_anio ?? []
+  const esARS = monedaSeleccionada === 'ARS' 
 
   return (
     <div className="pb-4">
       <ScreenHeader title="Vencimientos" onBack={() => navigate(-1)} />
 
       <div className="px-4 mb-4 pt-2">
-        <div className="text-[12px] text-app-text-dim space-y-1.5">
+        <div className="text-caption text-app-text-dim space-y-1.5">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-app-text">Días restantes</span>
             <InfoTooltip term="vencimientos_dias_restantes" />
@@ -118,23 +103,27 @@ export default function Vencimientos() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
-      ) : items.length === 0 ? (
+      <QueryBoundary
+        isLoading={vencimientosQuery.isLoading}
+        error={vencimientosQuery.error}
+        onRetry={() => void vencimientosQuery.refetch()}
+        fallback={<SkeletonPantalla />}
+      >
+      {items.length === 0 ? (
         <EmptyState title="Sin vencimientos" description="No hay instrumentos con fecha de vencimiento en esta cartera." />
       ) : (
         <div className="px-4 flex flex-col gap-4">
           {porAnio.length > 0 && <ResumenPorAnio porAnio={porAnio} esARS={esARS} />}
 
           <div>
-            <div className="flex items-center gap-2 mb-1 text-[11px] font-bold uppercase tracking-wide text-app-text-dim">
+            <div className="flex items-center gap-2 mb-1 text-label font-bold uppercase tracking-wide text-app-text-dim">
               Instrumentos
               <InfoTooltip term="vencimientos_inferido" />
             </div>
             {items.map(item => (
               <VencimientoRow key={item.ticker} item={item} moneda={monedaSeleccionada} />
             ))}
-            <div className="text-[10px] text-app-text-faint mt-2">
+            <div className="text-label text-app-text-faint mt-2">
               Paridad, TIR al vencimiento y duration son estimaciones sobre el cronograma de
               cobros inferido de tu historial (mismo motor que Flujo de caja proyectado), no un
               cronograma oficial.
@@ -142,6 +131,7 @@ export default function Vencimientos() {
           </div>
         </div>
       )}
+      </QueryBoundary>
     </div>
   )
 }

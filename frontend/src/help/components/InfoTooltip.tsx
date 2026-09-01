@@ -19,7 +19,7 @@ function InfoTooltipLink({ term, title }: { term: HelpKey; title: string }) {
         {title}
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={entry.title}>
-        <div className="text-[13px] text-app-text-dim leading-relaxed space-y-3">
+        <div className="text-body text-app-text-dim leading-relaxed space-y-3">
           {entry.shortDescription && <p>{entry.shortDescription}</p>}
           {entry.whyItMatters && (
             <div>
@@ -98,7 +98,7 @@ export default function InfoTooltip({ term, label, className = '' }: { term: Hel
         <Icon name="info" className="w-3.5 h-3.5" />
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={entry.title}>
-        <div className="text-[13px] text-app-text-dim leading-relaxed space-y-3">
+        <div className="text-body text-app-text-dim leading-relaxed space-y-3">
           {entry.shortDescription && <p>{entry.shortDescription}</p>}
           {entry.whyItMatters && (
             <div>

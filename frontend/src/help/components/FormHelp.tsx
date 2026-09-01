@@ -18,7 +18,7 @@ export default function FormHelp({ term, label, fieldKey, className = '' }: Form
         <InfoTooltip term={term} label={label} />
       </label>
       {limits && (
-        <div className="text-[11px] text-app-text-dim mb-2 px-2 py-1.5 bg-app-surface/50 rounded border border-app-border/30">
+        <div className="text-label text-app-text-dim mb-2 px-2 py-1.5 bg-app-surface/50 rounded border border-app-border/30">
           {limits.min !== undefined && limits.max !== undefined
             ? `Rango: ${limits.min} a ${limits.max} ${limits.unit}`
             : limits.min !== undefined

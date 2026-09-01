@@ -3,6 +3,10 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import './index.css'
+import { aplicarEscalaTexto, escalaTextoGuardada } from './utils/escalaTexto'
+
+// Antes del primer render: si no, el texto arranca en tamaño normal y salta al elegido.
+aplicarEscalaTexto(escalaTextoGuardada())
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

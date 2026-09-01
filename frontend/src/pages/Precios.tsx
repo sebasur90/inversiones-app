@@ -1,18 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import {
-  getTickersConPrecios, getPreciosHistoricos,
-  type TickerConPrecio, type PrecioHistoricoOut,
+  getTickersConPrecios,
+  getPreciosHistoricos,
+  type TickerConPrecio,
 } from '../api'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import EmptyState from '../components/ui/EmptyState'
 import { Icon } from '../components/icons/Icons'
 import InfoTooltip from '../help/components/InfoTooltip'
-import { useInversionesContext } from '../context/InversionesContext'
+import SkeletonPantalla, { Skeleton } from '../components/ui/Skeleton'
+import { useQuery } from '@tanstack/react-query'
+import { qk } from '../api/queryClient'
 
 type Vista = 'nominal' | 'usd' | 'cer'
 
@@ -41,37 +44,25 @@ function formatFechaTooltip(iso: string): string {
 }
 
 export default function Precios() {
-  const { syncVersion } = useInversionesContext()
   const navigate = useNavigate()
-  const [tickers, setTickers] = useState<TickerConPrecio[]>([])
-  const [tickerSel, setTickerSel] = useState<string | null>(null)
-  const [datos, setDatos] = useState<PrecioHistoricoOut | null>(null)
+  // null = todavía no eligió: se muestra el primer ticker con precios.
+  const [tickerElegido, setTickerSel] = useState<string | null>(null)
   const [vista, setVista] = useState<Vista>('nominal')
-  const [loading, setLoading] = useState(true)
-  const [loadingChart, setLoadingChart] = useState(false)
 
-  useEffect(() => {
-    getTickersConPrecios()
-      .then(data => {
-        setTickers(data)
-        if (data.length > 0) setTickerSel(data[0].ticker)
-      })
-      .catch(() => setTickers([]))
-      .finally(() => setLoading(false))
-  }, [syncVersion])
+  const tickersQuery = useQuery({
+    queryKey: qk.de('tickers-con-precios'),
+    queryFn: () => getTickersConPrecios(),
+  })
+  const tickers: TickerConPrecio[] = tickersQuery.data ?? []
+  const tickerSel = tickerElegido ?? tickers[0]?.ticker ?? null
 
-  useEffect(() => {
-    if (!tickerSel) return
-    setLoadingChart(true)
-    setDatos(null)
-    getPreciosHistoricos(tickerSel)
-      .then(data => {
-        setDatos(data)
-        setVista('nominal')
-      })
-      .catch(() => setDatos(null))
-      .finally(() => setLoadingChart(false))
-  }, [tickerSel, syncVersion])
+  const historicoQuery = useQuery({
+    queryKey: qk.de('precios-historicos', tickerSel),
+    queryFn: () => getPreciosHistoricos(tickerSel as string),
+    enabled: tickerSel !== null,
+  })
+  const datos = historicoQuery.data ?? null
+  const loadingChart = historicoQuery.isLoading || historicoQuery.isFetching
 
   const instrumento = tickers.find(t => t.ticker === tickerSel)
   const esARS = instrumento?.moneda === 'ARS'
@@ -105,11 +96,11 @@ export default function Precios() {
 
   const ultimoPunto = datosGrafico.length > 0 ? datosGrafico[datosGrafico.length - 1] : undefined
 
-  if (loading) {
+  if (tickersQuery.isLoading) {
     return (
       <div className="pb-4">
         <ScreenHeader title="Precios" />
-        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+        <SkeletonPantalla />
       </div>
     )
   }
@@ -128,7 +119,7 @@ export default function Precios() {
       <ScreenHeader title="Precios" />
 
       <div className="px-4 mb-4 pt-2">
-        <div className="text-[12px] text-app-text-dim space-y-1.5 mb-3">
+        <div className="text-caption text-app-text-dim space-y-1.5 mb-3">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-app-text">ARS Nominal</span>
             <InfoTooltip term="precios_ars_nominal" />
@@ -145,10 +136,10 @@ export default function Precios() {
       </div>
 
       <div className="flex flex-wrap gap-x-4 gap-y-1 mb-2">
-        <button onClick={() => navigate('/indicadores')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+        <button onClick={() => navigate('/indicadores')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
           <Icon name="trend" className="w-3.5 h-3.5" /> Indicadores macro (CER/MEP)
         </button>
-        <button onClick={() => navigate('/comparar')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+        <button onClick={() => navigate('/comparar')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
           <Icon name="trend" className="w-3.5 h-3.5" /> Comparar varios tickers
         </button>
       </div>
@@ -159,7 +150,7 @@ export default function Precios() {
           <button
             key={t.ticker}
             onClick={() => setTickerSel(t.ticker)}
-            className={`shrink-0 font-semibold text-[11.5px] px-3 py-1.5 rounded-[10px] border transition-colors ${
+            className={`shrink-0 font-semibold text-caption px-3 py-1.5 rounded-[10px] border transition-colors ${
               t.ticker === tickerSel
                 ? 'bg-app-gold-soft border-app-gold text-app-gold'
                 : 'bg-app-surface border-app-border text-app-text-dim'
@@ -174,19 +165,19 @@ export default function Precios() {
       {instrumento && (
         <div className="flex items-start justify-between mb-3">
           <div>
-            <div className="font-semibold text-[15px] text-app-text">{instrumento.ticker}</div>
-            <div className="text-[11.5px] text-app-text-dim">{instrumento.nombre}</div>
+            <div className="font-semibold text-strong text-app-text">{instrumento.ticker}</div>
+            <div className="text-caption text-app-text-dim">{instrumento.nombre}</div>
           </div>
           {ultimoPunto && (
             <div className="text-right shrink-0 ml-4">
-              <div className="inline-flex items-center gap-1 text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">
+              <div className="inline-flex items-center gap-1 text-label text-app-text-faint uppercase tracking-wide mb-0.5">
                 <span>Último registro</span>
                 <InfoTooltip term="precios_ultimo_registro" />
               </div>
-              <div className="font-mono font-bold text-[15px] text-app-text tabular-nums">
+              <div className="font-mono font-bold text-strong text-app-text tabular-nums">
                 {formatCompact(ultimoPunto.valor, vistaEsUSD)}
               </div>
-              <div className="text-[10px] text-app-text-dim">{formatFechaTooltip(ultimoPunto.fecha)}</div>
+              <div className="text-label text-app-text-dim">{formatFechaTooltip(ultimoPunto.fecha)}</div>
             </div>
           )}
         </div>
@@ -199,11 +190,9 @@ export default function Precios() {
 
       {/* Gráfico */}
       {loadingChart ? (
-        <div className="h-[220px] flex items-center justify-center text-app-text-dim text-[12.5px]">
-          Cargando…
-        </div>
+        <Skeleton className="h-[220px] rounded-xl" />
       ) : datosGrafico.length === 0 ? (
-        <div className="h-[220px] flex items-center justify-center text-app-text-dim text-[12.5px]">
+        <div className="h-[220px] flex items-center justify-center text-app-text-dim text-caption">
           Sin datos para esta vista
         </div>
       ) : (
@@ -244,7 +233,7 @@ export default function Precios() {
       )}
 
       {datos && datos.puntos.length > 0 && (
-        <div className="mt-2 text-[10.5px] text-app-text-dim">
+        <div className="mt-2 text-label text-app-text-dim">
           {datos.puntos.length} registro{datos.puntos.length !== 1 ? 's' : ''} cargados
           {' · '}desde {formatFechaTooltip(datos.puntos[0].fecha)}
         </div>

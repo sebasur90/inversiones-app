@@ -25,7 +25,7 @@ export default function ProyeccionPatrimonialChart({
 }: ProyeccionPatrimonialChartProps) {
   if (!evolucionReal || evolucionReal.puntos.length === 0) {
     return (
-      <div className="text-center py-8 text-app-text-dim text-[12.5px]">
+      <div className="text-center py-8 text-app-text-dim text-caption">
         Sin datos históricos para mostrar proyección
       </div>
     )
@@ -166,7 +166,7 @@ export default function ProyeccionPatrimonialChart({
       </ResponsiveContainer>
 
       {/* Leyenda */}
-      <div className="mt-3 flex items-center gap-4 text-[10.5px] text-app-text-dim">
+      <div className="mt-3 flex items-center gap-4 text-label text-app-text-dim">
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: '#d8b14a' }} />
           Valor real

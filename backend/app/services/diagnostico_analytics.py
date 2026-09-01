@@ -19,6 +19,7 @@ from .inversiones_analytics import (
     get_comisiones,
     get_progreso_objetivo,
 )
+from .cache import cache_por_sync
 
 
 def _get_objetivo(cartera: str | None, db: Session, resumen: dict | None = None) -> dict | None:
@@ -35,6 +36,7 @@ def _get_objetivo(cartera: str | None, db: Session, resumen: dict | None = None)
     return {**progreso, "monto_usd": float(fila.monto_usd)}
 
 
+@cache_por_sync
 def get_diagnostico(cartera: str | None, db: Session) -> dict:
     """Orquesta y agrega el diagnóstico completo.
 

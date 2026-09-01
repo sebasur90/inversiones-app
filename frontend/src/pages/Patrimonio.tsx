@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
   ComposedChart, Area, Line, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
@@ -16,6 +17,8 @@ import ErrorBanner from '../help/components/ErrorBanner'
 import { parseApiError, type ParsedApiError } from '../help/errors/apiErrors'
 import PatrimonioMensualTable from '../components/tables/PatrimonioMensualTable'
 import { calcularDesde, type PeriodoEvolucion } from '../utils'
+import { qk } from '../api/queryClient'
+import { Skeleton } from '../components/ui/Skeleton'
 
 type Periodo = PeriodoEvolucion
 type Vista = 'ars' | 'ars_real' | 'usd'
@@ -138,88 +141,42 @@ function EventoDot(props: any) {
 
 export default function Patrimonio() {
   const navigate = useNavigate()
-  const { carteraSeleccionada, movimientos, syncVersion } = useInversionesContext()
+  const { carteraSeleccionada, movimientos } = useInversionesContext()
   const [periodo, setPeriodo] = useState<Periodo>('1Y')
   const [vista, setVista] = useState<Vista>('ars')
-  const [puntos, setPuntos] = useState<EvolucionPunto[]>([])
-  const [puntosAll, setPuntosAll] = useState<EvolucionPunto[]>([])
-  const [patrimonioHistoria, setPatrimonioHistoria] = useState<PatrimonioPunto[]>([])
-  const [patrimonioSummary, setPatrimonioSummary] = useState<PatrimonioSummaryOut | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<ParsedApiError | null>(null)
   const [eventoSeleccionado, setEventoSeleccionado] = useState<EventoPunto | null>(null)
 
-  useEffect(() => {
-    let cancelado = false
-    setLoading(true)
-    getEvolucionInversiones(carteraSeleccionada, calcularDesde(periodo))
-      .then(data => {
-        if (!cancelado) {
-          setPuntos(data.puntos)
-          setError(null)
-        }
-      })
-      .catch(err => {
-        if (!cancelado) {
-          setPuntos([])
-          setError(parseApiError(err))
-        }
-      })
-      .finally(() => {
-        if (!cancelado) setLoading(false)
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [carteraSeleccionada, periodo, syncVersion])
+  const desde = calcularDesde(periodo)
 
-  useEffect(() => {
-    let cancelado = false
-    getEvolucionInversiones(carteraSeleccionada, undefined)
-      .then(data => {
-        if (!cancelado) setPuntosAll(data.puntos)
-      })
-      .catch(() => {
-        if (!cancelado) setPuntosAll([])
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [carteraSeleccionada, syncVersion])
+  // Cuatro series: la del período elegido y la histórica completa, para evolución y para
+  // patrimonio. Cada una con su clave, así cambiar de período no vuelve a pedir las
+  // históricas (que no dependen del período).
+  const evolucionQuery = useQuery({
+    queryKey: qk.de('evolucion', carteraSeleccionada, periodo),
+    queryFn: () => getEvolucionInversiones(carteraSeleccionada, desde),
+  })
+  const evolucionAllQuery = useQuery({
+    queryKey: qk.de('evolucion', carteraSeleccionada, 'ALL'),
+    queryFn: () => getEvolucionInversiones(carteraSeleccionada, undefined),
+  })
+  const summaryQuery = useQuery({
+    queryKey: qk.de('patrimonio-summary', carteraSeleccionada, periodo),
+    queryFn: () => getPatrimonioSummary(carteraSeleccionada, desde),
+  })
+  const historiaQuery = useQuery({
+    queryKey: qk.de('patrimonio-history', carteraSeleccionada),
+    queryFn: () => getPatrimonioHistory(carteraSeleccionada, undefined),
+  })
 
-  useEffect(() => {
-    let cancelado = false
-    getPatrimonioSummary(carteraSeleccionada, calcularDesde(periodo))
-      .then(data => {
-        if (!cancelado) {
-          setPatrimonioSummary(data)
-          setError(null)
-        }
-      })
-      .catch(err => {
-        if (!cancelado) {
-          setPatrimonioSummary(null)
-          setError(parseApiError(err))
-        }
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [carteraSeleccionada, periodo, syncVersion])
-
-  useEffect(() => {
-    let cancelado = false
-    getPatrimonioHistory(carteraSeleccionada, undefined)
-      .then(data => {
-        if (!cancelado) setPatrimonioHistoria(data.puntos)
-      })
-      .catch(() => {
-        if (!cancelado) setPatrimonioHistoria([])
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [carteraSeleccionada, syncVersion])
+  const puntos: EvolucionPunto[] = evolucionQuery.data?.puntos ?? []
+  const puntosAll: EvolucionPunto[] = evolucionAllQuery.data?.puntos ?? []
+  const patrimonioSummary: PatrimonioSummaryOut | null = summaryQuery.data ?? null
+  const patrimonioHistoria: PatrimonioPunto[] = historiaQuery.data?.puntos ?? []
+  const loading = evolucionQuery.isLoading
+  const error: ParsedApiError | null =
+    evolucionQuery.error ? parseApiError(evolucionQuery.error)
+    : summaryQuery.error ? parseApiError(summaryQuery.error)
+    : null
 
   const esUSD = vista === 'usd'
   type DatoGrafico = { fecha: string; valor: number; capitalAportado: number | null }
@@ -293,7 +250,7 @@ export default function Patrimonio() {
       <ScreenHeader title="Patrimonio" onBack={() => navigate(-1)} />
 
       <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
-        <button onClick={() => navigate('/rendimiento')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+        <button onClick={() => navigate('/rendimiento')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
           <Icon name="trend" className="w-3.5 h-3.5" /> Ver rendimiento detallado
         </button>
       </div>
@@ -311,15 +268,15 @@ export default function Patrimonio() {
         <>
           <div className="flex items-start justify-between mb-3">
             <div>
-              <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">Valor actual</div>
-              <div className="font-mono font-bold text-[22px] text-app-text tabular-nums">
+              <div className="text-label text-app-text-faint uppercase tracking-wide mb-0.5">Valor actual</div>
+              <div className="font-mono font-bold text-metric text-app-text tabular-nums">
                 {formatCompact(ultimoPunto.valor, esUSD)}
               </div>
             </div>
             {deltaAbs != null && variacionPct != null && (
               <div className="text-right shrink-0 ml-4">
-                <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">Variación del período</div>
-                <div className={`font-mono font-bold text-[15px] tabular-nums ${variacionPct >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
+                <div className="text-label text-app-text-faint uppercase tracking-wide mb-0.5">Variación del período</div>
+                <div className={`font-mono font-bold text-strong tabular-nums ${variacionPct >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
                   {variacionPct >= 0 ? '+' : ''}{formatCompact(deltaAbs, esUSD)} ({variacionPct >= 0 ? '+' : ''}{variacionPct.toFixed(1)}%)
                 </div>
               </div>
@@ -330,7 +287,7 @@ export default function Patrimonio() {
             const capital = ultimoPunto?.capitalAportado ?? null
             const ganancia = valor !== null && capital !== null ? valor - capital : null
             return ganancia !== null ? (
-              <div className="text-[11px] text-app-text-dim mb-3">
+              <div className="text-label text-app-text-dim mb-3">
                 Ganancia: <span className={ganancia >= 0 ? 'text-app-teal' : 'text-app-coral'}>{formatCompact(ganancia, esUSD)}</span>
               </div>
             ) : null
@@ -339,18 +296,18 @@ export default function Patrimonio() {
       )}
 
       <div className="flex items-center gap-4 mb-2">
-        <div className="flex items-center gap-1.5 text-[10.5px] text-app-text-dim">
+        <div className="flex items-center gap-1.5 text-label text-app-text-dim">
           <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: colorLinea }} />
           <InfoTooltip term="patrimonio_valor_mercado" label="Valor de mercado" />
         </div>
-        <div className="flex items-center gap-1.5 text-[10.5px] text-app-text-dim">
+        <div className="flex items-center gap-1.5 text-label text-app-text-dim">
           <span className="w-2.5 h-0.5 rounded-full shrink-0" style={{ backgroundColor: '#8ca39b' }} />
           <InfoTooltip term="patrimonio_capital_aportado" label="Capital aportado" />
         </div>
       </div>
 
       {loading ? (
-        <div className="h-[260px] flex items-center justify-center text-app-text-dim text-[12.5px]">Cargando…</div>
+        <Skeleton className="h-[260px] rounded-xl" />
       ) : datosGrafico.length === 0 ? (
         <EmptyState title="Sin datos para este período" description="Probá con un rango más amplio o revisá que la cartera tenga movimientos." />
       ) : (
@@ -443,7 +400,7 @@ export default function Patrimonio() {
 
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
             {(Object.keys(LABEL_EVENTO) as TipoEvento[]).map(tipo => (
-              <div key={tipo} className="flex items-center gap-1.5 text-[10px] text-app-text-faint">
+              <div key={tipo} className="flex items-center gap-1.5 text-label text-app-text-faint">
                 <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: COLOR_EVENTO[tipo] }} />
                 {LABEL_EVENTO[tipo]}
               </div>
@@ -455,7 +412,7 @@ export default function Patrimonio() {
       {patrimonioSummary && (
         <>
           <div className="mt-6 mb-4">
-            <div className="text-[10px] text-app-text-faint uppercase tracking-wide font-semibold mb-2">Máximo histórico y drawdown</div>
+            <div className="text-label text-app-text-faint uppercase tracking-wide font-semibold mb-2">Máximo histórico y drawdown</div>
             <div className="grid grid-cols-2 gap-2">
               <MetricTile
                 label="Máximo histórico"
@@ -479,8 +436,8 @@ export default function Patrimonio() {
           </div>
 
           <div className="mt-6 mb-4">
-            <div className="text-[10px] text-app-text-faint uppercase tracking-wide font-semibold mb-2">Descomposición del período</div>
-            <div className="space-y-2 text-[11px]">
+            <div className="text-label text-app-text-faint uppercase tracking-wide font-semibold mb-2">Descomposición del período</div>
+            <div className="space-y-2 text-label">
               <div className="flex justify-between">
                 <span className="text-app-text-dim">
                   <InfoTooltip term="patrimonio_descomposicion_aportes" label="Aportes:" className="text-app-text-dim" />
@@ -531,7 +488,7 @@ export default function Patrimonio() {
 
           {patrimonioHistoria.length > 0 && (
             <div className="mt-6">
-              <div className="text-[10px] text-app-text-faint uppercase tracking-wide font-semibold mb-2">Tabla mensual</div>
+              <div className="text-label text-app-text-faint uppercase tracking-wide font-semibold mb-2">Tabla mensual</div>
               <PatrimonioMensualTable puntos={patrimonioHistoria} esUSD={esUSD} />
             </div>
           )}
@@ -550,11 +507,11 @@ export default function Patrimonio() {
               return (
                 <div key={mov.id} className="flex items-center justify-between gap-2 py-2 border-b border-app-border-soft last:border-b-0">
                   <div>
-                    <div className="text-[12.5px] font-semibold text-app-text">{TIPO_LABELS[mov.tipo_movimiento] ?? mov.tipo_movimiento}</div>
-                    <div className="text-[11px] text-app-text-dim">{mov.ticker}</div>
+                    <div className="text-caption font-semibold text-app-text">{TIPO_LABELS[mov.tipo_movimiento] ?? mov.tipo_movimiento}</div>
+                    <div className="text-label text-app-text-dim">{mov.ticker}</div>
                   </div>
                   <div
-                    className="font-mono text-[12.5px] font-bold tabular-nums"
+                    className="font-mono text-caption font-bold tabular-nums"
                     style={{ color: tipo ? COLOR_EVENTO[tipo] : undefined }}
                   >
                     {tipo === 'retiro' ? '−' : '+'}{formatMontoMovimiento(mov)}

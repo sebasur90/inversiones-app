@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { qk } from '../api/queryClient'
 import { useNavigate } from 'react-router-dom'
 import { useInversionesContext } from '../context/InversionesContext'
-import { getPnlRealizadoNoRealizado, getRendimientoMensual, getPerformanceRelativa, getDescomposicionFx, type PnlRealizadoNoRealizadoOut, type RendimientoMensualOut, type PerformanceRelativaOut, type DescomposicionFxOut } from '../api'
+import { getPnlRealizadoNoRealizado, getRendimientoMensual, getPerformanceRelativa, getDescomposicionFx } from '../api'
 import { formatARS, formatUSD, formatPctRatio } from '../utils'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
@@ -13,6 +14,7 @@ import { Icon } from '../components/icons/Icons'
 import MetricTile from '../components/ui/MetricTile'
 import InfoTerm from '../components/ui/InfoTerm'
 import type { HelpKey } from '../help/content/index'
+import SkeletonPantalla from '../components/ui/Skeleton'
 
 function toneClass(v: number | null | undefined): string {
   if (v == null) return 'text-app-text'
@@ -26,46 +28,27 @@ function toneFor(v: number | null | undefined): 'pos' | 'neg' | undefined {
 
 export default function Rendimiento() {
   const navigate = useNavigate()
-  const { carteraSeleccionada, monedaSeleccionada, resumen, syncVersion } = useInversionesContext()
-  const [pnl, setPnl] = useState<PnlRealizadoNoRealizadoOut | null>(null)
-  const [rendimientoMensual, setRendimientoMensual] = useState<RendimientoMensualOut | null>(null)
-  const [perfRelativa, setPerfRelativa] = useState<PerformanceRelativaOut | null>(null)
-  const [descomposicionFx, setDescomposicionFx] = useState<DescomposicionFxOut | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { carteraSeleccionada, monedaSeleccionada, resumen } = useInversionesContext()
 
-  useEffect(() => {
-    let cancelado = false
-    setLoading(true)
-    const monedaBackend = monedaSeleccionada === 'ARS' ? 'ars_nominal' : 'usd'
-    Promise.all([
-      getPnlRealizadoNoRealizado(carteraSeleccionada),
-      getRendimientoMensual(carteraSeleccionada),
-      getPerformanceRelativa(carteraSeleccionada, monedaBackend, null),
-      getDescomposicionFx(carteraSeleccionada),
-    ])
-      .then(([pnlData, rendimientoData, perfData, fxData]) => {
-        if (!cancelado) {
-          setPnl(pnlData)
-          setRendimientoMensual(rendimientoData)
-          setPerfRelativa(perfData)
-          setDescomposicionFx(fxData)
-        }
-      })
-      .catch(() => {
-        if (!cancelado) {
-          setPnl(null)
-          setRendimientoMensual(null)
-          setPerfRelativa(null)
-          setDescomposicionFx(null)
-        }
-      })
-      .finally(() => {
-        if (!cancelado) setLoading(false)
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [carteraSeleccionada, monedaSeleccionada, syncVersion])
+  const monedaBackend = monedaSeleccionada === 'ARS' ? 'ars_nominal' : 'usd'
+  const rendimientoQuery = useQuery({
+    queryKey: qk.de('rendimiento-detalle', carteraSeleccionada, monedaBackend),
+    queryFn: async () => {
+      const [pnl, mensual, perfRelativa, fx] = await Promise.all([
+        getPnlRealizadoNoRealizado(carteraSeleccionada),
+        getRendimientoMensual(carteraSeleccionada),
+        getPerformanceRelativa(carteraSeleccionada, monedaBackend, null),
+        getDescomposicionFx(carteraSeleccionada),
+      ])
+      return { pnl, mensual, perfRelativa, fx }
+    },
+  })
+
+  const pnl = rendimientoQuery.data?.pnl ?? null
+  const rendimientoMensual = rendimientoQuery.data?.mensual ?? null
+  const perfRelativa = rendimientoQuery.data?.perfRelativa ?? null
+  const descomposicionFx = rendimientoQuery.data?.fx ?? null
+  const loading = rendimientoQuery.isLoading
 
   const esARS = monedaSeleccionada === 'ARS'
   const formatMoneda = esARS ? formatARS : formatUSD
@@ -113,23 +96,23 @@ export default function Rendimiento() {
       <ScreenHeader title="Rendimiento" onBack={() => navigate(-1)} />
 
       <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
-        <button onClick={() => navigate('/patrimonio')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+        <button onClick={() => navigate('/patrimonio')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
           <Icon name="trend" className="w-3.5 h-3.5" /> Ver evolución del patrimonio
         </button>
-        <button onClick={() => navigate('/riesgo')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+        <button onClick={() => navigate('/riesgo')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
           <Icon name="alert" className="w-3.5 h-3.5" /> Ver métricas de riesgo
         </button>
       </div>
 
       {loading ? (
-        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+        <SkeletonPantalla />
       ) : !pnl || !resumen ? (
         <EmptyState title="Sin datos" description="No hay movimientos suficientes para calcular el rendimiento de esta cartera." />
       ) : (
         <>
           {descomposicionFx && descomposicionFx.estado === 'ok' ? (
             <>
-              <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">¿Ganaste por los activos o por el dólar?</h3>
+              <h3 className="text-body font-bold text-app-text mb-2.5">¿Ganaste por los activos o por el dólar?</h3>
               <Card className="mb-4">
                 <div className="grid grid-cols-2 gap-2 mb-4">
                   <MetricTile
@@ -152,22 +135,22 @@ export default function Rendimiento() {
                   esARS={esARS}
                 />
                 <div className="mt-4 p-3 bg-app-surface rounded-[9px] border border-app-border">
-                  <div className="text-[10px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
+                  <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">
                     Efecto dólar
                   </div>
-                  <div className={`font-mono text-[15px] font-bold tabular-nums mb-2 ${toneFor(descomposicionFx.efecto_fx_pct) === 'pos' ? 'text-app-teal' : 'text-app-coral'}`}>
+                  <div className={`font-mono text-strong font-bold tabular-nums mb-2 ${toneFor(descomposicionFx.efecto_fx_pct) === 'pos' ? 'text-app-teal' : 'text-app-coral'}`}>
                     {descomposicionFx.efecto_fx_pct !== null ? (descomposicionFx.efecto_fx_pct >= 0 ? '+' : '') + formatPctRatio(descomposicionFx.efecto_fx_pct) : 'N/A'}
                   </div>
-                  <div className="text-[11px] text-app-text-dim">
+                  <div className="text-label text-app-text-dim">
                     Parte de la variación en ARS proviene del cambio del tipo de cambio.
                   </div>
                   {descomposicionFx.mep_aproximado && (
-                    <div className="mt-2 text-[10px] text-app-text-dim italic">
+                    <div className="mt-2 text-label text-app-text-dim italic">
                       ⚠ Datos de MEP desactualizados o estimados
                     </div>
                   )}
                   {!descomposicionFx.identidad_verificada && (
-                    <div className="mt-2 text-[10px] text-app-text-dim italic">
+                    <div className="mt-2 text-label text-app-text-dim italic">
                       ⚠ La descomposición no se verifica exactamente (puede deberse a operaciones particulares)
                     </div>
                   )}
@@ -176,7 +159,7 @@ export default function Rendimiento() {
             </>
           ) : descomposicionFx ? (
             <>
-              <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">Descomposición FX</h3>
+              <h3 className="text-body font-bold text-app-text mb-2.5">Descomposición FX</h3>
               <Card className="mb-4">
                 <EmptyState
                   title="Descomposición no disponible"
@@ -190,7 +173,7 @@ export default function Rendimiento() {
             </>
           ) : null}
 
-          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">P&amp;L realizado vs. no realizado</h3>
+          <h3 className="text-body font-bold text-app-text mb-2.5">P&amp;L realizado vs. no realizado</h3>
           <div className="grid grid-cols-2 gap-2 mb-2">
             <MetricTile label="Realizado (ventas)" infoTerm="realizado" value={formatMoneda(realizado)} tone={toneFor(realizado)} />
             <MetricTile label="No realizado (en cartera)" infoTerm="noRealizado" value={formatMoneda(noRealizado)} tone={toneFor(noRealizado)} />
@@ -200,17 +183,17 @@ export default function Rendimiento() {
             <MetricTile label="Total" value={formatMoneda(total)} tone={toneFor(total)} />
           </div>
 
-          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">Rendimiento: nominal vs. real vs. USD</h3>
+          <h3 className="text-body font-bold text-app-text mb-2.5">Rendimiento: nominal vs. real vs. USD</h3>
           <Card className="mb-4 overflow-x-auto">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-caption">
               <thead>
                 <tr>
-                  <th className="text-left text-app-text-faint font-bold uppercase text-[9.5px] pb-2">&nbsp;</th>
-                  <th className="text-right text-app-text-faint font-bold uppercase text-[9.5px] pb-2 px-1.5">ARS Nominal</th>
-                  <th className="text-right text-app-text-faint font-bold uppercase text-[9.5px] pb-2 px-1.5">
+                  <th className="text-left text-app-text-faint font-bold uppercase text-label pb-2">&nbsp;</th>
+                  <th className="text-right text-app-text-faint font-bold uppercase text-label pb-2 px-1.5">ARS Nominal</th>
+                  <th className="text-right text-app-text-faint font-bold uppercase text-label pb-2 px-1.5">
                     <InfoTerm term="cer" label="ARS Real (CER)" className="justify-end" />
                   </th>
-                  <th className="text-right text-app-text-faint font-bold uppercase text-[9.5px] pb-2 px-1.5">
+                  <th className="text-right text-app-text-faint font-bold uppercase text-label pb-2 px-1.5">
                     <InfoTerm term="mep" label="USD (MEP)" className="justify-end" />
                   </th>
                 </tr>
@@ -232,7 +215,7 @@ export default function Rendimiento() {
             </table>
           </Card>
 
-          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">
+          <h3 className="text-body font-bold text-app-text mb-2.5">
             <InfoTerm term="twr" label="Mapa de calor: rendimiento mensual" />
           </h3>
           {!rendimientoMensual || rendimientoMensual.meses.length === 0 ? (
@@ -241,36 +224,36 @@ export default function Rendimiento() {
             <RendimientoHeatmap meses={rendimientoMensual.meses} anios={rendimientoMensual.anios} esARS={esARS} />
           )}
 
-          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">
+          <h3 className="text-body font-bold text-app-text mb-2.5">
             <InfoTerm term="benchmark" label="Performance vs benchmark" />
           </h3>
           {perfRelativa?.estado === 'ok' ? (
             <Card className="mb-4">
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">Benchmark</div>
-                  <div className="text-[13px] font-semibold text-app-text">{perfRelativa.benchmark_usado}</div>
+                  <div className="text-label text-app-text-faint uppercase tracking-wide mb-0.5">Benchmark</div>
+                  <div className="text-body font-semibold text-app-text">{perfRelativa.benchmark_usado}</div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">Cartera vs Benchmark</div>
-                  <div className={`font-mono font-bold text-[15px] tabular-nums ${(perfRelativa.delta_pp ?? 0) >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
+                  <div className="text-label text-app-text-faint uppercase tracking-wide mb-0.5">Cartera vs Benchmark</div>
+                  <div className={`font-mono font-bold text-strong tabular-nums ${(perfRelativa.delta_pp ?? 0) >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
                     {(perfRelativa.delta_pp ?? 0) >= 0 ? '+' : ''}{perfRelativa.delta_pp?.toFixed(1)}%
                   </div>
                 </div>
               </div>
-              <div className="text-[11px] text-app-text-dim mb-3">
+              <div className="text-label text-app-text-dim mb-3">
                 {(perfRelativa.retorno_cartera_pct ?? 0) >= (perfRelativa.retorno_benchmark_pct ?? 0) ? 'Superaste el benchmark' : 'Quedaste por debajo del benchmark'}
               </div>
               <div className="flex gap-3">
                 <button
                   onClick={() => navigate('/performance-relativa')}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim hover:text-app-text"
+                  className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim hover:text-app-text"
                 >
                   <Icon name="trend" className="w-3.5 h-3.5" /> Ver comparación completa
                 </button>
                 <button
                   onClick={() => navigate('/benchmarks-comparacion')}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim hover:text-app-text"
+                  className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim hover:text-app-text"
                 >
                   <Icon name="trend" className="w-3.5 h-3.5" /> Comparar benchmarks
                 </button>
@@ -282,14 +265,14 @@ export default function Rendimiento() {
             </Card>
           )}
 
-          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">
+          <h3 className="text-body font-bold text-app-text mb-2.5">
             <InfoTerm term="benchmark" label="Cartera vs. benchmarks (ARS)" />
           </h3>
           <Card className="mb-4">
             <ComparacionChart resumen={resumen} />
           </Card>
 
-          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">P&amp;L por ticker</h3>
+          <h3 className="text-body font-bold text-app-text mb-2.5">P&amp;L por ticker</h3>
           {pnl.por_ticker.length === 0 ? (
             <EmptyState title="Sin posiciones" description="No hay tickers con actividad para esta cartera." />
           ) : (
@@ -305,14 +288,14 @@ export default function Rendimiento() {
                     className="flex items-center justify-between bg-app-surface border border-app-border rounded-[13px] px-3.5 py-2.5 text-left"
                   >
                     <div className="min-w-0">
-                      <div className="font-semibold text-[13px] text-app-text">{item.ticker}</div>
-                      <div className="text-[10.5px] text-app-text-dim truncate">{item.nombre}</div>
+                      <div className="font-semibold text-body text-app-text">{item.ticker}</div>
+                      <div className="text-label text-app-text-dim truncate">{item.nombre}</div>
                     </div>
                     <div className="text-right shrink-0 ml-3">
-                      <div className={`font-mono font-bold text-[13px] tabular-nums ${toneClass(itemTotal)}`}>
+                      <div className={`font-mono font-bold text-body tabular-nums ${toneClass(itemTotal)}`}>
                         {formatMoneda(itemTotal)}
                       </div>
-                      <div className="text-[10px] text-app-text-dim tabular-nums">
+                      <div className="text-label text-app-text-dim tabular-nums">
                         Real. {formatMoneda(itemRealizado)} · No real. {formatMoneda(itemNoRealizado)}
                       </div>
                     </div>

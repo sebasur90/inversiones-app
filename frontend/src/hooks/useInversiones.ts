@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useCallback, useMemo } from 'react'
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import {
   syncInversiones,
   getCarterasInversion,
@@ -7,162 +8,138 @@ import {
   getRebalanceoInversiones,
   getMovimientosInversion,
   getRendimientoPorTicker,
-  type CarteraInfo,
-  type InversionesResumen,
   type ExposicionOut,
   type RebalanceoOut,
   type MovimientoInversion,
   type RendimientoPorTickerItem,
   type SyncResult,
 } from '../api'
+import { qk } from '../api/queryClient'
+import {
+  leerPreferencia,
+  guardarPreferencia,
+  CLAVE_CARTERA as STORAGE_CARTERA,
+  CLAVE_MONEDA as STORAGE_MONEDA,
+  usePreferencia,
+} from './usePreferencia'
 
-const STORAGE_CARTERA = 'inversiones-cartera'
-const STORAGE_MONEDA = 'inversiones-moneda'
+const EXPOSICION_VACIA: ExposicionOut = { ejes: [] }
+const REBALANCEO_VACIO: RebalanceoOut = { ejes: [] }
+const MOVIMIENTOS_VACIOS: MovimientoInversion[] = []
+const RENDIMIENTO_VACIO: RendimientoPorTickerItem[] = []
 
-// localStorage puede fallar (modo privado, cookies bloqueadas): nunca debe tumbar la app.
-function leerPreferencia(clave: string): string | null {
-  try {
-    return localStorage.getItem(clave)
-  } catch {
-    return null
-  }
-}
-
-function guardarPreferencia(clave: string, valor: string | null): void {
-  try {
-    if (valor === null) localStorage.removeItem(clave)
-    else localStorage.setItem(clave, valor)
-  } catch {
-    // sin persistencia, la sesión sigue funcionando igual
-  }
-}
+// A nivel de módulo: si fueran inline, `usePreferencia` devolvería un setter nuevo en cada
+// render y el useMemo de abajo (y con él el contexto entero) se recalcularía siempre.
+const parseCartera = (crudo: string): string | null => crudo
+const serializarCartera = (valor: string | null): string => valor ?? ''
+const parseMoneda = (crudo: string): 'USD' | 'ARS' => (crudo === 'ARS' ? 'ARS' : 'USD')
+const serializarMoneda = (valor: 'USD' | 'ARS'): string => valor
 
 export function useInversiones() {
-  const [carteras, setCarteras] = useState<CarteraInfo[]>([])
-  const [carteraSeleccionada, setCarteraSeleccionada] = useState<string | null>(
-    () => leerPreferencia(STORAGE_CARTERA),
+  const queryClient = useQueryClient()
+
+  const [carteraSeleccionada, elegirCartera] = usePreferencia<string | null>(
+    STORAGE_CARTERA, null, parseCartera, serializarCartera,
   )
-  const [monedaSeleccionada, setMonedaSeleccionada] = useState<'USD' | 'ARS'>(
-    () => (leerPreferencia(STORAGE_MONEDA) === 'ARS' ? 'ARS' : 'USD'),
+  const [monedaSeleccionada, elegirMoneda] = usePreferencia<'USD' | 'ARS'>(
+    STORAGE_MONEDA, 'USD', parseMoneda, serializarMoneda,
   )
-  const [resumen, setResumen] = useState<InversionesResumen | null>(null)
-  const [exposicion, setExposicion] = useState<ExposicionOut>({ ejes: [] })
-  const [rebalanceo, setRebalanceo] = useState<RebalanceoOut>({ ejes: [] })
-  const [movimientos, setMovimientos] = useState<MovimientoInversion[]>([])
-  const [rendimientoPorTicker, setRendimientoPorTicker] = useState<RendimientoPorTickerItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  const fetchSeqRef = useRef(0)
+  const carterasQuery = useQuery({
+    queryKey: qk.carteras,
+    queryFn: () => getCarterasInversion(),
+  })
+  const carteras = carterasQuery.data ?? []
 
-  const fetchCarteras = useCallback(async () => {
-    try {
-      const data = await getCarterasInversion()
-      setCarteras(data)
-      return data
-    } catch {
-      setError('Error al cargar las carteras de inversión')
-      setLoading(false)
-      return []
-    }
-  }, [])
+  // La cartera guardada puede haber desaparecido del Sheet: se pide el consolidado. Se
+  // resuelve al leer, no con un efecto que corrija el estado después de un render con la
+  // cartera fantasma.
+  const carteraValida =
+    carteraSeleccionada !== null && carteras.length > 0 && !carteras.some(c => c.nombre === carteraSeleccionada)
+      ? null
+      : carteraSeleccionada
 
-  const fetchDetalle = useCallback(async (cartera: string | null) => {
-    const seq = ++fetchSeqRef.current
-    setLoading(true)
-    setError(null)
-    try {
-      const [r, ex, rb, mv, rt] = await Promise.all([
-        getResumenInversiones(cartera),
-        getExposicionInversiones(cartera),
-        getRebalanceoInversiones(cartera),
-        getMovimientosInversion(cartera ? { cartera } : {}),
-        getRendimientoPorTicker(cartera),
-      ])
-      if (fetchSeqRef.current !== seq) return // respuesta obsoleta, se descarta
-      setResumen(r)
-      setExposicion(ex)
-      setRebalanceo(rb)
-      setMovimientos(mv)
-      setRendimientoPorTicker(rt)
-    } catch {
-      if (fetchSeqRef.current !== seq) return
-      setError('Error al cargar los datos de inversiones')
-    } finally {
-      if (fetchSeqRef.current === seq) setLoading(false)
-    }
-  }, [])
+  const hayCarteras = carteras.length > 0
+  // `keepPreviousData`: al cambiar de cartera la pantalla mantiene los números anteriores
+  // mientras llegan los nuevos, en vez de vaciarse.
+  const comun = { enabled: hayCarteras, placeholderData: keepPreviousData }
 
-  useEffect(() => {
-    fetchCarteras()
-  }, [fetchCarteras])
+  const resumenQuery = useQuery({
+    queryKey: qk.resumen(carteraValida),
+    queryFn: () => getResumenInversiones(carteraValida),
+    ...comun,
+  })
+  const exposicionQuery = useQuery({
+    queryKey: qk.exposicion(carteraValida),
+    queryFn: () => getExposicionInversiones(carteraValida),
+    ...comun,
+  })
+  const rebalanceoQuery = useQuery({
+    queryKey: qk.rebalanceo(carteraValida),
+    queryFn: () => getRebalanceoInversiones(carteraValida),
+    ...comun,
+  })
+  const movimientosQuery = useQuery({
+    queryKey: qk.movimientos(carteraValida),
+    queryFn: () => getMovimientosInversion(carteraValida ? { cartera: carteraValida } : {}),
+    ...comun,
+  })
+  const rendimientoQuery = useQuery({
+    queryKey: qk.rendimientoPorTicker(carteraValida),
+    queryFn: () => getRendimientoPorTicker(carteraValida),
+    ...comun,
+  })
 
-  // La cartera guardada puede haber desaparecido del Sheet: se vuelve al consolidado.
-  useEffect(() => {
-    if (carteras.length === 0 || carteraSeleccionada === null) return
-    if (!carteras.some(c => c.nombre === carteraSeleccionada)) {
-      setCarteraSeleccionada(null)
-    }
-  }, [carteras, carteraSeleccionada])
+  const detalleQueries = [resumenQuery, exposicionQuery, rebalanceoQuery, movimientosQuery, rendimientoQuery]
 
-  useEffect(() => {
-    if (carteras.length === 0) {
-      setLoading(false)
-      return
-    }
-    fetchDetalle(carteraSeleccionada)
-  }, [carteraSeleccionada, carteras.length, fetchDetalle])
+  // Sólo la primera carga vacía la pantalla; las siguientes muestran los datos previos.
+  const loading =
+    carterasQuery.isLoading || (hayCarteras && detalleQueries.some(q => q.isLoading))
 
-  const elegirCartera = useCallback((cartera: string | null) => {
-    setCarteraSeleccionada(cartera)
-    guardarPreferencia(STORAGE_CARTERA, cartera)
-  }, [])
+  const error = carterasQuery.isError
+    ? 'Error al cargar las carteras de inversión'
+    : detalleQueries.some(q => q.isError)
+      ? 'Error al cargar los datos de inversiones'
+      : null
 
-  const elegirMoneda = useCallback((moneda: 'USD' | 'ARS') => {
-    setMonedaSeleccionada(moneda)
-    guardarPreferencia(STORAGE_MONEDA, moneda)
-  }, [])
+  const syncMutation = useMutation({
+    mutationFn: syncInversiones,
+    // Todo lo cacheado quedó viejo: los datos sólo cambian acá. Esto reemplaza al contador
+    // `syncVersion` que antes cada pantalla tenía que poner en las dependencias de su efecto.
+    onSuccess: () => queryClient.invalidateQueries(),
+  })
 
-  const sincronizar = useCallback(async (): Promise<SyncResult> => {
-    setSyncing(true)
-    try {
-      const resultado = await syncInversiones()
-      const nuevasCarteras = await fetchCarteras()
-      if (carteraSeleccionada && !nuevasCarteras.some(c => c.nombre === carteraSeleccionada)) {
-        elegirCartera(null)
-      } else {
-        await fetchDetalle(carteraSeleccionada)
-      }
-      return resultado
-    } finally {
-      setSyncing(false)
-    }
-  }, [carteraSeleccionada, fetchCarteras, fetchDetalle, elegirCartera])
+  const { mutateAsync } = syncMutation
+  const sincronizar = useCallback((): Promise<SyncResult> => mutateAsync(), [mutateAsync])
+  const syncing = syncMutation.isPending
 
-  // Objeto estable: el contexto lo memoiza y de él cuelgan los 21 consumidores.
   return useMemo(
     () => ({
       carteras,
-      carteraSeleccionada,
+      carteraSeleccionada: carteraValida,
       setCarteraSeleccionada: elegirCartera,
       monedaSeleccionada,
       setMonedaSeleccionada: elegirMoneda,
-      resumen,
-      exposicion,
-      rebalanceo,
-      movimientos,
-      rendimientoPorTicker,
+      resumen: resumenQuery.data ?? null,
+      exposicion: exposicionQuery.data ?? EXPOSICION_VACIA,
+      rebalanceo: rebalanceoQuery.data ?? REBALANCEO_VACIO,
+      movimientos: movimientosQuery.data ?? MOVIMIENTOS_VACIOS,
+      rendimientoPorTicker: rendimientoQuery.data ?? RENDIMIENTO_VACIO,
       loading,
       syncing,
       error,
       sincronizar,
-      sinDatos: carteras.length === 0,
+      sinDatos: !carterasQuery.isLoading && carteras.length === 0,
+      // Es el timestamp del último SyncRun: viene igual en todas las carteras.
+      ultimoSync: carteras[0]?.ultimo_sync ?? null,
     }),
     [
-      carteras, carteraSeleccionada, elegirCartera, monedaSeleccionada, elegirMoneda,
-      resumen, exposicion, rebalanceo, movimientos, rendimientoPorTicker,
-      loading, syncing, error, sincronizar,
+      carteras, carteraValida, elegirCartera, monedaSeleccionada, elegirMoneda,
+      resumenQuery.data, exposicionQuery.data, rebalanceoQuery.data,
+      movimientosQuery.data, rendimientoQuery.data,
+      loading, syncing, error, sincronizar, carterasQuery.isLoading,
     ],
   )
 }
+
+export { leerPreferencia, guardarPreferencia }

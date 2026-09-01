@@ -25,20 +25,20 @@ export default function HeroValorCard({
 
   return (
     <div className="bg-gradient-to-br from-app-surface to-app-surface-2 border border-app-border rounded-[18px] p-[18px] mb-3.5">
-      <div className="text-[10.5px] font-bold uppercase tracking-wide text-app-text-dim mb-1.5">Valor actual</div>
-      <div className="font-mono text-[32px] font-semibold tracking-tight tabular-nums text-app-text">
+      <div className="text-label font-bold uppercase tracking-wide text-app-text-dim mb-1.5">Valor actual</div>
+      <div className="font-mono text-hero font-semibold tracking-tight tabular-nums text-app-text">
         {resumen ? formatMoneda(valorActual) : '—'}
       </div>
-      {!esARS && resumen && <div className="font-mono text-[12px] text-app-text-dim mt-0.5 tabular-nums">≈ {formatARS(resumen.valor_actual_ars)}</div>}
+      {!esARS && resumen && <div className="font-mono text-caption text-app-text-dim mt-0.5 tabular-nums">≈ {formatARS(resumen.valor_actual_ars)}</div>}
 
       {resumen && rendimiento != null && (
         <div className="mt-2.5">
-          <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
+          <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">
             <InfoTerm term="simple" label="Rendimiento total" />
           </div>
           <div className="flex items-center gap-2">
             <span
-              className={`inline-flex items-center gap-0.5 font-mono font-bold text-[12px] px-2 py-1 rounded-lg tabular-nums ${
+              className={`inline-flex items-center gap-0.5 font-mono font-bold text-caption px-2 py-1 rounded-lg tabular-nums ${
                 positivo ? 'text-app-teal bg-app-teal-soft' : 'text-app-coral bg-app-coral-soft'
               }`}
             >
@@ -46,7 +46,7 @@ export default function HeroValorCard({
               {formatPctRatio(rendimiento)}
             </span>
             {deltaAbs != null && (
-              <span className="font-mono text-[11px] text-app-text-dim tabular-nums">
+              <span className="font-mono text-label text-app-text-dim tabular-nums">
                 {deltaAbs >= 0 ? '+' : ''}
                 {formatMoneda(deltaAbs)} vs. invertido
               </span>

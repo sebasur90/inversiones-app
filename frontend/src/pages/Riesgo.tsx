@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceDot, ResponsiveContainer } from 'recharts'
 import { useInversionesContext } from '../context/InversionesContext'
-import { getRiesgo, type RiesgoOut, type MonedaRiesgo, type PeriodoRetorno } from '../api'
+import { getRiesgo, type MonedaRiesgo, type PeriodoRetorno } from '../api'
 import { useBenchmarkSeleccionado } from '../hooks/useBenchmarkSeleccionado'
 import { formatPctRatio } from '../utils'
 import ScreenHeader from '../components/layout/ScreenHeader'
@@ -14,6 +15,8 @@ import ErrorBanner from '../help/components/ErrorBanner'
 import { parseApiError, type ParsedApiError } from '../help/errors/apiErrors'
 import Segmented from '../components/ui/Segmented'
 import { Icon } from '../components/icons/Icons'
+import SkeletonPantalla from '../components/ui/Skeleton'
+import { qk } from '../api/queryClient'
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
@@ -50,44 +53,25 @@ function tonoDeValor(v: number | null | undefined): 'pos' | 'neg' | undefined {
 function PeriodoRow({ item }: { item: PeriodoRetorno }) {
   return (
     <div className="flex items-center justify-between bg-app-surface border border-app-border rounded-[13px] px-3.5 py-2 text-left">
-      <div className="text-[12.5px] font-semibold text-app-text">{formatMesLabel(item.anio, item.mes)}</div>
-      <div className={`font-mono font-bold text-[13px] tabular-nums ${toneClass(item.retorno)}`}>{formatPctRatio(item.retorno)}</div>
+      <div className="text-caption font-semibold text-app-text">{formatMesLabel(item.anio, item.mes)}</div>
+      <div className={`font-mono font-bold text-body tabular-nums ${toneClass(item.retorno)}`}>{formatPctRatio(item.retorno)}</div>
     </div>
   )
 }
 
 export default function Riesgo() {
   const navigate = useNavigate()
-  const { carteraSeleccionada, syncVersion } = useInversionesContext()
+  const { carteraSeleccionada } = useInversionesContext()
   const [vista, setVista] = useState<MonedaRiesgo>('usd')
   const { benchmarks, benchmarkSeleccionado, setBenchmarkSeleccionado } = useBenchmarkSeleccionado(carteraSeleccionada)
-  const [riesgo, setRiesgo] = useState<RiesgoOut | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<ParsedApiError | null>(null)
 
-  useEffect(() => {
-    let cancelado = false
-    setLoading(true)
-    getRiesgo(carteraSeleccionada, vista, benchmarkSeleccionado)
-      .then(data => {
-        if (!cancelado) {
-          setRiesgo(data)
-          setError(null)
-        }
-      })
-      .catch(err => {
-        if (!cancelado) {
-          setRiesgo(null)
-          setError(parseApiError(err))
-        }
-      })
-      .finally(() => {
-        if (!cancelado) setLoading(false)
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [carteraSeleccionada, vista, benchmarkSeleccionado, syncVersion])
+  const riesgoQuery = useQuery({
+    queryKey: qk.de('riesgo', carteraSeleccionada, vista, benchmarkSeleccionado),
+    queryFn: () => getRiesgo(carteraSeleccionada, vista, benchmarkSeleccionado),
+  })
+  const riesgo = riesgoQuery.data ?? null
+  const loading = riesgoQuery.isLoading
+  const error: ParsedApiError | null = riesgoQuery.error ? parseApiError(riesgoQuery.error) : null
 
   const sinHistorialSuficiente = riesgo != null && riesgo.n_meses_historia === 0
   const serieDrawdown = riesgo?.drawdown.serie ?? []
@@ -97,10 +81,10 @@ export default function Riesgo() {
       <ScreenHeader title="Riesgo" onBack={() => navigate(-1)} />
 
       <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
-        <button onClick={() => navigate('/rendimiento')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+        <button onClick={() => navigate('/rendimiento')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
           <Icon name="trend" className="w-3.5 h-3.5" /> Ver rendimiento detallado
         </button>
-        <button onClick={() => navigate('/contribucion')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+        <button onClick={() => navigate('/contribucion')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
           <Icon name="scale" className="w-3.5 h-3.5" /> Ver contribución y concentración
         </button>
       </div>
@@ -111,7 +95,7 @@ export default function Riesgo() {
 
       {benchmarks.length > 0 && (
         <div className="mb-3">
-          <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-1.5">Benchmark para Sharpe</div>
+          <div className="text-label text-app-text-faint uppercase tracking-wide mb-1.5">Benchmark para Sharpe</div>
           <Segmented
             options={benchmarks.map(b => ({ value: b, label: b }))}
             value={benchmarkSeleccionado ?? benchmarks[0]}
@@ -121,18 +105,18 @@ export default function Riesgo() {
       )}
 
       {loading ? (
-        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+        <SkeletonPantalla />
       ) : error ? (
         <div className="py-4"><ErrorBanner error={error} /></div>
       ) : !riesgo || sinHistorialSuficiente ? (
         <EmptyState title="Sin datos" description="No hay suficiente historial mensual para calcular métricas de riesgo de esta cartera." />
       ) : (
         <>
-          <div className="text-[11px] text-app-text-dim mb-3">
+          <div className="text-label text-app-text-dim mb-3">
             Basado en {riesgo.n_meses_historia} mes{riesgo.n_meses_historia === 1 ? '' : 'es'} de historial (frecuencia mensual).
           </div>
 
-          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">
+          <h3 className="text-body font-bold text-app-text mb-2.5">
             <InfoTooltip term="drawdown" label="Drawdown" />
           </h3>
           {serieDrawdown.length < 2 ? (
@@ -194,7 +178,7 @@ export default function Riesgo() {
                   )}
                 </AreaChart>
               </ResponsiveContainer>
-              <div className="text-[11px] text-app-text-dim mt-1.5">
+              <div className="text-label text-app-text-dim mt-1.5">
                 {riesgo.drawdown.en_recuperacion
                   ? 'Todavía no se recuperó del máximo drawdown.'
                   : riesgo.drawdown.tiempo_recuperacion_meses != null
@@ -251,8 +235,8 @@ export default function Riesgo() {
 
           {riesgo.frecuencia_positivos_negativos.estado === 'ok' && (
             <Card className="mb-4">
-              <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">Meses positivos / negativos</div>
-              <div className="text-[13px] text-app-text">
+              <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">Meses positivos / negativos</div>
+              <div className="text-body text-app-text">
                 <span className="text-app-teal font-bold">{formatPctRatio(riesgo.frecuencia_positivos_negativos.pct_positivos)}</span> positivos ·{' '}
                 <span className="text-app-coral font-bold">{formatPctRatio(riesgo.frecuencia_positivos_negativos.pct_negativos)}</span> negativos
                 <span className="text-app-text-dim"> ({riesgo.frecuencia_positivos_negativos.n_obs} meses)</span>
@@ -262,13 +246,13 @@ export default function Riesgo() {
 
           {(riesgo.mejores_periodos.length > 0 || riesgo.peores_periodos.length > 0) && (
             <>
-              <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">Mejores meses</h3>
+              <h3 className="text-body font-bold text-app-text mb-2.5">Mejores meses</h3>
               <div className="flex flex-col gap-1.5 mb-4">
                 {riesgo.mejores_periodos.map(p => (
                   <PeriodoRow key={`mejor-${p.anio}-${p.mes}`} item={p} />
                 ))}
               </div>
-              <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">Peores meses</h3>
+              <h3 className="text-body font-bold text-app-text mb-2.5">Peores meses</h3>
               <div className="flex flex-col gap-1.5">
                 {riesgo.peores_periodos.map(p => (
                   <PeriodoRow key={`peor-${p.anio}-${p.mes}`} item={p} />

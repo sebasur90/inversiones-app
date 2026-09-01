@@ -8,6 +8,7 @@ import EmptyState from '../components/ui/EmptyState'
 import IconButton from '../components/ui/IconButton'
 import { Icon } from '../components/icons/Icons'
 import { descargarCSV, sufijoFechaHoy } from '../utils/csv'
+import SkeletonPantalla from '../components/ui/Skeleton'
 
 const COLUMNAS_POSICIONES = [
   'Ticker', 'Nombre', 'Cantidad Actual', 'Precio Promedio', 'Precio Actual',
@@ -46,7 +47,7 @@ export default function Posiciones() {
             value={busqueda}
             onChange={e => setBusqueda(e.target.value)}
             placeholder="Buscar ticker o nombre…"
-            className="flex-1 bg-transparent outline-none text-[12.5px] text-app-text placeholder:text-app-text-faint"
+            className="flex-1 bg-transparent outline-none text-caption text-app-text placeholder:text-app-text-faint"
           />
         </div>
         <IconButton
@@ -65,7 +66,7 @@ export default function Posiciones() {
       </div>
 
       {loading ? (
-        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+        <SkeletonPantalla />
       ) : filtrados.length === 0 ? (
         <EmptyState title="No hay posiciones activas" />
       ) : (

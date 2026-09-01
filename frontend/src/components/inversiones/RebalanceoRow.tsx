@@ -17,7 +17,7 @@ export default function RebalanceoRow({
 
   return (
     <div>
-      <div className="flex justify-between items-baseline text-[11.5px] mb-1.5">
+      <div className="flex justify-between items-baseline text-caption mb-1.5">
         <span className="text-app-text">{item.etiqueta}</span>
         <span className="font-mono font-bold text-app-text tabular-nums">{formatMoneda(valorActual)}</span>
       </div>
@@ -32,7 +32,7 @@ export default function RebalanceoRow({
           title={`Objetivo: ${item.porcentaje_objetivo}%`}
         />
       </div>
-      <div className="flex justify-between items-center text-[10.5px] text-app-text-dim mt-1">
+      <div className="flex justify-between items-center text-label text-app-text-dim mt-1">
         <span>Objetivo {item.porcentaje_objetivo.toFixed(1)}%</span>
         <span className={`font-mono font-bold tabular-nums ${dentroDeTolerancia ? 'text-app-teal' : 'text-app-coral'}`}>
           {formatPct(item.delta_pp)} pp

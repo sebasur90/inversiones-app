@@ -16,7 +16,7 @@ export default function TickerHistoricoTab({ historico, monedaSeleccionada }: { 
     <div className="pb-4">
       {precios.length > 0 && (
         <Card className="mb-4">
-          <h3 className="text-[12px] font-bold text-app-text mb-3">Precio histórico</h3>
+          <h3 className="text-caption font-bold text-app-text mb-3">Precio histórico</h3>
           <Sparkline
             data={precios}
             color={esCreciente ? '#4fd1ae' : '#e2665a'}
@@ -26,9 +26,9 @@ export default function TickerHistoricoTab({ historico, monedaSeleccionada }: { 
       )}
 
       <Card>
-        <h3 className="text-[12px] font-bold text-app-text mb-3">Detalle por fecha</h3>
+        <h3 className="text-caption font-bold text-app-text mb-3">Detalle por fecha</h3>
         <div className="overflow-x-auto">
-          <table className="w-full text-[10px]">
+          <table className="w-full text-label">
             <thead>
               <tr className="border-b border-app-border">
                 <th className="text-left py-2 px-2 text-app-text-dim font-semibold">Fecha</th>
@@ -53,7 +53,7 @@ export default function TickerHistoricoTab({ historico, monedaSeleccionada }: { 
             <tbody>
               {puntos.map((p, i) => (
                 <tr key={i} className="border-b border-app-border/50">
-                  <td className="py-2 px-2 text-app-text font-mono text-[9px]">{p.fecha}</td>
+                  <td className="py-2 px-2 text-app-text font-mono text-label">{p.fecha}</td>
                   <td className="text-right py-2 px-2 font-mono font-semibold tabular-nums text-app-text">
                     {formatPrecio(p.precio_nominal)}
                   </td>

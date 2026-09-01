@@ -1,40 +1,27 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { getDescomposicionFxPorPosicion, getPreciosTicker, type PrecioPunto, type DescomposicionFxPosicionItem } from '../../api'
+import { qk } from '../../api/queryClient'
 import { formatARS, formatCantidad, formatPctRatio, formatPrecio, formatUSD } from '../../utils'
 import Sparkline from '../../components/charts/Sparkline'
 import MetricTile from '../../components/ui/MetricTile'
 import { Icon } from '../../components/icons/Icons'
 import type { TickerPositionOut } from '../../api'
-import { useInversionesContext } from '../../context/InversionesContext'
 
 export default function TickerResumenTab({ position, cartera, monedaSeleccionada }: { position: TickerPositionOut; cartera: string | null; monedaSeleccionada: 'ARS' | 'USD' }) {
-  const { syncVersion } = useInversionesContext()
-  const [precios, setPrecios] = useState<PrecioPunto[]>([])
-  const [descomposicionFxPorTicker, setDescomposicionFxPorTicker] = useState<DescomposicionFxPosicionItem | null>(null)
+  const preciosQuery = useQuery({
+    queryKey: qk.de('precios-ticker', position.ticker),
+    queryFn: () => getPreciosTicker(position.ticker),
+  })
+  // La descomposición FX es de la cartera entera: cacheada por cartera, se comparte con
+  // cualquier otro ticker que se mire después.
+  const fxQuery = useQuery({
+    queryKey: qk.de('descomposicion-fx-posicion', cartera),
+    queryFn: () => getDescomposicionFxPorPosicion(cartera),
+  })
 
-  useEffect(() => {
-    let cancelado = false
-    Promise.all([
-      getPreciosTicker(position.ticker),
-      getDescomposicionFxPorPosicion(cartera),
-    ])
-      .then(([preciosOut, fxData]) => {
-        if (!cancelado) {
-          setPrecios(preciosOut.puntos)
-          const fxPorTicker = fxData.posiciones.find(p => p.ticker === position.ticker)
-          setDescomposicionFxPorTicker(fxPorTicker || null)
-        }
-      })
-      .catch(() => {
-        if (!cancelado) {
-          setPrecios([])
-          setDescomposicionFxPorTicker(null)
-        }
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [position.ticker, cartera, syncVersion])
+  const precios: PrecioPunto[] = preciosQuery.data?.puntos ?? []
+  const descomposicionFxPorTicker: DescomposicionFxPosicionItem | null =
+    fxQuery.data?.posiciones.find(p => p.ticker === position.ticker) ?? null
 
   const esARS = monedaSeleccionada === 'ARS'
   const formatMoneda = esARS ? formatARS : formatUSD
@@ -46,9 +33,9 @@ export default function TickerResumenTab({ position, cartera, monedaSeleccionada
   return (
     <div className="pb-4">
       <div className="mt-3">
-        <div className="font-mono text-[26px] font-bold text-app-text tabular-nums">{position.precio_actual != null ? formatPrecio(position.precio_actual) : '—'}</div>
+        <div className="font-mono text-metric-lg font-bold text-app-text tabular-nums">{position.precio_actual != null ? formatPrecio(position.precio_actual) : '—'}</div>
         {rendimiento != null && (
-          <span className={`inline-flex items-center gap-0.5 font-mono font-bold text-[12px] mt-1 tabular-nums ${positivo ? 'text-app-teal' : 'text-app-coral'}`}>
+          <span className={`inline-flex items-center gap-0.5 font-mono font-bold text-caption mt-1 tabular-nums ${positivo ? 'text-app-teal' : 'text-app-coral'}`}>
             <Icon name={positivo ? 'up' : 'down'} className="w-3 h-3" />
             {formatPctRatio(rendimiento)} desde promedio
           </span>
@@ -56,12 +43,12 @@ export default function TickerResumenTab({ position, cartera, monedaSeleccionada
         {(position.objetivo_alcanzado || position.stop_loss_disparado) && (
           <div className="flex flex-wrap gap-1.5 mt-2">
             {position.objetivo_alcanzado && (
-              <span className="text-[10.5px] font-bold text-app-teal bg-app-teal/10 border border-app-teal/30 px-2 py-1 rounded-[7px]">
+              <span className="text-label font-bold text-app-teal bg-app-teal/10 border border-app-teal/30 px-2 py-1 rounded-[7px]">
                 🎯 Objetivo alcanzado
               </span>
             )}
             {position.stop_loss_disparado && (
-              <span className="text-[10.5px] font-bold text-app-coral bg-app-coral/10 border border-app-coral/30 px-2 py-1 rounded-[7px]">
+              <span className="text-label font-bold text-app-coral bg-app-coral/10 border border-app-coral/30 px-2 py-1 rounded-[7px]">
                 🛑 Stop loss disparado
               </span>
             )}

@@ -1,82 +1,45 @@
-import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { useInversionesContext } from '../context/InversionesContext'
-import { getEvolucionInversiones, getDiagnostico, getCalidadDatos, type EvolucionPunto, type DiagnosticoOut, type CalidadDatosOut } from '../api'
+import { getEvolucionInversiones, getDiagnostico, getCalidadDatos } from '../api'
+import { qk } from '../api/queryClient'
 import { Icon } from '../components/icons/Icons'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import HeroValorCard from '../components/inversiones/HeroValorCard'
 import KpiGrid from '../components/inversiones/KpiGrid'
 import CarterasScroll from '../components/inversiones/CarterasScroll'
 import PosicionRow from '../components/inversiones/PosicionRow'
+import RequiereAtencion from '../components/inversiones/RequiereAtencion'
 import EmptyState from '../components/ui/EmptyState'
 import Card from '../components/ui/Card'
 import ComparacionChart from '../components/charts/ComparacionChart'
 import InfoTooltip from '../help/components/InfoTooltip'
-import ErrorBanner from '../help/components/ErrorBanner'
-import { parseApiError, type ParsedApiError } from '../help/errors/apiErrors'
+import QueryBoundary from '../components/ui/QueryBoundary'
+import SkeletonPantalla from '../components/ui/Skeleton'
 
 export default function Resumen() {
   const navigate = useNavigate()
-  const { carteras, carteraSeleccionada, setCarteraSeleccionada, monedaSeleccionada, resumen, rendimientoPorTicker, loading, syncVersion } =
+  const { carteras, carteraSeleccionada, setCarteraSeleccionada, monedaSeleccionada, resumen, rendimientoPorTicker, loading } =
     useInversionesContext()
-  const [evolucion, setEvolucion] = useState<EvolucionPunto[]>([])
-  const [diagnostico, setDiagnostico] = useState<DiagnosticoOut | null>(null)
-  const [calidad, setCalidad] = useState<CalidadDatosOut | null>(null)
-  const [error, setError] = useState<ParsedApiError | null>(null)
 
-  useEffect(() => {
-    let cancelado = false
-    getEvolucionInversiones(carteraSeleccionada)
-      .then(out => {
-        if (!cancelado) setEvolucion(out.puntos)
-      })
-      .catch(() => {
-        if (!cancelado) setEvolucion([])
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [carteraSeleccionada, syncVersion])
+  // Sin `syncVersion` en las dependencias: sincronizar invalida la caché de queries y estas
+  // tres se vuelven a pedir solas.
+  const evolucionQuery = useQuery({
+    queryKey: qk.evolucion(carteraSeleccionada),
+    queryFn: () => getEvolucionInversiones(carteraSeleccionada),
+  })
+  const diagnosticoQuery = useQuery({
+    queryKey: qk.diagnostico(carteraSeleccionada),
+    queryFn: () => getDiagnostico(carteraSeleccionada),
+  })
+  const calidadQuery = useQuery({
+    queryKey: qk.calidadDatos,
+    queryFn: () => getCalidadDatos(),
+  })
 
-  useEffect(() => {
-    let cancelado = false
-    getDiagnostico(carteraSeleccionada)
-      .then(d => {
-        if (!cancelado) {
-          setDiagnostico(d)
-          setError(null)
-        }
-      })
-      .catch(err => {
-        if (!cancelado) {
-          setDiagnostico(null)
-          setError(parseApiError(err))
-        }
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [carteraSeleccionada, syncVersion])
-
-  useEffect(() => {
-    let cancelado = false
-    getCalidadDatos()
-      .then(c => {
-        if (!cancelado) {
-          setCalidad(c)
-          setError(null)
-        }
-      })
-      .catch(err => {
-        if (!cancelado) {
-          setCalidad(null)
-          setError(parseApiError(err))
-        }
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [syncVersion])
+  const evolucion = evolucionQuery.data?.puntos ?? []
+  const diagnostico = diagnosticoQuery.data ?? null
+  const calidad = calidadQuery.data ?? null
 
   const topPosiciones = rendimientoPorTicker.slice(0, 5)
 
@@ -85,58 +48,63 @@ export default function Resumen() {
       <ScreenHeader title="Resumen" />
 
       {loading ? (
-        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+        <SkeletonPantalla />
       ) : (
         <>
           <HeroValorCard resumen={resumen} moneda={monedaSeleccionada} evolucion={evolucion} />
           <KpiGrid resumen={resumen} moneda={monedaSeleccionada} />
 
-          <ErrorBanner error={error} />
+          <QueryBoundary
+            isLoading={diagnosticoQuery.isLoading || calidadQuery.isLoading}
+            error={diagnosticoQuery.error ?? calidadQuery.error}
+            onRetry={() => {
+              void diagnosticoQuery.refetch()
+              void calidadQuery.refetch()
+            }}
+            fallback={null}
+          >
+            <RequiereAtencion diagnostico={diagnostico} calidad={calidad} posiciones={rendimientoPorTicker} />
 
-          {diagnostico && (
-            <button
-              onClick={() => navigate('/diagnostico')}
-              className="w-full text-left bg-app-surface border border-app-border rounded-2xl p-3.5 mb-4 mt-1 flex items-center justify-between gap-3 hover:border-app-border-soft transition-colors"
-            >
-              <div>
-                <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-0.5">Salud de cartera</div>
-                <div className="font-display text-[22px] font-semibold text-app-text">
+          {/* Los dos scores, en una fila: el detalle de lo que los mueve ya está arriba. */}
+          <div className="grid grid-cols-2 gap-2 mb-4 mt-1">
+            {diagnostico && (
+              <button
+                onClick={() => navigate('/diagnostico')}
+                className="text-left bg-app-surface border border-app-border rounded-2xl p-3 hover:border-app-border-soft transition-colors"
+              >
+                <div className="text-label font-bold uppercase tracking-wide text-app-text-dim mb-0.5">Salud de cartera</div>
+                <div className="font-display text-metric font-semibold text-app-text">
                   {diagnostico.salud.score_total !== null ? Math.round(diagnostico.salud.score_total) : '—'}
-                  <span className="text-[13px] text-app-text-dim">/100</span>
+                  <span className="text-body text-app-text-dim">/100</span>
                 </div>
-              </div>
-              <div className="text-right">
-                <div className="text-[11.5px] font-semibold text-app-text-dim">
+                <div className="text-caption text-app-text-dim">
                   {diagnostico.hallazgos.length} hallazgo{diagnostico.hallazgos.length !== 1 ? 's' : ''}
+                  <Icon name="chevron" className="w-3.5 h-3.5 inline-block -rotate-90 ml-0.5" />
                 </div>
-                <Icon name="chevron" className="w-4 h-4 text-app-text-dim inline-block mt-1" />
-              </div>
-            </button>
-          )}
+              </button>
+            )}
 
-          {calidad?.ultimo_sync && (
-            <button
-              onClick={() => navigate('/calidad-datos')}
-              className="w-full text-left bg-app-surface border border-app-border rounded-2xl p-3.5 mb-4 flex items-center justify-between gap-3 hover:border-app-border-soft transition-colors"
-            >
-              <div>
-                <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-0.5">Calidad de datos</div>
-                <div className="font-display text-[22px] font-semibold text-app-text">
+            {calidad?.ultimo_sync && (
+              <button
+                onClick={() => navigate('/calidad-datos')}
+                className="text-left bg-app-surface border border-app-border rounded-2xl p-3 hover:border-app-border-soft transition-colors"
+              >
+                <div className="text-label font-bold uppercase tracking-wide text-app-text-dim mb-0.5">Calidad de datos</div>
+                <div className="font-display text-metric font-semibold text-app-text">
                   {calidad.ultimo_sync.health_score}
-                  <span className="text-[13px] text-app-text-dim">/100</span>
+                  <span className="text-body text-app-text-dim">/100</span>
                 </div>
-              </div>
-              <div className="text-right">
-                <div className="text-[11.5px] font-semibold text-app-text-dim">
+                <div className="text-caption text-app-text-dim">
                   {calidad.issues.length} problema{calidad.issues.length !== 1 ? 's' : ''}
+                  <Icon name="chevron" className="w-3.5 h-3.5 inline-block -rotate-90 ml-0.5" />
                 </div>
-                <Icon name="chevron" className="w-4 h-4 text-app-text-dim inline-block mt-1" />
-              </div>
-            </button>
-          )}
+              </button>
+            )}
+            </div>
+          </QueryBoundary>
 
           <div className="flex items-center justify-between mb-2.5 mt-1">
-            <h3 className="text-[13.5px] font-bold text-app-text">Carteras</h3>
+            <h3 className="text-body font-bold text-app-text">Carteras</h3>
           </div>
           <CarterasScroll carteras={carteras} seleccionada={carteraSeleccionada} onSelect={setCarteraSeleccionada} />
 
@@ -147,14 +115,14 @@ export default function Resumen() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-[12.5px] font-semibold text-app-text">¿Qué pasaría si...?</div>
-                <div className="text-[11px] text-app-text-secondary mt-0.5">Simula escenarios sin tocar la cartera</div>
+                <div className="text-caption font-semibold text-app-text">¿Qué pasaría si...?</div>
+                <div className="text-label text-app-text-secondary mt-0.5">Simula escenarios sin tocar la cartera</div>
               </div>
               <Icon name="chevron" className="w-4 h-4 text-app-text-dim" />
             </div>
           </button>
 
-          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5 mt-5">
+          <h3 className="text-body font-bold text-app-text mb-2.5 mt-5">
             <InfoTooltip term="benchmark" label="Cartera vs. benchmarks (ARS)" />
           </h3>
           <Card>
@@ -162,9 +130,9 @@ export default function Resumen() {
           </Card>
 
           <div className="flex items-center justify-between mb-1 mt-5">
-            <h3 className="text-[13.5px] font-bold text-app-text">Posiciones</h3>
+            <h3 className="text-body font-bold text-app-text">Posiciones</h3>
             {rendimientoPorTicker.length > 5 && (
-              <button onClick={() => navigate('/posiciones')} className="text-[11px] font-semibold text-app-text-dim">
+              <button onClick={() => navigate('/posiciones')} className="text-label font-semibold text-app-text-dim">
                 Ver todas
               </button>
             )}

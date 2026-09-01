@@ -17,12 +17,12 @@ export default function CorrelacionMatriz({ data }: CorrelacionMatrizProps) {
 
   return (
     <Card className="overflow-x-auto">
-      <table className="text-[11px] border-separate border-spacing-0">
+      <table className="text-label border-separate border-spacing-0">
         <thead>
           <tr>
             <th className="sticky left-0 z-10 bg-app-surface pb-2 pr-2" />
             {tickers.map(t => (
-              <th key={t} className="text-center text-app-text-faint font-bold uppercase text-[9.5px] pb-2 px-0.5 min-w-[44px]">
+              <th key={t} className="text-center text-app-text-faint font-bold uppercase text-label pb-2 px-0.5 min-w-[44px]">
                 {t}
               </th>
             ))}

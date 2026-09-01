@@ -19,7 +19,7 @@ const VARIANT_CLASSES: Record<Variant, string> = {
 export default function Button({ variant = 'primary', icon, loading, children, className = '', disabled, ...rest }: Props) {
   return (
     <button
-      className={`h-11 px-4 rounded-2xl flex items-center justify-center gap-2 text-[13.5px] transition-opacity disabled:opacity-50 ${VARIANT_CLASSES[variant]} ${className}`}
+      className={`h-11 px-4 rounded-2xl flex items-center justify-center gap-2 text-body transition-opacity disabled:opacity-50 ${VARIANT_CLASSES[variant]} ${className}`}
       disabled={disabled || loading}
       {...rest}
     >

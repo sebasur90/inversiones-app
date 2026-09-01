@@ -1,35 +1,39 @@
-import { useEffect, useRef } from 'react'
+import { Suspense, lazy, useEffect, useRef } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { InversionesProvider, useInversionesContext } from './context/InversionesContext'
+import { queryClient } from './api/queryClient'
 import { IconSprite } from './components/icons/Icons'
 import Splash from './components/layout/Splash'
 import AppShell from './components/layout/AppShell'
 import Toast from './components/ui/Toast'
+import { useAutoSync } from './hooks/useAutoSync'
 import Modal from './components/ui/Modal'
-import Resumen from './pages/Resumen'
-import Exposicion from './pages/Exposicion'
-import Movimientos from './pages/Movimientos'
-import Posiciones from './pages/Posiciones'
-import TickerDetalle from './pages/TickerDetalle'
-import Objetivo from './pages/Objetivo'
-import Precios from './pages/Precios'
-import IndicadoresMacro from './pages/IndicadoresMacro'
-import Vencimientos from './pages/Vencimientos'
-import FlujoCaja from './pages/FlujoCaja'
-import Comparador from './pages/Comparador'
-import Comisiones from './pages/Comisiones'
-import VistaFiscal from './pages/VistaFiscal'
-import Patrimonio from './pages/Patrimonio'
-import Rendimiento from './pages/Rendimiento'
-import Rebalanceo from './pages/Rebalanceo'
-import Riesgo from './pages/Riesgo'
-import PerformanceRelativa from './pages/PerformanceRelativa'
-import Contribucion from './pages/Contribucion'
-import Diagnostico from './pages/Diagnostico'
-import CalidadDatos from './pages/CalidadDatos'
-import Simulador from './pages/Simulador'
-import BenchmarksComparacion from './pages/BenchmarksComparacion'
-import Mas from './pages/Mas'
+const Resumen = lazy(() => import('./pages/Resumen'))
+const Exposicion = lazy(() => import('./pages/Exposicion'))
+const Movimientos = lazy(() => import('./pages/Movimientos'))
+const Posiciones = lazy(() => import('./pages/Posiciones'))
+const TickerDetalle = lazy(() => import('./pages/TickerDetalle'))
+const Objetivo = lazy(() => import('./pages/Objetivo'))
+const Precios = lazy(() => import('./pages/Precios'))
+const IndicadoresMacro = lazy(() => import('./pages/IndicadoresMacro'))
+const Vencimientos = lazy(() => import('./pages/Vencimientos'))
+const FlujoCaja = lazy(() => import('./pages/FlujoCaja'))
+const Comparador = lazy(() => import('./pages/Comparador'))
+const Comisiones = lazy(() => import('./pages/Comisiones'))
+const VistaFiscal = lazy(() => import('./pages/VistaFiscal'))
+const Patrimonio = lazy(() => import('./pages/Patrimonio'))
+const Rendimiento = lazy(() => import('./pages/Rendimiento'))
+const Rebalanceo = lazy(() => import('./pages/Rebalanceo'))
+const Riesgo = lazy(() => import('./pages/Riesgo'))
+const PerformanceRelativa = lazy(() => import('./pages/PerformanceRelativa'))
+const Contribucion = lazy(() => import('./pages/Contribucion'))
+const Diagnostico = lazy(() => import('./pages/Diagnostico'))
+const CalidadDatos = lazy(() => import('./pages/CalidadDatos'))
+const Simulador = lazy(() => import('./pages/Simulador'))
+const BenchmarksComparacion = lazy(() => import('./pages/BenchmarksComparacion'))
+const Mas = lazy(() => import('./pages/Mas'))
+const Ajustes = lazy(() => import('./pages/Ajustes'))
 
 function SyncResultModal() {
   const { syncSheetOpen, closeSyncSheet, syncIssues, syncHealthScore, syncResultado, syncResumenTexto } = useInversionesContext()
@@ -47,16 +51,16 @@ function SyncResultModal() {
 
   return (
     <Modal open={syncSheetOpen} onClose={closeSyncSheet} title={titulo}>
-      <p className="text-[13px] text-app-text mb-3">
+      <p className="text-body text-app-text mb-3">
         Se cargaron: <strong>{syncResumenTexto}</strong>
       </p>
       {syncHealthScore !== null && (
         <div className="mb-4 p-3 bg-app-surface-2 rounded-lg">
-          <div className="text-[12px] font-semibold text-app-text">
-            Calidad: <span className="text-[18px]">{syncHealthScore}</span>/100
+          <div className="text-caption font-semibold text-app-text">
+            Calidad: <span className="text-heading">{syncHealthScore}</span>/100
           </div>
           {syncResultado !== 'ok' && (
-            <div className="text-[11px] text-app-text-dim mt-1">
+            <div className="text-label text-app-text-dim mt-1">
               {criticalCount > 0 && <div>{criticalCount} error(es) crítico(s)</div>}
               {warningCount > 0 && <div>{warningCount} advertencia(s)</div>}
             </div>
@@ -65,10 +69,10 @@ function SyncResultModal() {
       )}
       {syncIssues.length > 0 && (
         <div className="mb-4">
-          <div className="text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2">Problemas detectados</div>
+          <div className="text-label font-bold uppercase tracking-wide text-app-text-dim mb-2">Problemas detectados</div>
           <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
             {syncIssues.slice(0, 8).map((issue, i) => (
-              <div key={i} className="text-[12px] text-app-text bg-app-surface-2 rounded-lg px-3 py-2">
+              <div key={i} className="text-caption text-app-text bg-app-surface-2 rounded-lg px-3 py-2">
                 <strong>{issue.tab}</strong> {issue.fila && `/ fila ${issue.fila}`}: {issue.mensaje}
               </div>
             ))}
@@ -79,7 +83,7 @@ function SyncResultModal() {
                 closeSyncSheet()
                 navigate('/calidad-datos')
               }}
-              className="mt-2 text-[12px] text-app-link hover:underline"
+              className="mt-2 text-caption text-app-link hover:underline"
             >
               Ver detalle completo ({syncIssues.length - 8} más) →
             </button>
@@ -119,6 +123,7 @@ function useVolverAInicioAlReabrir() {
 function Root() {
   const { sinDatos, toast, dismissToast } = useInversionesContext()
   useVolverAInicioAlReabrir()
+  useAutoSync()
 
   return (
     <>
@@ -152,6 +157,7 @@ function Root() {
             <Route path="simulador" element={<Simulador />} />
             <Route path="benchmarks-comparacion" element={<BenchmarksComparacion />} />
             <Route path="mas" element={<Mas />} />
+            <Route path="ajustes" element={<Ajustes />} />
             <Route path="*" element={<Navigate to="/resumen" replace />} />
           </Route>
         </Routes>
@@ -164,9 +170,11 @@ function Root() {
 
 export default function App() {
   return (
-    <InversionesProvider>
-      <IconSprite />
-      <Root />
-    </InversionesProvider>
+    <QueryClientProvider client={queryClient}>
+      <InversionesProvider>
+        <IconSprite />
+        <Root />
+      </InversionesProvider>
+    </QueryClientProvider>
   )
 }

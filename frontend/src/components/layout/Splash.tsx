@@ -49,16 +49,16 @@ export default function Splash() {
         </svg>
       </div>
 
-      <h1 className="font-display text-[27px] font-semibold text-app-text mb-1.5">Inversiones</h1>
-      <p className="text-[13px] text-app-text-dim mb-9">Tu cartera, sincronizada.</p>
+      <h1 className="font-display text-metric-lg font-semibold text-app-text mb-1.5">Inversiones</h1>
+      <p className="text-body text-app-text-dim mb-9">Tu cartera, sincronizada.</p>
 
       <Button onClick={triggerSync} loading={syncing} icon={<Icon name="sync" className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />} className="w-full max-w-[280px]">
         {syncing ? 'Sincronizando…' : 'Sincronizar Google Sheet'}
       </Button>
 
-      {error && <p className="mt-3 text-[12px] text-app-coral max-w-[280px]">{error}</p>}
+      {error && <p className="mt-3 text-caption text-app-coral max-w-[280px]">{error}</p>}
 
-      <div className="mt-4 flex items-center gap-1.5 text-[11px] text-app-text-faint">
+      <div className="mt-4 flex items-center gap-1.5 text-label text-app-text-faint">
         <Icon name="lock" className="w-3 h-3" />
         Solo lectura · tus datos no salen de tu Sheet
       </div>

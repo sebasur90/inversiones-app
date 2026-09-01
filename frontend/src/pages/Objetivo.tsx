@@ -23,9 +23,10 @@ import SimuladorInverso from '../components/inversiones/SimuladorInverso'
 import { Icon } from '../components/icons/Icons'
 import InfoTooltip from '../help/components/InfoTooltip'
 import FormHelp from '../help/components/FormHelp'
+import SkeletonPantalla from '../components/ui/Skeleton'
 
 export default function Objetivo() {
-  const { carteras, carteraSeleccionada, setCarteraSeleccionada, syncVersion } = useInversionesContext()
+  const { carteras, carteraSeleccionada, setCarteraSeleccionada } = useInversionesContext()
   const { objetivo, aportesHistoricos, evolucion, riesgo, configuracion, loading } =
     useObjetivoInversion(carteraSeleccionada)
   const [tasaOverride, setTasaOverride] = useState('')
@@ -37,7 +38,7 @@ export default function Objetivo() {
     if (!carteraSeleccionada) return
     const stored = localStorage.getItem(`objetivo-tasa-${carteraSeleccionada}`)
     setTasaOverride(stored ?? '')
-  }, [carteraSeleccionada, syncVersion])
+  }, [carteraSeleccionada])
 
   const handleTasaOverride = (value: string) => {
     setTasaOverride(value)
@@ -229,7 +230,7 @@ export default function Objetivo() {
             <button
               key={c.nombre}
               onClick={() => setCarteraSeleccionada(c.nombre)}
-              className="text-left px-3.5 py-3 rounded-xl text-[13.5px] font-semibold text-app-text bg-app-surface border border-app-border"
+              className="text-left px-3.5 py-3 rounded-xl text-body font-semibold text-app-text bg-app-surface border border-app-border"
             >
               {c.nombre}
             </button>
@@ -246,7 +247,7 @@ export default function Objetivo() {
       <ScreenHeader title="Objetivo" />
 
       {loading ? (
-        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+        <SkeletonPantalla />
       ) : !objetivo ? (
         <EmptyState
           title="Esta cartera no tiene un objetivo definido"
@@ -256,14 +257,14 @@ export default function Objetivo() {
         <>
           {/* Header + anillo de progreso */}
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-[46px] h-[46px] rounded-2xl bg-app-gold-soft flex items-center justify-center text-[21px] shrink-0">
+            <div className="w-[46px] h-[46px] rounded-2xl bg-app-gold-soft flex items-center justify-center text-heading shrink-0">
               {objetivo.icono}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="font-display text-[18px] font-semibold text-app-text truncate">
+              <div className="font-display text-heading font-semibold text-app-text truncate">
                 {objetivo.nombre}
               </div>
-              <div className="text-[11.5px] text-app-text-dim">
+              <div className="text-caption text-app-text-dim">
                 Meta al {dayjs(objetivo.fecha_limite).format('MMM YYYY')} · cartera {carteraSeleccionada}
               </div>
             </div>
@@ -278,29 +279,29 @@ export default function Objetivo() {
                 }}
               >
                 <div className="absolute inset-3.5 rounded-full bg-app-surface flex flex-col items-center justify-center">
-                  <b className="font-mono text-[21px] text-app-text tabular-nums">
+                  <b className="font-mono text-heading text-app-text tabular-nums">
                     {progreso.toFixed(0)}%
                   </b>
-                  <span className="text-[9px] text-app-text-dim mt-0.5">completado</span>
+                  <span className="text-label text-app-text-dim mt-0.5">completado</span>
                 </div>
               </div>
               <div className="flex-1 flex flex-col gap-2.5 min-w-0">
                 <div>
-                  <b className="font-mono text-[14px] text-app-text tabular-nums block">
+                  <b className="font-mono text-strong text-app-text tabular-nums block">
                     {formatUSD(objetivo.valor_actual_usd)}
                   </b>
-                  <span className="text-[10px] uppercase tracking-wide text-app-text-dim">
+                  <span className="text-label uppercase tracking-wide text-app-text-dim">
                     de {formatUSD(objetivo.monto_usd)}
                   </span>
                 </div>
                 <div>
-                  <b className="font-mono text-[14px] text-app-text tabular-nums block">
+                  <b className="font-mono text-strong text-app-text tabular-nums block">
                     {objetivo.meses_restantes} meses
                   </b>
-                  <span className="text-[10px] uppercase tracking-wide text-app-text-dim">Restantes</span>
+                  <span className="text-label uppercase tracking-wide text-app-text-dim">Restantes</span>
                 </div>
                 <span
-                  className={`inline-flex items-center gap-1.5 font-bold text-[11px] px-2.5 py-1.5 rounded-lg w-fit ${
+                  className={`inline-flex items-center gap-1.5 font-bold text-label px-2.5 py-1.5 rounded-lg w-fit ${
                     objetivo.alcanzable
                       ? 'bg-app-teal-soft text-app-teal'
                       : 'bg-app-coral-soft text-app-coral'
@@ -350,48 +351,48 @@ export default function Objetivo() {
           </div>
 
           {/* Fechas estimadas */}
-          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5 flex items-center gap-1.5">
+          <h3 className="text-body font-bold text-app-text mb-2.5 flex items-center gap-1.5">
             <Icon name="trend" className="w-3.5 h-3.5 text-app-gold" />
             <InfoTooltip term="objetivo_fechas_estimadas" label="Fechas estimadas" />
           </h3>
           <Card>
             <div className="space-y-3.5">
               <div>
-                <div className="text-[10px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
+                <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">
                   <InfoTooltip term="objetivo_aporte_actual" label={`Manteniendo aporte actual (${formatUSD(objetivo.aporte_mensual_promedio_usd)}/mes)`} />
                 </div>
                 {fechaAportueActual?.fecha ? (
-                  <div className="font-mono text-[14px] font-semibold text-app-text">
+                  <div className="font-mono text-strong font-semibold text-app-text">
                     {dayjs(fechaAportueActual.fecha).format('MMM DD, YYYY')}{' '}
-                    <span className="text-[11px] text-app-text-dim">
+                    <span className="text-label text-app-text-dim">
                       ({fechaAportueActual.meses} meses)
                     </span>
                   </div>
                 ) : (
-                  <div className="text-[12px] text-app-text-dim">—</div>
+                  <div className="text-caption text-app-text-dim">—</div>
                 )}
               </div>
 
               <div>
-                <div className="text-[10px] font-bold uppercase tracking-wide text-app-text-faint mb-2">
+                <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-2">
                   <InfoTooltip term="objetivo_aporte_objetivo" label="Con aporte objetivo" />
                 </div>
                 {fechaAporteObjetivo?.fecha ? (
-                  <div className="font-mono text-[14px] font-semibold text-app-text mb-2">
+                  <div className="font-mono text-strong font-semibold text-app-text mb-2">
                     {dayjs(fechaAporteObjetivo.fecha).format('MMM DD, YYYY')}{' '}
-                    <span className="text-[11px] text-app-text-dim">
+                    <span className="text-label text-app-text-dim">
                       ({fechaAporteObjetivo.meses} meses)
                     </span>
                   </div>
                 ) : (
-                  <div className="text-[12px] text-app-text-dim mb-2">—</div>
+                  <div className="text-caption text-app-text-dim mb-2">—</div>
                 )}
                 <div className="flex gap-1.5">
                   {['Necesario', '+25%', '+50%', '+100%'].map((label, idx) => (
                     <button
                       key={idx}
                       onClick={() => setAporteBonusMultiplier(idx)}
-                      className={`text-[10px] px-2 py-1 rounded-lg font-semibold transition-colors ${
+                      className={`text-label px-2 py-1 rounded-lg font-semibold transition-colors ${
                         aporteBonusMultiplier === idx
                           ? 'bg-app-gold text-app-text'
                           : 'bg-app-surface-2 text-app-text-dim hover:text-app-text'
@@ -408,25 +409,25 @@ export default function Objetivo() {
           {/* Escenarios */}
           {escenarios && escenariosResueltos ? (
             <>
-              <h3 className="text-[13.5px] font-bold text-app-text mb-2.5 mt-3.5">Escenarios</h3>
+              <h3 className="text-body font-bold text-app-text mb-2.5 mt-3.5">Escenarios</h3>
               <Card>
                 <div className="grid grid-cols-3 gap-2 mb-3">
                   {escenariosResueltos.map(({ esc, tasa, fechaEsc, alcanzable }) => {
                     return (
                       <div key={esc} className="bg-app-surface rounded-lg p-2.5">
-                        <div className="text-[9px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
+                        <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">
                           {esc}
                         </div>
-                        <div className="font-mono text-[14px] font-bold text-app-text mb-1">
+                        <div className="font-mono text-strong font-bold text-app-text mb-1">
                           {formatPct(tasa)}
                         </div>
-                        <div className="text-[10px] text-app-text-dim mb-2">
+                        <div className="text-label text-app-text-dim mb-2">
                           {fechaEsc.fecha
                             ? dayjs(fechaEsc.fecha).format('MMM YYYY')
                             : '∞'}
                         </div>
                         <span
-                          className={`inline-flex text-[9px] font-semibold px-2 py-1 rounded-md w-full text-center justify-center ${
+                          className={`inline-flex text-label font-semibold px-2 py-1 rounded-md w-full text-center justify-center ${
                             alcanzable
                               ? 'bg-app-teal-soft text-app-teal'
                               : 'bg-app-coral-soft text-app-coral'
@@ -438,7 +439,7 @@ export default function Objetivo() {
                     )
                   })}
                 </div>
-                <div className="text-[8.5px] text-app-text-faint">
+                <div className="text-label text-app-text-faint">
                   Spread:{' '}
                   {escenarios.fuenteSpread === 'volatilidad'
                     ? `± ${((escenarios.optimista - escenarios.conservador) / 2).toFixed(1)}pp según volatilidad histórica`
@@ -451,11 +452,11 @@ export default function Objetivo() {
           {/* Proyección patrimonial */}
           {puntosPlan.length > 0 && puntosProyeccion.length > 0 ? (
             <>
-              <h3 className="text-[13.5px] font-bold text-app-text mb-2.5 mt-3.5">Proyección patrimonial</h3>
+              <h3 className="text-body font-bold text-app-text mb-2.5 mt-3.5">Proyección patrimonial</h3>
               <Card>
                 {escenarios && (
                   <div className="mb-3">
-                    <label className="block text-[10px] font-bold uppercase tracking-wide text-app-text-faint mb-1.5 flex items-center gap-1.5">
+                    <label className="block text-label font-bold uppercase tracking-wide text-app-text-faint mb-1.5 flex items-center gap-1.5">
                       Escenario mostrado
                       <InfoTooltip term="objetivo_escenario_mostrado" />
                     </label>
@@ -485,7 +486,7 @@ export default function Objetivo() {
           {/* Sensibilidad */}
           {grillaSensibilidad ? (
             <>
-              <h3 className="text-[13.5px] font-bold text-app-text mb-2.5 mt-3.5">Sensibilidad: tasa × aporte</h3>
+              <h3 className="text-body font-bold text-app-text mb-2.5 mt-3.5">Sensibilidad: tasa × aporte</h3>
               <SensibilidadGrid
                 grilla={grillaSensibilidad.grilla}
                 tasas={grillaSensibilidad.tasas}
@@ -496,7 +497,7 @@ export default function Objetivo() {
           ) : null}
 
           {/* Aportes históricos */}
-          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5 mt-3.5">Aportes históricos</h3>
+          <h3 className="text-body font-bold text-app-text mb-2.5 mt-3.5">Aportes históricos</h3>
           <Card>
             <AportesChart aportesHistoricos={aportesHistoricos} montoObjetivo={objetivo.monto_usd} />
           </Card>

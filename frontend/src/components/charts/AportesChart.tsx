@@ -13,7 +13,7 @@ export default function AportesChart({
   montoObjetivo?: number | null
 }) {
   if (!aportesHistoricos || aportesHistoricos.curva.length === 0) {
-    return <div className="text-center py-8 text-app-text-dim text-[12.5px]">Sin movimientos en esta cartera</div>
+    return <div className="text-center py-8 text-app-text-dim text-caption">Sin movimientos en esta cartera</div>
   }
 
   const data = aportesHistoricos.curva.map(punto => ({ ...punto, mes_label: punto.mes }))
@@ -58,7 +58,7 @@ export default function AportesChart({
           />
         </ComposedChart>
       </ResponsiveContainer>
-      <div className="mt-3 text-[11px] text-app-text-dim space-y-1">
+      <div className="mt-3 text-label text-app-text-dim space-y-1">
         <div>Últimos aportes netos acumulados: <strong className="text-app-text">{formatUSD(acumuladoFinal)}</strong></div>
         <div>Valor actual (hoy): <strong className="text-app-text">{formatUSD(aportesHistoricos.valor_actual_usd)}</strong></div>
         <div>

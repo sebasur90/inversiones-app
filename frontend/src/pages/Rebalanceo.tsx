@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useInversionesContext } from '../context/InversionesContext'
 import { formatARS, formatUSD } from '../utils'
 import {
   getConfiguracionCartera,
   simularRebalanceo,
-  type ConfiguracionCartera,
   type ModoSimulacion,
   type RebalanceoSimulacionOut,
 } from '../api'
@@ -17,6 +17,8 @@ import Button from '../components/ui/Button'
 import { Icon } from '../components/icons/Icons'
 import RebalanceoRow from '../components/inversiones/RebalanceoRow'
 import PropuestaRebalanceoRow from '../components/inversiones/PropuestaRebalanceoRow'
+import SkeletonPantalla from '../components/ui/Skeleton'
+import { qk } from '../api/queryClient'
 
 const MODO_OPCIONES: { value: ModoSimulacion; label: string }[] = [
   { value: 'completo', label: 'Rebalanceo completo' },
@@ -24,12 +26,16 @@ const MODO_OPCIONES: { value: ModoSimulacion; label: string }[] = [
 ]
 
 export default function Rebalanceo() {
-  const { carteraSeleccionada, rebalanceo, monedaSeleccionada, loading, syncVersion } = useInversionesContext()
+  const { carteraSeleccionada, rebalanceo, monedaSeleccionada, loading } = useInversionesContext()
   const [ejeActivo, setEjeActivo] = useState<string | null>(null)
   const esARS = monedaSeleccionada === 'ARS'
   const formatMoneda = esARS ? formatARS : formatUSD
 
-  const [configuracion, setConfiguracion] = useState<ConfiguracionCartera | null>(null)
+  const configuracionQuery = useQuery({
+    queryKey: qk.de('configuracion', carteraSeleccionada),
+    queryFn: () => getConfiguracionCartera(carteraSeleccionada),
+  })
+  const configuracion = configuracionQuery.data ?? null
 
   const [simuladorAbierto, setSimuladorAbierto] = useState(false)
   const [modo, setModo] = useState<ModoSimulacion>('completo')
@@ -44,24 +50,11 @@ export default function Rebalanceo() {
     return rebalanceo.ejes.find(e => e.eje === ejeActivo) ?? rebalanceo.ejes[0]
   }, [rebalanceo.ejes, ejeActivo])
 
-  useEffect(() => {
-    let cancelado = false
-    getConfiguracionCartera(carteraSeleccionada)
-      .then(data => {
-        if (!cancelado) setConfiguracion(data)
-      })
-      .catch(() => {
-        if (!cancelado) setConfiguracion(null)
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [carteraSeleccionada, syncVersion])
-
+  // La simulación es del eje y la cartera que estaban elegidos: si cambian, deja de aplicar.
   useEffect(() => {
     setSimResultado(null)
     setSimError(null)
-  }, [eje?.eje, carteraSeleccionada, syncVersion])
+  }, [eje?.eje, carteraSeleccionada])
 
   const toleranciaPp = configuracion?.tolerancia ?? 2
 
@@ -88,7 +81,7 @@ export default function Rebalanceo() {
       <ScreenHeader title="Balance de Cartera" />
 
       {loading ? (
-        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+        <SkeletonPantalla />
       ) : rebalanceo.ejes.length === 0 ? (
         <EmptyState
           title="Sin objetivos de rebalanceo cargados"
@@ -96,7 +89,7 @@ export default function Rebalanceo() {
         />
       ) : (
         <>
-          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">
+          <h3 className="text-body font-bold text-app-text mb-2.5">
             <InfoTooltip term="rebalanceo" label="Balance de Cartera" />
           </h3>
 
@@ -110,7 +103,7 @@ export default function Rebalanceo() {
             <>
               <div className="flex flex-col gap-4 mt-4">
                 {eje.items.length === 0 ? (
-                  <div className="text-[12px] text-app-text-dim">Sin categorías con objetivo en este eje.</div>
+                  <div className="text-caption text-app-text-dim">Sin categorías con objetivo en este eje.</div>
                 ) : (
                   eje.items.map(item => (
                     <RebalanceoRow key={item.etiqueta} item={item} moneda={monedaSeleccionada} toleranciaPp={toleranciaPp} />
@@ -120,11 +113,11 @@ export default function Rebalanceo() {
 
               {eje.sin_objetivo.length > 0 && (
                 <>
-                  <h3 className="text-[13.5px] font-bold text-app-text mb-2.5 mt-6">Sin objetivo</h3>
+                  <h3 className="text-body font-bold text-app-text mb-2.5 mt-6">Sin objetivo</h3>
                   <div className="flex flex-col gap-2.5">
                     {eje.sin_objetivo.map(item => (
                       <div key={item.etiqueta}>
-                        <div className="flex justify-between items-baseline text-[11.5px] mb-1.5">
+                        <div className="flex justify-between items-baseline text-caption mb-1.5">
                           <span className="text-app-text-dim">{item.etiqueta}</span>
                           <span className="font-mono font-bold text-app-text-dim tabular-nums">
                             {formatMoneda(esARS ? item.valor_ars : item.valor_usd)}
@@ -152,12 +145,12 @@ export default function Rebalanceo() {
 
                   {simuladorAbierto && (
                     <Card className="mt-3">
-                      <label className="block text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2">Modo</label>
+                      <label className="block text-label font-bold uppercase tracking-wide text-app-text-dim mb-2">Modo</label>
                       <Segmented options={MODO_OPCIONES} value={modo} onChange={setModo} />
 
                       {modo === 'solo_aportes' && (
                         <div className="mt-3.5">
-                          <label className="block text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2">
+                          <label className="block text-label font-bold uppercase tracking-wide text-app-text-dim mb-2">
                             Monto del aporte (USD)
                           </label>
                           <input
@@ -167,13 +160,13 @@ export default function Rebalanceo() {
                             placeholder="0"
                             value={aporteInput}
                             onChange={e => setAporteInput(e.target.value)}
-                            className="w-full h-11 rounded-xl bg-app-surface-2 border border-app-border px-3.5 text-[13.5px] text-app-text outline-none focus:border-app-gold/60 tabular-nums"
+                            className="w-full h-11 rounded-xl bg-app-surface-2 border border-app-border px-3.5 text-body text-app-text outline-none focus:border-app-gold/60 tabular-nums"
                           />
                         </div>
                       )}
 
                       <div className="mt-3.5">
-                        <label className="block text-[11px] font-bold uppercase tracking-wide text-app-text-dim mb-2">
+                        <label className="block text-label font-bold uppercase tracking-wide text-app-text-dim mb-2">
                           Comisión estimada (%)
                         </label>
                         <input
@@ -183,9 +176,9 @@ export default function Rebalanceo() {
                           placeholder="0"
                           value={tasaInput}
                           onChange={e => setTasaInput(e.target.value)}
-                          className="w-full h-11 rounded-xl bg-app-surface-2 border border-app-border px-3.5 text-[13.5px] text-app-text outline-none focus:border-app-gold/60 tabular-nums"
+                          className="w-full h-11 rounded-xl bg-app-surface-2 border border-app-border px-3.5 text-body text-app-text outline-none focus:border-app-gold/60 tabular-nums"
                         />
-                        <div className="text-[10px] text-app-text-faint mt-1">
+                        <div className="text-label text-app-text-faint mt-1">
                           Se precarga con el promedio histórico de esta cartera; podés editarla.
                         </div>
                       </div>
@@ -194,48 +187,48 @@ export default function Rebalanceo() {
                         {simLoading ? 'Simulando…' : 'Simular'}
                       </Button>
 
-                      <div className="text-[10.5px] text-app-text-faint text-center mt-2.5">
+                      <div className="text-label text-app-text-faint text-center mt-2.5">
                         Esto es una simulación: no se registran movimientos reales.
                       </div>
 
-                      {simError && <div className="text-[11.5px] text-app-coral mt-3">{simError}</div>}
+                      {simError && <div className="text-caption text-app-coral mt-3">{simError}</div>}
 
                       {simResultado && (
                         <div className="mt-4">
                           <div className="grid grid-cols-3 gap-2 mb-4">
                             <div className="bg-app-surface-2 rounded-[13px] p-2.5">
-                              <div className="text-[9px] font-bold uppercase tracking-wide text-app-text-faint mb-1">Comprar</div>
-                              <div className="font-mono text-[13px] font-bold text-app-teal tabular-nums">
+                              <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">Comprar</div>
+                              <div className="font-mono text-body font-bold text-app-teal tabular-nums">
                                 {formatUSD(simResultado.total_a_comprar_usd)}
                               </div>
                             </div>
                             <div className="bg-app-surface-2 rounded-[13px] p-2.5">
-                              <div className="text-[9px] font-bold uppercase tracking-wide text-app-text-faint mb-1">Vender</div>
-                              <div className="font-mono text-[13px] font-bold text-app-coral tabular-nums">
+                              <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">Vender</div>
+                              <div className="font-mono text-body font-bold text-app-coral tabular-nums">
                                 {formatUSD(simResultado.total_a_vender_usd)}
                               </div>
                             </div>
                             <div className="bg-app-surface-2 rounded-[13px] p-2.5">
-                              <div className="text-[9px] font-bold uppercase tracking-wide text-app-text-faint mb-1">Comisiones</div>
-                              <div className="font-mono text-[13px] font-bold text-app-text tabular-nums">
+                              <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">Comisiones</div>
+                              <div className="font-mono text-body font-bold text-app-text tabular-nums">
                                 {formatUSD(simResultado.total_comision_estimada_usd)}
                               </div>
                             </div>
                           </div>
 
                           {simResultado.modo === 'solo_aportes' && simResultado.sobrante_usd > 0.5 && (
-                            <div className="text-[11.5px] text-app-text-dim mb-3">
+                            <div className="text-caption text-app-text-dim mb-3">
                               Sobrante sin invertir: <span className="font-mono font-bold text-app-text">{formatUSD(simResultado.sobrante_usd)}</span> (alcanzarías los objetivos antes de usar todo el aporte).
                             </div>
                           )}
 
                           {necesarios.length === 0 && opcionales.length === 0 ? (
-                            <div className="text-[12px] text-app-text-dim">No hay cambios sugeridos: la cartera ya está dentro de la tolerancia.</div>
+                            <div className="text-caption text-app-text-dim">No hay cambios sugeridos: la cartera ya está dentro de la tolerancia.</div>
                           ) : (
                             <>
                               {necesarios.length > 0 && (
                                 <>
-                                  <h3 className="text-[12.5px] font-bold text-app-text mb-1 mt-2">Cambios necesarios</h3>
+                                  <h3 className="text-caption font-bold text-app-text mb-1 mt-2">Cambios necesarios</h3>
                                   <div>
                                     {necesarios.map((it, i) => (
                                       <PropuestaRebalanceoRow key={`${it.posicion ?? it.categoria}-${i}`} item={it} />
@@ -245,7 +238,7 @@ export default function Rebalanceo() {
                               )}
                               {opcionales.length > 0 && (
                                 <>
-                                  <h3 className="text-[12.5px] font-bold text-app-text mb-1 mt-4">Cambios opcionales</h3>
+                                  <h3 className="text-caption font-bold text-app-text mb-1 mt-4">Cambios opcionales</h3>
                                   <div>
                                     {opcionales.map((it, i) => (
                                       <PropuestaRebalanceoRow key={`${it.posicion ?? it.categoria}-${i}`} item={it} />

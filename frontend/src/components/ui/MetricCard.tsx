@@ -20,15 +20,15 @@ export default function MetricCard({
 }: MetricCardProps) {
   return (
     <div className="bg-app-surface border border-app-border rounded-[13px] px-2.5 py-2.5">
-      <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1">
+      <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">
         <InfoTerm term={infoTerm} label={label} />
       </div>
       {insuficiente ? (
-        <div className="text-[12px] text-app-text-faint">Datos insuficientes</div>
+        <div className="text-caption text-app-text-faint">Datos insuficientes</div>
       ) : (
-        <div className={`font-mono text-[14px] font-bold tabular-nums ${tone ?? 'text-app-text'}`}>{value}</div>
+        <div className={`font-mono text-strong font-bold tabular-nums ${tone ?? 'text-app-text'}`}>{value}</div>
       )}
-      {subtitulo && !insuficiente && <div className="text-[10px] text-app-text-dim mt-0.5">{subtitulo}</div>}
+      {subtitulo && !insuficiente && <div className="text-label text-app-text-dim mt-0.5">{subtitulo}</div>}
     </div>
   )
 }

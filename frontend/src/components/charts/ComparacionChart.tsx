@@ -42,7 +42,7 @@ const renderCustomLabel = (props: any): React.ReactElement | null => {
 
 export default function ComparacionChart({ resumen }: { resumen: InversionesResumen | null }) {
   if (!resumen) {
-    return <div className="text-center py-10 text-app-text-dim text-[12.5px]">Sin datos de comparación</div>
+    return <div className="text-center py-10 text-app-text-dim text-caption">Sin datos de comparación</div>
   }
 
   const data: BarData[] = [
@@ -89,7 +89,7 @@ export default function ComparacionChart({ resumen }: { resumen: InversionesResu
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-      <div className="mt-3 text-[11px] text-app-text-dim space-y-0.5">
+      <div className="mt-3 text-label text-app-text-dim space-y-0.5">
         {resumen.valor_benchmark_usd_ars === null && <div>⚠ Sin MEP disponible para hoy</div>}
         {resumen.total_invertido_ars_real === null && <div>⚠ Sin CER disponible para algunos períodos</div>}
       </div>

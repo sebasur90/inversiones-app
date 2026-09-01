@@ -319,7 +319,7 @@ export default function Simulador() {
             {/* Interpretación */}
             <ResultInterpretation>
               <p>Cada escenario muestra cómo evolucionaría tu patrimonio bajo diferentes supuestos de mercado. Compara los valores finales para entender el rango de posibilidades.</p>
-              <p className="text-app-text-faint text-[10px]">Recuerda: estos son ejercicios matemáticos bajo supuestos. El mercado real es más complejo y menos predecible.</p>
+              <p className="text-app-text-faint text-label">Recuerda: estos son ejercicios matemáticos bajo supuestos. El mercado real es más complejo y menos predecible.</p>
             </ResultInterpretation>
 
             {/* Advertencias */}
@@ -354,19 +354,19 @@ export default function Simulador() {
                   <button
                     onClick={() => handleCargarGuardado(esc)}
                     disabled={escenarios.length >= 6}
-                    className="text-[11px] font-semibold text-app-gold disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="text-label font-semibold text-app-gold disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Cargar
                   </button>
                   <button
                     onClick={() => handleDuplicarGuardado(esc)}
-                    className="text-[11px] font-semibold text-app-text-secondary hover:text-app-text"
+                    className="text-label font-semibold text-app-text-secondary hover:text-app-text"
                   >
                     Duplicar
                   </button>
                   <button
                     onClick={() => handleEliminarGuardado(esc)}
-                    className={`text-[11px] font-semibold ${
+                    className={`text-label font-semibold ${
                       confirmandoEliminar === esc.id
                         ? 'text-app-coral'
                         : 'text-app-text-secondary hover:text-app-coral'
@@ -378,7 +378,7 @@ export default function Simulador() {
               ))}
             </div>
             {escenarios.length >= 6 && (
-              <div className="text-[10px] text-app-text-faint mt-2">
+              <div className="text-label text-app-text-faint mt-2">
                 Máximo de 6 paneles de escenario. Quitá alguno para cargar otro.
               </div>
             )}

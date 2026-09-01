@@ -48,12 +48,12 @@ export default function TickerRiesgoTab({ riesgo }: { riesgo: TickerRiesgoOut })
 
       {riesgo.mejores_periodos && riesgo.mejores_periodos.length > 0 && (
         <Card className="mb-4">
-          <h3 className="text-[12px] font-bold text-app-text mb-3">Mejores períodos</h3>
+          <h3 className="text-caption font-bold text-app-text mb-3">Mejores períodos</h3>
           <div className="space-y-2">
             {riesgo.mejores_periodos.slice(0, 3).map((p, i) => (
               <div key={i} className="flex justify-between items-center py-2 px-2 bg-app-surface/50 rounded-[7px]">
-                <span className="text-[11px] text-app-text-dim">{p.anio}-{String(p.mes).padStart(2, '0')}</span>
-                <span className={`font-mono font-bold text-[11px] tabular-nums ${p.retorno >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
+                <span className="text-label text-app-text-dim">{p.anio}-{String(p.mes).padStart(2, '0')}</span>
+                <span className={`font-mono font-bold text-label tabular-nums ${p.retorno >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
                   {formatPctRatio(p.retorno)}
                 </span>
               </div>
@@ -64,12 +64,12 @@ export default function TickerRiesgoTab({ riesgo }: { riesgo: TickerRiesgoOut })
 
       {riesgo.peores_periodos && riesgo.peores_periodos.length > 0 && (
         <Card>
-          <h3 className="text-[12px] font-bold text-app-text mb-3">Peores períodos</h3>
+          <h3 className="text-caption font-bold text-app-text mb-3">Peores períodos</h3>
           <div className="space-y-2">
             {riesgo.peores_periodos.slice(0, 3).map((p, i) => (
               <div key={i} className="flex justify-between items-center py-2 px-2 bg-app-surface/50 rounded-[7px]">
-                <span className="text-[11px] text-app-text-dim">{p.anio}-{String(p.mes).padStart(2, '0')}</span>
-                <span className={`font-mono font-bold text-[11px] tabular-nums ${p.retorno >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
+                <span className="text-label text-app-text-dim">{p.anio}-{String(p.mes).padStart(2, '0')}</span>
+                <span className={`font-mono font-bold text-label tabular-nums ${p.retorno >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
                   {formatPctRatio(p.retorno)}
                 </span>
               </div>

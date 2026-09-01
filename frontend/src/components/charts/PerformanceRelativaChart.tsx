@@ -19,7 +19,7 @@ function formatFechaTooltip(iso: string): string {
 
 export default function PerformanceRelativaChart({ serie }: PerformanceRelativaChartProps) {
   if (serie.length === 0) {
-    return <div className="h-[240px] flex items-center justify-center text-app-text-dim text-[12.5px]">Sin datos para esta vista</div>
+    return <div className="h-[240px] flex items-center justify-center text-app-text-dim text-caption">Sin datos para esta vista</div>
   }
 
   return (

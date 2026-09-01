@@ -9,6 +9,18 @@ que `sync_from_sheet` intente pegarle a APIs externas de verdad en cada test.
 import pytest
 
 
+from app.services.cache import limpiar_cache
+
+
 @pytest.fixture(autouse=True)
 def _sin_apis_externas_por_default(monkeypatch):
     monkeypatch.setenv("USE_EXTERNAL_APIS", "false")
+
+
+@pytest.fixture(autouse=True)
+def _cache_limpia():
+    """Los analytics cachean por (conexión, sync, fecha). Cada test arranca con la caché
+    vacía para que el resultado no dependa de lo que corrió antes."""
+    limpiar_cache()
+    yield
+    limpiar_cache()

@@ -15,7 +15,7 @@ const SEVERIDAD_LABELS: Record<Severidad, string> = {
 export default function SeverityBadge({ severidad, className = '' }: { severidad: Severidad; className?: string }) {
   return (
     <span
-      className={`inline-block font-bold text-[9.5px] tracking-wide px-1.5 py-0.5 rounded-[6px] shrink-0 ${SEVERIDAD_CLASSES[severidad]} ${className}`}
+      className={`inline-block font-bold text-label tracking-wide px-1.5 py-0.5 rounded-[6px] shrink-0 ${SEVERIDAD_CLASSES[severidad]} ${className}`}
     >
       {SEVERIDAD_LABELS[severidad].toUpperCase()}
     </span>

@@ -170,14 +170,30 @@ def simular_rebalanceo_consolidado(body: RebalanceoSimulacionRequest, db: Sessio
 def list_movimientos(
     cartera: Optional[str] = Query(None),
     ticker: Optional[str] = Query(None),
+    desde: Optional[date] = Query(None, description="Sólo movimientos con fecha >= desde"),
+    limit: Optional[int] = Query(None, ge=1, le=5000, description="Máximo de movimientos a devolver"),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
+    """Movimientos, del más reciente al más viejo.
+
+    `limit`/`offset` paginan sobre ese orden: la app pide los últimos N al arrancar y va
+    trayendo el resto a medida que hace falta, en vez de cargar el historial completo.
+    """
     q = db.query(MovimientoInversion)
     if cartera:
         q = q.filter(MovimientoInversion.cartera == cartera)
     if ticker:
         q = q.filter(MovimientoInversion.ticker == ticker)
-    return q.order_by(MovimientoInversion.fecha.desc(), MovimientoInversion.id.desc()).all()
+    if desde:
+        q = q.filter(MovimientoInversion.fecha >= desde)
+
+    q = q.order_by(MovimientoInversion.fecha.desc(), MovimientoInversion.id.desc())
+    if offset:
+        q = q.offset(offset)
+    if limit is not None:
+        q = q.limit(limit)
+    return q.all()
 
 
 @router.get("/carteras/{nombre}/rendimiento-por-ticker", response_model=list[RendimientoPorTickerItem])

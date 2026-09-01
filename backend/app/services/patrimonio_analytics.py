@@ -24,8 +24,10 @@ from .inversiones_analytics import (
     _cer_indice,
     TIPOS_INGRESO,
 )
+from .cache import cache_por_sync
 
 
+@cache_por_sync
 def get_patrimonio_history(
     cartera: str | None,
     db: Session,

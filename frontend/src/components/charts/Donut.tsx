@@ -26,13 +26,13 @@ export default function Donut({
     <div className="flex items-center gap-4">
       <div className="relative w-[112px] h-[112px] shrink-0 rounded-full" style={{ background: gradient }}>
         <div className="absolute inset-5 rounded-full bg-app-surface flex flex-col items-center justify-center">
-          <b className="font-mono text-[15px] text-app-text tabular-nums">{centerValue}</b>
-          <span className="text-[8px] uppercase tracking-wide text-app-text-dim mt-0.5">{centerLabel}</span>
+          <b className="font-mono text-strong text-app-text tabular-nums">{centerValue}</b>
+          <span className="text-label uppercase tracking-wide text-app-text-dim mt-0.5">{centerLabel}</span>
         </div>
       </div>
       <div className="flex-1 flex flex-col gap-2 min-w-0">
         {slices.map((s, i) => (
-          <div key={s.etiqueta} className="flex items-center gap-2 text-[11.5px]">
+          <div key={s.etiqueta} className="flex items-center gap-2 text-caption">
             <i className="w-2.5 h-2.5 rounded-[3px] shrink-0" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
             <span className="flex-1 text-app-text-dim truncate">{s.etiqueta}</span>
             <span className="font-mono font-bold text-app-text tabular-nums">{s.porcentaje.toFixed(0)}%</span>

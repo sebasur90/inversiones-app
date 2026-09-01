@@ -8,6 +8,7 @@ import Chip from '../components/ui/Chip'
 import EmptyState from '../components/ui/EmptyState'
 import BotonExportarCsv from '../components/ui/BotonExportarCsv'
 import { Icon } from '../components/icons/Icons'
+import SkeletonPantalla from '../components/ui/Skeleton'
 
 export default function Movimientos() {
   const navigate = useNavigate()
@@ -50,7 +51,7 @@ export default function Movimientos() {
       <ScreenHeader title="Movimientos" />
 
       <div className="flex items-center justify-between gap-3 mb-3">
-        <button onClick={() => navigate('/comisiones')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-app-text-dim">
+        <button onClick={() => navigate('/comisiones')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
           Ver comisiones pagadas →
         </button>
         {filtrados.length > 0 && (
@@ -73,7 +74,7 @@ export default function Movimientos() {
           value={busqueda}
           onChange={e => setBusqueda(e.target.value)}
           placeholder="Buscar ticker o cartera…"
-          className="flex-1 bg-transparent outline-none text-[12.5px] text-app-text placeholder:text-app-text-faint"
+          className="flex-1 bg-transparent outline-none text-caption text-app-text placeholder:text-app-text-faint"
         />
       </div>
 
@@ -84,13 +85,13 @@ export default function Movimientos() {
       )}
 
       {loading ? (
-        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+        <SkeletonPantalla />
       ) : grupos.length === 0 ? (
         <EmptyState title="Sin movimientos" description="No hay movimientos que coincidan con el filtro." />
       ) : (
         grupos.map(grupo => (
           <div key={grupo.fecha}>
-            <div className="text-[10.5px] font-bold uppercase tracking-wide text-app-text-faint mt-3.5 mb-1">{labelFecha(grupo.fecha)}</div>
+            <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mt-3.5 mb-1">{labelFecha(grupo.fecha)}</div>
             {grupo.items.map(mov => (
               <MovimientoRow key={mov.id} mov={mov} />
             ))}

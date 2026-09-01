@@ -1,40 +1,31 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { getBenchmarksDisponibles, getConfiguracionCartera, getTickersConPrecios } from '../api'
-import { useInversionesContext } from '../context/InversionesContext'
+import { qk } from '../api/queryClient'
 
 export function useBenchmarkSeleccionado(cartera: string | null) {
-  const { syncVersion } = useInversionesContext()
-  const [benchmarks, setBenchmarks] = useState<string[]>([])
-  const [benchmarkSeleccionado, setBenchmarkSeleccionado] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [elegido, setBenchmarkSeleccionado] = useState<string | null>(null)
 
-  useEffect(() => {
-    let cancelado = false
-    Promise.all([
-      getBenchmarksDisponibles(),
-      getConfiguracionCartera(cartera).catch(() => null),
-      // El backend ya acepta cualquier ticker como benchmark (compara la cartera contra un
-      // activo puntual, ej. "vs. GGAL"), pero GET /benchmarks sólo devuelve los benchmarks
-      // "de verdad". Se agregan acá para no tener que tocar ese endpoint.
-      getTickersConPrecios().catch(() => []),
-    ])
-      .then(([data, config, tickers]) => {
-        if (cancelado) return
-        const conTickers = [...data, ...tickers.map(t => t.ticker).filter(t => !data.includes(t))]
-        setBenchmarks(conTickers)
-        const preferido = config?.benchmark && data.includes(config.benchmark) ? config.benchmark : data[0] ?? null
-        setBenchmarkSeleccionado(prev => prev ?? preferido)
-      })
-      .catch(() => {
-        if (!cancelado) setBenchmarks([])
-      })
-      .finally(() => {
-        if (!cancelado) setLoading(false)
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [cartera, syncVersion])
+  const query = useQuery({
+    queryKey: qk.de('benchmarks-disponibles', cartera),
+    queryFn: async () => {
+      const [data, config, tickers] = await Promise.all([
+        getBenchmarksDisponibles(),
+        getConfiguracionCartera(cartera).catch(() => null),
+        // El backend ya acepta cualquier ticker como benchmark (compara la cartera contra un
+        // activo puntual, ej. "vs. GGAL"), pero GET /benchmarks sólo devuelve los benchmarks
+        // "de verdad". Se agregan acá para no tener que tocar ese endpoint.
+        getTickersConPrecios().catch(() => []),
+      ])
+      const conTickers = [...data, ...tickers.map(t => t.ticker).filter(t => !data.includes(t))]
+      const preferido = config?.benchmark && data.includes(config.benchmark) ? config.benchmark : data[0] ?? null
+      return { benchmarks: conTickers, preferido }
+    },
+  })
 
-  return { benchmarks, benchmarkSeleccionado, setBenchmarkSeleccionado, loading }
+  const benchmarks = query.data?.benchmarks ?? []
+  // Lo que eligió el usuario manda; si todavía no eligió, el de la configuración de la cartera.
+  const benchmarkSeleccionado = elegido ?? query.data?.preferido ?? null
+
+  return { benchmarks, benchmarkSeleccionado, setBenchmarkSeleccionado, loading: query.isLoading }
 }

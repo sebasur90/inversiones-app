@@ -8,7 +8,8 @@
   --color-app-border-soft: #1a2521;
   --color-app-text: #edf2ef;
   --color-app-text-dim: #8ca39b;
-  --color-app-text-faint: #5e736a;
+  /* 4,9:1 mínimo sobre los tres fondos (AA). El tono anterior (#5e736a) daba 3,2-3,7:1. */
+  --color-app-text-faint: #7d918a;
   --color-app-gold: #d8b14a;
   --color-app-gold-soft: rgba(216, 177, 74, 0.14);
   --color-app-teal: #4fd1ae;
@@ -25,6 +26,21 @@
 
   --animate-rise: rise 2.6s ease-in-out infinite;
   --animate-spin-slow: spin 7s linear infinite;
+
+  /* Escala tipográfica. Antes cada componente hardcodeaba su tamaño (25 valores distintos
+     entre 8px y 42px, varios por debajo del mínimo legible). Los tamaños cuelgan de
+     --escala-texto, que Ajustes mueve entre 1 y 1.3: escala el texto sin tocar el spacing,
+     que en Tailwind también va en rem. */
+  --text-label: calc(0.6875rem * var(--escala-texto, 1));      /* 11px — etiquetas, nav, uppercase */
+  --text-caption: calc(0.75rem * var(--escala-texto, 1));      /* 12px — auxiliar, descripciones */
+  --text-body: calc(0.8125rem * var(--escala-texto, 1));       /* 13px — cuerpo */
+  --text-strong: calc(0.875rem * var(--escala-texto, 1));      /* 14px — títulos de sección */
+  --text-title: calc(1rem * var(--escala-texto, 1));           /* 16px */
+  --text-heading: calc(1.1875rem * var(--escala-texto, 1));    /* 19px — título de pantalla */
+  --text-metric: calc(1.375rem * var(--escala-texto, 1));      /* 22px — scores */
+  --text-metric-lg: calc(1.625rem * var(--escala-texto, 1));   /* 26px */
+  --text-hero: calc(2rem * var(--escala-texto, 1));            /* 32px — valor de cartera */
+  --text-display: calc(2.625rem * var(--escala-texto, 1));     /* 42px — splash */
 }
 
 @keyframes rise {
@@ -51,6 +67,14 @@ body {
   overscroll-behavior-y: contain;
 }
 
+/* Foco visible en cualquier control: antes sólo se veía el outline por defecto del
+   navegador, que el reset de Tailwind quita. */
+:focus-visible {
+  outline: 2px solid var(--color-app-gold);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
@@ -72,7 +96,7 @@ body {
 
 /* Diagnostico custom sizing */
 .salud-title {
-  font-size: 11px;
+  font-size: var(--text-label);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;

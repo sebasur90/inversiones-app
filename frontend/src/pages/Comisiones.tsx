@@ -1,16 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { useInversionesContext } from '../context/InversionesContext'
-import { getComisiones, type ComisionesOut, type ComisionPeriodoItem } from '../api'
+import { getComisiones, type ComisionPeriodoItem } from '../api'
+import { qk } from '../api/queryClient'
 import { CHART_COLORS, formatARS, formatUSD } from '../utils'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
 import BotonExportarCsv from '../components/ui/BotonExportarCsv'
+import SkeletonPantalla from '../components/ui/Skeleton'
+import QueryBoundary from '../components/ui/QueryBoundary'
 
 type Desglose = 'cartera' | 'ticker' | 'mes' | 'anio'
 
@@ -23,13 +27,13 @@ function BarrasDesglose({
 }) {
   const total = items.reduce((acc, i) => acc + i.valor, 0)
   if (total <= 0) {
-    return <div className="text-center py-10 text-app-text-dim text-[12.5px]">Sin comisiones para este desglose</div>
+    return <div className="text-center py-10 text-app-text-dim text-caption">Sin comisiones para este desglose</div>
   }
   return (
     <div className="flex flex-col gap-2.5">
       {items.map((item, i) => (
         <div key={item.etiqueta}>
-          <div className="flex justify-between items-baseline text-[11.5px] mb-1.5">
+          <div className="flex justify-between items-baseline text-caption mb-1.5">
             <span className="text-app-text">{item.etiqueta}</span>
             <span className="font-mono font-bold text-app-text tabular-nums">{formatMoneda(item.valor)}</span>
           </div>
@@ -47,7 +51,7 @@ function BarrasDesglose({
 
 function PeriodoChart({ items, esARS }: { items: ComisionPeriodoItem[]; esARS: boolean }) {
   if (items.length === 0) {
-    return <div className="text-center py-10 text-app-text-dim text-[12.5px]">Sin comisiones para este período</div>
+    return <div className="text-center py-10 text-app-text-dim text-caption">Sin comisiones para este período</div>
   }
   const clave = esARS ? 'total_ars' : 'total_usd'
   const formatMoneda = esARS ? formatARS : formatUSD
@@ -72,39 +76,34 @@ function PeriodoChart({ items, esARS }: { items: ComisionPeriodoItem[]; esARS: b
 
 export default function Comisiones() {
   const navigate = useNavigate()
-  const { carteraSeleccionada, monedaSeleccionada, syncVersion } = useInversionesContext()
-  const [datos, setDatos] = useState<ComisionesOut | null>(null)
-  const [desglose, setDesglose] = useState<Desglose>('ticker')
-  const [loading, setLoading] = useState(true)
+  const { carteraSeleccionada, monedaSeleccionada } = useInversionesContext()
+  // null = todavía no eligió: se usa el desglose por defecto según lo que traiga la respuesta.
+  const [desgloseElegido, setDesglose] = useState<Desglose | null>(null)
 
-  useEffect(() => {
-    let cancelado = false
-    setLoading(true)
-    getComisiones(carteraSeleccionada)
-      .then(data => {
-        if (cancelado) return
-        setDatos(data)
-        setDesglose(data.por_cartera.length > 0 ? 'cartera' : 'ticker')
-      })
-      .catch(() => {
-        if (!cancelado) setDatos(null)
-      })
-      .finally(() => {
-        if (!cancelado) setLoading(false)
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [carteraSeleccionada, syncVersion])
+  const comisionesQuery = useQuery({
+    queryKey: qk.de('comisiones', carteraSeleccionada),
+    queryFn: () => getComisiones(carteraSeleccionada),
+  })
+  const datos = comisionesQuery.data ?? null
+
+  const hayPorCartera = (datos?.por_cartera.length ?? 0) > 0
+  const desglose: Desglose = desgloseElegido ?? (hayPorCartera ? 'cartera' : 'ticker')
 
   const esARS = monedaSeleccionada === 'ARS'
   const formatMoneda = esARS ? formatARS : formatUSD
 
-  if (loading) {
+  if (comisionesQuery.isLoading || comisionesQuery.error) {
     return (
       <div className="pb-4">
         <ScreenHeader title="Comisiones" onBack={() => navigate(-1)} />
-        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+        <QueryBoundary
+          isLoading={comisionesQuery.isLoading}
+          error={comisionesQuery.error}
+          onRetry={() => void comisionesQuery.refetch()}
+          fallback={<SkeletonPantalla />}
+        >
+          {null}
+        </QueryBoundary>
       </div>
     )
   }
@@ -130,11 +129,11 @@ export default function Comisiones() {
       <ScreenHeader title="Comisiones" onBack={() => navigate(-1)} />
 
       <Card className="mb-4">
-        <div className="text-[10px] font-bold uppercase tracking-wide text-app-text-faint mb-1">Total pagado</div>
-        <div className="font-mono text-[26px] font-bold text-app-text tabular-nums">
+        <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">Total pagado</div>
+        <div className="font-mono text-metric-lg font-bold text-app-text tabular-nums">
           {formatMoneda(esARS ? datos.total_ars : datos.total_usd)}
         </div>
-        <div className="text-[11px] text-app-text-dim mt-1">
+        <div className="text-label text-app-text-dim mt-1">
           {datos.movimientos_con_comision} movimiento{datos.movimientos_con_comision !== 1 ? 's' : ''} con comisión
         </div>
       </Card>

@@ -1,16 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { getIndicesMercado, type IndicesMercadoOut } from '../api'
+import { getIndicesMercado } from '../api'
 import { formatPct } from '../utils'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import EmptyState from '../components/ui/EmptyState'
 import { Icon } from '../components/icons/Icons'
 import InfoTooltip from '../help/components/InfoTooltip'
-import { useInversionesContext } from '../context/InversionesContext'
+import SkeletonPantalla from '../components/ui/Skeleton'
+import { useQuery } from '@tanstack/react-query'
+import { qk } from '../api/queryClient'
+import QueryBoundary from '../components/ui/QueryBoundary'
 
 type Vista = 'cer' | 'mep' | 'riesgo_pais' | 'inflacion'
 
@@ -49,18 +52,14 @@ const META: Record<Vista, { titulo: string; sub: string; color: string; formato:
 }
 
 export default function IndicadoresMacro() {
-  const { syncVersion } = useInversionesContext()
   const navigate = useNavigate()
-  const [datos, setDatos] = useState<IndicesMercadoOut | null>(null)
   const [vista, setVista] = useState<Vista>('cer')
-  const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    getIndicesMercado()
-      .then(setDatos)
-      .catch(() => setDatos(null))
-      .finally(() => setLoading(false))
-  }, [syncVersion])
+  const indicesQuery = useQuery({
+    queryKey: qk.de('indices-mercado'),
+    queryFn: () => getIndicesMercado(),
+  })
+  const datos = indicesQuery.data ?? null
 
   const meta = META[vista]
   const esInflacion = vista === 'inflacion'
@@ -87,11 +86,18 @@ export default function IndicadoresMacro() {
 
   const hayAlgo = datos && (datos.puntos.length > 0 || datos.inflacion_mensual.length > 0)
 
-  if (loading) {
+  if (indicesQuery.isLoading || indicesQuery.error) {
     return (
       <div className="pb-4">
         <ScreenHeader title="Indicadores macro" onBack={() => navigate(-1)} />
-        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+        <QueryBoundary
+          isLoading={indicesQuery.isLoading}
+          error={indicesQuery.error}
+          onRetry={() => void indicesQuery.refetch()}
+          fallback={<SkeletonPantalla />}
+        >
+          {null}
+        </QueryBoundary>
       </div>
     )
   }
@@ -111,20 +117,20 @@ export default function IndicadoresMacro() {
 
       <div className="flex items-start justify-between mb-3">
         <div>
-          <div className="font-semibold text-[15px] text-app-text">{meta.titulo}</div>
-          <div className="text-[11.5px] text-app-text-dim">{meta.sub}</div>
+          <div className="font-semibold text-strong text-app-text">{meta.titulo}</div>
+          <div className="text-caption text-app-text-dim">{meta.sub}</div>
         </div>
         {ultimoPunto && (
           <div className="text-right shrink-0 ml-4">
-            <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5 flex items-center justify-end gap-1.5">
+            <div className="text-label text-app-text-faint uppercase tracking-wide mb-0.5 flex items-center justify-end gap-1.5">
               <span>Último registro</span>
               <InfoTooltip term="precios_ultimo_registro" />
             </div>
-            <div className="font-mono font-bold text-[15px] text-app-text tabular-nums">
+            <div className="font-mono font-bold text-strong text-app-text tabular-nums">
               {meta.formato(ultimoPunto.valor)}{meta.unidad && !esInflacion ? ` ${meta.unidad}` : ''}
             </div>
             {!esInflacion && variacion != null && (
-              <div className={`inline-flex items-center gap-0.5 font-mono text-[11px] font-bold mt-0.5 tabular-nums ${positivo ? 'text-app-teal' : 'text-app-coral'}`}>
+              <div className={`inline-flex items-center gap-0.5 font-mono text-label font-bold mt-0.5 tabular-nums ${positivo ? 'text-app-teal' : 'text-app-coral'}`}>
                 <Icon name={positivo ? 'up' : 'down'} className="w-2.5 h-2.5" />
                 {formatPct(variacion)}
                 <div className="ml-0.5">
@@ -137,7 +143,7 @@ export default function IndicadoresMacro() {
       </div>
 
       <div className="px-4 mb-4 pt-2">
-        <div className="text-[12px] text-app-text-dim space-y-1.5 mb-3">
+        <div className="text-caption text-app-text-dim space-y-1.5 mb-3">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-app-text">CER</span>
             <InfoTooltip term="cer" />
@@ -146,7 +152,7 @@ export default function IndicadoresMacro() {
             <span className="font-semibold text-app-text">MEP</span>
             <InfoTooltip term="mep" />
           </div>
-          <div className="text-[11.5px]">
+          <div className="text-caption">
             <span className="font-semibold text-app-text">Riesgo país</span>: sobretasa que paga
             la deuda argentina vs. la de EE. UU., en puntos básicos (100 pb = 1%).
           </div>
@@ -158,7 +164,7 @@ export default function IndicadoresMacro() {
       </div>
 
       {datosGrafico.length === 0 ? (
-        <div className="h-[220px] flex items-center justify-center text-app-text-dim text-[12.5px]">
+        <div className="h-[220px] flex items-center justify-center text-app-text-dim text-caption">
           {esInflacion
             ? 'Sin serie de inflación. Requiere el benchmark "Inflación (INDEC)" (se completa vía API).'
             : vista === 'riesgo_pais'
@@ -207,7 +213,7 @@ export default function IndicadoresMacro() {
         </ResponsiveContainer>
       )}
 
-      <div className="mt-2 text-[10.5px] text-app-text-dim">
+      <div className="mt-2 text-label text-app-text-dim">
         {datosGrafico.length} registro{datosGrafico.length !== 1 ? 's' : ''}
         {ultimoPunto && ` · hasta ${formatFechaTooltip(ultimoPunto.fecha)}`}
       </div>

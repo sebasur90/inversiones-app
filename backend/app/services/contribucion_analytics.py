@@ -26,6 +26,7 @@ from .inversiones_analytics import (
     _retornos_mensuales_ticker,
     get_pnl_realizado_no_realizado,
 )
+from .cache import cache_por_sync
 
 UNIVERSOS_VALIDOS = ("tenencias", "todos")
 
@@ -70,6 +71,7 @@ def _peso_promedio_por_ticker(cartera: str | None, movs, precios_por_ticker, db:
     return {ticker: (suma / n_boundaries) * 100 for ticker, suma in pesos_acumulados.items()}
 
 
+@cache_por_sync
 def get_contribucion(cartera: str | None, db: Session) -> dict:
     movs = _movimientos_ordenados(db, cartera)
     if not movs:

@@ -40,8 +40,8 @@ export default function CarterasScroll({
               seleccionada === c.nombre ? 'bg-app-gold-soft border-app-gold/40' : 'bg-app-surface border-app-border'
             }`}
           >
-            <div className="text-[11.5px] font-bold text-app-text-dim mb-1.5 truncate">{c.nombre}</div>
-            <div className="font-mono text-[11px] text-app-text-dim tabular-nums">
+            <div className="text-caption font-bold text-app-text-dim mb-1.5 truncate">{c.nombre}</div>
+            <div className="font-mono text-label text-app-text-dim tabular-nums">
               {c.ultimo_sync ? `sync ${new Date(c.ultimo_sync).toLocaleDateString('es-AR')}` : 'sin sync'}
             </div>
           </button>

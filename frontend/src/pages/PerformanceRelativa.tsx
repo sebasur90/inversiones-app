@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { qk } from '../api/queryClient'
 import { useNavigate } from 'react-router-dom'
 import { useInversionesContext } from '../context/InversionesContext'
-import { getPerformanceRelativa, type PerformanceRelativaOut, type MonedaRiesgo } from '../api'
+import { getPerformanceRelativa, type MonedaRiesgo } from '../api'
 import { useBenchmarkSeleccionado } from '../hooks/useBenchmarkSeleccionado'
 import { formatPctRatio, calcularDesde, type PeriodoEvolucion } from '../utils'
 import ScreenHeader from '../components/layout/ScreenHeader'
@@ -11,6 +13,7 @@ import EmptyState from '../components/ui/EmptyState'
 import MetricTile from '../components/ui/MetricTile'
 import PerformanceRelativaChart from '../components/charts/PerformanceRelativaChart'
 import InfoTooltip from '../help/components/InfoTooltip'
+import SkeletonPantalla from '../components/ui/Skeleton'
 
 const OPCIONES_VISTA: { value: MonedaRiesgo; label: string }[] = [
   { value: 'ars_nominal', label: 'ARS Nominal' },
@@ -34,30 +37,17 @@ function getTone(v: number | null | undefined): 'pos' | 'neg' | undefined {
 
 export default function PerformanceRelativa() {
   const navigate = useNavigate()
-  const { carteraSeleccionada, syncVersion } = useInversionesContext()
+  const { carteraSeleccionada } = useInversionesContext()
   const [periodo, setPeriodo] = useState<PeriodoEvolucion>('1Y')
   const [vista, setVista] = useState<MonedaRiesgo>('usd')
   const { benchmarks, benchmarkSeleccionado, setBenchmarkSeleccionado } = useBenchmarkSeleccionado(carteraSeleccionada)
-  const [perfRelativa, setPerfRelativa] = useState<PerformanceRelativaOut | null>(null)
-  const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    let cancelado = false
-    setLoading(true)
-    getPerformanceRelativa(carteraSeleccionada, vista, benchmarkSeleccionado, calcularDesde(periodo))
-      .then(data => {
-        if (!cancelado) setPerfRelativa(data)
-      })
-      .catch(() => {
-        if (!cancelado) setPerfRelativa(null)
-      })
-      .finally(() => {
-        if (!cancelado) setLoading(false)
-      })
-    return () => {
-      cancelado = true
-    }
-  }, [carteraSeleccionada, vista, benchmarkSeleccionado, periodo, syncVersion])
+  const perfQuery = useQuery({
+    queryKey: qk.de('performance-relativa', carteraSeleccionada, vista, benchmarkSeleccionado, periodo),
+    queryFn: () => getPerformanceRelativa(carteraSeleccionada, vista, benchmarkSeleccionado, calcularDesde(periodo)),
+  })
+  const perfRelativa = perfQuery.data ?? null
+  const loading = perfQuery.isLoading
 
   const sinHistorialSuficiente = perfRelativa != null && perfRelativa.n_meses_historia === 0
 
@@ -70,7 +60,7 @@ export default function PerformanceRelativa() {
       </div>
 
       <div className="px-4 mb-4 pt-2">
-        <div className="text-[12px] text-app-text-dim space-y-1.5 mb-3">
+        <div className="text-caption text-app-text-dim space-y-1.5 mb-3">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-app-text">ARS Real (CER)</span>
             <InfoTooltip term="cer" />
@@ -88,7 +78,7 @@ export default function PerformanceRelativa() {
 
       {benchmarks.length > 0 && (
         <div className="mb-3">
-          <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-1.5">Benchmark</div>
+          <div className="text-label text-app-text-faint uppercase tracking-wide mb-1.5">Benchmark</div>
           <Segmented
             options={benchmarks.map(b => ({ value: b, label: b }))}
             value={benchmarkSeleccionado ?? benchmarks[0]}
@@ -98,7 +88,7 @@ export default function PerformanceRelativa() {
       )}
 
       {loading ? (
-        <div className="py-20 text-center text-app-text-dim text-[13px]">Cargando…</div>
+        <SkeletonPantalla />
       ) : !perfRelativa || perfRelativa.estado === 'sin_benchmark' ? (
         <EmptyState title="Sin benchmark configurado" description="Configura un benchmark para esta cartera para poder comparar su performance." />
       ) : perfRelativa.estado === 'datos_insuficientes' ? (
@@ -108,25 +98,25 @@ export default function PerformanceRelativa() {
           <Card className="mb-4">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">Cartera</div>
-                <div className={`font-mono font-bold text-[18px] tabular-nums ${getTone(perfRelativa.retorno_cartera_pct) === 'pos' ? 'text-app-teal' : getTone(perfRelativa.retorno_cartera_pct) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
+                <div className="text-label text-app-text-faint uppercase tracking-wide mb-0.5">Cartera</div>
+                <div className={`font-mono font-bold text-heading tabular-nums ${getTone(perfRelativa.retorno_cartera_pct) === 'pos' ? 'text-app-teal' : getTone(perfRelativa.retorno_cartera_pct) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
                   {formatPctRatio(perfRelativa.retorno_cartera_pct)}
                 </div>
               </div>
               <div>
-                <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">Benchmark</div>
-                <div className={`font-mono font-bold text-[18px] tabular-nums ${getTone(perfRelativa.retorno_benchmark_pct) === 'pos' ? 'text-app-teal' : getTone(perfRelativa.retorno_benchmark_pct) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
+                <div className="text-label text-app-text-faint uppercase tracking-wide mb-0.5">Benchmark</div>
+                <div className={`font-mono font-bold text-heading tabular-nums ${getTone(perfRelativa.retorno_benchmark_pct) === 'pos' ? 'text-app-teal' : getTone(perfRelativa.retorno_benchmark_pct) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
                   {formatPctRatio(perfRelativa.retorno_benchmark_pct)}
                 </div>
               </div>
               <div>
-                <div className="text-[10px] text-app-text-faint uppercase tracking-wide mb-0.5">Diferencia</div>
-                <div className={`font-mono font-bold text-[16px] tabular-nums ${getTone(perfRelativa.delta_pp) === 'pos' ? 'text-app-teal' : getTone(perfRelativa.delta_pp) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
+                <div className="text-label text-app-text-faint uppercase tracking-wide mb-0.5">Diferencia</div>
+                <div className={`font-mono font-bold text-title tabular-nums ${getTone(perfRelativa.delta_pp) === 'pos' ? 'text-app-teal' : getTone(perfRelativa.delta_pp) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
                   {(perfRelativa.delta_pp ?? 0) >= 0 ? '+' : ''}{perfRelativa.delta_pp?.toFixed(1)} pp
                 </div>
               </div>
             </div>
-            <div className="text-[11px] text-app-text-dim">
+            <div className="text-label text-app-text-dim">
               {(perfRelativa.retorno_cartera_pct ?? 0) >= (perfRelativa.retorno_benchmark_pct ?? 0)
                 ? '✓ Superaste el benchmark'
                 : '✗ Quedaste por debajo del benchmark'}
@@ -135,20 +125,20 @@ export default function PerformanceRelativa() {
 
           <Card className="mb-4">
             <div className="mb-3">
-              <div className="text-[9.5px] font-bold uppercase tracking-wide text-app-text-faint mb-1 flex items-center justify-between">
+              <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1 flex items-center justify-between">
                 <span>Costo de oportunidad vs {perfRelativa.benchmark_usado}</span>
                 <InfoTooltip term="costoOportunidad" />
               </div>
-              <div className={`font-mono font-bold text-[16px] tabular-nums ${getTone(perfRelativa.costo_oportunidad_pp) === 'pos' ? 'text-app-teal' : getTone(perfRelativa.costo_oportunidad_pp) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
+              <div className={`font-mono font-bold text-title tabular-nums ${getTone(perfRelativa.costo_oportunidad_pp) === 'pos' ? 'text-app-teal' : getTone(perfRelativa.costo_oportunidad_pp) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
                 {(perfRelativa.costo_oportunidad_pp ?? 0) >= 0 ? '+' : ''}{perfRelativa.costo_oportunidad_pp?.toFixed(1)} pp
               </div>
             </div>
-            <div className="text-[10px] text-app-text-dim">
+            <div className="text-label text-app-text-dim">
               ⓘ Esta métrica no constituye una recomendación de inversión. Refleja únicamente la diferencia de rentabilidad respecto al benchmark seleccionado.
             </div>
           </Card>
 
-          <div className="text-[11px] text-app-text-dim mb-3">
+          <div className="text-label text-app-text-dim mb-3">
             Basado en {perfRelativa.n_meses_historia} mes{perfRelativa.n_meses_historia === 1 ? '' : 'es'} de historial común.
           </div>
 
@@ -156,7 +146,7 @@ export default function PerformanceRelativa() {
             <PerformanceRelativaChart serie={perfRelativa.serie} />
           </Card>
 
-          <h3 className="text-[13.5px] font-bold text-app-text mb-2.5">Métricas de performance relativa</h3>
+          <h3 className="text-body font-bold text-app-text mb-2.5">Métricas de performance relativa</h3>
           <div className="grid grid-cols-2 gap-2 mb-4">
             <MetricTile
               label="Exceso de retorno"

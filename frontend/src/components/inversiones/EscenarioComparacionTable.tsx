@@ -46,7 +46,7 @@ export default function EscenarioComparacionTable({ resultado }: EscenarioCompar
                 className="text-right py-2 px-2 font-medium text-app-text tabular-nums"
               >
                 <div className="text-xs font-semibold">{esc.nombre}</div>
-                <div className="text-[10px] text-app-text-secondary">({esc.tipo_preset})</div>
+                <div className="text-label text-app-text-secondary">({esc.tipo_preset})</div>
               </th>
             ))}
           </tr>

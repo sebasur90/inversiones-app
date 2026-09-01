@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   getObjetivoInversion,
   getAportesHistoricos,
@@ -11,7 +11,7 @@ import {
   type RiesgoOut,
   type ConfiguracionCartera,
 } from '../api'
-import { useInversionesContext } from '../context/InversionesContext'
+import { qk } from '../api/queryClient'
 
 export interface UseObjetivoInversionResult {
   objetivo: ObjetivoInversion | null
@@ -23,81 +23,36 @@ export interface UseObjetivoInversionResult {
   error: string | null
 }
 
+/** El objetivo es por cartera: en el consolidado no hay nada que pedir. */
 export function useObjetivoInversion(cartera: string | null): UseObjetivoInversionResult {
-  const { syncVersion } = useInversionesContext()
-  const [objetivo, setObjetivo] = useState<ObjetivoInversion | null>(null)
-  const [aportesHistoricos, setAportesHistoricos] = useState<AportesHistoricosOut | null>(null)
-  const [evolucion, setEvolucion] = useState<EvolucionOut | null>(null)
-  const [riesgo, setRiesgo] = useState<RiesgoOut | null>(null)
-  const [configuracion, setConfiguracion] = useState<ConfiguracionCartera | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const query = useQuery({
+    queryKey: qk.de('objetivo', cartera),
+    enabled: cartera !== null,
+    queryFn: async () => {
+      const nombre = cartera as string
+      const [objetivo, aportesHistoricos, riesgo, configuracion] = await Promise.all([
+        getObjetivoInversion(nombre),
+        getAportesHistoricos(nombre),
+        getRiesgo(nombre, 'usd', null).catch(() => null),
+        getConfiguracionCartera(nombre).catch(() => null),
+      ])
 
-  useEffect(() => {
-    if (!cartera) {
-      setObjetivo(null)
-      setAportesHistoricos(null)
-      setEvolucion(null)
-      setRiesgo(null)
-      setConfiguracion(null)
-      setLoading(false)
-      return
-    }
+      // La evolución arranca en el primer mes con aportes: pedir desde antes traería puntos
+      // vacíos que sólo achatan el gráfico.
+      const desde = aportesHistoricos?.curva[0]?.mes ? `${aportesHistoricos.curva[0].mes}-01` : undefined
+      const evolucion = await getEvolucionInversiones(nombre, desde).catch(() => null)
 
-    let cancelado = false
-
-    const fetch = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-
-        // Fetch objetivo, aportes, riesgo, configuracion en paralelo
-        const [obj, aportes, riesgoData, configData] = await Promise.all([
-          getObjetivoInversion(cartera),
-          getAportesHistoricos(cartera),
-          getRiesgo(cartera, 'usd', null).catch(() => null),
-          getConfiguracionCartera(cartera).catch(() => null),
-        ])
-
-        if (cancelado) return
-
-        // Fetch evolucion con desde = primer mes de aportes
-        const desde = aportes?.curva[0]?.mes ? `${aportes.curva[0].mes}-01` : undefined
-        const evolucionData = await getEvolucionInversiones(cartera, desde).catch(() => null)
-
-        if (cancelado) return
-
-        setObjetivo(obj)
-        setAportesHistoricos(aportes)
-        setEvolucion(evolucionData)
-        setRiesgo(riesgoData)
-        setConfiguracion(configData)
-      } catch (err: any) {
-        if (cancelado) return
-        setError((err as Error).message || 'Error cargando objetivo')
-        setObjetivo(null)
-        setAportesHistoricos(null)
-        setEvolucion(null)
-        setRiesgo(null)
-        setConfiguracion(null)
-      } finally {
-        if (!cancelado) setLoading(false)
-      }
-    }
-
-    fetch()
-    return () => {
-      cancelado = true
-    }
-  }, [cartera, syncVersion])
+      return { objetivo, aportesHistoricos, evolucion, riesgo, configuracion }
+    },
+  })
 
   return {
-    objetivo,
-    aportesHistoricos,
-    evolucion,
-    riesgo,
-    configuracion,
-    loading,
-    error,
+    objetivo: query.data?.objetivo ?? null,
+    aportesHistoricos: query.data?.aportesHistoricos ?? null,
+    evolucion: query.data?.evolucion ?? null,
+    riesgo: query.data?.riesgo ?? null,
+    configuracion: query.data?.configuracion ?? null,
+    loading: cartera !== null && query.isLoading,
+    error: query.error ? (query.error as Error).message || 'Error cargando objetivo' : null,
   }
 }
