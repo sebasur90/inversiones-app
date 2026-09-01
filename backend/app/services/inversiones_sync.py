@@ -517,14 +517,30 @@ def sync_from_sheet(db: Session) -> dict:
         # ver más abajo) se preservan aparte para no perderlas por una falla de red transitoria.
         db.query(IndiceMercado).filter(IndiceMercado.fuente == "sheet").delete()
         db.flush()
-        fechas_sheet = set()
+        fechas_sheet = {indice["fecha"] for indice in indices_mercado}
+
+        # Una fila 'api' guardada para una fecha que el Sheet ahora sí cubre no puede convivir con
+        # la fila 'sheet' que se inserta a continuación (IndiceMercado.fecha es unique) — hay que
+        # borrarla ANTES de insertar. Su riesgo país se conserva mergeándolo en la fila del Sheet
+        # (mismo criterio que A5 más abajo: el Sheet nunca aporta riesgo país), así no se pierde si
+        # la API no responde en esta corrida.
+        riesgo_pais_api = {}
+        for fila_api in db.query(IndiceMercado).filter(IndiceMercado.fuente == "api").all():
+            if fila_api.fecha not in fechas_sheet:
+                continue
+            if fila_api.riesgo_pais is not None:
+                riesgo_pais_api[fila_api.fecha] = fila_api.riesgo_pais
+            db.delete(fila_api)
+        db.flush()
+
         for indice in indices_mercado:
             indice.setdefault("fuente", "sheet")
-            fechas_sheet.add(indice["fecha"])
+            if indice.get("riesgo_pais") is None and indice["fecha"] in riesgo_pais_api:
+                indice["riesgo_pais"] = riesgo_pais_api[indice["fecha"]]
             db.add(IndiceMercado(**indice))
+        db.flush()
 
         if market_data.use_external_apis():
-            db.flush()
             api_indices, issues_api = market_data_indices.fetch_indices_mercado_api(fechas_sheet)
             issues.extend(issues_api)
             if api_indices is not None:
@@ -569,9 +585,19 @@ def sync_from_sheet(db: Session) -> dict:
     if "Benchmarks" not in tabs_bloqueadas:
         db.query(BenchmarkValor).filter(BenchmarkValor.fuente == "sheet").delete()
         db.flush()
+
+        # Mismo caso que en índices: las filas 'api' preservadas de corridas anteriores chocan
+        # contra UNIQUE (fecha, benchmark) si el Sheet pasa a cubrir esa clave. El Sheet gana.
+        claves_sheet_bench = {(b["fecha"], b["benchmark"]) for b in benchmarks_validos}
+        for fila_api in db.query(BenchmarkValor).filter(BenchmarkValor.fuente == "api").all():
+            if (fila_api.fecha, fila_api.benchmark) in claves_sheet_bench:
+                db.delete(fila_api)
+        db.flush()
+
         for benchmark in benchmarks_validos:
             benchmark.setdefault("fuente", "sheet")
             db.add(BenchmarkValor(**benchmark))
+        db.flush()
 
         if market_data.use_external_apis():
             api_benchmarks, issues_api_bench = market_data_indices.fetch_benchmarks_api()
@@ -579,6 +605,11 @@ def sync_from_sheet(db: Session) -> dict:
             if api_benchmarks is not None:
                 db.query(BenchmarkValor).filter(BenchmarkValor.fuente == "api").delete()
                 db.flush()
+                # 'api' nunca pisa una clave que el Sheet cubre (precedencia sheet > api).
+                api_benchmarks = [
+                    b for b in api_benchmarks
+                    if (b["fecha"], b["benchmark"]) not in claves_sheet_bench
+                ]
                 for benchmark in api_benchmarks:
                     db.add(BenchmarkValor(**benchmark))
                 benchmarks_api_count = len(api_benchmarks)
