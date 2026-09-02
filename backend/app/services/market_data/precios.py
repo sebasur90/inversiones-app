@@ -78,7 +78,7 @@ def _es_renta_fija(tipo_instrumento: str) -> bool:
     t = _sin_acentos(tipo_instrumento or "")
     if any(sub in t for sub in _SUBCADENAS_RENTA_FIJA):
         return True
-    tokens = {tok for tok in t.replace("/", " ").replace("-", " ").split()}
+    tokens = set(t.replace("/", " ").replace("-", " ").split())
     return bool(tokens & _TOKENS_RENTA_FIJA)
 
 

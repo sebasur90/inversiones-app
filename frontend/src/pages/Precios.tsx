@@ -14,6 +14,7 @@ import EmptyState from '../components/ui/EmptyState'
 import { Icon } from '../components/icons/Icons'
 import InfoTooltip from '../help/components/InfoTooltip'
 import SkeletonPantalla, { Skeleton } from '../components/ui/Skeleton'
+import QueryBoundary from '../components/ui/QueryBoundary'
 import { useQuery } from '@tanstack/react-query'
 import { qk } from '../api/queryClient'
 
@@ -96,11 +97,17 @@ export default function Precios() {
 
   const ultimoPunto = datosGrafico.length > 0 ? datosGrafico[datosGrafico.length - 1] : undefined
 
-  if (tickersQuery.isLoading) {
+  if (tickersQuery.isLoading || tickersQuery.error) {
     return (
       <div className="pb-4">
         <ScreenHeader title="Precios" />
-        <SkeletonPantalla />
+        <QueryBoundary
+          isLoading={tickersQuery.isLoading}
+          error={tickersQuery.error}
+          onRetry={() => void tickersQuery.refetch()}
+        >
+          {null}
+        </QueryBoundary>
       </div>
     )
   }

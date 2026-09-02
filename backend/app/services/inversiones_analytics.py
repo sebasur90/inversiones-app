@@ -16,6 +16,10 @@ EPS = 1e-9
 
 TIPOS_QUE_CAMBIAN_TENENCIA = ("compra", "venta", "amortizacion")
 TIPOS_INGRESO = ("dividendo", "cupon")
+# Devuelven capital aportado (a diferencia de TIPOS_INGRESO, que es renta).
+TIPOS_RETIRO = ("venta", "amortizacion")
+# Lado "cash in" de la convención de signos: todo lo que no es una compra.
+TIPOS_COBRO = TIPOS_RETIRO + TIPOS_INGRESO
 
 
 # ── Conversión de monedas / índices ──────────────────────────────────────────
@@ -64,7 +68,7 @@ def _flujos_cashflow(movs: list[MovimientoInversion], monto_fn) -> list[tuple[da
             continue
         if mov.tipo_movimiento == "compra":
             flujos.append((mov.fecha, -monto))
-        elif mov.tipo_movimiento in ("venta", "amortizacion") or mov.tipo_movimiento in TIPOS_INGRESO:
+        elif mov.tipo_movimiento in TIPOS_COBRO:
             flujos.append((mov.fecha, monto))
     return flujos
 
@@ -570,11 +574,7 @@ def _resumen_sobre_movs(movs: list[MovimientoInversion], db: Session) -> dict:
                         break
                     if mov.tipo_movimiento == "compra":
                         flujos_xirr_ars_real.append((mov.fecha, -monto_ars_real))
-                    elif mov.tipo_movimiento == "venta":
-                        flujos_xirr_ars_real.append((mov.fecha, monto_ars_real))
-                    elif mov.tipo_movimiento in TIPOS_INGRESO:
-                        flujos_xirr_ars_real.append((mov.fecha, monto_ars_real))
-                    elif mov.tipo_movimiento == "amortizacion":
+                    elif mov.tipo_movimiento in TIPOS_COBRO:
                         flujos_xirr_ars_real.append((mov.fecha, monto_ars_real))
 
                 if not tiene_cer_faltante:
@@ -792,14 +792,12 @@ def _calcular_twr_ars_real(
     return twr, aprox
 
 
-def _calcular_twr_mensual(
+def _twr_mensual_encadenado(
     movs: list[MovimientoInversion],
-    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
-    db: Session,
-    mep_cache: dict,
     hoy: date,
     monto_fn,
     valuar_fn,
+    abortar_si_falta: bool = False,
 ) -> dict[tuple[int, int], float | None]:
     """TWR encadenado y agrupado por mes calendario. Devuelve {(anio, mes): twr_mensual},
     sin entrada para meses sin tenencia (en vez de 0.0).
@@ -809,20 +807,26 @@ def _calcular_twr_mensual(
     identidad telescópica esto no altera el producto total del período (v_dm/v0 * (v1-flujo)/v_dm
     = (v1-flujo)/v0), y permite atribuir cada sub-retorno al mes calendario exacto en que ocurre,
     ya que ningún sub-período puede cruzar un fin de mes.
+
+    `monto_fn(mov)` y `valuar_fn(holdings, fecha, costos)` encapsulan la moneda. Con
+    `abortar_si_falta` (ARS real: falta CER para una fecha puntual) un `None` de cualquiera de
+    las dos corta el cálculo devolviendo {}, en vez de propagarlo a una comparación numérica;
+    sin él, los montos faltantes se ignoran — mismo criterio que `_calcular_twr_encadenado`.
     """
     fechas_borde = sorted({m.fecha for m in movs if m.tipo_movimiento in TIPOS_QUE_CAMBIAN_TENENCIA})
     if not fechas_borde:
         return {}
 
-    primera_fecha = fechas_borde[0]
-    boundaries = sorted(set(fechas_borde) | set(_fin_de_mes_range(primera_fecha, hoy)))
+    boundaries = sorted(set(fechas_borde) | set(_fin_de_mes_range(fechas_borde[0], hoy)))
 
     cf_por_fecha: dict[date, float] = {}
     for mov in movs:
         if mov.tipo_movimiento not in TIPOS_QUE_CAMBIAN_TENENCIA:
             continue
-        monto = monto_fn(mov, db, mep_cache)
+        monto = monto_fn(mov)
         if monto is None:
+            if abortar_si_falta:
+                return {}
             continue
         signo = 1 if mov.tipo_movimiento == "compra" else -1
         cf_por_fecha[mov.fecha] = cf_por_fecha.get(mov.fecha, 0.0) + signo * monto
@@ -831,14 +835,15 @@ def _calcular_twr_mensual(
     valores: dict[date, float] = {}
     for b in boundaries:
         tracker.avanzar_a(b)
-        valor, _aprox, _falt = valuar_fn(tracker.snapshot(), b, precios_por_ticker, db, mep_cache, tracker.costo_snapshot())
+        valor, _aprox, _falt = valuar_fn(tracker.snapshot(), b, tracker.costo_snapshot())
+        if valor is None:
+            return {}
         valores[b] = valor
 
     factores_por_mes: dict[tuple[int, int], list[float]] = {}
     tuvo_tenencia: dict[tuple[int, int], bool] = {}
 
-    for i in range(1, len(boundaries)):
-        d0, d1 = boundaries[i - 1], boundaries[i]
+    for d0, d1 in zip(boundaries, boundaries[1:]):
         v0, v1 = valores[d0], valores[d1]
         key = (d1.year, d1.month)
         if v0 > EPS or v1 > EPS:
@@ -848,8 +853,7 @@ def _calcular_twr_mensual(
         if v0 <= EPS:
             continue
         flujo = cf_por_fecha.get(d1, 0.0)
-        r = (v1 - flujo) / v0 - 1
-        factores_por_mes.setdefault(key, []).append(1 + r)
+        factores_por_mes.setdefault(key, []).append((v1 - flujo) / v0)
 
     resultado: dict[tuple[int, int], float | None] = {}
     for key, tuvo in tuvo_tenencia.items():
@@ -862,6 +866,23 @@ def _calcular_twr_mensual(
             total *= f
         resultado[key] = total - 1
     return resultado
+
+
+def _calcular_twr_mensual(
+    movs: list[MovimientoInversion],
+    precios_por_ticker: dict[str, list[tuple[date, float, str]]],
+    db: Session,
+    mep_cache: dict,
+    hoy: date,
+    monto_fn,
+    valuar_fn,
+) -> dict[tuple[int, int], float | None]:
+    """TWR mensual en USD o ARS nominal, según el par (`monto_fn`, `valuar_fn`) que se pase."""
+    return _twr_mensual_encadenado(
+        movs, hoy,
+        lambda mov: monto_fn(mov, db, mep_cache),
+        lambda holdings, f, costos: valuar_fn(holdings, f, precios_por_ticker, db, mep_cache, costos),
+    )
 
 
 def _calcular_twr_mensual_ars_real(
@@ -873,72 +894,21 @@ def _calcular_twr_mensual_ars_real(
     cer_hoy: float | None,
     hoy: date,
 ) -> dict[tuple[int, int], float | None]:
-    """TWR mensual encadenado en ARS real (deflactado por CER). Ver `_calcular_twr_mensual`.
+    """TWR mensual en ARS real (deflactado por CER).
 
-    Duplica el encadenamiento de `_calcular_twr_mensual` (en vez de reusarla vía closures)
-    porque, a diferencia de USD/ARS nominal, una valuación en ARS real puede ser `None` cuando
-    falta CER para una fecha puntual — igual que `_calcular_twr_ars_real`, abortamos devolviendo
-    {} en ese caso en vez de propagar `None` a una comparación numérica.
+    A diferencia de USD/ARS nominal, una valuación en ARS real puede ser `None` cuando falta
+    CER para una fecha puntual: de ahí `abortar_si_falta`.
     """
     if cer_hoy is None:
         return {}
-
-    fechas_borde = sorted({m.fecha for m in movs if m.tipo_movimiento in TIPOS_QUE_CAMBIAN_TENENCIA})
-    if not fechas_borde:
-        return {}
-
-    primera_fecha = fechas_borde[0]
-    boundaries = sorted(set(fechas_borde) | set(_fin_de_mes_range(primera_fecha, hoy)))
-
-    cf_por_fecha: dict[date, float] = {}
-    for mov in movs:
-        if mov.tipo_movimiento not in TIPOS_QUE_CAMBIAN_TENENCIA:
-            continue
-        monto = _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy)
-        if monto is None:
-            return {}
-        signo = 1 if mov.tipo_movimiento == "compra" else -1
-        cf_por_fecha[mov.fecha] = cf_por_fecha.get(mov.fecha, 0.0) + signo * monto
-
-    tracker = _HoldingsTracker(movs)
-    valores: dict[date, float] = {}
-    for b in boundaries:
-        tracker.avanzar_a(b)
-        valor, _aprox, _falt = _valuar_holdings_ars_real(
-            tracker.snapshot(), b, precios_por_ticker, db, mep_cache, cer_cache, cer_hoy, tracker.costo_snapshot()
-        )
-        if valor is None:
-            return {}
-        valores[b] = valor
-
-    factores_por_mes: dict[tuple[int, int], list[float]] = {}
-    tuvo_tenencia: dict[tuple[int, int], bool] = {}
-
-    for i in range(1, len(boundaries)):
-        d0, d1 = boundaries[i - 1], boundaries[i]
-        v0, v1 = valores[d0], valores[d1]
-        key = (d1.year, d1.month)
-        if v0 > EPS or v1 > EPS:
-            tuvo_tenencia[key] = True
-        else:
-            tuvo_tenencia.setdefault(key, False)
-        if v0 <= EPS:
-            continue
-        flujo = cf_por_fecha.get(d1, 0.0)
-        r = (v1 - flujo) / v0 - 1
-        factores_por_mes.setdefault(key, []).append(1 + r)
-
-    resultado: dict[tuple[int, int], float | None] = {}
-    for key, tuvo in tuvo_tenencia.items():
-        factores = factores_por_mes.get(key)
-        if not tuvo or not factores:
-            resultado[key] = None
-            continue
-        total = 1.0
-        for f in factores:
-            total *= f
-        resultado[key] = total - 1
-    return resultado
+    return _twr_mensual_encadenado(
+        movs, hoy,
+        lambda mov: _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy),
+        lambda holdings, f, costos: _valuar_holdings_ars_real(
+            holdings, f, precios_por_ticker, db, mep_cache, cer_cache, cer_hoy, costos
+        ),
+        abortar_si_falta=True,
+    )
 
 
 def get_rendimiento_mensual(cartera: str | None, db: Session) -> dict:
@@ -1023,36 +993,12 @@ def _holdings_por_cartera_ticker(movs: list[MovimientoInversion], hasta: date) -
     return result
 
 
-def _agrupar(entries: list[tuple[str, float, float]]) -> list[dict]:
-    """Agrupa entradas (etiqueta, valor_usd, valor_ars) y calcula porcentajes."""
-    grupos_usd: dict[str, float] = {}
-    grupos_ars: dict[str, float] = {}
-    for etiqueta, valor_usd, valor_ars in entries:
-        if etiqueta is None:
-            continue
-        grupos_usd[etiqueta] = grupos_usd.get(etiqueta, 0.0) + valor_usd
-        grupos_ars[etiqueta] = grupos_ars.get(etiqueta, 0.0) + valor_ars
-    total = sum(grupos_usd.values())
-    if total <= EPS:
-        return []
-    items = sorted(grupos_usd.items(), key=lambda kv: -kv[1])
-    return [
-        {
-            "etiqueta": k,
-            "valor_usd": round(v, 2),
-            "valor_ars": round(grupos_ars[k], 2),
-            "porcentaje": round(v / total * 100, 2)
-        }
-        for k, v in items
-    ]
+def _agrupar(entries: list[tuple[str, float, float]], total_usd: float | None = None) -> list[dict]:
+    """Agrupa entradas (etiqueta, valor_usd, valor_ars) y calcula porcentajes.
 
-
-def _agrupar_sobre_total(entries: list[tuple[str, float, float]], total_usd: float, total_ars: float) -> list[dict]:
-    """Igual que _agrupar, pero el % se calcula sobre un total dado (no sobre la suma de las entradas).
-
-    Se usa para ejes donde algunas entradas no tienen etiqueta (ej. Sector es opcional) y el
-    porcentaje debe reflejar el peso sobre el total real de la cartera, no sobre el subtotal
-    de lo que sí tiene etiqueta.
+    Por defecto el % es sobre la suma de las entradas. Con `total_usd` se calcula sobre ese
+    total: hace falta en los ejes donde algunas entradas no tienen etiqueta (Sector es
+    opcional) y el peso debe reflejar el total real de la cartera, no el subtotal etiquetado.
     """
     grupos_usd: dict[str, float] = {}
     grupos_ars: dict[str, float] = {}
@@ -1061,17 +1007,17 @@ def _agrupar_sobre_total(entries: list[tuple[str, float, float]], total_usd: flo
             continue
         grupos_usd[etiqueta] = grupos_usd.get(etiqueta, 0.0) + valor_usd
         grupos_ars[etiqueta] = grupos_ars.get(etiqueta, 0.0) + valor_ars
-    if total_usd <= EPS:
+    total = sum(grupos_usd.values()) if total_usd is None else total_usd
+    if total <= EPS:
         return []
-    items = sorted(grupos_usd.items(), key=lambda kv: -kv[1])
     return [
         {
             "etiqueta": k,
             "valor_usd": round(v, 2),
             "valor_ars": round(grupos_ars[k], 2),
-            "porcentaje": round(v / total_usd * 100, 2),
+            "porcentaje": round(v / total * 100, 2),
         }
-        for k, v in items
+        for k, v in sorted(grupos_usd.items(), key=lambda kv: -kv[1])
     ]
 
 
@@ -1181,7 +1127,7 @@ def _construir_eje_rebalanceo(
     total_usd: float,
     total_ars: float,
 ) -> dict | None:
-    """Combina el % actual (salida de _agrupar/_agrupar_sobre_total) con los objetivos cargados.
+    """Combina el % actual (salida de `_agrupar`) con los objetivos cargados.
 
     Las categorías con objetivo pero sin holding actual también aparecen (en 0%), para que se
     vea claramente qué falta comprar. Las categorías con holding pero sin objetivo cargado van
@@ -1258,9 +1204,9 @@ def get_rebalanceo(cartera: str | None, db: Session) -> dict:
     if eje_tipo:
         ejes.append(eje_tipo)
 
-    sector = _agrupar_sobre_total(
+    sector = _agrupar(
         [(instrumentos[t].sector, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados],
-        total_usd, total_ars,
+        total_usd,
     )
     eje_sector = _construir_eje_rebalanceo("Sector", sector, _targets_por_eje("Sector", cartera, objetivos), total_usd, total_ars)
     if eje_sector:
@@ -1635,7 +1581,7 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
             if abs(precio_promedio_ars_ajustado_cer) > EPS:
                 rendimiento_simple_ars_real = (precio_actual_ars_ajustado_cer - precio_promedio_ars_ajustado_cer) / precio_promedio_ars_ajustado_cer
 
-        instrumento = instrumentos.get(ticker, None)
+        instrumento = instrumentos.get(ticker)
         nombre = instrumento.nombre if instrumento else ticker
 
         precio_objetivo, pct_a_objetivo, objetivo_alcanzado = _nivel_precio(
@@ -1721,11 +1667,7 @@ def get_pnl_realizado_no_realizado(cartera: str | None, db: Session) -> dict:
         movimientos_por_ticker.setdefault(mov.ticker, []).append(mov)
 
     por_ticker_resultado = []
-    tot = {k: 0.0 for k in (
-        "realizado_usd", "no_realizado_usd", "ingresos_usd",
-        "realizado_ars", "no_realizado_ars", "ingresos_ars",
-        "realizado_ars_real", "no_realizado_ars_real", "ingresos_ars_real",
-    )}
+    tot = dict.fromkeys(("realizado_usd", "no_realizado_usd", "ingresos_usd", "realizado_ars", "no_realizado_ars", "ingresos_ars", "realizado_ars_real", "no_realizado_ars_real", "ingresos_ars_real"), 0.0)
 
     for ticker, movs_ticker in movimientos_por_ticker.items():
         est = _recorrer_movs_ticker(

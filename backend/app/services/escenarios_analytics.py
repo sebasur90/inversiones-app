@@ -28,7 +28,7 @@ def construir_snapshot(
 
     # Construir lista de posiciones
     posiciones = []
-    for cart, ticker, valor_usd, valor_ars in clasificados:
+    for _cart, ticker, valor_usd, _valor_ars in clasificados:
         if valor_usd <= 0:
             continue
         instrumento = instrumentos.get(ticker)
@@ -157,9 +157,6 @@ def simular_escenario_cartera(
     # Construir snapshot UNA SOLA VEZ (garantiza comparabilidad)
     snapshot = construir_snapshot(cartera, db)
 
-    # Obtener resumen actual
-    resumen_actual = get_resumen(cartera, db)
-
     # Procesar cada escenario
     resultados = []
     advertencias_set = set()
@@ -243,10 +240,6 @@ def simular_escenario_cartera(
 
     if len(snapshot.posiciones) == 0 and snapshot.valor_total_usd == 0:
         advertencias_set.add("Cartera vacía: aportes se acumulan en un bucket sintético")
-
-    # Intrumentos sin precio
-    tickers_simulados = {p.ticker for p in snapshot.posiciones}
-    # (ya están filtrados por _clasificados_valorizados, así que no hay que advertir más)
 
     return {
         "cartera": cartera,

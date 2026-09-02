@@ -23,8 +23,45 @@ from .inversiones_analytics import (
     _comision_ars,
     _cer_indice,
     TIPOS_INGRESO,
+    TIPOS_RETIRO,
 )
 from .cache import cache_por_sync
+
+
+class _Acumulador:
+    """Acumula un flujo de movimientos en las tres monedas a la vez.
+
+    El total en ARS real deja de ser válido en cuanto falta el CER de algún movimiento: no se
+    puede completar la serie deflactada, así que se marca inválido y se reporta como `None`.
+    """
+
+    def __init__(self) -> None:
+        self.usd = 0.0
+        self.ars = 0.0
+        self.ars_real = 0.0
+        self.ars_real_valido = True
+
+    def sumar(self, mov, signo: int, db: Session, mep_cache: dict, cer_cache: dict, cer_hoy) -> None:
+        monto_usd = _monto_usd(mov, db, mep_cache)
+        if monto_usd is not None:
+            self.usd += signo * monto_usd
+        monto_ars = _monto_ars(mov, db, mep_cache)
+        if monto_ars is not None:
+            self.ars += signo * monto_ars
+        if not self.ars_real_valido:
+            return
+        monto_ars_real = _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy)
+        if monto_ars_real is None:
+            self.ars_real_valido = False
+        else:
+            self.ars_real += signo * monto_ars_real
+
+    def redondeado(self) -> tuple[float, float, float | None]:
+        return (
+            round(self.usd, 2),
+            round(self.ars, 2),
+            round(self.ars_real, 2) if self.ars_real_valido else None,
+        )
 
 
 @cache_por_sync
@@ -78,20 +115,9 @@ def get_patrimonio_history(
     puntos = []
     idx_mov = 0
 
-    aportes_usd = 0.0
-    aportes_ars = 0.0
-    aportes_ars_real = 0.0
-    aportes_ars_real_valido = True
-
-    dividendos_usd = 0.0
-    dividendos_ars = 0.0
-    dividendos_ars_real = 0.0
-    dividendos_ars_real_valido = True
-
-    otros_ajustes_usd = 0.0
-    otros_ajustes_ars = 0.0
-    otros_ajustes_ars_real = 0.0
-    otros_ajustes_ars_real_valido = True
+    aportes = _Acumulador()
+    dividendos = _Acumulador()
+    otros_ajustes = _Acumulador()
 
     for f in fechas:
         tracker.avanzar_a(f)
@@ -109,91 +135,54 @@ def get_patrimonio_history(
 
             comision_usd = _comision_usd(mov, db, mep_cache)
             if comision_usd is not None:
-                otros_ajustes_usd -= comision_usd
+                otros_ajustes.usd -= comision_usd
             comision_ars = _comision_ars(mov, db, mep_cache)
             if comision_ars is not None:
-                otros_ajustes_ars -= comision_ars
-                if otros_ajustes_ars_real_valido:
+                otros_ajustes.ars -= comision_ars
+                if otros_ajustes.ars_real_valido:
                     cer_fecha = _cer_indice(mov.fecha, db, cer_cache)
                     if cer_hoy is not None and cer_fecha is not None:
-                        otros_ajustes_ars_real -= comision_ars * (cer_hoy / cer_fecha)
+                        otros_ajustes.ars_real -= comision_ars * (cer_hoy / cer_fecha)
                     else:
-                        otros_ajustes_ars_real_valido = False
+                        otros_ajustes.ars_real_valido = False
 
+            # Aportes: compra suma, venta y amortización restan. Los ingresos (dividendos,
+            # cupones) van a su propio acumulador porque no son capital aportado.
             if mov.tipo_movimiento == "compra":
-                monto_usd = _monto_usd(mov, db, mep_cache)
-                if monto_usd is not None:
-                    aportes_usd += monto_usd
-                monto_ars = _monto_ars(mov, db, mep_cache)
-                if monto_ars is not None:
-                    aportes_ars += monto_ars
-                if aportes_ars_real_valido:
-                    monto_ars_real = _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy)
-                    if monto_ars_real is not None:
-                        aportes_ars_real += monto_ars_real
-                    else:
-                        aportes_ars_real_valido = False
-
-            elif mov.tipo_movimiento == "venta":
-                monto_usd = _monto_usd(mov, db, mep_cache)
-                if monto_usd is not None:
-                    aportes_usd -= monto_usd
-                monto_ars = _monto_ars(mov, db, mep_cache)
-                if monto_ars is not None:
-                    aportes_ars -= monto_ars
-                if aportes_ars_real_valido:
-                    monto_ars_real = _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy)
-                    if monto_ars_real is not None:
-                        aportes_ars_real -= monto_ars_real
-                    else:
-                        aportes_ars_real_valido = False
-
-            elif mov.tipo_movimiento == "amortizacion":
-                monto_usd = _monto_usd(mov, db, mep_cache)
-                if monto_usd is not None:
-                    aportes_usd -= monto_usd
-                monto_ars = _monto_ars(mov, db, mep_cache)
-                if monto_ars is not None:
-                    aportes_ars -= monto_ars
-                if aportes_ars_real_valido:
-                    monto_ars_real = _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy)
-                    if monto_ars_real is not None:
-                        aportes_ars_real -= monto_ars_real
-                    else:
-                        aportes_ars_real_valido = False
-
+                destino, signo = aportes, 1
+            elif mov.tipo_movimiento in TIPOS_RETIRO:
+                destino, signo = aportes, -1
             elif mov.tipo_movimiento in TIPOS_INGRESO:
-                monto_usd = _monto_usd(mov, db, mep_cache)
-                if monto_usd is not None:
-                    dividendos_usd += monto_usd
-                monto_ars = _monto_ars(mov, db, mep_cache)
-                if monto_ars is not None:
-                    dividendos_ars += monto_ars
-                if dividendos_ars_real_valido:
-                    monto_ars_real = _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy)
-                    if monto_ars_real is not None:
-                        dividendos_ars_real += monto_ars_real
-                    else:
-                        dividendos_ars_real_valido = False
+                destino, signo = dividendos, 1
+            else:
+                continue
+            destino.sumar(mov, signo, db, mep_cache, cer_cache, cer_hoy)
 
-        ganancia_usd = valor_usd - aportes_usd
-        ganancia_ars = valor_ars - aportes_ars
-        ganancia_ars_real = (valor_ars_real - aportes_ars_real) if (valor_ars_real is not None and aportes_ars_real_valido) else None
+        ganancia_usd = valor_usd - aportes.usd
+        ganancia_ars = valor_ars - aportes.ars
+        ganancia_ars_real = (
+            (valor_ars_real - aportes.ars_real)
+            if (valor_ars_real is not None and aportes.ars_real_valido)
+            else None
+        )
+        aportes_usd_r, aportes_ars_r, aportes_ars_real_r = aportes.redondeado()
+        div_usd_r, div_ars_r, div_ars_real_r = dividendos.redondeado()
+        otros_usd_r, otros_ars_r, otros_ars_real_r = otros_ajustes.redondeado()
 
         puntos.append({
             "fecha": f,
             "valor_usd": round(valor_usd, 2),
             "valor_ars": round(valor_ars, 2),
             "valor_ars_real": round(valor_ars_real, 2) if valor_ars_real is not None else None,
-            "aportes_acumulados_usd": round(aportes_usd, 2),
-            "aportes_acumulados_ars": round(aportes_ars, 2),
-            "aportes_acumulados_ars_real": round(aportes_ars_real, 2) if aportes_ars_real_valido else None,
-            "dividendos_acumulados_usd": round(dividendos_usd, 2),
-            "dividendos_acumulados_ars": round(dividendos_ars, 2),
-            "dividendos_acumulados_ars_real": round(dividendos_ars_real, 2) if dividendos_ars_real_valido else None,
-            "otros_ajustes_acumulados_usd": round(otros_ajustes_usd, 2),
-            "otros_ajustes_acumulados_ars": round(otros_ajustes_ars, 2),
-            "otros_ajustes_acumulados_ars_real": round(otros_ajustes_ars_real, 2) if otros_ajustes_ars_real_valido else None,
+            "aportes_acumulados_usd": aportes_usd_r,
+            "aportes_acumulados_ars": aportes_ars_r,
+            "aportes_acumulados_ars_real": aportes_ars_real_r,
+            "dividendos_acumulados_usd": div_usd_r,
+            "dividendos_acumulados_ars": div_ars_r,
+            "dividendos_acumulados_ars_real": div_ars_real_r,
+            "otros_ajustes_acumulados_usd": otros_usd_r,
+            "otros_ajustes_acumulados_ars": otros_ars_r,
+            "otros_ajustes_acumulados_ars_real": otros_ars_real_r,
             "ganancia_usd": round(ganancia_usd, 2),
             "ganancia_ars": round(ganancia_ars, 2),
             "ganancia_ars_real": round(ganancia_ars_real, 2) if ganancia_ars_real is not None else None,

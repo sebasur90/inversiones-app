@@ -149,7 +149,7 @@ def _descubrir(db, presupuesto: Presupuesto, paises: list[str], excluidos: set[s
                     plan.append((instrumento, panel, pais))
 
     if not plan:
-        plan = [t for t in iol._PANELES]
+        plan = list(iol._PANELES)
         print(f"  Fallback: {len(plan)} paneles candidatos de market_data/iol.py")
 
     extra = [t for t in _PANELES_EXTRA if t not in plan]
@@ -222,7 +222,7 @@ def _leer_anterior(path: str) -> dict:
     if not os.path.isfile(path):
         return {}
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
         instrumentos = data.get("instrumentos")
         return {i["simbolo"]: i for i in instrumentos if isinstance(i, dict) and i.get("simbolo")} \

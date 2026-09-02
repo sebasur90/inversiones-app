@@ -17,7 +17,7 @@ import Button from '../components/ui/Button'
 import { Icon } from '../components/icons/Icons'
 import RebalanceoRow from '../components/inversiones/RebalanceoRow'
 import PropuestaRebalanceoRow from '../components/inversiones/PropuestaRebalanceoRow'
-import SkeletonPantalla from '../components/ui/Skeleton'
+import QueryBoundary from '../components/ui/QueryBoundary'
 import { qk } from '../api/queryClient'
 
 const MODO_OPCIONES: { value: ModoSimulacion; label: string }[] = [
@@ -26,7 +26,7 @@ const MODO_OPCIONES: { value: ModoSimulacion; label: string }[] = [
 ]
 
 export default function Rebalanceo() {
-  const { carteraSeleccionada, rebalanceo, monedaSeleccionada, loading } = useInversionesContext()
+  const { carteraSeleccionada, rebalanceo, monedaSeleccionada, loading, error } = useInversionesContext()
   const [ejeActivo, setEjeActivo] = useState<string | null>(null)
   const esARS = monedaSeleccionada === 'ARS'
   const formatMoneda = esARS ? formatARS : formatUSD
@@ -80,9 +80,8 @@ export default function Rebalanceo() {
     <div className="pb-4">
       <ScreenHeader title="Balance de Cartera" />
 
-      {loading ? (
-        <SkeletonPantalla />
-      ) : rebalanceo.ejes.length === 0 ? (
+      <QueryBoundary isLoading={loading} error={error}>
+      {rebalanceo.ejes.length === 0 ? (
         <EmptyState
           title="Sin objetivos de rebalanceo cargados"
           description="Agregá filas a la pestaña 'Rebalanceo' del Sheet y sincronizá para ver el balance de tu cartera."
@@ -258,6 +257,7 @@ export default function Rebalanceo() {
           )}
         </>
       )}
+      </QueryBoundary>
     </div>
   )
 }

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Caché en memoria para los analytics, invalidada por sincronización.
 
 Los datos sólo cambian cuando corre el sync: entre dos syncs, `get_resumen(cartera)` devuelve
@@ -35,7 +34,7 @@ from ..database import SyncRun
 # generaciones viejas caen solas por LRU.
 MAX_ENTRADAS = 256
 
-_cache: "OrderedDict[tuple, Any]" = OrderedDict()
+_cache: OrderedDict[tuple, Any] = OrderedDict()
 _lock = Lock()
 
 # Sube ante cualquier escritura en la sesión: ver el listener de abajo.

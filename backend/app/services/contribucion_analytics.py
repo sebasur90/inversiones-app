@@ -21,7 +21,6 @@ from .inversiones_analytics import (
     _to_usd,
     _monto_usd,
     _agrupar,
-    _agrupar_sobre_total,
     _clasificados_valorizados,
     _retornos_mensuales_ticker,
     get_pnl_realizado_no_realizado,
@@ -33,7 +32,7 @@ UNIVERSOS_VALIDOS = ("tenencias", "todos")
 
 # ── Contribución al rendimiento ──────────────────────────────────────────────
 
-def _peso_promedio_por_ticker(cartera: str | None, movs, precios_por_ticker, db: Session, mep_cache: dict) -> dict[str, float]:
+def _peso_promedio_por_ticker(movs, precios_por_ticker, db: Session, mep_cache: dict) -> dict[str, float]:
     """Peso promedio (%) de cada ticker sobre el valor total de la cartera, promediado en
     cada fin de mes desde el primer movimiento (inclusive). Los meses previos a la primera
     compra de un ticker cuentan como 0% en su promedio (decisión de producto confirmada:
@@ -81,7 +80,7 @@ def get_contribucion(cartera: str | None, db: Session) -> dict:
     instrumentos = {i.ticker: i for i in db.query(InstrumentoInversion).all()}
     mep_cache: dict = {}
 
-    peso_promedio_pct = _peso_promedio_por_ticker(cartera, movs, precios_por_ticker, db, mep_cache)
+    peso_promedio_pct = _peso_promedio_por_ticker(movs, precios_por_ticker, db, mep_cache)
 
     # Reusa get_pnl_realizado_no_realizado para que el P&L por ticker coincida exactamente
     # con lo que ya muestra la pantalla de PnL (realizado + no_realizado + ingresos).
@@ -156,7 +155,6 @@ def get_concentracion(cartera: str | None, db: Session) -> list[dict]:
         return []
 
     total_usd = sum(v_usd for _, _, v_usd, _ in clasificados)
-    total_ars = sum(v_ars for _, _, _, v_ars in clasificados)
 
     def _con_hhi(eje: str, items: list[dict]) -> dict:
         pesos = [it["porcentaje"] for it in items]
@@ -183,7 +181,7 @@ def get_concentracion(cartera: str | None, db: Session) -> list[dict]:
     moneda_items = _agrupar([(instrumentos[t].moneda, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados])
     resultado.append(_con_hhi("Moneda", moneda_items))
 
-    # A diferencia de get_exposicion, el eje Sector usa _agrupar_sobre_total con un bucket
+    # A diferencia de get_exposicion, el eje Sector pasa `total_usd` a `_agrupar` y usa un bucket
     # explícito "Sin sector": el HHI necesita que los pesos sumen el 100% real de la cartera,
     # no el subtotal de lo etiquetado (si no, una cartera con muchos tickers sin clasificar
     # parecería artificialmente diversificada).
@@ -191,7 +189,7 @@ def get_concentracion(cartera: str | None, db: Session) -> list[dict]:
         (instrumentos[t].sector if instrumentos[t].sector else "Sin sector", v_usd, v_ars)
         for _, t, v_usd, v_ars in clasificados
     ]
-    sector_items = _agrupar_sobre_total(sector_entries, total_usd, total_ars)
+    sector_items = _agrupar(sector_entries, total_usd)
     resultado.append(_con_hhi_residual("Sector", sector_items, "Sin sector"))
 
     # Igual que Sector: bucket explícito "Sin país" para que los pesos sumen el 100% real
@@ -200,7 +198,7 @@ def get_concentracion(cartera: str | None, db: Session) -> list[dict]:
         (instrumentos[t].pais if instrumentos[t].pais else "Sin país", v_usd, v_ars)
         for _, t, v_usd, v_ars in clasificados
     ]
-    pais_items = _agrupar_sobre_total(pais_entries, total_usd, total_ars)
+    pais_items = _agrupar(pais_entries, total_usd)
     resultado.append(_con_hhi_residual("País", pais_items, "Sin país"))
 
     return resultado

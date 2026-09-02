@@ -13,7 +13,7 @@ import EmptyState from '../components/ui/EmptyState'
 import MetricTile from '../components/ui/MetricTile'
 import PerformanceRelativaChart from '../components/charts/PerformanceRelativaChart'
 import InfoTooltip from '../help/components/InfoTooltip'
-import SkeletonPantalla from '../components/ui/Skeleton'
+import QueryBoundary from '../components/ui/QueryBoundary'
 
 const OPCIONES_VISTA: { value: MonedaRiesgo; label: string }[] = [
   { value: 'ars_nominal', label: 'ARS Nominal' },
@@ -87,9 +87,12 @@ export default function PerformanceRelativa() {
         </div>
       )}
 
-      {loading ? (
-        <SkeletonPantalla />
-      ) : !perfRelativa || perfRelativa.estado === 'sin_benchmark' ? (
+      <QueryBoundary
+        isLoading={loading}
+        error={perfQuery.error}
+        onRetry={() => void perfQuery.refetch()}
+      >
+      {!perfRelativa || perfRelativa.estado === 'sin_benchmark' ? (
         <EmptyState title="Sin benchmark configurado" description="Configura un benchmark para esta cartera para poder comparar su performance." />
       ) : perfRelativa.estado === 'datos_insuficientes' ? (
         <EmptyState title="Datos insuficientes" description="No hay suficiente historial común entre la cartera y el benchmark para este período." />
@@ -184,6 +187,7 @@ export default function PerformanceRelativa() {
           </div>
         </>
       )}
+      </QueryBoundary>
     </div>
   )
 }

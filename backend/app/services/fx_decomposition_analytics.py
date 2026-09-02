@@ -18,7 +18,6 @@ from .inversiones_analytics import (
     _valuar_holdings,
     _valuar_holdings_ars,
     _mep_sheet,
-    _cer_indice,
     UMBRAL_APROXIMADO_DIAS,
     get_rendimiento_por_ticker,
 )
@@ -54,9 +53,7 @@ def get_descomposicion_fx(
     movs = _movimientos_ordenados(db, cartera)
     precios_por_ticker = _precios_por_ticker(db)
     mep_cache: dict = {}
-    cer_cache: dict = {}
     hoy = date.today()
-    cer_hoy = _cer_indice(hoy, db, cer_cache)
 
     # Calcular TWR mensuales completos (USD y ARS nominal)
     twr_mensuales_usd = _calcular_twr_mensual(

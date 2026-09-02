@@ -23,7 +23,6 @@ from ..schemas import (
     PrecioHistoricoOut,
     TickerConPrecioItem,
     IndicesMercadoOut,
-    VencimientoItem,
     VencimientosOut,
     FlujoCajaProyectadoOut,
     ComisionesOut,
@@ -39,8 +38,6 @@ from ..schemas import (
     DiagnosticoOut,
     DescomposicionFxOut,
     DescomposicionFxPosicionOut,
-    TickerPositionOut,
-    TickerPerformanceOut,
     TickerAnalysisOut,
     TickerHistoricoOut,
     TickerRiesgoOut,
@@ -93,7 +90,7 @@ def sync(db: Session = Depends(get_db)):
     try:
         result = sync_from_sheet(db)
     except SheetsClientError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return result
 
 

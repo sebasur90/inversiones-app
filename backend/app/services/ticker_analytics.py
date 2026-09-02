@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Análisis profundo por ticker individual (reutiliza el motor de analytics de cartera).
 
 Patrón adaptador: sin lógica de cálculo propia, filtra movimientos por ticker y orquesta
@@ -18,10 +17,8 @@ from .inversiones_analytics import (
     _precio_conocido,
     _monto_usd,
     _monto_ars,
-    _monto_ars_real,
     _valuar_holdings,
     _valuar_holdings_ars,
-    _valuar_holdings_ars_real,
     _calcular_twr_mensual,
     _calcular_twr_mensual_ars_real,
     _cer_indice,
@@ -30,9 +27,6 @@ from .inversiones_analytics import (
     get_pnl_realizado_no_realizado,
     get_comisiones,
     EPS,
-    TIPOS_INGRESO,
-    TIPOS_QUE_CAMBIAN_TENENCIA,
-    _fin_de_mes_range,
     _nivel_precio,
     _mep_sheet,
 )

@@ -57,8 +57,7 @@ def _get_service():
 
 def _is_local_env() -> bool:
     """Detecta si se debe usar archivo Excel local en lugar de Google Sheets."""
-    use_local = os.getenv("USE_LOCAL_SHEET", "false").lower() in ("true", "1", "yes")
-    return use_local
+    return os.getenv("USE_LOCAL_SHEET", "false").lower() in ("true", "1", "yes")
 
 
 def _get_excel_path() -> str:

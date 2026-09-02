@@ -3,6 +3,29 @@ from .types import ValidationIssue, Severity
 from .parsers import _strip_accents, _parse_numero
 
 
+def _campo_opcional(
+    row: dict, row_num: int, nombre_col: str, issues: list[ValidationIssue]
+) -> float | None:
+    """Parsea un campo numérico opcional de Configuracion.
+
+    Vacío o ilegible → `None`; en el segundo caso además deja una advertencia. Nunca invalida
+    la fila entera (salvage): sólo anula el campo.
+    """
+    raw = (row.get(nombre_col) or "").strip()
+    if not raw:
+        return None
+    valor = _parse_numero(raw)
+    if valor is None:
+        issues.append(ValidationIssue(
+            tab="Configuracion", fila=row_num, campo=nombre_col,
+            regla=f"{nombre_col.lower()}_invalido",
+            mensaje=f"{nombre_col} inválido: {raw}",
+            impacto="Se descarta este campo, la configuración se guarda sin él",
+            severidad=Severity.ADVERTENCIA
+        ))
+    return valor
+
+
 def validar_configuracion(rows: list[tuple[int, dict]]) -> tuple[list[dict], list[ValidationIssue]]:
     """Valida filas de Configuracion (campos opcionales, solo Cartera obligatoria).
 
@@ -28,27 +51,10 @@ def validar_configuracion(rows: list[tuple[int, dict]]) -> tuple[list[dict], lis
 
         benchmark = (row.get("Benchmark") or "").strip() or None
 
-        def _campo_opcional(nombre_col: str, nombre_error: str) -> tuple[float | None, bool]:
-            """Parsea un campo numérico opcional. Devuelve (valor, ok)."""
-            raw = (row.get(nombre_col) or "").strip()
-            if not raw:
-                return None, True
-            valor = _parse_numero(raw)
-            if valor is None:
-                issues.append(ValidationIssue(
-                    tab="Configuracion", fila=row_num, campo=nombre_col,
-                    regla=f"{nombre_col.lower()}_invalido",
-                    mensaje=f"{nombre_error} inválido: {raw}",
-                    impacto=f"Se descarta este campo, la configuración se guarda sin él",
-                    severidad=Severity.ADVERTENCIA
-                ))
-                return None, True  # salvage: solo anula este campo
-            return valor, True
-
-        rendimiento_objetivo, ok1 = _campo_opcional("Rendimiento Objetivo", "Rendimiento Objetivo")
-        peso_maximo, ok2 = _campo_opcional("Peso Máximo", "Peso Máximo")
-        peso_minimo, ok3 = _campo_opcional("Peso Mínimo", "Peso Mínimo")
-        tolerancia, ok4 = _campo_opcional("Tolerancia", "Tolerancia")
+        rendimiento_objetivo = _campo_opcional(row, row_num, "Rendimiento Objetivo", issues)
+        peso_maximo = _campo_opcional(row, row_num, "Peso Máximo", issues)
+        peso_minimo = _campo_opcional(row, row_num, "Peso Mínimo", issues)
+        tolerancia = _campo_opcional(row, row_num, "Tolerancia", issues)
 
         # Validar rangos
         if peso_maximo is not None and not (0 <= peso_maximo <= 100):

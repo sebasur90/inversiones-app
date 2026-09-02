@@ -193,8 +193,11 @@ def get_opportunity_cost_por_posicion(cartera: str | None, benchmark: str | None
     mep_hoy = _mep_sheet(hoy, db, mep_cache)
     por_posicion = []
 
-    for ticker in set(m.ticker for m in movs):
-        movs_ticker = [m for m in movs if m.ticker == ticker]
+    movs_por_ticker: dict[str, list] = {}
+    for m in movs:
+        movs_por_ticker.setdefault(m.ticker, []).append(m)
+
+    for ticker, movs_ticker in sorted(movs_por_ticker.items()):
         flujos_ticker = _flujos_cashflow(movs_ticker, lambda m: _monto_usd(m, db, mep_cache))
 
         tracker = _HoldingsTracker(movs_ticker)

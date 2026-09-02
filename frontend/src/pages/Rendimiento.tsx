@@ -15,6 +15,7 @@ import MetricTile from '../components/ui/MetricTile'
 import InfoTerm from '../components/ui/InfoTerm'
 import type { HelpKey } from '../help/content/index'
 import SkeletonPantalla from '../components/ui/Skeleton'
+import QueryBoundary from '../components/ui/QueryBoundary'
 
 function toneClass(v: number | null | undefined): string {
   if (v == null) return 'text-app-text'
@@ -104,9 +105,12 @@ export default function Rendimiento() {
         </button>
       </div>
 
-      {loading ? (
-        <SkeletonPantalla />
-      ) : !pnl || !resumen ? (
+      <QueryBoundary
+        isLoading={loading}
+        error={rendimientoQuery.error}
+        onRetry={() => void rendimientoQuery.refetch()}
+      >
+      {!pnl || !resumen ? (
         <EmptyState title="Sin datos" description="No hay movimientos suficientes para calcular el rendimiento de esta cartera." />
       ) : (
         <>
@@ -306,6 +310,7 @@ export default function Rendimiento() {
           )}
         </>
       )}
+      </QueryBoundary>
     </div>
   )
 }

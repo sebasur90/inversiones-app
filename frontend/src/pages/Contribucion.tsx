@@ -17,6 +17,7 @@ import MetricTile from '../components/ui/MetricTile'
 import CorrelacionMatriz from '../components/charts/CorrelacionMatriz'
 import { Icon } from '../components/icons/Icons'
 import { SkeletonFilas } from '../components/ui/Skeleton'
+import QueryBoundary from '../components/ui/QueryBoundary'
 import { qk } from '../api/queryClient'
 
 function toneClass(v: number | null | undefined): string {
@@ -108,9 +109,13 @@ export default function Contribucion() {
       <h3 className="text-body font-bold text-app-text mb-2.5">
         <InfoTerm term="contribucion" label="Contribución al rendimiento" />
       </h3>
-      {loadingContribucion ? (
-        <SkeletonFilas filas={3} />
-      ) : !contribucion || contribucion.contribucion.length === 0 ? (
+      <QueryBoundary
+        isLoading={loadingContribucion}
+        error={contribucionQuery.error}
+        onRetry={() => void contribucionQuery.refetch()}
+        fallback={<SkeletonFilas filas={3} />}
+      >
+      {!contribucion || contribucion.contribucion.length === 0 ? (
         <EmptyState title="Sin datos" description="No hay movimientos suficientes para calcular contribución." />
       ) : (
         <>
@@ -128,6 +133,7 @@ export default function Contribucion() {
           </div>
         </>
       )}
+      </QueryBoundary>
 
       <h3 className="text-body font-bold text-app-text mb-2.5">Concentración</h3>
       {loadingContribucion ? null : !contribucion || contribucion.concentracion.length === 0 ? (
@@ -168,9 +174,13 @@ export default function Contribucion() {
       <div className="mb-3">
         <Segmented options={OPCIONES_UNIVERSO} value={universo} onChange={setUniverso} />
       </div>
-      {loadingCorrelaciones ? (
-        <SkeletonFilas filas={3} />
-      ) : !correlaciones || correlaciones.n_tickers < 2 ? (
+      <QueryBoundary
+        isLoading={loadingCorrelaciones}
+        error={correlacionesQuery.error}
+        onRetry={() => void correlacionesQuery.refetch()}
+        fallback={<SkeletonFilas filas={3} />}
+      >
+      {!correlaciones || correlaciones.n_tickers < 2 ? (
         <EmptyState
           title="Sin suficientes activos"
           description="Se necesitan al menos 2 tickers con precio cargado para calcular correlaciones."
@@ -189,6 +199,7 @@ export default function Contribucion() {
           <CorrelacionMatriz data={correlaciones} />
         </>
       )}
+      </QueryBoundary>
     </div>
   )
 }

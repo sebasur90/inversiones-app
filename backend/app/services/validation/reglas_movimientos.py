@@ -1,6 +1,6 @@
 """Validación de la pestaña Movimientos."""
 from .types import ValidationIssue, Severity
-from .parsers import _parse_fecha, _parse_numero, _normalize_tipo_movimiento, MONEDAS_VALIDAS, TIPOS_MOVIMIENTO
+from .parsers import _parse_fecha, _parse_numero, _normalize_tipo_movimiento, MONEDAS_VALIDAS
 
 
 def validar_movimientos(

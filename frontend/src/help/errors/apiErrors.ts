@@ -15,6 +15,9 @@ interface ValidationErrorItem {
 type ApiErrorResponse = string | ValidationErrorItem[] | unknown
 
 export function parseApiError(err: unknown, fieldLabels?: Record<string, string>): ParsedApiError {
+  // Mensaje ya armado por quien llama (p. ej. el `error` del contexto de inversiones)
+  if (typeof err === 'string') return { message: err }
+
   // Sin respuesta (error de red)
   if (!err || typeof err !== 'object' || !('response' in err)) {
     return {

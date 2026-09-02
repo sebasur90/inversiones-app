@@ -10,7 +10,7 @@ from ..database import (
     ObjetivoInversion, RebalanceoObjetivo, BenchmarkValor, ConfiguracionCartera,
     SyncRun, SyncIssue, EstadoMarketDataTicker
 )
-from .sheets_client import fetch_sheet_data, fetch_objetivos_tab, fetch_rebalanceo_tab, fetch_benchmarks_tab, fetch_configuracion_tab
+from .sheets_client import fetch_sheet_data
 from .inversiones_analytics import get_carteras
 from .validation.types import ValidationIssue, Severity
 from .validation.reglas_estructura import validar_estructura_tab

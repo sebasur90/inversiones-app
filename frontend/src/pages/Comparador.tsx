@@ -14,6 +14,7 @@ import EmptyState from '../components/ui/EmptyState'
 import Card from '../components/ui/Card'
 import InfoTooltip from '../help/components/InfoTooltip'
 import SkeletonPantalla, { Skeleton } from '../components/ui/Skeleton'
+import QueryBoundary from '../components/ui/QueryBoundary'
 import { useQuery } from '@tanstack/react-query'
 import { qk } from '../api/queryClient'
 
@@ -128,11 +129,17 @@ export default function Comparador() {
     })
   }
 
-  if (loading) {
+  if (loading || tickersQuery.error) {
     return (
       <div className="pb-4">
         <ScreenHeader title="Comparador" onBack={() => navigate(-1)} />
-        <SkeletonPantalla />
+        <QueryBoundary
+          isLoading={loading}
+          error={tickersQuery.error}
+          onRetry={() => void tickersQuery.refetch()}
+        >
+          {null}
+        </QueryBoundary>
       </div>
     )
   }

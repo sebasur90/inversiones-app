@@ -1,6 +1,6 @@
 """Validación de la pestaña Instrumentos."""
 from .types import ValidationIssue, Severity
-from .parsers import _parse_fecha, _parse_numero, _parse_nivel_precio
+from .parsers import _parse_fecha, _parse_nivel_precio
 
 MONEDAS_VALIDAS = ("ARS", "USD")
 

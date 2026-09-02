@@ -218,8 +218,10 @@ def _proyectar_cobros_ticker(
 
     if cupon_por_unidad is not None and periodicidad_meses:
         monto_cupon = cupon_por_unidad * cantidad
-        for f in _grilla_hacia_atras(venc, hoy, horizonte_fin, periodicidad_meses):
-            cobros.append({"fecha": f, "tipo": "cupon", "monto_nativo": monto_cupon})
+        cobros.extend(
+            {"fecha": f, "tipo": "cupon", "monto_nativo": monto_cupon}
+            for f in _grilla_hacia_atras(venc, hoy, horizonte_fin, periodicidad_meses)
+        )
 
     metodo_capital: str
     n_hist_amort = len(fechas_amort)
@@ -247,8 +249,9 @@ def _proyectar_cobros_ticker(
         n_max_fut = max(0, n_total_amort - n_hist_amort)
         grilla_amort = grilla_amort[-n_max_fut:] if n_max_fut > 0 else []
         amort_futuras = len(grilla_amort)
-        for f in grilla_amort:
-            cobros.append({"fecha": f, "tipo": "amortizacion", "monto_nativo": monto_amort})
+        cobros.extend(
+            {"fecha": f, "tipo": "amortizacion", "monto_nativo": monto_amort} for f in grilla_amort
+        )
         notas.append(
             "Amortización inferida del historial: el cupón proyectado no ajusta por la "
             "caída de capital residual."
@@ -297,7 +300,6 @@ def _proyectar_cobros_ticker(
         "amort_por_unidad": amort_por_unidad,
         "amort_historicas": len(fechas_amort),
         "amort_futuras": amort_futuras,
-        "amort_por_unidad": amort_por_unidad,
         "notas": notas,
     }
 

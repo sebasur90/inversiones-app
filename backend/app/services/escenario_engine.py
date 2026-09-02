@@ -202,7 +202,7 @@ def simular_escenario(
 
     # Tasas mensuales por instrumento
     tasas_mensuales = {}
-    for ticker in posiciones.keys():
+    for ticker in posiciones:
         v_anual = params.variacion_por_instrumento.get(
             ticker, params.variacion_por_defecto_pct
         )
@@ -249,7 +249,7 @@ def simular_escenario(
                 mep_mes_anterior = (mep_inicio + (mep_horizonte - mep_inicio) *
                                     ((mes - 1) / params.horizonte_meses))
                 mep_cambio_ratio = mep_mes / mep_mes_anterior if mep_mes_anterior > 0 else 1.0
-                for ticker, pos in posiciones.items():
+                for pos in posiciones.values():
                     if pos["moneda"] == "ARS":
                         pos["valor_usd"] *= mep_cambio_ratio
 
@@ -265,7 +265,7 @@ def simular_escenario(
         if params.modo_dividendos == "reinvertir_total":
             # Prorratea el dividendo entre posiciones
             if tiene_posiciones and valor_total > 0:
-                for ticker, pos in posiciones.items():
+                for pos in posiciones.values():
                     pos["valor_usd"] += dividendo_mes * (pos["valor_usd"] / valor_total)
             else:
                 valor_total += dividendo_mes
@@ -273,7 +273,7 @@ def simular_escenario(
             pct = params.pct_dividendo_reinvertido or 0.0
             reinvertido = dividendo_mes * (pct / 100)
             if tiene_posiciones and valor_total > 0:
-                for ticker, pos in posiciones.items():
+                for pos in posiciones.values():
                     pos["valor_usd"] += reinvertido * (pos["valor_usd"] / valor_total)
             else:
                 valor_total += reinvertido
@@ -297,7 +297,7 @@ def simular_escenario(
         if aporte_neto != 0:
             if tiene_posiciones and valor_total > 0:
                 # Prorratea entre posiciones
-                for ticker, pos in posiciones.items():
+                for pos in posiciones.values():
                     pos["valor_usd"] += aporte_neto * (pos["valor_usd"] / valor_total)
             else:
                 valor_total += aporte_neto

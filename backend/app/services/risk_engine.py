@@ -20,6 +20,7 @@ Supuestos documentados (ver también "Consideraciones" del pedido original):
   métricas devuelven `estado: "datos_insuficientes"` con los valores numéricos en `None` en vez
   de un número que aparente ser válido.
 """
+import bisect
 import math
 import statistics
 from datetime import date
@@ -354,6 +355,4 @@ def _bisect_right_carry_forward(fechas: list[date], fecha_buscada: date) -> int:
     """Busca el índice del último elemento en `fechas` que sea <= `fecha_buscada`.
     Retorna -1 si no hay ninguno (la búsqueda está antes de todas las fechas).
     """
-    import bisect
-    idx = bisect.bisect_right(fechas, fecha_buscada) - 1
-    return idx
+    return bisect.bisect_right(fechas, fecha_buscada) - 1

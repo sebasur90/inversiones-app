@@ -14,7 +14,7 @@ Algoritmo, por eje:
   objetivo pero sin ningún instrumento en cartera no inventa un ticker: se marca como
   "categoria_sin_instrumento" para que el usuario elija manualmente qué comprar.
 """
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 
 EPS_USD = 0.01
 EPS_PCT = 1e-9

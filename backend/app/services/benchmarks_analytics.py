@@ -20,7 +20,6 @@ from .inversiones_analytics import (
     _valuar_holdings,
     _valuar_holdings_ars,
     _cer_indice,
-    _retornos_mensuales_ticker,
     get_configuracion_cartera,
 )
 

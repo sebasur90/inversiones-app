@@ -80,7 +80,7 @@ def _leer_credenciales() -> tuple[str, str] | None:
     if not os.path.isfile(path):
         return None
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
         username, password = data.get("username"), data.get("password")
         if not username or not password:
