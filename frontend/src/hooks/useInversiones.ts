@@ -20,6 +20,9 @@ import {
   guardarPreferencia,
   CLAVE_CARTERA as STORAGE_CARTERA,
   CLAVE_MONEDA as STORAGE_MONEDA,
+  CLAVE_UMBRAL_PROXIMIDAD as STORAGE_UMBRAL_PROXIMIDAD,
+  UMBRAL_PROXIMIDAD_DEFAULT,
+  UMBRAL_PROXIMIDAD_MAX,
   usePreferencia,
 } from './usePreferencia'
 
@@ -34,6 +37,13 @@ const parseCartera = (crudo: string): string | null => crudo
 const serializarCartera = (valor: string | null): string => valor ?? ''
 const parseMoneda = (crudo: string): 'USD' | 'ARS' => (crudo === 'ARS' ? 'ARS' : 'USD')
 const serializarMoneda = (valor: 'USD' | 'ARS'): string => valor
+// No se usa `usePreferenciaNumerica`: sus callbacks son inline, así que devolvería un setter
+// nuevo en cada render y rompería el useMemo de abajo.
+const parseUmbral = (crudo: string): number | null => {
+  const n = Number(crudo)
+  return Number.isFinite(n) && n >= 0 && n <= UMBRAL_PROXIMIDAD_MAX ? n : null
+}
+const serializarUmbral = (valor: number): string => String(valor)
 
 export function useInversiones() {
   const queryClient = useQueryClient()
@@ -43,6 +53,11 @@ export function useInversiones() {
   )
   const [monedaSeleccionada, elegirMoneda] = usePreferencia<'USD' | 'ARS'>(
     STORAGE_MONEDA, 'USD', parseMoneda, serializarMoneda,
+  )
+  // Vive acá, y no en cada pantalla, porque el badge del nav, la lista de posiciones y el
+  // detalle del ticker tienen que reaccionar juntos cuando se cambia en Ajustes.
+  const [umbralProximidadPct, elegirUmbralProximidad] = usePreferencia<number>(
+    STORAGE_UMBRAL_PROXIMIDAD, UMBRAL_PROXIMIDAD_DEFAULT, parseUmbral, serializarUmbral,
   )
 
   const carterasQuery = useQuery({
@@ -120,6 +135,11 @@ export function useInversiones() {
       setCarteraSeleccionada: elegirCartera,
       monedaSeleccionada,
       setMonedaSeleccionada: elegirMoneda,
+      umbralProximidadPct,
+      setUmbralProximidadPct: elegirUmbralProximidad,
+      // Como ratio, la unidad en la que el backend devuelve `pct_a_objetivo`/`pct_a_stop_loss`:
+      // así ningún consumidor tiene que acordarse de dividir por 100.
+      umbralProximidad: umbralProximidadPct / 100,
       resumen: resumenQuery.data ?? null,
       exposicion: exposicionQuery.data ?? EXPOSICION_VACIA,
       rebalanceo: rebalanceoQuery.data ?? REBALANCEO_VACIO,
@@ -135,6 +155,7 @@ export function useInversiones() {
     }),
     [
       carteras, carteraValida, elegirCartera, monedaSeleccionada, elegirMoneda,
+      umbralProximidadPct, elegirUmbralProximidad,
       resumenQuery.data, exposicionQuery.data, rebalanceoQuery.data,
       movimientosQuery.data, rendimientoQuery.data,
       loading, syncing, error, sincronizar, carterasQuery.isLoading,

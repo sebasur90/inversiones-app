@@ -4,10 +4,16 @@ import { qk } from '../../api/queryClient'
 import { formatARS, formatCantidad, formatPctRatio, formatPrecio, formatUSD } from '../../utils'
 import Sparkline from '../../components/charts/Sparkline'
 import MetricTile from '../../components/ui/MetricTile'
+import AlertaPrecioBadge from '../../components/inversiones/AlertaPrecioBadge'
+import { estadoAlerta, pctDelEstado } from '../../utils/alertasPrecio'
+import { useInversionesContext } from '../../context/InversionesContext'
 import { Icon } from '../../components/icons/Icons'
 import type { TickerPositionOut } from '../../api'
 
 export default function TickerResumenTab({ position, cartera, monedaSeleccionada }: { position: TickerPositionOut; cartera: string | null; monedaSeleccionada: 'ARS' | 'USD' }) {
+  const { umbralProximidad } = useInversionesContext()
+  const alerta = estadoAlerta(position, umbralProximidad)
+
   const preciosQuery = useQuery({
     queryKey: qk.de('precios-ticker', position.ticker),
     queryFn: () => getPreciosTicker(position.ticker),
@@ -40,18 +46,9 @@ export default function TickerResumenTab({ position, cartera, monedaSeleccionada
             {formatPctRatio(rendimiento)} desde promedio
           </span>
         )}
-        {(position.objetivo_alcanzado || position.stop_loss_disparado) && (
+        {alerta && (
           <div className="flex flex-wrap gap-1.5 mt-2">
-            {position.objetivo_alcanzado && (
-              <span className="text-label font-bold text-app-teal bg-app-teal/10 border border-app-teal/30 px-2 py-1 rounded-[7px]">
-                🎯 Objetivo alcanzado
-              </span>
-            )}
-            {position.stop_loss_disparado && (
-              <span className="text-label font-bold text-app-coral bg-app-coral/10 border border-app-coral/30 px-2 py-1 rounded-[7px]">
-                🛑 Stop loss disparado
-              </span>
-            )}
+            <AlertaPrecioBadge estado={alerta} pct={pctDelEstado(position, alerta)} className="px-2 py-1" />
           </div>
         )}
         {precios.length > 0 && (

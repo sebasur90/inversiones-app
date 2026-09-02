@@ -70,6 +70,7 @@ export const CLAVE_CARTERA = 'inversiones-cartera'
 export const CLAVE_MONEDA = 'inversiones-moneda'
 export const CLAVE_AUTOSYNC_HORAS = 'inversiones-autosync-horas'
 export const CLAVE_ESCALA_TEXTO = 'inversiones-escala-texto'
+export const CLAVE_UMBRAL_PROXIMIDAD = 'inversiones-alerta-proximidad-pct'
 
 /** 0 = auto-sync desactivado. */
 export const AUTOSYNC_HORAS_DEFAULT = 12
@@ -77,3 +78,11 @@ export const AUTOSYNC_HORAS_MAX = 72
 export const ESCALA_TEXTO_DEFAULT = 1
 export const ESCALA_TEXTO_MIN = 1
 export const ESCALA_TEXTO_MAX = 1.3
+
+/**
+ * A cuántos puntos porcentuales del stop-loss o del precio objetivo una posición empieza a
+ * avisar. En porcentaje, no en ratio: es lo que se elige en Ajustes. 0 = sólo avisar cuando
+ * el precio ya cruzó el nivel.
+ */
+export const UMBRAL_PROXIMIDAD_DEFAULT = 5
+export const UMBRAL_PROXIMIDAD_MAX = 20

@@ -9,6 +9,7 @@ import HeroValorCard from '../components/inversiones/HeroValorCard'
 import KpiGrid from '../components/inversiones/KpiGrid'
 import CarterasScroll from '../components/inversiones/CarterasScroll'
 import PosicionRow from '../components/inversiones/PosicionRow'
+import { estadoAlerta } from '../utils/alertasPrecio'
 import RequiereAtencion from '../components/inversiones/RequiereAtencion'
 import EmptyState from '../components/ui/EmptyState'
 import Card from '../components/ui/Card'
@@ -19,7 +20,7 @@ import SkeletonPantalla from '../components/ui/Skeleton'
 
 export default function Resumen() {
   const navigate = useNavigate()
-  const { carteras, carteraSeleccionada, setCarteraSeleccionada, monedaSeleccionada, resumen, rendimientoPorTicker, loading } =
+  const { carteras, carteraSeleccionada, setCarteraSeleccionada, monedaSeleccionada, resumen, rendimientoPorTicker, umbralProximidad, loading } =
     useInversionesContext()
 
   // Sin `syncVersion` en las dependencias: sincronizar invalida la caché de queries y estas
@@ -63,7 +64,12 @@ export default function Resumen() {
             }}
             fallback={null}
           >
-            <RequiereAtencion diagnostico={diagnostico} calidad={calidad} posiciones={rendimientoPorTicker} />
+            <RequiereAtencion
+              diagnostico={diagnostico}
+              calidad={calidad}
+              posiciones={rendimientoPorTicker}
+              umbralProximidad={umbralProximidad}
+            />
 
           {/* Los dos scores, en una fila: el detalle de lo que los mueve ya está arriba. */}
           <div className="grid grid-cols-2 gap-2 mb-4 mt-1">
@@ -142,7 +148,13 @@ export default function Resumen() {
           ) : (
             <div>
               {topPosiciones.map(item => (
-                <PosicionRow key={item.ticker} item={item} moneda={monedaSeleccionada} onClick={() => navigate(`/ticker/${encodeURIComponent(item.ticker)}`)} />
+                <PosicionRow
+                  key={item.ticker}
+                  item={item}
+                  moneda={monedaSeleccionada}
+                  alerta={estadoAlerta(item, umbralProximidad)}
+                  onClick={() => navigate(`/ticker/${encodeURIComponent(item.ticker)}`)}
+                />
               ))}
             </div>
           )}
