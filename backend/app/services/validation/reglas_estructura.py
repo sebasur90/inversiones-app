@@ -11,6 +11,9 @@ COLUMNAS_REQUERIDAS = {
     "Benchmarks": ["Fecha", "Benchmark", "Valor"],
     "Configuracion": ["Cartera"],
     "Tipos de Cambio": ["Fecha", "Tipo", "Valor"],
+    # Watchlist: sólo Ticker y Objetivo hacen falta para que la fila sirva de algo (seguir un
+    # precio contra una zona de compra); el resto de las columnas es descriptivo.
+    "Watchlist": ["Ticker", "Objetivo"],
 }
 
 COLUMNAS_CONOCIDAS = {
@@ -32,6 +35,10 @@ COLUMNAS_CONOCIDAS = {
         "Peso Máximo", "Peso Mínimo", "Tolerancia"
     ],
     "Tipos de Cambio": ["Fecha", "Tipo", "Valor"],
+    "Watchlist": [
+        "Ticker", "Nombre", "Tipo Instrumento", "Mercado", "Moneda",
+        "País", "Pais", "Sector", "Objetivo"
+    ],
 }
 
 

@@ -48,7 +48,8 @@ inversiones-app/
 │       ├── Rebalanceo            # Opcional: % objetivo de asignación
 │       ├── Benchmarks            # Opcional: series de benchmarks (además de los automáticos)
 │       ├── Configuracion         # Opcional: benchmark/pesos objetivo por cartera
-│       └── Tipos de Cambio       # Opcional: CER/MEP dedicados (Fecha, Tipo, Valor)
+│       ├── Tipos de Cambio       # Opcional: CER/MEP dedicados (Fecha, Tipo, Valor)
+│       └── Watchlist             # Opcional: instrumentos a seguir, ver "Watchlist" más abajo
 ├── credentials/
 │   ├── google-service-account.json  # Para modo Google Sheets
 │   └── iol.json                     # Opcional: API de IOL (ver "Precios: IOL" más abajo)
@@ -162,6 +163,41 @@ exactamente en el Google Sheet y en `sheet_local/sheet_inversiones.xlsx`:
 
 `Modo` y `Valor` deben completarse juntos (o dejarse ambos vacíos). Se ven en el detalle de
 cada ticker en la app, junto con el % que falta para alcanzarlos.
+
+## Watchlist
+
+La pestaña opcional `Watchlist` sirve para seguir instrumentos que **todavía no están en
+cartera** (no tienen movimientos) y que se avise cuando el precio se acerca a un precio de
+compra. Debe coincidir exactamente en el Google Sheet y en `sheet_local/sheet_inversiones.xlsx`:
+
+| Columna | Valores | Significado |
+|---|---|---|
+| `Ticker` | texto, requerido | El único campo obligatorio junto con `Objetivo`. |
+| `Nombre` | texto | Nombre a mostrar; si falta, se usa el Ticker. |
+| `Tipo Instrumento` | texto libre (`Acción`, `CEDEAR`, `Bono`, `ON`, etc.) | Determina si se le busca precio automático (IOL/data912) y en qué familia. |
+| `Mercado` | texto | Sólo descriptivo. |
+| `Moneda` | `ARS` o `USD` | En qué unidad se muestra el precio; si falta o es inválida, se asume `ARS`. |
+| `País` / `Sector` | texto | Sólo descriptivos. |
+| `Objetivo` | número | El precio al que se quiere comprar. |
+
+A diferencia de `Objetivo Modo/Valor` de `Instrumentos` (que es un precio de **venta**, se
+cruza hacia arriba), el `Objetivo` de la Watchlist es un precio de **compra**: la alerta se
+dispara cuando el precio de mercado baja hasta ese nivel o por debajo (misma mecánica que el
+stop-loss). El margen de aviso ("cerca") es el umbral global de Ajustes → Alertas de precio,
+el mismo que usan las posiciones — la Watchlist no tiene una columna propia para eso.
+
+Los precios automáticos de la Watchlist reusan el mismo motor que los de cartera (IOL primero,
+data912 como respaldo), con una diferencia: como estos tickers no tienen precios manuales
+previos en `Precios` para calibrar la escala (lámina de 100 VN vs. 1 VN), se usa el propio
+`Objetivo` como referencia. Si el objetivo está muy lejos del precio real de mercado (más de
+~2.5x en cualquier sentido), el factor de escala no se puede deducir y el precio no se carga
+(queda como issue `escala_desconocida` en Calidad de datos); se destraba cargando un precio
+manual de ese ticker en la pestaña `Precios`. Un ticker que sí está en cartera toma su precio
+de la serie normal (`precios_instrumento`), no de este mecanismo.
+
+Si la pestaña no existe todavía, la sincronización no falla — simplemente no hay watchlist
+cargada. Se ve en "Más" → "Watchlist", con badge de alertas ahí y un bloque "Oportunidades de
+compra" en Resumen.
 
 ## Rebalanceo de Cartera
 

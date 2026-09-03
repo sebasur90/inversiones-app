@@ -8,13 +8,16 @@ import {
   getRebalanceoInversiones,
   getMovimientosInversion,
   getRendimientoPorTicker,
+  getWatchlist,
   type ExposicionOut,
   type RebalanceoOut,
   type MovimientoInversion,
   type RendimientoPorTickerItem,
+  type WatchlistItemOut,
   type SyncResult,
 } from '../api'
 import { qk } from '../api/queryClient'
+import { alertasDeCompra } from '../utils/alertasPrecio'
 import {
   leerPreferencia,
   guardarPreferencia,
@@ -30,6 +33,7 @@ const EXPOSICION_VACIA: ExposicionOut = { ejes: [] }
 const REBALANCEO_VACIO: RebalanceoOut = { ejes: [] }
 const MOVIMIENTOS_VACIOS: MovimientoInversion[] = []
 const RENDIMIENTO_VACIO: RendimientoPorTickerItem[] = []
+const WATCHLIST_VACIA: WatchlistItemOut[] = []
 
 // A nivel de módulo: si fueran inline, `usePreferencia` devolvería un setter nuevo en cada
 // render y el useMemo de abajo (y con él el contexto entero) se recalcularía siempre.
@@ -105,6 +109,14 @@ export function useInversiones() {
     ...comun,
   })
 
+  // Global, no por cartera: no depende de `hayCarteras` ni entra en `comun`/`detalleQueries`
+  // (el badge de watchlist y el bloque de Resumen deben poder mostrarse aunque el consolidado
+  // de carteras todavía esté cargando).
+  const watchlistQuery = useQuery({
+    queryKey: qk.watchlist,
+    queryFn: () => getWatchlist(),
+  })
+
   const detalleQueries = [resumenQuery, exposicionQuery, rebalanceoQuery, movimientosQuery, rendimientoQuery]
 
   // Sólo la primera carga vacía la pantalla; las siguientes muestran los datos previos.
@@ -145,6 +157,10 @@ export function useInversiones() {
       rebalanceo: rebalanceoQuery.data ?? REBALANCEO_VACIO,
       movimientos: movimientosQuery.data ?? MOVIMIENTOS_VACIOS,
       rendimientoPorTicker: rendimientoQuery.data ?? RENDIMIENTO_VACIO,
+      watchlist: watchlistQuery.data ?? WATCHLIST_VACIA,
+      // Derivada acá, no en cada pantalla: el badge del menú Más y el bloque de Resumen
+      // comparten el mismo cálculo sin duplicar el fetch ni el umbral.
+      alertasCompra: alertasDeCompra(watchlistQuery.data ?? WATCHLIST_VACIA, umbralProximidadPct / 100),
       loading,
       syncing,
       error,
@@ -157,7 +173,7 @@ export function useInversiones() {
       carteras, carteraValida, elegirCartera, monedaSeleccionada, elegirMoneda,
       umbralProximidadPct, elegirUmbralProximidad,
       resumenQuery.data, exposicionQuery.data, rebalanceoQuery.data,
-      movimientosQuery.data, rendimientoQuery.data,
+      movimientosQuery.data, rendimientoQuery.data, watchlistQuery.data,
       loading, syncing, error, sincronizar, carterasQuery.isLoading,
     ],
   )

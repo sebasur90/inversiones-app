@@ -8,7 +8,15 @@ import type { Severidad } from '../components/inversiones/SeverityBadge'
  * Los estados `*_cerca` se derivan acá a partir de las distancias que ya vienen calculadas:
  * avisar recién cuando el precio cruzó el nivel no deja margen para reaccionar.
  */
-export type EstadoAlerta = 'stop_loss_disparado' | 'objetivo_alcanzado' | 'stop_loss_cerca' | 'objetivo_cerca'
+/**
+ * Los estados `compra_*` son el mismo mecanismo aplicado a la Watchlist (`WatchlistItemOut`):
+ * el `Objetivo` ahí es un precio de compra, así que se cruza hacia abajo -- misma semántica que
+ * el stop-loss (`en_zona` equivale a `precio_actual <= precio_objetivo`), y el signo de
+ * `pct_a_objetivo` sigue la misma convención.
+ */
+export type EstadoAlerta =
+  | 'stop_loss_disparado' | 'objetivo_alcanzado' | 'stop_loss_cerca' | 'objetivo_cerca'
+  | 'compra_en_zona' | 'compra_cerca'
 
 /**
  * Los campos de niveles de precio, que vienen idénticos en `RendimientoPorTickerItem` (la
@@ -25,6 +33,14 @@ export interface NivelesPrecio {
 export interface PosicionConNiveles extends NivelesPrecio {
   ticker: string
   nombre: string
+}
+
+/** Los campos de watchlist que hacen falta para calcular su estado de alerta. */
+export interface WatchlistConNivel {
+  ticker: string
+  nombre: string
+  pct_a_objetivo: number | null
+  en_zona: boolean | null
 }
 
 export interface AlertaPrecio {
@@ -50,6 +66,10 @@ const SEVERIDAD_POR_ESTADO: Record<EstadoAlerta, Severidad> = {
   stop_loss_cerca: 'advertencia',
   objetivo_cerca: 'advertencia',
   objetivo_alcanzado: 'info',
+  // Entrar en zona de compra es accionable (dorado) pero no urgente como un stop-loss; "cerca"
+  // es sólo un aviso temprano.
+  compra_en_zona: 'advertencia',
+  compra_cerca: 'info',
 }
 
 // Orden en que se muestran: lo que exige una decisión primero. El stop-loss manda sobre el
@@ -60,6 +80,8 @@ const PRIORIDAD: Record<EstadoAlerta, number> = {
   objetivo_alcanzado: 1,
   stop_loss_cerca: 2,
   objetivo_cerca: 3,
+  compra_en_zona: 4,
+  compra_cerca: 5,
 }
 
 export function severidadDeEstado(estado: EstadoAlerta): Severidad {
@@ -123,6 +145,54 @@ export function contarAlertas(items: NivelesPrecio[], umbralProximidad: number):
   const conteo = { ...CONTEO_VACIO }
   for (const it of items) {
     const estado = estadoAlerta(it, umbralProximidad)
+    if (estado === null) continue
+    const severidad = severidadDeEstado(estado)
+    if (severidad === 'critico') conteo.criticas += 1
+    else if (severidad === 'advertencia') conteo.advertencias += 1
+    else conteo.info += 1
+    conteo.total += 1
+  }
+  return conteo
+}
+
+/**
+ * El estado de alerta de un ítem de la Watchlist, o `null` si no tiene objetivo/precio cargado
+ * o el precio está lejos de la zona de compra. Mismo contrato que `estadoAlerta`, aplicado a
+ * `en_zona`/`pct_a_objetivo` en vez de a los cuatro campos de posiciones.
+ */
+export function estadoWatchlist(item: WatchlistConNivel, umbralProximidad: number): EstadoAlerta | null {
+  if (item.en_zona) return 'compra_en_zona'
+  if (umbralProximidad <= 0) return null
+  if (item.pct_a_objetivo != null && Math.abs(item.pct_a_objetivo) <= umbralProximidad) return 'compra_cerca'
+  return null
+}
+
+/** Ítems de la watchlist con alguna alerta, ordenados por urgencia y luego por cercanía. */
+export function alertasDeCompra(items: WatchlistConNivel[], umbralProximidad: number): AlertaPrecio[] {
+  const alertas: AlertaPrecio[] = []
+  for (const it of items) {
+    const estado = estadoWatchlist(it, umbralProximidad)
+    if (estado === null) continue
+    alertas.push({
+      ticker: it.ticker,
+      nombre: it.nombre,
+      estado,
+      severidad: severidadDeEstado(estado),
+      pct: it.pct_a_objetivo,
+    })
+  }
+  return alertas.sort((a, b) => {
+    const porPrioridad = PRIORIDAD[a.estado] - PRIORIDAD[b.estado]
+    if (porPrioridad !== 0) return porPrioridad
+    return Math.abs(a.pct ?? Infinity) - Math.abs(b.pct ?? Infinity)
+  })
+}
+
+/** Conteo por severidad de la watchlist, para el contador en el menú Más. */
+export function contarAlertasCompra(items: WatchlistConNivel[], umbralProximidad: number): ConteoAlertas {
+  const conteo = { ...CONTEO_VACIO }
+  for (const it of items) {
+    const estado = estadoWatchlist(it, umbralProximidad)
     if (estado === null) continue
     const severidad = severidadDeEstado(estado)
     if (severidad === 'critico') conteo.criticas += 1

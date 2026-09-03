@@ -7,6 +7,7 @@ from ..database import get_db, MovimientoInversion, InstrumentoInversion
 from ..schemas import (
     SyncResult,
     CalidadDatosOut,
+    WatchlistItemOut,
     CarteraInfo,
     InversionesResumen,
     ExposicionOut,
@@ -46,6 +47,7 @@ from ..schemas import (
 from ..services.sheets_client import SheetsClientError
 from ..services.inversiones_sync import sync_from_sheet
 from ..services.calidad_datos import get_calidad_datos
+from ..services.watchlist_analytics import get_watchlist
 from ..services.inversiones_analytics import (
     get_carteras,
     get_resumen,
@@ -530,6 +532,15 @@ def descomposicion_fx_por_posicion_consolidado(
 def calidad_datos(db: Session = Depends(get_db)):
     """Obtiene el estado de calidad de datos del último sync."""
     return get_calidad_datos(db)
+
+
+@router.get("/watchlist", response_model=list[WatchlistItemOut])
+def watchlist(db: Session = Depends(get_db)):
+    """Instrumentos seguidos y su distancia al precio objetivo de compra.
+
+    Es global, no por cartera: la pestaña `Watchlist` del Sheet no tiene columna Cartera.
+    """
+    return get_watchlist(db)
 
 
 # ── Análisis profundo por ticker ──────────────────────────────────────────────

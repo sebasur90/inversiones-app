@@ -173,6 +173,47 @@ class EstadoMarketDataTicker(Base):
     backfill_intento = Column(Date, nullable=True)
 
 
+class WatchlistItem(Base):
+    """Espejo de la pestaña `Watchlist` del Sheet: instrumentos a seguir que no están en cartera.
+
+    `objetivo` es el precio al que el usuario quiere comprar. La alerta se dispara "hacia abajo"
+    (precio de mercado acercándose al objetivo), a diferencia del `objetivo_valor` de
+    `InstrumentoInversion`, que es un precio de venta y se cruza hacia arriba.
+
+    Se reescribe entera en cada sync, como todas las pestañas -- por eso el precio observado vive
+    aparte, en `PrecioWatchlist`.
+    """
+    __tablename__ = "watchlist"
+    ticker = Column(String, primary_key=True)
+    nombre = Column(String, nullable=False)
+    tipo_instrumento = Column(String, nullable=False, default="")
+    mercado = Column(String, nullable=False, default="")
+    moneda = Column(String, nullable=False, default="ARS")
+    pais = Column(String, nullable=True)
+    sector = Column(String, nullable=True)
+    objetivo = Column(Numeric(18, 6), nullable=True)
+
+
+class PrecioWatchlist(Base):
+    """Último precio de mercado observado para un ticker de la watchlist.
+
+    No va a `precios_instrumento` por dos razones: esos tickers no están en
+    `instrumentos_inversion` (la FK del ticker), y la serie de precios la leen patrimonio,
+    exposición y riesgo -- meter ahí instrumentos que no se poseen falsearía esos números.
+
+    Tabla aparte de `watchlist` (y no columnas de esa tabla) para que el precio sobreviva al
+    DELETE+INSERT de cada sync y a una caída transitoria de la API, igual que
+    `EstadoMarketDataTicker`. Sólo se guarda el último precio: la watchlist no necesita serie
+    histórica.
+    """
+    __tablename__ = "precios_watchlist"
+    ticker = Column(String, primary_key=True)
+    fecha = Column(Date, nullable=False)
+    precio = Column(Numeric(18, 6), nullable=False)
+    moneda = Column(String, nullable=False)
+    fuente = Column(String, nullable=False)  # "iol" | "api"
+
+
 class EstadoApiIol(Base):
     """Contador mensual de llamadas a la API de IOL, para no pasarse del cupo bonificado.
 

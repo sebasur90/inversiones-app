@@ -412,6 +412,32 @@ class RendimientoPorTickerItem(BaseModel):
     stop_loss_disparado: Optional[bool] = None
 
 
+
+# --- Watchlist ---
+
+class WatchlistItemOut(BaseModel):
+    """Un instrumento seguido y su distancia a la zona de compra.
+
+    `pct_a_objetivo` es `(objetivo - precio_actual) / precio_actual`, el mismo criterio que
+    `pct_a_stop_loss`: negativo mientras el precio esté por encima del objetivo (todavía caro),
+    cero o positivo una vez que entró en zona. El frontend usa el valor absoluto como distancia.
+    """
+    ticker: str
+    nombre: str
+    tipo_instrumento: str
+    mercado: str
+    moneda: str
+    pais: Optional[str] = None
+    sector: Optional[str] = None
+    precio_actual: Optional[float] = None
+    fecha_precio: Optional[date] = None
+    moneda_precio: Optional[str] = None
+    fuente_precio: Optional[str] = None  # "cartera" | "iol" | "api"
+    precio_objetivo: Optional[float] = None
+    pct_a_objetivo: Optional[float] = None
+    en_zona: Optional[bool] = None
+    en_cartera: bool = False
+
 # --- Objetivos de Inversión ---
 
 class ObjetivoInversionOut(BaseModel):

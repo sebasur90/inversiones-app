@@ -13,6 +13,7 @@ const Resumen = lazy(() => import('./pages/Resumen'))
 const Exposicion = lazy(() => import('./pages/Exposicion'))
 const Movimientos = lazy(() => import('./pages/Movimientos'))
 const Posiciones = lazy(() => import('./pages/Posiciones'))
+const Watchlist = lazy(() => import('./pages/Watchlist'))
 const TickerDetalle = lazy(() => import('./pages/TickerDetalle'))
 const Objetivo = lazy(() => import('./pages/Objetivo'))
 const Precios = lazy(() => import('./pages/Precios'))
@@ -137,6 +138,7 @@ function Root() {
             <Route path="exposicion" element={<Exposicion />} />
             <Route path="movimientos" element={<Movimientos />} />
             <Route path="posiciones" element={<Posiciones />} />
+            <Route path="watchlist" element={<Watchlist />} />
             <Route path="ticker/:ticker" element={<TickerDetalle />} />
             <Route path="objetivo" element={<Objetivo />} />
             <Route path="precios" element={<Precios />} />

@@ -11,6 +11,7 @@ import CarterasScroll from '../components/inversiones/CarterasScroll'
 import PosicionRow from '../components/inversiones/PosicionRow'
 import { estadoAlerta } from '../utils/alertasPrecio'
 import RequiereAtencion from '../components/inversiones/RequiereAtencion'
+import OportunidadesCompra from '../components/inversiones/OportunidadesCompra'
 import EmptyState from '../components/ui/EmptyState'
 import Card from '../components/ui/Card'
 import ComparacionChart from '../components/charts/ComparacionChart'
@@ -20,7 +21,7 @@ import SkeletonPantalla from '../components/ui/Skeleton'
 
 export default function Resumen() {
   const navigate = useNavigate()
-  const { carteras, carteraSeleccionada, setCarteraSeleccionada, monedaSeleccionada, resumen, rendimientoPorTicker, umbralProximidad, loading } =
+  const { carteras, carteraSeleccionada, setCarteraSeleccionada, monedaSeleccionada, resumen, rendimientoPorTicker, watchlist, umbralProximidad, loading } =
     useInversionesContext()
 
   // Sin `syncVersion` en las dependencias: sincronizar invalida la caché de queries y estas
@@ -70,6 +71,8 @@ export default function Resumen() {
               posiciones={rendimientoPorTicker}
               umbralProximidad={umbralProximidad}
             />
+
+            <OportunidadesCompra watchlist={watchlist} umbralProximidad={umbralProximidad} />
 
           {/* Los dos scores, en una fila: el detalle de lo que los mueve ya está arriba. */}
           <div className="grid grid-cols-2 gap-2 mb-4 mt-1">

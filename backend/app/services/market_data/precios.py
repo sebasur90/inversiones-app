@@ -506,6 +506,36 @@ def _fetch_precios_encadenado(
     return filas, issues
 
 
+def memo_paneles(db):
+    """Callable que pide los paneles de IOL una sola vez y cachea la respuesta.
+
+    Los paneles de `_PANELES` traen renta fija y renta variable en la MISMA tanda de respuestas: se
+    piden una vez por sync y se reusan para todas las familias y rutas (precios de cartera y de
+    watchlist). Sin este memo cada una gastaría la tanda entera por separado -> varias veces el
+    consumo del cupo mensual de IOL.
+    """
+    cache: list = []
+
+    def _paneles():
+        if not cache:
+            cache.append(iol_client.fetch_precios_paneles(db))
+        return cache[0]
+
+    return _paneles
+
+
+def memo_fci(db):
+    """Igual que `memo_paneles`, para la llamada única a `Titulos/FCI`."""
+    cache: list = []
+
+    def _fci():
+        if not cache:
+            cache.append(iol_client.fetch_precios_fci(db))
+        return cache[0]
+
+    return _fci
+
+
 def fetch_precios_api(
     instrumentos: list[dict],
     precios_sheet: list[dict],
@@ -513,6 +543,8 @@ def fetch_precios_api(
     db,
     hoy: date | None = None,
     estado_por_ticker: dict[str, dict] | None = None,
+    paneles_fn=None,
+    fci_fn=None,
 ) -> tuple[list[dict], list[ValidationIssue]]:
     """Precio del día para renta fija + renta variable + FCI, IOL primero y data912 como
     respaldo (FCI no tiene respaldo público: si IOL no lo cotiza, no se carga). Punto de entrada
@@ -521,20 +553,16 @@ def fetch_precios_api(
 
     `db`: la sesión del sync (no se usa para leer/escribir precios acá, sólo se le pasa a
     `iol_auth`, que cuenta el cupo mensual sobre esa misma sesión en vez de abrir una propia --
-    ver la docstring de `iol_auth`)."""
+    ver la docstring de `iol_auth`).
+
+    `paneles_fn` / `fci_fn`: memos de las llamadas a IOL compartidos con otras rutas de la misma
+    corrida (ver `memo_paneles` / `memo_fci`). Si no se pasan, se arman propios."""
     hoy = hoy or date.today()
     filas: list[dict] = []
     issues: list[ValidationIssue] = []
 
-    # Los paneles de `_PANELES` traen renta fija y renta variable en la MISMA tanda de respuestas:
-    # se piden una sola vez por sync y se reusan para las dos familias. Sin este memo cada familia
-    # gastaría la tanda entera por separado -> el doble de consumo del cupo mensual de IOL.
-    _paneles_memo: list = []
-
-    def _paneles():
-        if not _paneles_memo:
-            _paneles_memo.append(iol_client.fetch_precios_paneles(db))
-        return _paneles_memo[0]
+    _paneles = paneles_fn or memo_paneles(db)
+    _fci = fci_fn or memo_fci(db)
 
     for predicate, fallback_fn, label, familia in (
         (_es_renta_fija, data912.fetch_precios_renta_fija,
@@ -552,7 +580,7 @@ def fetch_precios_api(
     # FCI: sin respaldo público — si IOL no responde, directamente no hay filas para esta familia.
     fci_objetivo = [i for i in instrumentos if _es_fci(i.get("tipo_instrumento", ""))]
     if fci_objetivo:
-        iol_fci = iol_client.fetch_precios_fci(db)
+        iol_fci = _fci()
         if iol_fci is None:
             issues.append(ValidationIssue(
                 tab="Precios (API)", regla="iol_no_disponible",
@@ -572,6 +600,68 @@ def fetch_precios_api(
                 f["fuente"] = "iol"
             filas.extend(f_fci or [])
             issues.extend(i_fci)
+
+    return filas, issues
+
+
+def fetch_precios_watchlist(
+    watchlist: list[dict],
+    precios_sheet: list[dict],
+    db,
+    hoy: date | None = None,
+    estado_por_ticker: dict[str, dict] | None = None,
+    paneles_fn=None,
+    fci_fn=None,
+) -> tuple[list[dict], list[ValidationIssue]]:
+    """Precio del día para los tickers de la pestaña `Watchlist` (los que NO están en cartera).
+
+    Reusa `fetch_precios_api` entero -- las tres familias, el encadenado IOL -> data912 y la
+    calibración de escala son los mismos. Lo único propio es de dónde sale la **referencia de
+    escala**: un ticker de watchlist no tiene precios manuales en la pestaña `Precios`, así que se
+    le arma una referencia sintética con su propio `Objetivo`, que está expresado en la misma
+    unidad en la que el usuario piensa el precio. Si además cargó precios reales de ese ticker en
+    `Precios`, esos ganan (son una referencia observada, no una intención).
+
+    Consecuencia a tener presente: si el objetivo está a más de ~2.5x del precio de mercado, el
+    ratio cae fuera de las ventanas de `_factor_escala` y el precio no se carga (issue
+    `escala_desconocida`). Se destraba cargando un precio manual del ticker en la pestaña `Precios`.
+
+    Devuelve (filas, issues); las filas tienen la forma `{ticker, fecha, precio, moneda, fuente}`,
+    lista para `PrecioWatchlist`.
+    """
+    hoy = hoy or date.today()
+    if not watchlist:
+        return [], []
+
+    tickers_wl = {w["ticker"] for w in watchlist}
+    precios_ref = [p for p in precios_sheet if p["ticker"] in tickers_wl]
+    con_referencia_real = {p["ticker"] for p in precios_ref}
+    for w in watchlist:
+        if w["ticker"] in con_referencia_real or w.get("objetivo") is None:
+            continue
+        precios_ref.append({
+            "ticker": w["ticker"],
+            "fecha": hoy,
+            "precio": float(w["objetivo"]),
+            "moneda": w.get("moneda") or "ARS",
+        })
+
+    filas, issues = fetch_precios_api(
+        watchlist, precios_ref, set(), db, hoy=hoy, estado_por_ticker=estado_por_ticker,
+        paneles_fn=paneles_fn, fci_fn=fci_fn,
+    )
+
+    # Los issues salen rotulados como si vinieran de la cartera: se re-rotulan para que en Calidad
+    # de datos se vea de qué pestaña salió cada uno, y las dos reglas de calibración explican el
+    # remedio propio de la watchlist (la referencia acá es el Objetivo, no un precio manual).
+    for issue in issues:
+        issue.tab = "Watchlist (API)"
+        if issue.regla in ("sin_precio_para_calibrar", "escala_desconocida"):
+            issue.impacto = (
+                "No se carga el precio de este instrumento de la watchlist. Cargá un precio "
+                "manual del ticker en la pestaña Precios, o revisá que el Objetivo esté en la "
+                "misma unidad que la cotización"
+            )
 
     return filas, issues
 

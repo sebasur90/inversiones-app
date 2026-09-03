@@ -15,6 +15,8 @@ const COMPACTO: Record<EstadoAlerta, string> = {
   stop_loss_cerca: '⚠ STOP',
   objetivo_alcanzado: '🎯 META',
   objetivo_cerca: '⚠ META',
+  compra_en_zona: '🛒 ZONA',
+  compra_cerca: '👀 CERCA',
 }
 
 const COMPLETO: Record<EstadoAlerta, string> = {
@@ -22,6 +24,8 @@ const COMPLETO: Record<EstadoAlerta, string> = {
   stop_loss_cerca: 'Cerca del stop-loss',
   objetivo_alcanzado: 'Objetivo alcanzado',
   objetivo_cerca: 'Cerca del objetivo',
+  compra_en_zona: 'En zona de compra',
+  compra_cerca: 'Cerca de la zona de compra',
 }
 
 /** Texto de distancia al nivel. `pct` es un ratio y su signo no importa acá: lo que se
@@ -29,6 +33,7 @@ const COMPLETO: Record<EstadoAlerta, string> = {
 function textoDistancia(estado: EstadoAlerta, pct: number | null | undefined): string | null {
   if (pct == null) return null
   const magnitud = `${Math.abs(pct * 100).toFixed(1)}%`
+  if (estado === 'compra_en_zona') return `${magnitud} por debajo del objetivo`
   const cruzado = estado === 'stop_loss_disparado' || estado === 'objetivo_alcanzado'
   return cruzado ? `superado por ${magnitud}` : `a ${magnitud}`
 }

@@ -8,13 +8,13 @@ from sqlalchemy.orm import Session
 from ..database import (
     InstrumentoInversion, MovimientoInversion, PrecioInstrumento, IndiceMercado,
     ObjetivoInversion, RebalanceoObjetivo, BenchmarkValor, ConfiguracionCartera,
-    SyncRun, SyncIssue, EstadoMarketDataTicker
+    SyncRun, SyncIssue, EstadoMarketDataTicker, WatchlistItem, PrecioWatchlist
 )
 from .sheets_client import fetch_sheet_data
 from .inversiones_analytics import get_carteras
 from .validation.types import ValidationIssue, Severity
 from .validation.reglas_estructura import validar_estructura_tab
-from .validation import reglas_instrumentos, reglas_movimientos, reglas_precios, reglas_objetivos, reglas_rebalanceo, reglas_benchmarks, reglas_configuracion, reglas_tipos_cambio
+from .validation import reglas_instrumentos, reglas_movimientos, reglas_precios, reglas_objetivos, reglas_rebalanceo, reglas_benchmarks, reglas_configuracion, reglas_tipos_cambio, reglas_watchlist
 from .validation.health_score import calcular_health_score
 from . import market_data
 from .market_data import indices as market_data_indices
@@ -43,6 +43,7 @@ def _tab_actualmente_no_vacia(db: Session, tabla_name: str) -> bool:
         "Rebalanceo": RebalanceoObjetivo,
         "Benchmarks": BenchmarkValor,
         "Configuracion": ConfiguracionCartera,
+        "Watchlist": WatchlistItem,
     }
     tabla = tabla_map.get(tabla_name)
     if not tabla:
@@ -84,6 +85,7 @@ def sync_from_sheet(db: Session) -> dict:
     rebalanceo_validos = []
     benchmarks_validos = []
     configuracion_validos = []
+    watchlist_validos = []
 
     # Validar Instrumentos (obligatoria)
     raw_inst = raw_data.get("Instrumentos")
@@ -293,6 +295,28 @@ def sync_from_sheet(db: Session) -> dict:
             configuracion_validos, issues_cfg = reglas_configuracion.validar_configuracion(raw_cfg.rows)
             issues.extend(issues_cfg)
 
+    # Validar Watchlist (opcional): instrumentos a seguir que todavía no están en cartera.
+    raw_wl = raw_data.get("Watchlist")
+    if raw_wl and raw_wl.error_lectura:
+        issues.append(ValidationIssue(
+            tab="Watchlist", regla="lectura_fallo",
+            mensaje=f"Error leyendo Watchlist: {raw_wl.error_lectura}",
+            impacto="Pestaña bloqueada, datos anteriores preservados",
+            severidad=Severity.ADVERTENCIA
+        ))
+        tabs_bloqueadas.add("Watchlist")
+    elif raw_wl and raw_wl.presente:
+        bloqueada_est, issues_est = validar_estructura_tab(
+            "Watchlist", raw_wl.header, raw_wl.rows,
+            tab_requerida=False, tab_actual_no_vacia=_tab_actualmente_no_vacia(db, "Watchlist")
+        )
+        issues.extend(issues_est)
+        if bloqueada_est:
+            tabs_bloqueadas.add("Watchlist")
+        else:
+            watchlist_validos, issues_wl = reglas_watchlist.validar_watchlist(raw_wl.rows)
+            issues.extend(issues_wl)
+
     # Validar Tipos de Cambio (opcional): fuente dedicada de CER/MEP, tiene prioridad sobre las
     # columnas CER/MEP embebidas en Movimientos/Precios (que sólo traen valor en fechas con
     # operación o carga de precio).
@@ -340,6 +364,27 @@ def sync_from_sheet(db: Session) -> dict:
                 comision=mov["comision"],
             ))
 
+    # Estado persistente por ticker (A1: factor de escala ya calibrado; A3: backfill que no
+    # converge) y memos de las llamadas a IOL. Viven a nivel de sync, no dentro del bloque de
+    # Precios, porque los comparten las dos rutas de precios -- cartera y watchlist -- y los
+    # paneles de IOL tienen que pedirse una sola vez por corrida (cupo mensual).
+    usa_apis = market_data.use_external_apis()
+    estado_por_ticker: dict = {}
+    paneles_fn = None
+    fci_fn = None
+    if usa_apis:
+        estado_por_ticker = {
+            r.ticker: {
+                "factor_escala": float(r.factor_escala) if r.factor_escala is not None else None,
+                "factor_fecha": r.factor_fecha,
+                "backfill_estado": r.backfill_estado,
+                "backfill_intento": r.backfill_intento,
+            }
+            for r in db.query(EstadoMarketDataTicker).all()
+        }
+        paneles_fn = market_data_precios.memo_paneles(db)
+        fci_fn = market_data_precios.memo_fci(db)
+
     precios_api_count = 0
     if "Precios" not in tabs_bloqueadas:
         for precio in precios_validos:
@@ -353,25 +398,17 @@ def sync_from_sheet(db: Session) -> dict:
         # esa (ticker, fecha) va a perder.
         filas_iol: list[dict] = []
         filas_api: list[dict] = []
-        if market_data.use_external_apis():
-            # Estado persistente por ticker (A1: factor de escala ya calibrado; A3: backfill que
-            # no converge). Se pasa a las cuatro rutas y ellas lo mutan in place.
-            estado_por_ticker: dict = {
-                r.ticker: {
-                    "factor_escala": float(r.factor_escala) if r.factor_escala is not None else None,
-                    "factor_fecha": r.factor_fecha,
-                    "backfill_estado": r.backfill_estado,
-                    "backfill_intento": r.backfill_intento,
-                }
-                for r in db.query(EstadoMarketDataTicker).all()
-            }
+        if usa_apis:
+            # `estado_por_ticker` lo mutan in place las cinco rutas (las cuatro de cartera y la de
+            # watchlist); se persiste una sola vez, más abajo.
 
             # Precio del día: IOL primero (paneles, una llamada trae docenas de símbolos),
             # data912 como red de contención para lo que IOL no cotizó. Sin `claves_excluir`
             # (set()): IOL puede reclamar una fecha que el Sheet ya cubre —es la fuente primaria—,
             # la precedencia final se resuelve más abajo al escribir en la DB.
             precios_auto, issues_precios_auto = market_data_precios.fetch_precios_api(
-                instrumentos_validos, precios_validos, set(), db, estado_por_ticker=estado_por_ticker
+                instrumentos_validos, precios_validos, set(), db,
+                estado_por_ticker=estado_por_ticker, paneles_fn=paneles_fn, fci_fn=fci_fn,
             )
             issues.extend(issues_precios_auto)
             for p in precios_auto:
@@ -413,18 +450,6 @@ def sync_from_sheet(db: Session) -> dict:
             issues.extend(issues_backfill_iol)
             filas_iol.extend(backfill_iol)
 
-            # A1/A3: persistir el factor de escala calibrado y el estado de backfill por ticker.
-            for tk, est in estado_por_ticker.items():
-                fila_est = db.get(EstadoMarketDataTicker, tk)
-                if fila_est is None:
-                    fila_est = EstadoMarketDataTicker(ticker=tk)
-                    db.add(fila_est)
-                fila_est.factor_escala = est.get("factor_escala")
-                fila_est.factor_fecha = est.get("factor_fecha")
-                fila_est.backfill_estado = est.get("backfill_estado")
-                fila_est.backfill_intento = est.get("backfill_intento")
-            db.flush()
-
         claves_iol: set = {(p["ticker"], p["fecha"]) for p in filas_iol}
 
         # Válvula de seguridad: un precio manual del Sheet que IOL desplaza nunca es silencioso.
@@ -465,7 +490,7 @@ def sync_from_sheet(db: Session) -> dict:
             db.add(PrecioInstrumento(**precio))
         db.flush()
 
-        if market_data.use_external_apis():
+        if usa_apis:
             # Purga las filas 'iol'/'api' de tickers que ya no son renta fija/variable/FCI del
             # Sheet (p.ej. un bono que venció y se sacó de Instrumentos): quedarían huérfanas.
             # Sólo si hay al menos un ticker automático: con el conjunto vacío (la pestaña
@@ -510,6 +535,54 @@ def sync_from_sheet(db: Session) -> dict:
             precios_api_count = db.query(PrecioInstrumento).filter(
                 PrecioInstrumento.fuente.in_(("iol", "api"))
             ).count()
+
+    # Precios de la watchlist. Mismo motor que los de cartera, pero contra `precios_watchlist`:
+    # esos tickers no están en `instrumentos_inversion` y no deben entrar en la serie que leen
+    # patrimonio/exposición/riesgo (ver la docstring de `PrecioWatchlist`).
+    if usa_apis and watchlist_validos:
+        # Los que también están en cartera ya los resolvió el pipeline de arriba, con serie
+        # histórica completa: `watchlist_analytics` lee de ahí para ellos.
+        tickers_en_cartera = {i["ticker"] for i in instrumentos_validos}
+        wl_a_cotizar = [w for w in watchlist_validos if w["ticker"] not in tickers_en_cartera]
+        filas_wl, issues_wl_api = market_data_precios.fetch_precios_watchlist(
+            wl_a_cotizar, precios_validos, db,
+            estado_por_ticker=estado_por_ticker, paneles_fn=paneles_fn, fci_fn=fci_fn,
+        )
+        issues.extend(issues_wl_api)
+        for fila in filas_wl:
+            existente = db.get(PrecioWatchlist, fila["ticker"])
+            if existente is None:
+                db.add(PrecioWatchlist(**fila))
+            else:
+                existente.fecha = fila["fecha"]
+                existente.precio = fila["precio"]
+                existente.moneda = fila["moneda"]
+                existente.fuente = fila["fuente"]
+        db.flush()
+
+    # Precios huérfanos de tickers que salieron de la watchlist. Sólo con la pestaña sin bloquear:
+    # bloqueada, `watchlist_validos` está vacía y el DELETE se llevaría todo.
+    if "Watchlist" not in tabs_bloqueadas:
+        tickers_wl = {w["ticker"] for w in watchlist_validos}
+        query_huerfanos = db.query(PrecioWatchlist)
+        if tickers_wl:
+            query_huerfanos = query_huerfanos.filter(PrecioWatchlist.ticker.notin_(tickers_wl))
+        query_huerfanos.delete(synchronize_session=False)
+        db.flush()
+
+    # A1/A3: persistir el factor de escala calibrado y el estado de backfill por ticker, una vez
+    # que pasaron por acá todas las rutas que lo mutan.
+    if usa_apis:
+        for tk, est in estado_por_ticker.items():
+            fila_est = db.get(EstadoMarketDataTicker, tk)
+            if fila_est is None:
+                fila_est = EstadoMarketDataTicker(ticker=tk)
+                db.add(fila_est)
+            fila_est.factor_escala = est.get("factor_escala")
+            fila_est.factor_fecha = est.get("factor_fecha")
+            fila_est.backfill_estado = est.get("backfill_estado")
+            fila_est.backfill_intento = est.get("backfill_intento")
+        db.flush()
 
     indices_mercado_api_count = 0
     if not fuentes_cer_mep_bloqueadas:
@@ -621,6 +694,13 @@ def sync_from_sheet(db: Session) -> dict:
         db.flush()
         for configuracion in configuracion_validos:
             db.add(ConfiguracionCartera(**configuracion))
+
+    if "Watchlist" not in tabs_bloqueadas:
+        db.query(WatchlistItem).delete()
+        db.flush()
+        for item in watchlist_validos:
+            db.add(WatchlistItem(**item))
+        db.flush()
 
     # Calcular health score
     score_result = calcular_health_score(issues)

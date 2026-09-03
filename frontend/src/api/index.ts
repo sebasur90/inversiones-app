@@ -74,6 +74,24 @@ export interface CarteraInfo {
   ultimo_sync: string | null
 }
 
+export interface WatchlistItemOut {
+  ticker: string
+  nombre: string
+  tipo_instrumento: string
+  mercado: string
+  moneda: string
+  pais: string | null
+  sector: string | null
+  precio_actual: number | null
+  fecha_precio: string | null
+  moneda_precio: string | null
+  fuente_precio: string | null
+  precio_objetivo: number | null
+  pct_a_objetivo: number | null
+  en_zona: boolean | null
+  en_cartera: boolean
+}
+
 export interface InversionesResumen {
   valor_actual_usd: number
   valor_actual_ars: number
@@ -240,6 +258,9 @@ export const syncInversiones = () =>
 
 export const getCalidadDatos = () =>
   api.get<CalidadDatosOut>('/inversiones/calidad-datos').then(r => r.data)
+
+export const getWatchlist = () =>
+  api.get<WatchlistItemOut[]>('/inversiones/watchlist').then(r => r.data)
 
 export const getCarterasInversion = () =>
   api.get<CarteraInfo[]>('/inversiones/carteras').then(r => r.data)

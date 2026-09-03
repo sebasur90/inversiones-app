@@ -29,6 +29,8 @@ CONFIGURACION_TAB = "Configuracion"
 
 TIPOS_CAMBIO_TAB = "Tipos de Cambio"
 
+WATCHLIST_TAB = "Watchlist"
+
 
 class SheetsClientError(Exception):
     pass
@@ -109,7 +111,8 @@ def _fetch_from_excel() -> dict[str, TabRaw]:
                     result[tab] = TabRaw(presente=True, header=[], rows=[], error_lectura=str(exc))
 
         # Agregar pestañas opcionales
-        for opt_tab in [OBJETIVOS_TAB, REBALANCEO_TAB, BENCHMARKS_TAB, CONFIGURACION_TAB, TIPOS_CAMBIO_TAB]:
+        for opt_tab in [OBJETIVOS_TAB, REBALANCEO_TAB, BENCHMARKS_TAB, CONFIGURACION_TAB,
+                        TIPOS_CAMBIO_TAB, WATCHLIST_TAB]:
             if opt_tab not in excel_file.sheet_names:
                 result[opt_tab] = TabRaw(presente=False, header=[], rows=[])
             else:
@@ -130,7 +133,7 @@ def _fetch_from_excel() -> dict[str, TabRaw]:
 
 
 def fetch_sheet_data() -> dict[str, TabRaw]:
-    """Lee las 3 pestañas obligatorias + 4 opcionales del Sheet (Excel o Google Sheets).
+    """Lee las 3 pestañas obligatorias + 6 opcionales del Sheet (Excel o Google Sheets).
 
     Devuelve {pestaña: TabRaw}. No lanza por una sola pestaña obligatoria faltante;
     solo lanza por falla total (credenciales ausentes, archivo Excel ausente, error de servicio).
@@ -164,7 +167,8 @@ def fetch_sheet_data() -> dict[str, TabRaw]:
                     result[tab] = TabRaw(presente=True, header=[], rows=[], error_lectura=str(exc))
 
         # Agregar pestañas opcionales
-        for opt_tab in [OBJETIVOS_TAB, REBALANCEO_TAB, BENCHMARKS_TAB, CONFIGURACION_TAB, TIPOS_CAMBIO_TAB]:
+        for opt_tab in [OBJETIVOS_TAB, REBALANCEO_TAB, BENCHMARKS_TAB, CONFIGURACION_TAB,
+                        TIPOS_CAMBIO_TAB, WATCHLIST_TAB]:
             try:
                 resp = (
                     service.spreadsheets()
