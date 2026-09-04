@@ -87,6 +87,12 @@ class InversionesResumen(BaseModel):
     xirr_usd: Optional[float] = None
     xirr_ars: Optional[float] = None
     xirr_ars_real: Optional[float] = None
+    # XIRR reexpresado como retorno acumulado del período, comparable contra el TWR
+    # (que no viene anualizado).
+    xirr_usd_periodo: Optional[float] = None
+    xirr_ars_periodo: Optional[float] = None
+    xirr_ars_real_periodo: Optional[float] = None
+    dias_periodo: int = 0
     twr_usd: Optional[float] = None
     twr_ars: Optional[float] = None
     twr_ars_real: Optional[float] = None

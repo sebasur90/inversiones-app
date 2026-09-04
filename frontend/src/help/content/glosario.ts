@@ -2,6 +2,7 @@ import { HelpContent } from '../types'
 
 export type GlosarioKey =
   | 'xirr'
+  | 'xirrPeriodo'
   | 'twr'
   | 'simple'
   | 'invertido'
@@ -39,26 +40,44 @@ export type GlosarioKey =
 
 export const GLOSARIO_HELP: Record<GlosarioKey, HelpContent> = {
   xirr: {
-    title: 'XIRR (TIR)',
+    title: 'XIRR (TIR) anualizada',
     shortDescription:
       'Tasa Interna de Retorno anualizada. Calcula cuánto rindió tu dinero teniendo en cuenta CUÁNDO pusiste o sacaste cada peso (aportes, retiros, ventas). Es la métrica más fiel a "cuánto gané realmente" con tu forma particular de invertir.',
+    whyItMatters:
+      'Viene expresada como tasa ANUAL: responde "a este ritmo, cuánto rendiría en 12 meses". Si tu historial es más corto que un año, el número extrapola y va a ser bastante más grande que lo que efectivamente ganaste hasta hoy.',
+    howToInterpret:
+      'No la compares contra el TWRR ni contra el rendimiento simple, que son acumulados del período. Para eso está "TIR (XIRR) del período".',
+    relatedTerms: ['xirrPeriodo', 'twr'],
+  },
+  xirrPeriodo: {
+    title: 'TIR (XIRR) del período',
+    shortDescription:
+      'La misma TIR, pero expresada como lo que efectivamente rindió tu plata desde el primer movimiento hasta hoy, sin anualizar.',
+    whyItMatters:
+      'Es la versión de la TIR que se puede comparar de igual a igual contra el TWRR y contra el rendimiento simple: las tres miden el mismo tramo de tiempo.',
+    howItIsCalculated: 'XIRR del período = (1 + XIRR anualizada) ^ (días del período ÷ 365) − 1.',
+    relatedTerms: ['xirr', 'twr', 'efectoAportes'],
   },
   twr: {
     title: 'TWR / TWRR (Time-Weighted Return)',
     shortDescription:
       'Mide el rendimiento de la estrategia en sí misma, sin que importe cuándo depositaste o retiraste plata. Se usa para comparar tu cartera contra un índice o benchmark de forma justa, ya que tus aportes y retiros no distorsionan el número.',
+    howToInterpret:
+      'Está expresado como retorno ACUMULADO del período (no anualizado): es lo que rindió la estrategia desde tu primer movimiento hasta hoy.',
+    relatedTerms: ['xirrPeriodo', 'efectoAportes'],
   },
   efectoAportes: {
     title: 'Efecto de tus aportes',
     shortDescription:
-      'La diferencia entre XIRR y TWR. Te dice si el momento en que pusiste o sacaste plata jugó a tu favor o en tu contra, más allá de cómo rindió la estrategia en sí.',
+      'La diferencia entre la TIR del período y el TWRR. Te dice si el momento en que pusiste o sacaste plata jugó a tu favor o en tu contra, más allá de cómo rindió la estrategia en sí.',
     whyItMatters:
       'XIRR y TWR miden cosas distintas: XIRR pondera por cuánta plata había invertida en cada momento, TWR no. Si sumaste aportes justo antes de una suba, tu XIRR va a ser mejor que tu TWR (el timing jugó a favor); si aportaste antes de una baja, va a ser peor.',
-    howItIsCalculated: 'Efecto = XIRR − TWR, en la misma moneda.',
+    howItIsCalculated:
+      'Efecto = TIR del período − TWRR, en la misma moneda. Se usa la TIR del período y no la anualizada porque el TWRR tampoco está anualizado: restar una tasa anual menos un acumulado daría una brecha inventada por la diferencia de unidades.',
     howToInterpret:
       'Positivo: tus aportes/retiros mejoraron el resultado respecto a la estrategia pura. Negativo: el timing de tus movimientos te costó rendimiento, aunque la estrategia haya sido buena.',
     limitations: 'No es "buen" o "mal" timing en un sentido predictivo — es una lectura hacia atrás de cómo coincidieron tus aportes con los movimientos de precio.',
-    relatedTerms: ['xirr', 'twr'],
+    relatedTerms: ['xirrPeriodo', 'twr'],
   },
   twrBruto: {
     title: 'TWRR sin comisiones',

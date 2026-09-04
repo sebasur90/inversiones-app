@@ -62,14 +62,17 @@ export default function Rendimiento() {
 
   // XIRR pondera por cuánta plata había invertida en cada momento, TWR no: la diferencia entre
   // ambas es el efecto de CUÁNDO aportaste/retiraste, aislado de cómo rindió la estrategia.
+  // Sólo vale restarlas en la misma unidad: el XIRR sale anualizado y el TWR es acumulado del
+  // período, así que se usa `xirr_*_periodo` (el XIRR llevado a base acumulada por el backend).
   const diff = (a: number | null | undefined, b: number | null | undefined) =>
     a != null && b != null ? a - b : null
 
   const filas: { label: string; infoTerm: HelpKey; valores: (number | null | undefined)[] }[] = resumen
     ? [
-        { label: 'Simple', infoTerm: 'simple', valores: [resumen.rendimiento_simple_ars, resumen.rendimiento_simple_ars_real, resumen.rendimiento_simple_usd] },
-        { label: 'TIR (XIRR)', infoTerm: 'xirr', valores: [resumen.xirr_ars, resumen.xirr_ars_real, resumen.xirr_usd] },
-        { label: 'TWRR', infoTerm: 'twr', valores: [resumen.twr_ars, resumen.twr_ars_real, resumen.twr_usd] },
+        { label: 'Simple (período)', infoTerm: 'simple', valores: [resumen.rendimiento_simple_ars, resumen.rendimiento_simple_ars_real, resumen.rendimiento_simple_usd] },
+        { label: 'TIR (XIRR) anualizada', infoTerm: 'xirr', valores: [resumen.xirr_ars, resumen.xirr_ars_real, resumen.xirr_usd] },
+        { label: 'TIR (XIRR) del período', infoTerm: 'xirrPeriodo', valores: [resumen.xirr_ars_periodo, resumen.xirr_ars_real_periodo, resumen.xirr_usd_periodo] },
+        { label: 'TWRR del período', infoTerm: 'twr', valores: [resumen.twr_ars, resumen.twr_ars_real, resumen.twr_usd] },
         { label: 'TWRR sin comisiones', infoTerm: 'twrBruto', valores: [resumen.twr_ars_bruto, null, resumen.twr_usd_bruto] },
         {
           label: 'Costo de operar',
@@ -84,9 +87,9 @@ export default function Rendimiento() {
           label: 'Efecto de tus aportes',
           infoTerm: 'efectoAportes',
           valores: [
-            diff(resumen.xirr_ars, resumen.twr_ars),
-            diff(resumen.xirr_ars_real, resumen.twr_ars_real),
-            diff(resumen.xirr_usd, resumen.twr_usd),
+            diff(resumen.xirr_ars_periodo, resumen.twr_ars),
+            diff(resumen.xirr_ars_real_periodo, resumen.twr_ars_real),
+            diff(resumen.xirr_usd_periodo, resumen.twr_usd),
           ],
         },
       ]
@@ -217,6 +220,13 @@ export default function Rendimiento() {
                 ))}
               </tbody>
             </table>
+            {resumen.dias_periodo > 0 && (
+              <div className="mt-2 text-label text-app-text-dim">
+                «Del período» = los {resumen.dias_periodo} días desde tu primer movimiento hasta hoy.
+                La TIR anualizada extrapola ese tramo a 12 meses, por eso es mucho más grande cuando el
+                historial es corto.
+              </div>
+            )}
           </Card>
 
           <h3 className="text-body font-bold text-app-text mb-2.5">

@@ -440,6 +440,7 @@ def _resumen_sobre_movs(movs: list[MovimientoInversion], db: Session) -> dict:
     mep_cache: dict = {}
     cer_cache: dict = {}
     hoy = date.today()
+    dias_periodo = _dias_periodo_medido(movs, hoy)
 
     # CER de hoy (para deflactación en modo real)
     cer_hoy = _cer_indice(hoy, db, cer_cache)
@@ -582,6 +583,12 @@ def _resumen_sobre_movs(movs: list[MovimientoInversion], db: Session) -> dict:
                     xirr_ars_real = _calcular_xirr(flujos_xirr_ars_real)
                     twr_ars_real, _ = _calcular_twr_ars_real(movs, precios_por_ticker, db, mep_cache, cer_cache, cer_hoy, hoy)
 
+    # XIRR llevado a la misma base que el TWR (acumulado del período): el XIRR sale anualizado
+    # y el TWR no, así que compararlos crudos mezcla unidades.
+    xirr_usd_periodo = _xirr_a_periodo(xirr_usd, dias_periodo)
+    xirr_ars_periodo = _xirr_a_periodo(xirr_ars, dias_periodo)
+    xirr_ars_real_periodo = _xirr_a_periodo(xirr_ars_real, dias_periodo)
+
     # Cálculo de valor_benchmark_usd_ars (Si comprabas USD)
     mep_hoy = _mep_sheet(hoy, db, mep_cache)
     valor_benchmark_usd_ars = (
@@ -602,6 +609,12 @@ def _resumen_sobre_movs(movs: list[MovimientoInversion], db: Session) -> dict:
         "xirr_usd": round(xirr_usd, 4) if xirr_usd is not None else None,
         "xirr_ars": round(xirr_ars, 4) if xirr_ars is not None else None,
         "xirr_ars_real": round(xirr_ars_real, 4) if xirr_ars_real is not None else None,
+        # XIRR llevado a la misma base que el TWR (acumulado del período), para compararlos
+        # sin mezclar una tasa anual con un retorno acumulado.
+        "xirr_usd_periodo": round(xirr_usd_periodo, 4) if xirr_usd_periodo is not None else None,
+        "xirr_ars_periodo": round(xirr_ars_periodo, 4) if xirr_ars_periodo is not None else None,
+        "xirr_ars_real_periodo": round(xirr_ars_real_periodo, 4) if xirr_ars_real_periodo is not None else None,
+        "dias_periodo": dias_periodo,
         "twr_usd": round(twr_usd, 4) if twr_usd is not None else None,
         "twr_ars": round(twr_ars, 4) if twr_ars is not None else None,
         "twr_ars_real": round(twr_ars_real, 4) if twr_ars_real is not None else None,
@@ -643,6 +656,36 @@ def _calcular_xirr(flujos: list[tuple[date, float]]) -> float | None:
         else:
             lo, f_lo = mid, f_mid
     return mid
+
+
+def _dias_periodo_medido(movs: list[MovimientoInversion], hoy: date) -> int:
+    """Días que abarca el período que miden TWR y XIRR: del primer movimiento hasta hoy.
+
+    Se toma la primera fecha de `TIPOS_QUE_CAMBIAN_TENENCIA` porque es el primer boundary del
+    encadenamiento del TWR (ver `_calcular_twr_encadenado`) y, en una cartera real, también el
+    primer flujo del XIRR: no hay ventas ni cupones antes de la primera compra.
+    """
+    fechas = [m.fecha for m in movs if m.tipo_movimiento in TIPOS_QUE_CAMBIAN_TENENCIA]
+    if not fechas:
+        return 0
+    return (hoy - min(fechas)).days
+
+
+def _xirr_a_periodo(xirr: float | None, dias: int) -> float | None:
+    """Reexpresa el XIRR (tasa ANUAL) como retorno acumulado sobre `dias`.
+
+    `_calcular_xirr` devuelve una tasa anualizada y `_calcular_twr_encadenado` un retorno
+    acumulado del período: restarlos directamente mezcla unidades. Con historiales cortos la
+    anualización domina la brecha y se disfraza de "efecto de los aportes" lo que sólo es
+    extrapolación (65 días de historia multiplican el acumulado por ~5,6x). Esta conversión
+    lleva el XIRR a la misma base que el TWR para poder compararlos.
+    """
+    if xirr is None or dias <= 0:
+        return None
+    base = 1 + xirr
+    if base <= 0:
+        return None
+    return base ** (dias / 365) - 1
 
 
 def _calcular_twr_encadenado(

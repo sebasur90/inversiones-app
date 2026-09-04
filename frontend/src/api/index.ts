@@ -106,6 +106,11 @@ export interface InversionesResumen {
   xirr_usd: number | null
   xirr_ars: number | null
   xirr_ars_real: number | null
+  // XIRR reexpresado como retorno acumulado del período (comparable contra el TWR).
+  xirr_usd_periodo: number | null
+  xirr_ars_periodo: number | null
+  xirr_ars_real_periodo: number | null
+  dias_periodo: number
   twr_usd: number | null
   twr_ars: number | null
   twr_ars_real: number | null
