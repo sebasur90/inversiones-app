@@ -688,9 +688,9 @@ class PnlPorTickerItem(BaseModel):
     ticker: str
     nombre: str
     realizado_usd: float
-    no_realizado_usd: float
+    no_realizado_usd: Optional[float] = None
     ingresos_usd: float
-    total_usd: float
+    total_usd: Optional[float] = None
     realizado_ars: float
     no_realizado_ars: Optional[float] = None
     ingresos_ars: float

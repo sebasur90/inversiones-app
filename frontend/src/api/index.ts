@@ -639,9 +639,9 @@ export interface PnlPorTickerItem {
   ticker: string
   nombre: string
   realizado_usd: number
-  no_realizado_usd: number
+  no_realizado_usd: number | null
   ingresos_usd: number
-  total_usd: number
+  total_usd: number | null
   realizado_ars: number
   no_realizado_ars: number | null
   ingresos_ars: number
