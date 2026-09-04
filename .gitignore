@@ -4,7 +4,7 @@ __pycache__/
 *.pyc
 .venv/
 backend/data/
-backend/sheet_local
+sheet_local/
 *.db
 
 # Credentials - never commit
