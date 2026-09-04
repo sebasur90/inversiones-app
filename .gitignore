@@ -19,3 +19,6 @@ CREDENTIALS.md
 .env.*.local
 .env.corporate
 # .env.example IS committed as template for reference
+
+# Manual de usuario generado — no se versiona
+docs/manual-usuario.html
