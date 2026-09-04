@@ -14,7 +14,7 @@ from .sheets_client import fetch_sheet_data
 from .inversiones_analytics import get_carteras
 from .validation.types import ValidationIssue, Severity
 from .validation.reglas_estructura import validar_estructura_tab
-from .validation import reglas_instrumentos, reglas_movimientos, reglas_precios, reglas_objetivos, reglas_rebalanceo, reglas_benchmarks, reglas_configuracion, reglas_tipos_cambio, reglas_watchlist
+from .validation import reglas_instrumentos, reglas_movimientos, reglas_precios, reglas_objetivos, reglas_rebalanceo, reglas_benchmarks, reglas_configuracion, reglas_tipos_cambio, reglas_watchlist, reglas_cer
 from .validation.health_score import calcular_health_score
 from . import market_data
 from .market_data import indices as market_data_indices
@@ -642,6 +642,11 @@ def sync_from_sheet(db: Session) -> dict:
             else:
                 indices_mercado_api_count = db.query(IndiceMercado).filter(IndiceMercado.fuente == "api").count()
 
+        # Con las dos fuentes ya persistidas, la serie de CER queda en una sola base: se descarta
+        # lo que venga en otra (ver reglas_cer). Va al final a propósito — es el único punto donde
+        # se ve la serie completa, Sheet y API juntas, que es como la leen los analytics.
+        issues.extend(_sanear_serie_cer(db))
+
     if "Objetivos" not in tabs_bloqueadas:
         db.query(ObjetivoInversion).delete()
         db.flush()
@@ -793,6 +798,32 @@ def _consolidar_indices_mercado(cer_mep_movimientos: list[dict], cer_mep_precios
                 existente["mep"] = mep
 
     return list(indices_por_fecha.values()), advertencias
+
+
+def _sanear_serie_cer(db: Session) -> list[ValidationIssue]:
+    """Anula los CER persistidos que no pertenecen a la base del resto de la serie.
+
+    Se anula sólo el campo `cer`: el MEP y el riesgo país de esa fecha son independientes y
+    siguen siendo válidos. Al quedar en NULL, el lookup de `_cer_indice` (que filtra por
+    `cer IS NOT NULL` y toma la última fecha ≤ la buscada) arrastra el último valor bueno.
+    """
+    filas = (
+        db.query(IndiceMercado)
+        .filter(IndiceMercado.cer.isnot(None))
+        .order_by(IndiceMercado.fecha)
+        .all()
+    )
+    descartadas, issues = reglas_cer.detectar_cer_fuera_de_serie(
+        [(f.fecha, float(f.cer)) for f in filas]
+    )
+    if not descartadas:
+        return issues
+
+    for fila in filas:
+        if fila.fecha in descartadas:
+            fila.cer = None
+    db.flush()
+    return issues
 
 
 def _aplicar_tipos_cambio(indices_existentes: list[dict], tipos_cambio: list[dict]) -> list[dict]:
