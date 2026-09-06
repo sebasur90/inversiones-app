@@ -18,6 +18,11 @@ def _px(ticker, precio, fecha=date(2026, 7, 27)):
     return {"ticker": ticker, "fecha": fecha, "precio": precio, "moneda": "ARS"}
 
 
+def _serie(*pares):
+    """Lista de `BarraCruda` close-only a partir de pares (fecha, precio)."""
+    return [analisistecnico.BarraCruda(fecha=f, cierre=px, apertura=px, maximo=px, minimo=px) for f, px in pares]
+
+
 HOY = date(2026, 8, 28)
 
 
@@ -135,8 +140,8 @@ def test_sin_precio_manual_previo_no_carga_ni_via_iol(monkeypatch):
 def test_backfill_iol_cubre_on_marcada_sin_serie(monkeypatch):
     estado = {"MGCJO": {"factor_escala": None, "factor_fecha": None,
                         "backfill_estado": "sin_serie", "backfill_intento": HOY - timedelta(days=91)}}
-    serie = [(date(2025, 6, 2), 105000.0), (date(2025, 6, 3), 106000.0)]
-    monkeypatch.setattr(mdp.iol_client, "fetch_historico", lambda db, t, d, h: serie)
+    serie = _serie((date(2025, 6, 2), 105000.0), (date(2025, 6, 3), 106000.0))
+    monkeypatch.setattr(mdp.iol_client, "fetch_historico_ohlcv", lambda db, t, d, h: serie)
 
     filas, issues = mdp.fetch_backfill_iol(
         [_inst("MGCJO", tipo="ON")], [_px("MGCJO", 105000.0, fecha=date(2026, 7, 27))],
@@ -151,9 +156,9 @@ def test_backfill_iol_cubre_renta_variable_sin_pedirlo_a_analisistecnico(monkeyp
     def _boom(*a, **kw):
         raise AssertionError("analisistecnico no cubre renta variable")
 
-    monkeypatch.setattr(analisistecnico, "fetch_historico_bono", _boom)
-    serie = [(date(2025, 6, 2), 5000.0)]
-    monkeypatch.setattr(mdp.iol_client, "fetch_historico", lambda db, t, d, h: serie)
+    monkeypatch.setattr(analisistecnico, "fetch_historico_ohlcv", _boom)
+    serie = _serie((date(2025, 6, 2), 5000.0))
+    monkeypatch.setattr(mdp.iol_client, "fetch_historico_ohlcv", lambda db, t, d, h: serie)
 
     filas, issues = mdp.fetch_backfill_iol(
         [_inst("GGAL", tipo="Accion")], [_px("GGAL", 5100.0, fecha=date(2026, 7, 27))],
@@ -164,7 +169,7 @@ def test_backfill_iol_cubre_renta_variable_sin_pedirlo_a_analisistecnico(monkeyp
 
 def test_backfill_iol_tampoco_tiene_serie_marca_sin_serie_iol(monkeypatch):
     estado: dict = {}
-    monkeypatch.setattr(mdp.iol_client, "fetch_historico", lambda db, t, d, h: None)
+    monkeypatch.setattr(mdp.iol_client, "fetch_historico_ohlcv", lambda db, t, d, h: None)
 
     filas, issues = mdp.fetch_backfill_iol(
         [_inst("GGAL", tipo="Accion")], [_px("GGAL", 5100.0, fecha=date(2026, 7, 27))],
@@ -176,8 +181,8 @@ def test_backfill_iol_tampoco_tiene_serie_marca_sin_serie_iol(monkeypatch):
 
 
 def test_backfill_iol_no_pisa_fechas_del_sheet(monkeypatch):
-    serie = [(date(2025, 6, 2), 5000.0), (date(2026, 7, 27), 5100.0)]
-    monkeypatch.setattr(mdp.iol_client, "fetch_historico", lambda db, t, d, h: serie)
+    serie = _serie((date(2025, 6, 2), 5000.0), (date(2026, 7, 27), 5100.0))
+    monkeypatch.setattr(mdp.iol_client, "fetch_historico_ohlcv", lambda db, t, d, h: serie)
 
     filas, issues = mdp.fetch_backfill_iol(
         [_inst("GGAL", tipo="Accion")], [_px("GGAL", 5100.0, fecha=date(2026, 7, 27))],
@@ -190,7 +195,7 @@ def test_backfill_iol_converge_no_vuelve_a_pedir(monkeypatch):
     def _boom(*a, **kw):
         raise AssertionError("ya está backfilleado hasta el piso")
 
-    monkeypatch.setattr(mdp.iol_client, "fetch_historico", _boom)
+    monkeypatch.setattr(mdp.iol_client, "fetch_historico_ohlcv", _boom)
     filas, issues = mdp.fetch_backfill_iol(
         [_inst("GGAL", tipo="Accion")], [_px("GGAL", 5100.0, fecha=date(2026, 7, 27))],
         set(), {"GGAL": date(2025, 6, 1)}, {"GGAL": date(2025, 6, 10)}, _DB, hoy=HOY,
@@ -228,7 +233,7 @@ def test_sin_serie_iol_gatea_tambien_el_reintento_de_analisistecnico(monkeypatch
     def _boom(*a, **kw):
         raise AssertionError("no debería reintentar analisistecnico antes de los 90 días")
 
-    monkeypatch.setattr(analisistecnico, "fetch_historico_bono", _boom)
+    monkeypatch.setattr(analisistecnico, "fetch_historico_ohlcv", _boom)
     estado = {"MGCJO": {"factor_escala": None, "factor_fecha": None,
                         "backfill_estado": "sin_serie_iol",
                         "backfill_intento": HOY - timedelta(days=5)}}
@@ -242,8 +247,8 @@ def test_sin_serie_iol_gatea_tambien_el_reintento_de_analisistecnico(monkeypatch
 
 
 def test_sin_serie_iol_se_limpia_cuando_analisistecnico_empieza_a_cubrirlo(monkeypatch):
-    serie = [(date(2025, 6, 2), 105000.0)]
-    monkeypatch.setattr(analisistecnico, "fetch_historico_bono", lambda t, d, h: serie)
+    serie = _serie((date(2025, 6, 2), 105000.0))
+    monkeypatch.setattr(analisistecnico, "fetch_historico_ohlcv", lambda t, d, h: serie)
     estado = {"MGCJO": {"factor_escala": None, "factor_fecha": None,
                         "backfill_estado": "sin_serie_iol",
                         "backfill_intento": HOY - timedelta(days=91)}}

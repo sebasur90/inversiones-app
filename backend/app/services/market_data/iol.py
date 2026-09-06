@@ -22,6 +22,7 @@ from datetime import date, datetime
 from sqlalchemy.orm import Session
 
 from . import iol_auth
+from .ohlcv_types import BarraCruda
 
 # (instrumento, panel, pais) -> una llamada, docenas de símbolos. Ajustar los nombres exactos
 # según lo que devuelva `scripts/iol_probe.py` contra una cuenta real.
@@ -117,19 +118,45 @@ def fetch_precio_simbolo(db: Session, simbolo: str, mercado: str = _MERCADO_DEFA
     return precio, moneda
 
 
-def fetch_historico(
+_ALIAS_APERTURA = ("apertura", "precioApertura", "open")
+_ALIAS_MAXIMO = ("maximo", "precioMaximo", "maximoDia", "high")
+_ALIAS_MINIMO = ("minimo", "precioMinimo", "minimoDia", "low")
+_ALIAS_VOLUMEN = ("volumenNominal", "cantidadOperada", "volumen")
+
+
+def _primer_alias(fila: dict, claves: tuple[str, ...]) -> float | None:
+    for clave in claves:
+        if clave in fila:
+            v = _num(fila.get(clave))
+            if v is not None:
+                return v
+    return None
+
+
+def fetch_historico_ohlcv(
     db: Session, ticker: str, desde: date, hasta: date, mercado: str = _MERCADO_DEFAULT,
-) -> list[tuple[date, float]] | None:
-    """Serie diaria `[(fecha, cierre), ...]` vía la serie histórica de IOL para `ticker` en
-    `[desde, hasta]`, ordenada por fecha. `None` si la petición falló (sin cupo, red caída, HTTP
-    de error); `[]` si el símbolo existe pero no vino ningún cierre usable. Nunca lanza."""
+) -> list[BarraCruda] | None:
+    """Serie diaria de velas vía la serie histórica de IOL para `ticker` en `[desde, hasta]`.
+
+    **Parseo defensivo por alias**: los nombres reales de los campos OHLC de `seriehistorica` no
+    están confirmados contra una cuenta real (`/Help` responde 403 a cualquier cliente sin sesión
+    de navegador) — se prueban varios alias plausibles por campo y, si ninguno matchea, la barra
+    sale close-only (degradación explícita, no fallo). `scripts/iol_probe.py` sirve para volcar
+    una fila cruda y confirmar los nombres de una vez. `montoOperado` queda fuera del volumen a
+    propósito: es plata, no unidades — mezclarlo daría una escala de volumen sin sentido.
+
+    Mismo contrato que `fetch_historico` (que ahora es un wrapper sobre ésta): `None` si la
+    petición falló (sin cupo, red caída, HTTP de error), `[]` si no vino ningún cierre usable.
+    Nunca lanza.
+    """
     f_desde, f_hasta = desde.strftime("%Y-%m-%d"), hasta.strftime("%Y-%m-%d")
     url = (f"{iol_auth.BASE_URL}/{mercado}/Titulos/{ticker}/Cotizacion/seriehistorica/"
            f"{f_desde}/{f_hasta}/sinAjustar")
     data = iol_auth.get_autenticado(db, url)
     if not isinstance(data, list):
         return None
-    out: list[tuple[date, float]] = []
+
+    out: list[BarraCruda] = []
     for fila in data:
         if not isinstance(fila, dict):
             continue
@@ -141,6 +168,26 @@ def fetch_historico(
             fecha = datetime.fromisoformat(str(fecha_raw).replace("Z", "+00:00")).date()
         except ValueError:
             continue
-        out.append((fecha, precio))
-    out.sort(key=lambda t: t[0])
+
+        o = _primer_alias(fila, _ALIAS_APERTURA)
+        h = _primer_alias(fila, _ALIAS_MAXIMO)
+        l = _primer_alias(fila, _ALIAS_MINIMO)
+        v = _primer_alias(fila, _ALIAS_VOLUMEN)
+        if o is not None and h is not None and l is not None:
+            if not (l <= min(o, precio) and h >= max(o, precio)):
+                o = h = l = None
+        out.append(BarraCruda(fecha=fecha, cierre=precio, apertura=o, maximo=h, minimo=l, volumen=v))
+
+    out.sort(key=lambda b: b.fecha)
     return out
+
+
+def fetch_historico(
+    db: Session, ticker: str, desde: date, hasta: date, mercado: str = _MERCADO_DEFAULT,
+) -> list[tuple[date, float]] | None:
+    """Serie diaria `[(fecha, cierre), ...]` — wrapper de compatibilidad sobre
+    `fetch_historico_ohlcv` para los llamadores que sólo necesitan el cierre."""
+    barras = fetch_historico_ohlcv(db, ticker, desde, hasta, mercado)
+    if barras is None:
+        return None
+    return [(b.fecha, b.cierre) for b in barras]

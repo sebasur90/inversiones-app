@@ -6,7 +6,7 @@ Todos mockean `fetch_sheet_data` (sin red hacia Sheets) y, cuando corresponde, l
 from datetime import date, datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from backend.app.database import Base, IndiceMercado, BenchmarkValor, PrecioInstrumento, SyncIssue
+from backend.app.database import Base, IndiceMercado, BenchmarkValor, PrecioInstrumento, SyncIssue, BarraOHLCV
 from backend.app.services.inversiones_sync import sync_from_sheet
 from backend.app.services.sheets_client import TabRaw
 import backend.app.services.inversiones_sync as sync_module
@@ -276,14 +276,19 @@ def test_backfill_historico_renta_fija_normaliza_escala_y_converge(monkeypatch):
     monkeypatch.setattr(sync_module.market_data_indices, "fetch_benchmarks_api", lambda: (None, []))
     monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_fija", lambda: {})
 
-    serie = [(date(2026, 6, 2), 265.0), (date(2026, 7, 27), 271.0), (date(2026, 7, 28), 272.5)]
+    barra_cls = sync_module.market_data_precios.analisistecnico.BarraCruda
+    serie = [
+        barra_cls(fecha=date(2026, 6, 2), cierre=265.0, apertura=265.0, maximo=265.0, minimo=265.0),
+        barra_cls(fecha=date(2026, 7, 27), cierre=271.0, apertura=271.0, maximo=271.0, minimo=271.0),
+        barra_cls(fecha=date(2026, 7, 28), cierre=272.5, apertura=272.5, maximo=272.5, minimo=272.5),
+    ]
     llamadas = []
 
     def _fake_hist(ticker, desde, hasta):
         llamadas.append(ticker)
         return serie
 
-    monkeypatch.setattr(sync_module.market_data_precios.analisistecnico, "fetch_historico_bono", _fake_hist)
+    monkeypatch.setattr(sync_module.market_data_precios.analisistecnico, "fetch_historico_ohlcv", _fake_hist)
 
     try:
         sync_from_sheet(db)
@@ -576,6 +581,137 @@ def test_purga_orfanos_incluye_fuente_iol(monkeypatch):
         db.commit()
         sync_from_sheet(db)
         assert db.query(PrecioInstrumento).filter(PrecioInstrumento.ticker == "VENCIDO").count() == 0
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
+# --- OHLCV (serie_ohlcv): velas de cartera y watchlist dentro del sync ----------------------
+
+def _tabs_con_bono_y_watchlist():
+    """Cartera con un bono (con movimiento, para que tenga piso de backfill) + un ticker que sólo
+    se sigue en la watchlist (sin movimientos ni precios manuales: su referencia es el Objetivo)."""
+    tabs = _tabs_con_bono_y_movimiento()
+    tabs["Watchlist"] = TabRaw(
+        presente=True,
+        header=["Ticker", "Nombre", "Tipo Instrumento", "Mercado", "Moneda", "Objetivo"],
+        rows=[(2, {"Ticker": "GGAL", "Nombre": "Galicia", "Tipo Instrumento": "Accion",
+                   "Mercado": "BCBA", "Moneda": "ARS", "Objetivo": "50"})],
+    )
+    return tabs
+
+
+def _barra(fecha, cierre, con_velas=True):
+    cls = sync_module.market_data_precios.analisistecnico.BarraCruda
+    if not con_velas:
+        return cls(fecha=fecha, cierre=cierre)
+    return cls(fecha=fecha, cierre=cierre, apertura=cierre * 0.99, maximo=cierre * 1.01,
+               minimo=cierre * 0.98, volumen=1000.0)
+
+
+def _mockear_apis_ohlcv(monkeypatch, series_por_ticker):
+    monkeypatch.setattr(sync_module.market_data, "use_external_apis", lambda: True)
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_indices_mercado_api", lambda fechas_excluir: (None, []))
+    monkeypatch.setattr(sync_module.market_data_indices, "fetch_benchmarks_api", lambda: (None, []))
+    monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_fija", lambda: {})
+    monkeypatch.setattr(sync_module.market_data_precios.data912, "fetch_precios_renta_variable", lambda: {})
+    monkeypatch.setattr(sync_module.market_data_precios.iol_client, "fetch_precios_paneles", lambda db: None)
+    monkeypatch.setattr(sync_module.market_data_precios.iol_client, "fetch_historico_ohlcv",
+                        lambda db, t, d, h: None)
+    monkeypatch.setattr(sync_module.market_data_precios.analisistecnico, "fetch_historico_ohlcv",
+                        lambda t, d, h: series_por_ticker.get(t))
+
+
+def test_sync_puebla_serie_ohlcv_de_cartera_y_watchlist(monkeypatch):
+    """Un sync puebla `serie_ohlcv` con velas de la cartera (gratis, en la misma respuesta del
+    backfill de valuación) y de la watchlist (backfill propio, referencia = Objetivo)."""
+    db = _make_db()
+    original_fetch = sync_module.fetch_sheet_data
+    sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_bono_y_watchlist())
+
+    series = {
+        # TZXD7 cotiza por lámina de 100 (2.7135 en el Sheet -> factor 0.01)
+        "TZXD7": [_barra(date(2026, 6, 2), 265.0), _barra(date(2026, 6, 3), 270.0)],
+        # GGAL: Objetivo 50 -> la fuente cotiza ~5000, factor 0.01
+        "GGAL": [_barra(date(2026, 6, 2), 5000.0), _barra(date(2026, 6, 3), 5100.0)],
+    }
+    _mockear_apis_ohlcv(monkeypatch, series)
+
+    try:
+        resultado = sync_from_sheet(db)
+        barras = db.query(BarraOHLCV).all()
+        por_ticker: dict = {}
+        for b in barras:
+            por_ticker.setdefault(b.ticker, []).append(b)
+
+        assert set(por_ticker) == {"TZXD7", "GGAL"}
+        assert resultado["serie_ohlcv"] == len(barras)
+
+        # Escala aplicada por igual a o/h/l/c, y el invariante de la vela se preserva.
+        tzxd7 = {b.fecha: b for b in por_ticker["TZXD7"]}
+        vela = tzxd7[date(2026, 6, 3)]
+        assert round(float(vela.cierre), 4) == 2.70
+        assert float(vela.minimo) <= float(vela.cierre) <= float(vela.maximo)
+        assert float(vela.volumen) == 1000.0   # nominal: nunca escalado
+
+        ggal = {b.fecha: b for b in por_ticker["GGAL"]}
+        assert round(float(ggal[date(2026, 6, 2)].cierre), 4) == 50.0
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
+def test_segundo_sync_no_duplica_ni_degrada_las_velas(monkeypatch):
+    """El segundo sync no duplica filas (UNIQUE ticker+fecha) ni pisa una vela real con una
+    barra close-only (precedencia de `debe_reemplazar_barra`)."""
+    db = _make_db()
+    original_fetch = sync_module.fetch_sheet_data
+    sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_bono_y_watchlist())
+
+    series = {
+        "TZXD7": [_barra(date(2026, 6, 2), 265.0), _barra(date(2026, 6, 3), 270.0)],
+        "GGAL": [_barra(date(2026, 6, 2), 5000.0)],
+    }
+    _mockear_apis_ohlcv(monkeypatch, series)
+
+    try:
+        sync_from_sheet(db)
+        conteo_1 = db.query(BarraOHLCV).count()
+        aperturas_1 = db.query(BarraOHLCV).filter(BarraOHLCV.apertura.isnot(None)).count()
+
+        # Segunda corrida: la fuente ahora sólo devuelve barras close-only (sin o/h/l).
+        series_degradadas = {
+            "TZXD7": [_barra(date(2026, 6, 2), 265.0, con_velas=False),
+                      _barra(date(2026, 6, 3), 270.0, con_velas=False)],
+            "GGAL": [_barra(date(2026, 6, 2), 5000.0, con_velas=False)],
+        }
+        _mockear_apis_ohlcv(monkeypatch, series_degradadas)
+        sync_from_sheet(db)
+
+        assert db.query(BarraOHLCV).count() == conteo_1               # no duplica
+        assert db.query(BarraOHLCV).filter(BarraOHLCV.apertura.isnot(None)).count() == aperturas_1  # no degrada
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
+def test_purga_de_velas_con_set_vacio_no_borra_nada(monkeypatch):
+    """Con Instrumentos bloqueada (error de lectura), el conjunto de tickers válidos no es
+    confiable: la purga de huérfanos no debe correr y llevarse toda la serie acumulada."""
+    db = _make_db()
+    original_fetch = sync_module.fetch_sheet_data
+    tabs = _tabs_con_bono_y_watchlist()
+    tabs["Instrumentos"] = TabRaw(presente=True, header=[], rows=[], error_lectura="boom")
+    sync_module.fetch_sheet_data = _mock_fetch(tabs)
+
+    _mockear_apis_ohlcv(monkeypatch, {})
+
+    try:
+        db.add(BarraOHLCV(ticker="TZXD7", fecha=date(2026, 6, 2), cierre=2.65,
+                          moneda="ARS", fuente="api"))
+        db.commit()
+        sync_from_sheet(db)
+        assert db.query(BarraOHLCV).filter(BarraOHLCV.ticker == "TZXD7").count() == 1
     finally:
         sync_module.fetch_sheet_data = original_fetch
         db.close()

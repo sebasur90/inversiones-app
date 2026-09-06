@@ -36,6 +36,7 @@ export const GRUPOS_PANTALLAS: GrupoPantallas[] = [
     items: [
       { to: '/simulador', label: 'Simulador', desc: 'Escenarios "¿qué pasaría si…?"', icon: 'edit' },
       { to: '/comparar', label: 'Comparador', desc: 'Hasta 5 tickers, series normalizadas', icon: 'search' },
+      { to: '/analisis-tecnico', label: 'Análisis técnico', desc: 'Velas, indicadores y estrategias backtesteables', icon: 'trend' },
     ],
   },
   {

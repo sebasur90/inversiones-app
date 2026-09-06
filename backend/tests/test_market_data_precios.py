@@ -243,21 +243,24 @@ def test_sin_instrumentos_de_renta_variable_no_llama_api(monkeypatch):
 # --- Backfill histórico (analisistecnico) --------------------------------------------------
 
 def _serie(*pares):
-    return [(f, px) for f, px in pares]
+    """Lista de `BarraCruda` close-only (o/h/l == cierre) a partir de pares (fecha, precio) —
+    conveniente para los tests de valuación, que sólo les importa el cierre."""
+    return [analisistecnico.BarraCruda(fecha=f, cierre=px, apertura=px, maximo=px, minimo=px) for f, px in pares]
 
 
 def _backfill(monkeypatch, serie, *, instrumentos, precios_sheet, primeras, api_min=None,
-              claves_excluir=None, hoy=HOY, estado=None):
+              claves_excluir=None, hoy=HOY, estado=None, ohlcv_existentes=None, barras_out=None):
     llamadas = []
 
     def _fake(ticker, desde, hasta):
         llamadas.append((ticker, desde, hasta))
         return serie(ticker) if callable(serie) else serie
 
-    monkeypatch.setattr(analisistecnico, "fetch_historico_bono", _fake)
+    monkeypatch.setattr(analisistecnico, "fetch_historico_ohlcv", _fake)
     filas, issues = mdp.fetch_backfill_renta_fija_api(
         instrumentos, precios_sheet, claves_excluir or set(),
         primeras, api_min or {}, hoy=hoy, estado_por_ticker=estado,
+        ohlcv_existentes=ohlcv_existentes, barras_out=barras_out,
     )
     return filas, issues, llamadas
 
@@ -310,7 +313,7 @@ def test_backfill_converge_no_vuelve_a_pedir_si_ya_llego_al_piso(monkeypatch):
     def _boom(*a, **kw):
         raise AssertionError("no debería pedir la serie: ya está backfilleado hasta el piso")
 
-    monkeypatch.setattr(analisistecnico, "fetch_historico_bono", _boom)
+    monkeypatch.setattr(analisistecnico, "fetch_historico_ohlcv", _boom)
     filas, issues = mdp.fetch_backfill_renta_fija_api(
         [_inst("TZXD7")], [_px("TZXD7", 2.7135)], set(),
         {"TZXD7": date(2025, 6, 1)},
@@ -336,7 +339,7 @@ def test_backfill_sin_movimientos_no_pide(monkeypatch):
     def _boom(*a, **kw):
         raise AssertionError("sin movimientos no hay posición que valuar")
 
-    monkeypatch.setattr(analisistecnico, "fetch_historico_bono", _boom)
+    monkeypatch.setattr(analisistecnico, "fetch_historico_ohlcv", _boom)
     filas, issues = mdp.fetch_backfill_renta_fija_api(
         [_inst("TZXD7")], [_px("TZXD7", 2.7135)], set(), {}, {}, hoy=HOY,
     )
@@ -405,7 +408,7 @@ def test_backfill_atiende_primero_los_huecos_mas_grandes(monkeypatch):
     # B0 sin api (hueco infinito); B1..B(n-1) con hueco creciente, todos > la tolerancia de 40d.
     api_min = {f"B{i}": piso + timedelta(days=50 + i) for i in range(1, n)}
     llamados = []
-    monkeypatch.setattr(analisistecnico, "fetch_historico_bono",
+    monkeypatch.setattr(analisistecnico, "fetch_historico_ohlcv",
                         lambda t, d, h: llamados.append(t) or _serie((date(2025, 6, 2), 100.0)))
     mdp.fetch_backfill_renta_fija_api(instrumentos, precios_sheet, set(), primeras, api_min, hoy=HOY)
     assert len(llamados) == tope

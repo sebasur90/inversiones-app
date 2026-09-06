@@ -171,6 +171,12 @@ class EstadoMarketDataTicker(Base):
     factor_fecha = Column(Date, nullable=True)
     backfill_estado = Column(String, nullable=True)
     backfill_intento = Column(Date, nullable=True)
+    # Estado del backfill de velas (serie_ohlcv), independiente de `backfill_estado`: ese campo
+    # tiene una interacción delicada ya documentada entre las dos funciones de backfill de
+    # `precios.py`; un tercer consumidor ahí reabriría ese bug. Mismos valores posibles que
+    # `backfill_estado` pero para el pipeline de OHLCV.
+    ohlcv_estado = Column(String, nullable=True)
+    ohlcv_intento = Column(Date, nullable=True)
 
 
 class WatchlistItem(Base):
@@ -241,6 +247,63 @@ class EscenarioSimulacion(Base):
     parametros = Column(JSON, nullable=False)  # Payload completo de EscenarioParamsIn
 
 
+class BarraOHLCV(Base):
+    """Serie histórica de velas (OHLCV) para análisis técnico — cartera y watchlist.
+
+    Sin FK a `instrumentos_inversion` a propósito: sirve tanto tickers de cartera como de
+    watchlist (que no tienen fila ahí), y no debe poder ensuciar patrimonio/exposición/riesgo,
+    que leen `precios_instrumento`. Se acepta duplicar el cierre respecto de esa tabla para los
+    tickers de cartera (~75k filas, irrelevante en SQLite).
+
+    **El cierre de acá NO siempre coincide con `precios_instrumento.precio` de la misma fecha**,
+    aunque las dos filas salgan del mismo backfill y el mismo factor. Las dos tablas se pueblan
+    por caminos con reglas distintas y eso es deliberado:
+      - el precio del día lo escribe la ruta 'live' (último precio de un panel de cotizaciones),
+        mientras que la vela de esa misma rueda la trae después la serie histórica (cierre de la
+        rueda): son dos números distintos para el mismo día, y cada uno es el correcto para lo
+        suyo (valuar la tenencia de ese día / dibujar la vela);
+      - el backfill no pisa en `precios_instrumento` las fechas que el Sheet cubre
+        (`claves_excluir`), pero sí las emite acá — el Sheet no tiene OHLC, así que la vela es
+        información nueva, no un reemplazo de una carga manual.
+    Al comparar las dos tablas hay que esperar diferencias en las fechas donde conviven las dos
+    rutas; no son un síntoma de que el factor de escala esté mal aplicado.
+
+    Unique `(ticker, fecha)` **en ese orden**, al revés que `uq_precio_instrumento`: la consulta
+    dominante acá es "toda la serie de UN ticker en un rango", así el índice único es covering.
+    """
+    __tablename__ = "serie_ohlcv"
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String, nullable=False, index=True)
+    fecha = Column(Date, nullable=False)
+    apertura = Column(Numeric(18, 6), nullable=True)
+    maximo = Column(Numeric(18, 6), nullable=True)
+    minimo = Column(Numeric(18, 6), nullable=True)
+    cierre = Column(Numeric(18, 6), nullable=False)
+    volumen = Column(Numeric(20, 2), nullable=True)  # nominal — nunca escalado por factor
+    moneda = Column(String, nullable=False)
+    fuente = Column(String, nullable=False)  # "iol" | "api" (no hay "sheet": el Sheet no tiene OHLC)
+
+    __table_args__ = (UniqueConstraint("ticker", "fecha", name="uq_serie_ohlcv"),)
+
+
+class EstrategiaTecnica(Base):
+    """Estrategia de análisis técnico guardada por el usuario (reglas + riesgo + ejecución).
+
+    Sin `cartera`: una estrategia es sobre indicadores, no sobre una cartera. `ticker` nullable
+    (None = reusable en cualquier ticker); el ticker efectivo sobre el que se backtestea siempre
+    lo pone el path del endpoint de backtest, no la estrategia guardada.
+    """
+    __tablename__ = "estrategias_tecnicas"
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String, nullable=False)
+    descripcion = Column(String, nullable=True)
+    ticker = Column(String, nullable=True, index=True)
+    tipo_preset = Column(String, nullable=True)  # nombre del preset de origen, si se partió de uno
+    definicion = Column(JSON, nullable=False)
+    fecha_creacion = Column(DateTime, nullable=False)
+    fecha_actualizacion = Column(DateTime, nullable=False)
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -287,4 +350,14 @@ def init_db():
         cols = [row[1] for row in result.fetchall()]
         if 'riesgo_pais' not in cols:
             conn.execute(text("ALTER TABLE indices_mercado ADD COLUMN riesgo_pais NUMERIC"))
+            conn.commit()
+
+        # aseguramos compatibilidad con DB antiguas que no tenían el estado de backfill OHLCV.
+        result = conn.execute(text("PRAGMA table_info(estado_market_data_ticker)"))
+        cols = [row[1] for row in result.fetchall()]
+        if 'ohlcv_estado' not in cols:
+            conn.execute(text("ALTER TABLE estado_market_data_ticker ADD COLUMN ohlcv_estado TEXT"))
+            conn.commit()
+        if 'ohlcv_intento' not in cols:
+            conn.execute(text("ALTER TABLE estado_market_data_ticker ADD COLUMN ohlcv_intento DATE"))
             conn.commit()

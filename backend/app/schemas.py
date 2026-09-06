@@ -23,6 +23,7 @@ class SyncResult(BaseModel):
     rebalanceo: int
     benchmarks: int
     configuracion: int
+    serie_ohlcv: int = 0
     health_score: int
     resultado: str
     duration_ms: int
@@ -1072,3 +1073,138 @@ class OpportunityCostOut(BaseModel):
     costo_oportunidad_usd: Optional[float] = None
     costo_oportunidad_ars: Optional[float] = None
     por_posicion: list[OpportunityCostPosicionOut] = []
+
+
+# --- Análisis técnico ---
+
+class TickerTecnicoOut(BaseModel):
+    ticker: str
+    nombre: str
+    moneda: str
+    tipo_instrumento: str
+    origen: str  # "cartera" | "watchlist" | "ambos"
+
+
+class BarraOut(BaseModel):
+    fecha: date
+    cierre: float
+    apertura: Optional[float] = None
+    maximo: Optional[float] = None
+    minimo: Optional[float] = None
+    volumen: Optional[float] = None
+
+
+class SerieTecnicaOut(BaseModel):
+    ticker: str
+    nombre: str
+    moneda: str
+    origen: Optional[str] = None
+    fuente_serie: str  # "velas" | "mixta" | "sin_datos"
+    tiene_velas: bool
+    tiene_volumen: bool
+    indice_desde: int
+    barras: list[BarraOut]
+    # clave = clave() del indicador (p.ej "SMA(50)"), valor = {salida: [valores...]}
+    indicadores: dict[str, dict[str, list[Optional[float]]]] = Field(default_factory=dict)
+    advertencias: list[str] = Field(default_factory=list)
+
+
+class SenalOut(BaseModel):
+    indice: int
+    fecha: date
+    tipo: str  # "compra" | "venta"
+    precio: float
+    motivo: str
+
+
+class OperacionOut(BaseModel):
+    indice_entrada: int
+    indice_salida: Optional[int] = None
+    fecha_entrada: date
+    fecha_salida: Optional[date] = None
+    precio_entrada: float
+    precio_salida: Optional[float] = None
+    barras: int
+    retorno_bruto_pct: float
+    retorno_neto_pct: float
+    motivo_salida: Optional[str] = None
+    abierta: bool
+
+
+class BacktestMetricasOut(BaseModel):
+    estado: str
+    retorno_total_pct: float
+    retorno_anualizado_pct: Optional[float] = None
+    retorno_buy_hold_pct: float
+    exceso_vs_buy_hold_pp: float
+    operaciones: int
+    ganadoras: int
+    perdedoras: int
+    win_rate_pct: Optional[float] = None
+    retorno_medio_operacion_pct: Optional[float] = None
+    mejor_operacion_pct: Optional[float] = None
+    peor_operacion_pct: Optional[float] = None
+    profit_factor: Optional[float] = None
+    max_drawdown_pct: Optional[float] = None
+    fecha_pico: Optional[date] = None
+    fecha_valle: Optional[date] = None
+    duracion_media_barras: Optional[float] = None
+    exposicion_pct: float
+    comisiones_pct_acum: float
+
+
+class CurvaPuntoOut(BaseModel):
+    fecha: date
+    valor: float
+
+
+class BacktestRequest(BaseModel):
+    definicion: dict[str, Any]
+    desde: Optional[date] = None
+    hasta: Optional[date] = None
+
+
+class BacktestOut(BaseModel):
+    ticker: str
+    senales: list[SenalOut]
+    operaciones: list[OperacionOut]
+    metricas: BacktestMetricasOut
+    curva_equity: list[CurvaPuntoOut]
+    curva_buy_hold: list[CurvaPuntoOut]
+    primera_barra_evaluable: Optional[int] = None
+    advertencias: list[str] = Field(default_factory=list)
+
+
+class PresetEstrategiaOut(BaseModel):
+    nombre: str
+    definicion: dict[str, Any]
+
+
+class SenalTickerOut(BaseModel):
+    ticker: str
+    estrategia_id: int
+    estrategia_nombre: str
+    tipo: str  # "compra" | "venta"
+    fecha: date
+    precio: float
+    motivo: str
+    barras_desde: int
+
+
+class EstrategiaGuardarRequest(BaseModel):
+    nombre: str = Field(..., min_length=1, max_length=80)
+    descripcion: Optional[str] = None
+    ticker: Optional[str] = None
+    tipo_preset: Optional[str] = None
+    definicion: dict[str, Any]
+
+
+class EstrategiaOut(BaseModel):
+    id: int
+    nombre: str
+    descripcion: Optional[str] = None
+    ticker: Optional[str] = None
+    tipo_preset: Optional[str] = None
+    definicion: dict[str, Any]
+    fecha_creacion: datetime
+    fecha_actualizacion: datetime

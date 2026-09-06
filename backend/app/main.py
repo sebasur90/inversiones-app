@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from .database import init_db
-from .routers import inversiones, objetivos_inversion, escenarios
+from .routers import inversiones, objetivos_inversion, escenarios, tecnico
 
 
 @asynccontextmanager
@@ -33,6 +33,7 @@ app.add_middleware(
 app.include_router(inversiones.router)
 app.include_router(objetivos_inversion.router)
 app.include_router(escenarios.router)
+app.include_router(tecnico.router)
 
 
 @app.get("/health")

@@ -1228,3 +1228,207 @@ export const duplicarEscenario = (id: number, nuevoNombre?: string) =>
 
 export const eliminarEscenario = (id: number) =>
   api.delete(`/inversiones/scenarios/${id}`).then(() => undefined)
+
+// ---- Análisis técnico ----
+
+export interface TickerTecnicoOut {
+  ticker: string
+  nombre: string
+  moneda: string
+  tipo_instrumento: string
+  origen: 'cartera' | 'watchlist' | 'ambos'
+}
+
+export interface BarraOut {
+  fecha: string
+  cierre: number
+  apertura?: number | null
+  maximo?: number | null
+  minimo?: number | null
+  volumen?: number | null
+}
+
+export interface SerieTecnicaOut {
+  ticker: string
+  nombre: string
+  moneda: string
+  origen: 'cartera' | 'watchlist' | 'ambos' | null
+  fuente_serie: 'velas' | 'mixta' | 'sin_datos'
+  tiene_velas: boolean
+  tiene_volumen: boolean
+  indice_desde: number
+  barras: BarraOut[]
+  indicadores: Record<string, Record<string, (number | null)[]>>
+  advertencias: string[]
+}
+
+export const getTickersTecnicos = () =>
+  api.get<TickerTecnicoOut[]>('/inversiones/tecnico/tickers').then(r => r.data)
+
+export const getSerieTecnica = (
+  ticker: string,
+  params: { desde?: string; hasta?: string; indicadores?: string[]; max_barras?: number },
+) =>
+  api.get<SerieTecnicaOut>(`/inversiones/tecnico/${encodeURIComponent(ticker)}/serie`, { params }).then(r => r.data)
+
+// --- Estrategias: DSL ---
+
+export type OperandoDsl =
+  | { ref: string; salida?: string }
+  | { const: number }
+  | { campo: 'cierre' | 'apertura' | 'maximo' | 'minimo' | 'volumen' }
+
+export type CondicionDsl =
+  | { op: 'y' | 'o'; condiciones: CondicionDsl[] }
+  | { op: 'no'; condicion: CondicionDsl }
+  | { op: 'mayor' | 'menor' | 'mayor_igual' | 'menor_igual' | 'cruce_arriba' | 'cruce_abajo'; izq: OperandoDsl; der: OperandoDsl }
+  | { op: 'entre'; valor: OperandoDsl; minimo: OperandoDsl; maximo: OperandoDsl }
+  | { op: 'subiendo' | 'bajando'; operando: OperandoDsl; barras?: number }
+
+export interface IndicadorDsl {
+  id: string
+  tipo: string
+  params: Record<string, number>
+}
+
+export interface RiesgoDsl {
+  stop_loss_pct: number | null
+  take_profit_pct: number | null
+  trailing_stop_pct: number | null
+  max_barras: number | null
+}
+
+export interface EjecucionDsl {
+  lado: 'long'
+  comision_pct: number
+  precio_ejecucion: 'cierre' | 'apertura_siguiente'
+  demora_barras: number
+}
+
+export interface EstrategiaDsl {
+  version: 1
+  indicadores: IndicadorDsl[]
+  entrada: CondicionDsl
+  salida?: CondicionDsl | null
+  riesgo: RiesgoDsl
+  ejecucion: EjecucionDsl
+}
+
+export interface SenalOut {
+  indice: number
+  fecha: string
+  tipo: 'compra' | 'venta'
+  precio: number
+  motivo: string
+}
+
+export interface OperacionOut {
+  indice_entrada: number
+  indice_salida: number | null
+  fecha_entrada: string
+  fecha_salida: string | null
+  precio_entrada: number
+  precio_salida: number | null
+  barras: number
+  retorno_bruto_pct: number
+  retorno_neto_pct: number
+  motivo_salida: string | null
+  abierta: boolean
+}
+
+export interface BacktestMetricasOut {
+  estado: 'ok' | 'datos_insuficientes'
+  retorno_total_pct: number
+  retorno_anualizado_pct: number | null
+  retorno_buy_hold_pct: number
+  exceso_vs_buy_hold_pp: number
+  operaciones: number
+  ganadoras: number
+  perdedoras: number
+  win_rate_pct: number | null
+  retorno_medio_operacion_pct: number | null
+  mejor_operacion_pct: number | null
+  peor_operacion_pct: number | null
+  profit_factor: number | null
+  max_drawdown_pct: number | null
+  fecha_pico: string | null
+  fecha_valle: string | null
+  duracion_media_barras: number | null
+  exposicion_pct: number
+  comisiones_pct_acum: number
+}
+
+export interface CurvaPuntoOut {
+  fecha: string
+  valor: number
+}
+
+export interface BacktestOut {
+  ticker: string
+  senales: SenalOut[]
+  operaciones: OperacionOut[]
+  metricas: BacktestMetricasOut
+  curva_equity: CurvaPuntoOut[]
+  curva_buy_hold: CurvaPuntoOut[]
+  primera_barra_evaluable: number | null
+  advertencias: string[]
+}
+
+export interface PresetEstrategiaOut {
+  nombre: string
+  definicion: EstrategiaDsl
+}
+
+export interface EstrategiaGuardarRequest {
+  nombre: string
+  descripcion?: string | null
+  ticker?: string | null
+  tipo_preset?: string | null
+  definicion: EstrategiaDsl
+}
+
+export interface EstrategiaOut {
+  id: number
+  nombre: string
+  descripcion: string | null
+  ticker: string | null
+  tipo_preset: string | null
+  definicion: EstrategiaDsl
+  fecha_creacion: string
+  fecha_actualizacion: string
+}
+
+export interface SenalTickerOut {
+  ticker: string
+  estrategia_id: number
+  estrategia_nombre: string
+  tipo: 'compra' | 'venta'
+  fecha: string
+  precio: number
+  motivo: string
+  barras_desde: number
+}
+
+export const getPresetsEstrategia = () =>
+  api.get<PresetEstrategiaOut[]>('/inversiones/tecnico/presets').then(r => r.data)
+
+export const getSenalesTecnicas = () =>
+  api.get<SenalTickerOut[]>('/inversiones/tecnico/senales').then(r => r.data)
+
+export const backtestEstrategia = (ticker: string, definicion: EstrategiaDsl, desde?: string, hasta?: string) =>
+  api.post<BacktestOut>(`/inversiones/tecnico/${encodeURIComponent(ticker)}/backtest`, { definicion, desde, hasta }).then(r => r.data)
+
+export const listarEstrategias = (ticker?: string) =>
+  api.get<EstrategiaOut[]>('/inversiones/estrategias', { params: ticker ? { ticker } : {} }).then(r => r.data)
+
+export const guardarEstrategia = (body: EstrategiaGuardarRequest) =>
+  api.post<EstrategiaOut>('/inversiones/estrategias', body).then(r => r.data)
+
+export const actualizarEstrategia = (id: number, body: EstrategiaGuardarRequest) =>
+  api.put<EstrategiaOut>(`/inversiones/estrategias/${id}`, body).then(r => r.data)
+
+export const duplicarEstrategia = (id: number, nuevoNombre?: string) =>
+  api.post<EstrategiaOut>(`/inversiones/estrategias/${id}/duplicate`, null, { params: nuevoNombre ? { nuevo_nombre: nuevoNombre } : {} }).then(r => r.data)
+
+export const eliminarEstrategiaTecnica = (id: number) =>
+  api.delete(`/inversiones/estrategias/${id}`).then(() => undefined)

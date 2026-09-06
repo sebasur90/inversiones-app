@@ -14,12 +14,24 @@ navegador y trae series frescas al día.
 from datetime import date, datetime, timezone
 
 from .client import get_json
+from .ohlcv_types import BarraCruda
 
 BASE_URL = "https://analisistecnico.com.ar/services/datafeed"
 
 
-def fetch_historico_bono(ticker: str, desde: date, hasta: date) -> list[tuple[date, float]] | None:
-    """Serie diaria `[(fecha, cierre), ...]` de `ticker` en `[desde, hasta]`, ordenada por fecha.
+def _valor(lista, i: int) -> float | None:
+    if not isinstance(lista, list) or i >= len(lista):
+        return None
+    try:
+        return float(lista[i])
+    except (TypeError, ValueError):
+        return None
+
+
+def fetch_historico_ohlcv(ticker: str, desde: date, hasta: date) -> list[BarraCruda] | None:
+    """Serie diaria de velas `[BarraCruda, ...]` de `ticker` en `[desde, hasta]`, ordenada por
+    fecha. Los campos `o/h/l/v` ya vienen en la misma respuesta que el cierre — no hace falta una
+    llamada extra, `fetch_historico_bono` (compatibilidad) sólo descartaba esos campos.
 
     Devuelve:
       - `None` si la petición falló (red caída, JSON inesperado, o `s != "ok"` — un símbolo
@@ -27,6 +39,11 @@ def fetch_historico_bono(ticker: str, desde: date, hasta: date) -> list[tuple[da
       - `[]` si el símbolo existe pero no tuvo ruedas en el rango (`{"s": "no_data"}`) o no vino
         ningún cierre usable.
     Nunca lanza.
+
+    Si una barra trae `o/h/l` pero son inconsistentes con el cierre (`mínimo` no contiene al
+    menor de apertura/cierre, o `máximo` no contiene al mayor), se conserva `fecha`/`cierre` y se
+    anulan `o/h/l`: una fuente inconsistente para una barra puntual no la vuelve inservible, sólo
+    la degrada a close-only.
     """
     desde_ts = int(datetime(desde.year, desde.month, desde.day, tzinfo=timezone.utc).timestamp())
     hasta_ts = int(datetime(hasta.year, hasta.month, hasta.day, 23, 59, 59, tzinfo=timezone.utc).timestamp())
@@ -43,9 +60,10 @@ def fetch_historico_bono(ticker: str, desde: date, hasta: date) -> list[tuple[da
     tiempos, cierres = data.get("t"), data.get("c")
     if not isinstance(tiempos, list) or not isinstance(cierres, list):
         return None
+    aperturas, maximos, minimos, volumenes = data.get("o"), data.get("h"), data.get("l"), data.get("v")
 
-    out: list[tuple[date, float]] = []
-    for ts, px in zip(tiempos, cierres):
+    out: list[BarraCruda] = []
+    for i, (ts, px) in enumerate(zip(tiempos, cierres)):
         try:
             # Las barras vienen con timestamp intradiario (hora de sesión, no medianoche); en UTC
             # cae siempre dentro del mismo día calendario de la rueda.
@@ -53,7 +71,24 @@ def fetch_historico_bono(ticker: str, desde: date, hasta: date) -> list[tuple[da
             precio = float(px)
         except (TypeError, ValueError, OSError):
             continue
-        if precio > 0:
-            out.append((fecha, precio))
-    out.sort(key=lambda t: t[0])
+        if precio <= 0:
+            continue
+
+        o, h, l, v = _valor(aperturas, i), _valor(maximos, i), _valor(minimos, i), _valor(volumenes, i)
+        if o is not None and h is not None and l is not None:
+            if not (l <= min(o, precio) and h >= max(o, precio)):
+                o = h = l = None
+        out.append(BarraCruda(fecha=fecha, cierre=precio, apertura=o, maximo=h, minimo=l, volumen=v))
+
+    out.sort(key=lambda b: b.fecha)
     return out
+
+
+def fetch_historico_bono(ticker: str, desde: date, hasta: date) -> list[tuple[date, float]] | None:
+    """Serie diaria `[(fecha, cierre), ...]` — wrapper de compatibilidad sobre
+    `fetch_historico_ohlcv` para los llamadores que sólo necesitan el cierre (backfill de
+    valuación en `precios.py`). Mismo contrato: `None` en fallo, `[]` sin ruedas."""
+    barras = fetch_historico_ohlcv(ticker, desde, hasta)
+    if barras is None:
+        return None
+    return [(b.fecha, b.cierre) for b in barras]

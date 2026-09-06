@@ -33,6 +33,7 @@ from unicodedata import combining, normalize
 from ..validation.types import Severity, ValidationIssue
 from . import analisistecnico, data912
 from . import iol as iol_client
+from .ohlcv_types import BarraCruda
 
 # `tipo_instrumento` en el Sheet es texto libre; se matchea por familia, sin acentos ni mayúsculas.
 # Subcadenas inequívocas...
@@ -55,6 +56,27 @@ _TOPE_BACKFILL = timedelta(days=366 * 5)   # piso duro: nunca más de ~5 años h
 _TOLERANCIA_PISO_DIAS = 40                 # "ya llegué al piso" si la serie 'api' arranca a <=40d de él
 _MAX_BACKFILL_POR_SYNC = 15               # cota de peticiones por corrida (se atienden los huecos más grandes primero)
 _REINTENTO_SIN_SERIE_DIAS = 90            # A3: un ticker sin serie histórica se reintenta cada ~90 días
+
+# OHLCV (análisis técnico): piso más ancho que el de valuación (alcanza para una MM200 aunque el
+# ticker se haya comprado hace poco) y cupo propio para el backfill de velas de la watchlist, que
+# sí gasta llamadas HTTP nuevas (a diferencia del de cartera, que viaja gratis en la respuesta que
+# ya se pide para valuación).
+_PISO_TECNICO = timedelta(days=366 * 2)
+_MAX_BACKFILL_OHLCV_POR_SYNC = 8
+
+
+def _aplicar_factor_ohlcv(barra: BarraCruda, factor: float) -> BarraCruda:
+    """Escala `o/h/l/c` por el mismo factor — nunca el volumen, que es nominal. Invariante: si
+    `mínimo <= min(apertura, cierre)` y `máximo >= max(apertura, cierre)` antes de escalar, se
+    preserva después (escalar sólo el cierre, el bug clásico, rompe la vela visualmente)."""
+    return BarraCruda(
+        fecha=barra.fecha,
+        cierre=round(barra.cierre * factor, 6),
+        apertura=round(barra.apertura * factor, 6) if barra.apertura is not None else None,
+        maximo=round(barra.maximo * factor, 6) if barra.maximo is not None else None,
+        minimo=round(barra.minimo * factor, 6) if barra.minimo is not None else None,
+        volumen=barra.volumen,
+    )
 
 
 def _sin_acentos(s: str) -> str:
@@ -282,6 +304,8 @@ def fetch_backfill_renta_fija_api(
     api_existentes_por_ticker: dict[str, date],
     hoy: date | None = None,
     estado_por_ticker: dict[str, dict] | None = None,
+    ohlcv_existentes: dict[str, date] | None = None,
+    barras_out: list[dict] | None = None,
 ) -> tuple[list[dict], list[ValidationIssue]]:
     """Puebla *hacia atrás* la serie `precios_instrumento` (`fuente='api'`) de renta fija con la
     serie diaria de analisistecnico. Complementa a `fetch_precios_renta_fija_api`, que sólo agrega
@@ -305,9 +329,21 @@ def fetch_backfill_renta_fija_api(
     tratara igual que `'sin_serie'`, el par de funciones se reintentaría mutuamente en cada sync
     (una reescribe el estado que gatea a la otra) y la cota de A3 no frenaría nunca.
 
-    ONs corporativas: analisistecnico no las tiene (`fetch_historico_bono` -> None). Se marcan
+    ONs corporativas: analisistecnico no las tiene (`fetch_historico_ohlcv` -> None). Se marcan
     `'sin_serie'` y se reporta un SyncIssue info **una sola vez** — siguen con la serie
     forward-only y su historia manual del Sheet.
+
+    `ohlcv_existentes` / `barras_out` (opcionales, OHLCV): `ohlcv_existentes` es
+    ticker -> fecha más antigua ya en `serie_ohlcv`; `barras_out` es una lista mutada in place con
+    las barras derivadas de la MISMA respuesta que ya se pide para valuación — cero llamadas HTTP
+    nuevas. Con `barras_out` presente, el rango pedido se amplía a `_PISO_TECNICO` (2 años) aunque
+    el piso de valuación sea más corto (para tener suficiente historia para una MM200); sólo las
+    fechas >= piso de valuación se emiten a `precios_instrumento`, a `barras_out` va el rango
+    completo. **Regla de primer llenado**: un ticker con `backfill_estado == 'completo'` igual se
+    vuelve a pedir si todavía no tiene ninguna fila en `serie_ohlcv` — si no, un ticker cuya
+    valuación ya había convergido antes de que existiera esta feature jamás tendría velas.
+    Gateado por `ohlcv_intento` (no por `backfill_intento`), para no interferir con la
+    convergencia de valuación existente.
     """
     issues: list[ValidationIssue] = []
     hoy = hoy or date.today()
@@ -324,38 +360,47 @@ def fetch_backfill_renta_fija_api(
             ultimo_sheet[t] = (f, px, p.get("moneda") or "")
 
     # Qué tickers necesitan backfill y cuánto; se atienden los huecos más grandes primero.
-    pendientes: list[tuple[int, dict, date]] = []
+    pendientes: list[tuple[int, dict, date, date]] = []
     for inst in objetivo:
         ticker = inst["ticker"]
         piso = primeras_fechas_mov.get(ticker)
         if piso is None:
             continue
         piso = max(piso, hoy - _TOPE_BACKFILL)
+        piso_fetch = min(piso, hoy - _PISO_TECNICO) if barras_out is not None else piso
+
         ya = api_existentes_por_ticker.get(ticker)
-        if ya is not None and ya <= piso + timedelta(days=_TOLERANCIA_PISO_DIAS):
-            continue  # la serie 'api' ya cubre hasta ~el piso
+        valuacion_convergida = ya is not None and ya <= piso + timedelta(days=_TOLERANCIA_PISO_DIAS)
+        necesita_ohlcv = barras_out is not None and (ohlcv_existentes or {}).get(ticker) is None
+
+        if valuacion_convergida and not necesita_ohlcv:
+            continue  # la serie 'api' ya cubre hasta ~el piso y no hace falta poblar OHLCV
 
         est = estado_por_ticker.get(ticker) if estado_por_ticker is not None else None
         if est is not None:
             bf = est.get("backfill_estado")
             if bf == "completo":
-                continue  # A3: la serie histórica ya no baja más, no gastar cupo
-            if bf in ("sin_serie", "sin_serie_iol"):
+                if not necesita_ohlcv:
+                    continue  # A3: la serie histórica ya no baja más, no gastar cupo
+                intento_ohlcv = est.get("ohlcv_intento")
+                if intento_ohlcv is not None and (hoy - intento_ohlcv).days < _REINTENTO_SIN_SERIE_DIAS:
+                    continue  # regla de primer llenado, gateada por su propio cooldown
+            elif bf in ("sin_serie", "sin_serie_iol"):
                 intento = est.get("backfill_intento")
                 if intento is None or (hoy - intento).days < _REINTENTO_SIN_SERIE_DIAS:
                     continue  # A3: la fuente no lo cubre; se reintenta recién a los ~90 días
 
         hueco = (ya - piso).days if ya is not None else 10 ** 6
-        pendientes.append((hueco, inst, piso))
+        pendientes.append((hueco, inst, piso, piso_fetch))
 
     pendientes.sort(key=lambda x: x[0], reverse=True)
 
     filas: list[dict] = []
-    for _, inst, piso in pendientes[:_MAX_BACKFILL_POR_SYNC]:
+    for _, inst, piso, piso_fetch in pendientes[:_MAX_BACKFILL_POR_SYNC]:
         ticker = inst["ticker"]
         ya = api_existentes_por_ticker.get(ticker)
         est_entry = estado_por_ticker.setdefault(ticker, {}) if estado_por_ticker is not None else None
-        serie = analisistecnico.fetch_historico_bono(ticker, piso, ayer)
+        serie = analisistecnico.fetch_historico_ohlcv(ticker, piso_fetch, ayer)
 
         if serie is None:
             ya_reportado = est_entry is not None and est_entry.get("backfill_estado") == "sin_serie"
@@ -377,6 +422,8 @@ def fetch_backfill_renta_fija_api(
             est_entry["backfill_intento"] = hoy
             if est_entry.get("backfill_estado") in ("sin_serie", "sin_serie_iol"):
                 est_entry["backfill_estado"] = None  # la fuente empezó a cubrirlo
+            if barras_out is not None:
+                est_entry["ohlcv_intento"] = hoy
         if not serie:
             continue
 
@@ -394,8 +441,13 @@ def fetch_backfill_renta_fija_api(
         f_sheet, px_sheet, moneda_sheet = prev
         if px_sheet <= 0:
             continue
+
+        # Sólo las barras >= piso de valuación importan para precios_instrumento y para calibrar
+        # (si `barras_out` amplió el rango, las más viejas quedan fuera de esta selección).
+        serie_valuacion = [b for b in serie if b.fecha >= piso]
+        candidatos_ref = serie_valuacion or serie
         # Calibra contra el cierre de analisistecnico más cercano a la última fecha del Sheet.
-        px_ref = min(serie, key=lambda fp: abs((fp[0] - f_sheet).days))[1]
+        px_ref = min(candidatos_ref, key=lambda b: abs((b.fecha - f_sheet).days)).cierre
         factor, _ = _resolver_factor(ticker, px_ref, px_sheet, f_sheet, estado_por_ticker)
         if factor is None:
             issues.append(ValidationIssue(
@@ -412,20 +464,38 @@ def fetch_backfill_renta_fija_api(
             issues.append(issue_moneda)
 
         moneda = (moneda_sheet or inst.get("moneda") or "ARS").strip().upper()
-        for f, px in serie:
-            if f >= hoy or (ticker, f) in claves_excluir:
+        for b in serie_valuacion:
+            if b.fecha >= hoy or (ticker, b.fecha) in claves_excluir:
                 continue
             filas.append({
-                "fecha": f,
+                "fecha": b.fecha,
                 "ticker": ticker,
-                "precio": round(px * factor, 6),
+                "precio": round(b.cierre * factor, 6),
                 "moneda": moneda,
                 "fuente": "api",
             })
 
+        if barras_out is not None:
+            for b in serie:
+                if b.fecha >= hoy:
+                    continue
+                escalada = _aplicar_factor_ohlcv(b, factor)
+                barras_out.append({
+                    "ticker": ticker, "fecha": escalada.fecha,
+                    "apertura": escalada.apertura, "maximo": escalada.maximo, "minimo": escalada.minimo,
+                    "cierre": escalada.cierre, "volumen": escalada.volumen,
+                    "moneda": moneda, "fuente": "api",
+                })
+            if est_entry is not None:
+                ya_ohlcv = (ohlcv_existentes or {}).get(ticker)
+                min_serie_full = min((b.fecha for b in serie), default=None)
+                if ya_ohlcv is not None and min_serie_full is not None and min_serie_full >= ya_ohlcv:
+                    est_entry["ohlcv_estado"] = "completo"
+
         # A3: convergencia por "ya no baja más" — si la fecha más vieja devuelta no mejora
         # respecto de lo que ya hay en la DB, la serie no va a crecer hacia atrás: marcar completo.
-        min_serie = min((f for f, _ in serie), default=None)
+        # Acotada al piso de valuación: no se toca por la ampliación de rango de OHLCV.
+        min_serie = min((b.fecha for b in serie_valuacion), default=None)
         if est_entry is not None and ya is not None and min_serie is not None and min_serie >= ya:
             est_entry["backfill_estado"] = "completo"
 
@@ -675,6 +745,8 @@ def fetch_backfill_iol(
     db,
     hoy: date | None = None,
     estado_por_ticker: dict[str, dict] | None = None,
+    ohlcv_existentes: dict[str, date] | None = None,
+    barras_out: list[dict] | None = None,
 ) -> tuple[list[dict], list[ValidationIssue]]:
     """Backfill histórico vía IOL para lo que `fetch_backfill_renta_fija_api` (analisistecnico) no
     cubre: ONs corporativas (marcadas `backfill_estado == 'sin_serie'`) y renta variable (acciones/
@@ -686,6 +758,10 @@ def fetch_backfill_iol(
     todavía" en corridas donde IOL esté deshabilitada).
 
     Devuelve siempre una lista (nunca None): un fallo puntual sólo se reintenta el próximo sync.
+
+    `ohlcv_existentes` / `barras_out`: ver `fetch_backfill_renta_fija_api` — mismo contrato
+    (rango ampliado a `_PISO_TECNICO`, regla de primer llenado, cero llamadas HTTP nuevas: viaja
+    en la misma respuesta de `fetch_historico_ohlcv` que ya se pide para valuación).
     """
     issues: list[ValidationIssue] = []
     hoy = hoy or date.today()
@@ -707,38 +783,47 @@ def fetch_backfill_iol(
         if t not in ultimo_sheet or f > ultimo_sheet[t][0]:
             ultimo_sheet[t] = (f, px, p.get("moneda") or "")
 
-    pendientes: list[tuple[int, dict, date]] = []
+    pendientes: list[tuple[int, dict, date, date]] = []
     for inst in objetivo:
         ticker = inst["ticker"]
         piso = primeras_fechas_mov.get(ticker)
         if piso is None:
             continue
         piso = max(piso, hoy - _TOPE_BACKFILL)
+        piso_fetch = min(piso, hoy - _PISO_TECNICO) if barras_out is not None else piso
+
         ya = api_existentes_por_ticker.get(ticker)
-        if ya is not None and ya <= piso + timedelta(days=_TOLERANCIA_PISO_DIAS):
+        valuacion_convergida = ya is not None and ya <= piso + timedelta(days=_TOLERANCIA_PISO_DIAS)
+        necesita_ohlcv = barras_out is not None and (ohlcv_existentes or {}).get(ticker) is None
+
+        if valuacion_convergida and not necesita_ohlcv:
             continue
 
         est = estado_por_ticker.get(ticker) if estado_por_ticker is not None else None
         if est is not None:
             bf = est.get("backfill_estado")
             if bf == "completo":
-                continue
-            if bf == "sin_serie_iol":
+                if not necesita_ohlcv:
+                    continue
+                intento_ohlcv = est.get("ohlcv_intento")
+                if intento_ohlcv is not None and (hoy - intento_ohlcv).days < _REINTENTO_SIN_SERIE_DIAS:
+                    continue
+            elif bf == "sin_serie_iol":
                 intento = est.get("backfill_intento")
                 if intento is None or (hoy - intento).days < _REINTENTO_SIN_SERIE_DIAS:
                     continue
 
         hueco = (ya - piso).days if ya is not None else 10 ** 6
-        pendientes.append((hueco, inst, piso))
+        pendientes.append((hueco, inst, piso, piso_fetch))
 
     pendientes.sort(key=lambda x: x[0], reverse=True)
 
     filas: list[dict] = []
-    for _, inst, piso in pendientes[:_MAX_BACKFILL_POR_SYNC]:
+    for _, inst, piso, piso_fetch in pendientes[:_MAX_BACKFILL_POR_SYNC]:
         ticker = inst["ticker"]
         ya = api_existentes_por_ticker.get(ticker)
         est_entry = estado_por_ticker.setdefault(ticker, {}) if estado_por_ticker is not None else None
-        serie = iol_client.fetch_historico(db, ticker, piso, ayer)
+        serie = iol_client.fetch_historico_ohlcv(db, ticker, piso_fetch, ayer)
 
         if serie is None:
             ya_reportado = est_entry is not None and est_entry.get("backfill_estado") == "sin_serie_iol"
@@ -758,6 +843,8 @@ def fetch_backfill_iol(
             est_entry["backfill_intento"] = hoy
             if est_entry.get("backfill_estado") in ("sin_serie", "sin_serie_iol"):
                 est_entry["backfill_estado"] = None
+            if barras_out is not None:
+                est_entry["ohlcv_intento"] = hoy
         if not serie:
             continue
 
@@ -775,7 +862,10 @@ def fetch_backfill_iol(
         f_sheet, px_sheet, moneda_sheet = prev
         if px_sheet <= 0:
             continue
-        px_ref = min(serie, key=lambda fp: abs((fp[0] - f_sheet).days))[1]
+
+        serie_valuacion = [b for b in serie if b.fecha >= piso]
+        candidatos_ref = serie_valuacion or serie
+        px_ref = min(candidatos_ref, key=lambda b: abs((b.fecha - f_sheet).days)).cierre
         factor, _ = _resolver_factor(ticker, px_ref, px_sheet, f_sheet, estado_por_ticker)
         if factor is None:
             issues.append(ValidationIssue(
@@ -792,19 +882,202 @@ def fetch_backfill_iol(
             issues.append(issue_moneda)
 
         moneda = (moneda_sheet or inst.get("moneda") or "ARS").strip().upper()
-        for f, px in serie:
-            if f >= hoy or (ticker, f) in claves_excluir:
+        for b in serie_valuacion:
+            if b.fecha >= hoy or (ticker, b.fecha) in claves_excluir:
                 continue
             filas.append({
-                "fecha": f,
+                "fecha": b.fecha,
                 "ticker": ticker,
-                "precio": round(px * factor, 6),
+                "precio": round(b.cierre * factor, 6),
                 "moneda": moneda,
                 "fuente": "iol",
             })
 
-        min_serie = min((f for f, _ in serie), default=None)
+        if barras_out is not None:
+            for b in serie:
+                if b.fecha >= hoy:
+                    continue
+                escalada = _aplicar_factor_ohlcv(b, factor)
+                barras_out.append({
+                    "ticker": ticker, "fecha": escalada.fecha,
+                    "apertura": escalada.apertura, "maximo": escalada.maximo, "minimo": escalada.minimo,
+                    "cierre": escalada.cierre, "volumen": escalada.volumen,
+                    "moneda": moneda, "fuente": "iol",
+                })
+            if est_entry is not None:
+                ya_ohlcv = (ohlcv_existentes or {}).get(ticker)
+                min_serie_full = min((b.fecha for b in serie), default=None)
+                if ya_ohlcv is not None and min_serie_full is not None and min_serie_full >= ya_ohlcv:
+                    est_entry["ohlcv_estado"] = "completo"
+
+        min_serie = min((b.fecha for b in serie_valuacion), default=None)
         if est_entry is not None and ya is not None and min_serie is not None and min_serie >= ya:
             est_entry["backfill_estado"] = "completo"
+
+    return filas, issues
+
+
+def fetch_backfill_ohlcv_watchlist(
+    watchlist: list[dict],
+    precios_sheet: list[dict],
+    ohlcv_existentes: dict[str, date],
+    db,
+    hoy: date | None = None,
+    estado_por_ticker: dict[str, dict] | None = None,
+) -> tuple[list[dict], list[ValidationIssue]]:
+    """Backfill de velas para tickers de la watchlist — función propia, a diferencia del backfill
+    de cartera: esos tickers no tienen movimientos (sin piso de valuación) ni filas en
+    `precios_instrumento`, y su referencia de escala es sintética.
+
+    Piso `hoy - _PISO_TECNICO` (2 años, alcanza para una MM200 y el backtest, cuesta la mitad que
+    el piso de cartera). Referencia de escala: **exactamente** la misma construcción que
+    `fetch_precios_watchlist` — precio manual de `Precios` si existe, si no una fila sintética con
+    el `Objetivo`. El factor sale de `_resolver_factor`, que normalmente reusa el `factor_escala`
+    ya persistido por la ruta live: el gráfico y la tarjeta de watchlist no pueden divergir de
+    escala. Fuera de las ventanas de ratio conocidas -> issue `escala_desconocida` con el mismo
+    texto de remedio que ya usa la watchlist.
+
+    analisistecnico primero (gratis); IOL sólo si el primero devuelve `None`, y sólo esa llamada
+    cuenta contra `_MAX_BACKFILL_OHLCV_POR_SYNC` — analisistecnico no tiene cupo mensual, así que
+    no hace falta racionarlo.
+
+    `ohlcv_existentes`: ticker -> fecha más antigua ya en `serie_ohlcv` (define qué tickers
+    todavía no convergieron). `estado_por_ticker` (opcional): se muta in place con
+    `ohlcv_estado`/`ohlcv_intento` — mismos valores que `backfill_estado`
+    ('completo'/'sin_serie'/'sin_serie_iol') pero para este pipeline, independiente del de
+    valuación (`backfill_estado`), que no existe para estos tickers.
+
+    Devuelve siempre una lista (nunca None): un fallo puntual sólo se reintenta el próximo sync.
+    """
+    issues: list[ValidationIssue] = []
+    hoy = hoy or date.today()
+    ayer = hoy - timedelta(days=1)
+    if not watchlist:
+        return [], issues
+
+    tickers_wl = {w["ticker"] for w in watchlist}
+    precios_ref = [p for p in precios_sheet if p["ticker"] in tickers_wl]
+    con_referencia_real = {p["ticker"] for p in precios_ref}
+
+    ultimo_sheet: dict[str, tuple[date, float, str]] = {}
+    for p in precios_ref:
+        t, f, px = p["ticker"], p["fecha"], float(p["precio"])
+        if t not in ultimo_sheet or f > ultimo_sheet[t][0]:
+            ultimo_sheet[t] = (f, px, p.get("moneda") or "")
+    for w in watchlist:
+        if w["ticker"] in con_referencia_real or w.get("objetivo") is None:
+            continue
+        ultimo_sheet.setdefault(w["ticker"], (hoy, float(w["objetivo"]), w.get("moneda") or "ARS"))
+
+    piso_global = hoy - _PISO_TECNICO
+
+    pendientes: list[dict] = []
+    for w in watchlist:
+        ticker = w["ticker"]
+        ya = ohlcv_existentes.get(ticker)
+        if ya is not None and ya <= piso_global + timedelta(days=_TOLERANCIA_PISO_DIAS):
+            continue  # la serie de velas ya cubre hasta ~el piso
+
+        est = estado_por_ticker.get(ticker) if estado_por_ticker is not None else None
+        if est is not None:
+            oe = est.get("ohlcv_estado")
+            if oe == "completo":
+                continue
+            if oe in ("sin_serie", "sin_serie_iol"):
+                intento = est.get("ohlcv_intento")
+                if intento is None or (hoy - intento).days < _REINTENTO_SIN_SERIE_DIAS:
+                    continue
+
+        hueco = (ya - piso_global).days if ya is not None else 10 ** 6
+        pendientes.append({"hueco": hueco, "w": w})
+
+    pendientes.sort(key=lambda x: x["hueco"], reverse=True)
+
+    filas: list[dict] = []
+    llamadas_iol = 0
+    for item in pendientes:
+        w = item["w"]
+        ticker = w["ticker"]
+        ya = ohlcv_existentes.get(ticker)
+        est_entry = estado_por_ticker.setdefault(ticker, {}) if estado_por_ticker is not None else None
+
+        serie = analisistecnico.fetch_historico_ohlcv(ticker, piso_global, ayer)
+        fuente_barras = "api"
+        if serie is None:
+            if llamadas_iol >= _MAX_BACKFILL_OHLCV_POR_SYNC:
+                continue  # cupo de IOL agotado para esta corrida; se reintenta el próximo sync
+            serie = iol_client.fetch_historico_ohlcv(db, ticker, piso_global, ayer)
+            llamadas_iol += 1
+            fuente_barras = "iol"
+
+        if serie is None:
+            ya_reportado = est_entry is not None and est_entry.get("ohlcv_estado") == "sin_serie_iol"
+            if est_entry is not None:
+                est_entry["ohlcv_estado"] = "sin_serie_iol"
+                est_entry["ohlcv_intento"] = hoy
+            if not ya_reportado:
+                issues.append(ValidationIssue(
+                    tab="Watchlist (OHLCV)", campo=ticker, regla="sin_historico_ohlcv",
+                    mensaje=f"{ticker}: sin serie histórica de velas en analisistecnico ni IOL",
+                    impacto="Este ticker de la watchlist se grafica sólo con lo que se acumule de acá en más",
+                    severidad=Severity.INFO,
+                ))
+            continue
+
+        if est_entry is not None:
+            est_entry["ohlcv_intento"] = hoy
+            if est_entry.get("ohlcv_estado") in ("sin_serie", "sin_serie_iol"):
+                est_entry["ohlcv_estado"] = None
+        if not serie:
+            continue
+
+        prev = ultimo_sheet.get(ticker)
+        if prev is None:
+            continue  # sin precio manual ni Objetivo: no hay referencia de escala posible
+
+        f_ref, px_ref_sheet, moneda_sheet = prev
+        if px_ref_sheet <= 0:
+            continue
+        px_ref = min(serie, key=lambda b: abs((b.fecha - f_ref).days)).cierre
+        factor, _ = _resolver_factor(ticker, px_ref, px_ref_sheet, f_ref, estado_por_ticker)
+
+        # El factor persistido se calibró contra la fuente de la ruta *live* (IOL/data912), que no
+        # es necesariamente la misma que la de las velas: para un CEDEAR, IOL cotiza el CEDEAR en
+        # ARS y analisistecnico puede resolver el mismo símbolo a la acción en USD (~11x de
+        # diferencia). Reusar el factor a ciegas cargaría velas en otra unidad que la tarjeta de
+        # la watchlist — justo lo que el reuso quería evitar. Por eso el factor reusado igual se
+        # valida contra ESTA serie: si no concuerda, no se cargan velas y se reporta.
+        factor_observado = _factor_escala(px_ref, px_ref_sheet)
+        if factor is None or factor_observado != factor:
+            issues.append(ValidationIssue(
+                tab="Watchlist (OHLCV)", campo=ticker, regla="escala_desconocida",
+                mensaje=(f"{ticker}: la fuente de velas cotiza {px_ref:g} y la referencia "
+                         f"({'precio manual' if ticker in con_referencia_real else 'Objetivo'}) "
+                         f"es {px_ref_sheet:g} (factor {px_ref / px_ref_sheet:.2f}, "
+                         f"incompatible con la escala {factor if factor is not None else '~1 o ~100'} "
+                         "de la cotización)"),
+                impacto=("No se cargan velas de este ticker de la watchlist: el gráfico quedaría "
+                         "en otra unidad que el precio de la tarjeta. Cargá un precio manual del "
+                         "ticker en la pestaña Precios, o revisá que el Objetivo esté en la misma "
+                         "unidad que la cotización"),
+                severidad=Severity.ADVERTENCIA,
+            ))
+            continue
+
+        moneda = (moneda_sheet or w.get("moneda") or "ARS").strip().upper()
+        for b in serie:
+            if b.fecha >= hoy:
+                continue
+            escalada = _aplicar_factor_ohlcv(b, factor)
+            filas.append({
+                "ticker": ticker, "fecha": escalada.fecha,
+                "apertura": escalada.apertura, "maximo": escalada.maximo, "minimo": escalada.minimo,
+                "cierre": escalada.cierre, "volumen": escalada.volumen,
+                "moneda": moneda, "fuente": fuente_barras,
+            })
+
+        min_serie = min((b.fecha for b in serie), default=None)
+        if est_entry is not None and ya is not None and min_serie is not None and min_serie >= ya:
+            est_entry["ohlcv_estado"] = "completo"
 
     return filas, issues

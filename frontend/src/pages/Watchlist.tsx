@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { getWatchlist } from '../api'
+import { getWatchlist, getSenalesTecnicas, type SenalTickerOut } from '../api'
 import { qk } from '../api/queryClient'
 import { useInversionesContext } from '../context/InversionesContext'
 import ScreenHeader from '../components/layout/ScreenHeader'
@@ -42,6 +42,20 @@ export default function Watchlist() {
     queryFn: () => getWatchlist(),
   })
   const items = watchlistQuery.data ?? []
+
+  // Señales de las estrategias técnicas guardadas para estos tickers. Es información extra: si
+  // el pedido falla, la watchlist se muestra igual (sin badges).
+  const senalesQuery = useQuery({
+    queryKey: qk.de('tecnico-senales'),
+    queryFn: () => getSenalesTecnicas(),
+  })
+  const senalPorTicker = useMemo(() => {
+    const mapa = new Map<string, SenalTickerOut>()
+    for (const s of senalesQuery.data ?? []) {
+      if (!mapa.has(s.ticker)) mapa.set(s.ticker, s)  // ya vienen ordenadas por antigüedad
+    }
+    return mapa
+  }, [senalesQuery.data])
 
   const conEstado = useMemo(
     () => items.map(item => ({ item, estado: estadoWatchlist(item, umbralProximidad) })),
@@ -88,6 +102,7 @@ export default function Watchlist() {
           <div>
             {filtrados.map(({ item, estado }) => {
               const irADetalle = item.en_cartera
+              const senal = senalPorTicker.get(item.ticker)
               return (
                 <button
                   key={item.ticker}
@@ -105,6 +120,18 @@ export default function Watchlist() {
                     <div className="flex items-center gap-1.5 min-w-0">
                       <div className="text-caption font-bold text-app-text truncate">{item.nombre}</div>
                       {estado && <AlertaPrecioBadge estado={estado} pct={item.pct_a_objetivo} compacto />}
+                      {senal && (
+                        <span
+                          title={`${senal.estrategia_nombre} · ${senal.motivo} · ${senal.fecha}`}
+                          className={`shrink-0 rounded-md px-1.5 py-0.5 text-label font-bold border ${
+                            senal.tipo === 'compra'
+                              ? 'border-app-teal/40 text-app-teal bg-app-teal-soft'
+                              : 'border-app-coral/40 text-app-coral bg-app-coral-soft'
+                          }`}
+                        >
+                          {senal.tipo === 'compra' ? '▲' : '▼'} {senal.tipo}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-1 text-label text-app-text-dim mt-0.5 truncate">
                       {item.tipo_instrumento || '—'} · {item.mercado || '—'}

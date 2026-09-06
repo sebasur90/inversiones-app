@@ -2,13 +2,13 @@
 import time
 import logging
 from datetime import datetime, UTC
-from sqlalchemy import tuple_
+from sqlalchemy import func, tuple_
 from sqlalchemy.orm import Session
 
 from ..database import (
     InstrumentoInversion, MovimientoInversion, PrecioInstrumento, IndiceMercado,
     ObjetivoInversion, RebalanceoObjetivo, BenchmarkValor, ConfiguracionCartera,
-    SyncRun, SyncIssue, EstadoMarketDataTicker, WatchlistItem, PrecioWatchlist
+    SyncRun, SyncIssue, EstadoMarketDataTicker, WatchlistItem, PrecioWatchlist, BarraOHLCV
 )
 from .sheets_client import fetch_sheet_data
 from .inversiones_analytics import get_carteras
@@ -17,6 +17,7 @@ from .validation.reglas_estructura import validar_estructura_tab
 from .validation import reglas_instrumentos, reglas_movimientos, reglas_precios, reglas_objetivos, reglas_rebalanceo, reglas_benchmarks, reglas_configuracion, reglas_tipos_cambio, reglas_watchlist, reglas_cer
 from .validation.health_score import calcular_health_score
 from . import market_data
+from . import ohlcv_analytics
 from .market_data import indices as market_data_indices
 from .market_data import precios as market_data_precios
 
@@ -372,6 +373,12 @@ def sync_from_sheet(db: Session) -> dict:
     estado_por_ticker: dict = {}
     paneles_fn = None
     fci_fn = None
+    # Velas OHLCV derivadas de la misma respuesta que ya se pide para valuación (cartera) o de
+    # backfill propio (watchlist) — se acumulan acá y se vuelcan a `serie_ohlcv` al final del
+    # bloque de precios, ver más abajo. `ohlcv_existentes`: ticker -> fecha más antigua ya en
+    # `serie_ohlcv`, para las reglas de convergencia/primer llenado de los tres fetches.
+    barras_ohlcv_out: list[dict] = []
+    ohlcv_existentes: dict = {}
     if usa_apis:
         estado_por_ticker = {
             r.ticker: {
@@ -379,11 +386,15 @@ def sync_from_sheet(db: Session) -> dict:
                 "factor_fecha": r.factor_fecha,
                 "backfill_estado": r.backfill_estado,
                 "backfill_intento": r.backfill_intento,
+                "ohlcv_estado": r.ohlcv_estado,
+                "ohlcv_intento": r.ohlcv_intento,
             }
             for r in db.query(EstadoMarketDataTicker).all()
         }
         paneles_fn = market_data_precios.memo_paneles(db)
         fci_fn = market_data_precios.memo_fci(db)
+        for ticker, fecha_min in db.query(BarraOHLCV.ticker, func.min(BarraOHLCV.fecha)).group_by(BarraOHLCV.ticker):
+            ohlcv_existentes[ticker] = fecha_min
 
     precios_api_count = 0
     if "Precios" not in tabs_bloqueadas:
@@ -413,6 +424,13 @@ def sync_from_sheet(db: Session) -> dict:
             issues.extend(issues_precios_auto)
             for p in precios_auto:
                 (filas_iol if p["fuente"] == "iol" else filas_api).append(p)
+                # Espejo close-only del precio del día: así el backfill de mañana lo encuentra en
+                # `serie_ohlcv` y lo promueve a vela real en vez de partir de cero.
+                barras_ohlcv_out.append({
+                    "ticker": p["ticker"], "fecha": p["fecha"],
+                    "apertura": None, "maximo": None, "minimo": None, "cierre": p["precio"],
+                    "volumen": None, "moneda": p["moneda"], "fuente": p["fuente"],
+                })
 
             # Backfill histórico hacia atrás. Ninguno de los dos pisa fechas que el Sheet ya trae
             # (son para llenar huecos, no para reemplazar una carga manual pasada) — a diferencia
@@ -437,6 +455,7 @@ def sync_from_sheet(db: Session) -> dict:
             backfill_api, issues_backfill_api = market_data_precios.fetch_backfill_renta_fija_api(
                 instrumentos_validos, precios_validos, claves_sheet,
                 primeras_fechas_mov, _min_por_ticker("api"), estado_por_ticker=estado_por_ticker,
+                ohlcv_existentes=ohlcv_existentes, barras_out=barras_ohlcv_out,
             )
             issues.extend(issues_backfill_api)
             filas_api.extend(backfill_api)
@@ -446,6 +465,7 @@ def sync_from_sheet(db: Session) -> dict:
             backfill_iol, issues_backfill_iol = market_data_precios.fetch_backfill_iol(
                 instrumentos_validos, precios_validos, claves_sheet,
                 primeras_fechas_mov, _min_por_ticker("iol"), db, estado_por_ticker=estado_por_ticker,
+                ohlcv_existentes=ohlcv_existentes, barras_out=barras_ohlcv_out,
             )
             issues.extend(issues_backfill_iol)
             filas_iol.extend(backfill_iol)
@@ -560,6 +580,14 @@ def sync_from_sheet(db: Session) -> dict:
                 existente.fuente = fila["fuente"]
         db.flush()
 
+        # Backfill de velas propio de la watchlist: sin movimientos ni precios_instrumento, la
+        # referencia de escala es sintética (ver docstring de la función).
+        backfill_ohlcv_wl, issues_ohlcv_wl = market_data_precios.fetch_backfill_ohlcv_watchlist(
+            wl_a_cotizar, precios_validos, ohlcv_existentes, db, estado_por_ticker=estado_por_ticker,
+        )
+        issues.extend(issues_ohlcv_wl)
+        barras_ohlcv_out.extend(backfill_ohlcv_wl)
+
     # Precios huérfanos de tickers que salieron de la watchlist. Sólo con la pestaña sin bloquear:
     # bloqueada, `watchlist_validos` está vacía y el DELETE se llevaría todo.
     if "Watchlist" not in tabs_bloqueadas:
@@ -569,6 +597,56 @@ def sync_from_sheet(db: Session) -> dict:
             query_huerfanos = query_huerfanos.filter(PrecioWatchlist.ticker.notin_(tickers_wl))
         query_huerfanos.delete(synchronize_session=False)
         db.flush()
+
+    # Upsert de `serie_ohlcv` con las barras acumuladas (cartera + watchlist), con precedencia
+    # `debe_reemplazar_barra` (iol > api; velas > close-only, a igual fuente).
+    ohlcv_count = 0
+    if usa_apis and barras_ohlcv_out:
+        tickers_con_barras = {b["ticker"] for b in barras_ohlcv_out}
+        existentes_ohlcv = {
+            (r.ticker, r.fecha): r
+            for r in db.query(BarraOHLCV).filter(BarraOHLCV.ticker.in_(tickers_con_barras)).all()
+        }
+        for fila in barras_ohlcv_out:
+            clave = (fila["ticker"], fila["fecha"])
+            existente = existentes_ohlcv.get(clave)
+            tiene_velas_nueva = fila["apertura"] is not None and fila["maximo"] is not None and fila["minimo"] is not None
+            existente_dict = (
+                {"fuente": existente.fuente, "tiene_velas": existente.apertura is not None
+                 and existente.maximo is not None and existente.minimo is not None}
+                if existente is not None else None
+            )
+            if not ohlcv_analytics.debe_reemplazar_barra(existente_dict, {"fuente": fila["fuente"], "tiene_velas": tiene_velas_nueva}):
+                continue
+            if existente is not None:
+                existente.apertura = fila["apertura"]
+                existente.maximo = fila["maximo"]
+                existente.minimo = fila["minimo"]
+                existente.cierre = fila["cierre"]
+                existente.volumen = fila["volumen"]
+                existente.moneda = fila["moneda"]
+                existente.fuente = fila["fuente"]
+            else:
+                nueva = BarraOHLCV(
+                    ticker=fila["ticker"], fecha=fila["fecha"],
+                    apertura=fila["apertura"], maximo=fila["maximo"], minimo=fila["minimo"],
+                    cierre=fila["cierre"], volumen=fila["volumen"],
+                    moneda=fila["moneda"], fuente=fila["fuente"],
+                )
+                existentes_ohlcv[clave] = nueva
+                db.add(nueva)
+        db.flush()
+
+    # Velas huérfanas: mismo guard del set vacío que la purga de PrecioWatchlist — con cualquiera
+    # de las dos pestañas bloqueada el conjunto de tickers válidos no es confiable.
+    if usa_apis and "Instrumentos" not in tabs_bloqueadas and "Watchlist" not in tabs_bloqueadas:
+        tickers_ohlcv_validos = {i["ticker"] for i in instrumentos_validos} | {w["ticker"] for w in watchlist_validos}
+        if tickers_ohlcv_validos:
+            db.query(BarraOHLCV).filter(BarraOHLCV.ticker.notin_(tickers_ohlcv_validos)).delete(synchronize_session=False)
+            db.flush()
+
+    if usa_apis:
+        ohlcv_count = db.query(BarraOHLCV).count()
 
     # A1/A3: persistir el factor de escala calibrado y el estado de backfill por ticker, una vez
     # que pasaron por acá todas las rutas que lo mutan.
@@ -582,6 +660,8 @@ def sync_from_sheet(db: Session) -> dict:
             fila_est.factor_fecha = est.get("factor_fecha")
             fila_est.backfill_estado = est.get("backfill_estado")
             fila_est.backfill_intento = est.get("backfill_intento")
+            fila_est.ohlcv_estado = est.get("ohlcv_estado")
+            fila_est.ohlcv_intento = est.get("ohlcv_intento")
         db.flush()
 
     indices_mercado_api_count = 0
@@ -755,6 +835,7 @@ def sync_from_sheet(db: Session) -> dict:
         "indices_mercado": 0 if fuentes_cer_mep_bloqueadas else len(indices_mercado) + indices_mercado_api_count,
         "benchmarks": len(benchmarks_validos) + benchmarks_api_count,
         "configuracion": len(configuracion_validos),
+        "serie_ohlcv": ohlcv_count,
         "health_score": score_result["score"],
         "resultado": score_result["resultado"],
         "duration_ms": duracion_ms,
