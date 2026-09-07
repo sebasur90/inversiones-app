@@ -22,3 +22,10 @@ CREDENTIALS.md
 
 # Manual de usuario generado — no se versiona
 docs/manual-usuario.html
+
+# Estrategias exportadas desde el laboratorio — no se versionan (la lógica se comparte por
+# otra vía; los JSON son artefactos locales)
+lab/estrategias/*.json
+# Checkpoints de Jupyter
+lab/.ipynb_checkpoints/
+**/.ipynb_checkpoints/

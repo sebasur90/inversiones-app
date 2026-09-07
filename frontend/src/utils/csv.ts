@@ -1,3 +1,5 @@
+import { descargarArchivo } from './descargar'
+
 export type ValorCelda = string | number | boolean | null | undefined
 
 /**
@@ -37,16 +39,7 @@ export function descargarCSV(
     fila.map(celda => escapar(celda, separador)).join(separador),
   )
   const contenido = '﻿' + lineas.join('\r\n')
-
-  const blob = new Blob([contenido], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const enlace = document.createElement('a')
-  enlace.href = url
-  enlace.download = `${nombreArchivo}.csv`
-  document.body.appendChild(enlace)
-  enlace.click()
-  document.body.removeChild(enlace)
-  URL.revokeObjectURL(url)
+  descargarArchivo(`${nombreArchivo}.csv`, contenido, 'text/csv;charset=utf-8;')
 }
 
 /** Sufijo de fecha para los nombres de archivo: `movimientos-2026-08-27.csv`. */

@@ -1,0 +1,28 @@
+# Imagen del laboratorio de estrategias: misma base que el backend + JupyterLab.
+# El código (`app/`) y los notebooks (`lab/`) se montan como volúmenes en runtime (ver
+# docker-compose.yml, servicio `lab`), no se copian acá.
+FROM python:3.13-slim
+
+WORKDIR /app
+
+# Support corporate proxy via build args
+ARG HTTP_PROXY=""
+ARG HTTPS_PROXY=""
+ARG NO_PROXY=""
+
+ENV http_proxy=${HTTP_PROXY} \
+    https_proxy=${HTTPS_PROXY} \
+    no_proxy=${NO_PROXY}
+
+COPY requirements.txt requirements-lab.txt ./
+RUN pip install --no-cache-dir -r requirements-lab.txt
+
+ENV PYTHONPATH=/app
+
+EXPOSE 8888
+
+# Loopback-only (lo publica docker-compose en 127.0.0.1); Jupyter ejecuta código arbitrario, así
+# que en una red corporativa no debe escuchar en todas las interfaces. Con eso, el token se puede
+# desactivar por comodidad.
+CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", \
+     "--ServerApp.token=", "--ServerApp.password=", "--notebook-dir=/app/lab"]

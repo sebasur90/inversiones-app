@@ -38,5 +38,27 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Laboratorio de estrategias (JupyterLab). Perfil opcional: NO arranca con un `docker compose up`
+  # normal. Levantar con `docker compose --profile lab up lab` y abrir http://127.0.0.1:8888.
+  lab:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lab
+    profiles: ["lab"]
+    environment:
+      - PYTHONPATH=/app
+      - USE_EXTERNAL_APIS=false
+    volumes:
+      # DB y serie histórica, SÓLO LECTURA: el lab nunca escribe en la DB de la app.
+      - backend_data:/app/data:ro
+      # Código de la app, sólo lectura (para importar `app.lab`, `app.services`, ...).
+      - ./backend/app:/app/app:ro
+      # Notebooks y JSON exportados, con escritura.
+      - ./lab:/app/lab
+    # Sólo loopback: Jupyter ejecuta código arbitrario y no debe escuchar en todas las interfaces.
+    ports:
+      - "8888:8888"
+    restart: unless-stopped
+
 volumes:
   backend_data:

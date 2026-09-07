@@ -51,5 +51,21 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  lab:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lab
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    environment:
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - NO_PROXY=${NO_PROXY:-}
+      - no_proxy=${NO_PROXY:-}
+    ports:
+      - "8888:8888"
+
 volumes:
   backend_data:

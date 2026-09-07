@@ -137,3 +137,28 @@ def test_router_rechaza_dsl_invalido(client):
     dsl_invalido = {"version": 99, "entrada": {"op": "y", "condiciones": []}}
     r = client.post("/api/inversiones/estrategias", json={"nombre": "Mala", "definicion": dsl_invalido})
     assert r.status_code == 422
+
+
+def test_router_acepta_dsl_avanzado_con_entre_y_no_anidado(client):
+    # Garantía de que el backend no necesita cambios para lo que produce el builder del laboratorio:
+    # `entre` y `no` anidados (no representables en el editor visual) hacen round-trip exacto.
+    dsl = {
+        "version": 1,
+        "indicadores": [
+            {"id": "rsi14", "tipo": "RSI", "params": {"periodo": 14}},
+            {"id": "ext0", "tipo": "EXTREMOS", "params": {"ventana": 0}},
+        ],
+        "entrada": {"op": "y", "condiciones": [
+            {"op": "entre", "valor": {"ref": "rsi14"}, "minimo": {"const": 30}, "maximo": {"const": 70}},
+            {"op": "no", "condicion": {
+                "op": "mayor", "izq": {"ref": "ext0", "salida": "dist_min_pct"}, "der": {"const": 5}}},
+        ]},
+        "salida": {"op": "mayor_igual", "izq": {"ref": "ext0", "salida": "dist_max_pct"}, "der": {"const": -1}},
+        "riesgo": {"stop_loss_pct": 20.0, "take_profit_pct": None, "trailing_stop_pct": None, "max_barras": None},
+        "ejecucion": {"lado": "long", "comision_pct": 0.6, "precio_ejecucion": "cierre", "demora_barras": 0},
+    }
+    r = client.post("/api/inversiones/estrategias", json={"nombre": "Avanzada", "definicion": dsl})
+    assert r.status_code == 201, r.text
+    r = client.get(f"/api/inversiones/estrategias/{r.json()['id']}")
+    assert r.status_code == 200
+    assert r.json()["definicion"] == dsl

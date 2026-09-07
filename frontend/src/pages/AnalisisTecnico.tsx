@@ -22,8 +22,22 @@ import SelectorIndicadores from '../components/tecnico/SelectorIndicadores'
 import GraficoTecnico from '../components/tecnico/GraficoTecnico'
 import GraficoFullscreen from '../components/tecnico/GraficoFullscreen'
 import EditorEstrategia from '../components/tecnico/EditorEstrategia'
+import EstrategiaAvanzadaJson from '../components/tecnico/EstrategiaAvanzadaJson'
 import ResultadoBacktest from '../components/tecnico/ResultadoBacktest'
+import { esEditableVisual } from '../components/tecnico/dslEditable'
 import { parseApiError } from '../help/errors/apiErrors'
+import { descargarArchivo } from '../utils/descargar'
+import {
+  nombreArchivoEstrategia, parsearArchivoEstrategia, serializarEstrategia,
+} from '../utils/estrategiaArchivo'
+
+/** El backend une los errores del validador con "; ". Se listan uno por línea, truncando a los
+ * primeros 5 con "y N más". */
+function erroresDesde(e: unknown): string[] {
+  const partes = parseApiError(e).message.split(';').map(s => s.trim()).filter(Boolean)
+  if (partes.length <= 5) return partes
+  return [...partes.slice(0, 5), `y ${partes.length - 5} más`]
+}
 
 type Vista = 'grafico' | 'estrategias'
 const PERIODOS: PeriodoEvolucion[] = ['1M', '3M', '6M', '1Y', '3Y', 'YTD', 'ALL']
@@ -56,9 +70,17 @@ export default function AnalisisTecnico() {
   )
   const desde = calcularDesde(periodo)
 
+  // Con `ventana === 0` (EXTREMOS/PERCENTIL en modo histórico acumulado) hay que traer toda la
+  // serie disponible: si no, el "máximo histórico" sería el de las últimas 750 ruedas y la
+  // etiqueta engañaría. Entra en la clave de react-query para que el cambio dispare refetch.
+  const maxBarras = useMemo(
+    () => (Object.values(activos).some(p => p.ventana === 0) ? 3000 : undefined),
+    [activos],
+  )
+
   const serieQuery = useQuery({
-    queryKey: qk.de('tecnico-serie', ticker, desde, claves.join(','), variante),
-    queryFn: () => getSerieTecnica(ticker as string, { desde, indicadores: claves, variante }),
+    queryKey: qk.de('tecnico-serie', ticker, desde, claves.join(','), variante, maxBarras ?? 0),
+    queryFn: () => getSerieTecnica(ticker as string, { desde, indicadores: claves, variante, max_barras: maxBarras }),
     enabled: ticker !== null,
   })
   const serie = serieQuery.data
@@ -224,11 +246,18 @@ function SeccionEstrategias({
   const [semillaEditor, setSemillaEditor] = useState(0)
   const [estrategiaActualId, setEstrategiaActualId] = useState<number | null>(null)
   const [nombreActual, setNombreActual] = useState('')
+  const [descripcionActual, setDescripcionActual] = useState<string | null>(null)
+  // Se activa desde el panel avanzado ("Editar igual"): fuerza el editor visual aunque el DSL
+  // tenga condiciones no representables (que se van a perder al guardar).
+  const [forzarVisual, setForzarVisual] = useState(false)
   const [resultado, setResultado] = useState<BacktestOut | null>(null)
   const [errores, setErrores] = useState<string[]>([])
+  const [avisoImport, setAvisoImport] = useState<string | null>(null)
   const [cargando, setCargando] = useState(false)
   const [modalGuardarOpen, setModalGuardarOpen] = useState(false)
   const [nombreParaGuardar, setNombreParaGuardar] = useState('')
+  const [modalImportarOpen, setModalImportarOpen] = useState(false)
+  const [textoImportar, setTextoImportar] = useState('')
 
   useEffect(() => {
     if (dsl === null && presetsQuery.data && presetsQuery.data.length > 0) {
@@ -240,58 +269,105 @@ function SeccionEstrategias({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [presetsQuery.data])
 
-  async function correrBacktest() {
-    if (!dsl) return
+  async function correrBacktestCon(definicion: EstrategiaDsl) {
     setCargando(true)
     setErrores([])
     try {
-      const r = await backtestEstrategia(ticker, dsl, desde, undefined, variante)
+      const r = await backtestEstrategia(ticker, definicion, desde, undefined, variante)
       setResultado(r)
     } catch (e) {
-      setErrores([parseApiError(e).message])
+      setErrores(erroresDesde(e))
       setResultado(null)
     } finally {
       setCargando(false)
     }
   }
 
+  const correrBacktest = () => { if (dsl) void correrBacktestCon(dsl) }
+
   function elegirPreset(nombre: string) {
     const preset = presetsQuery.data?.find(p => p.nombre === nombre)
     if (preset) {
       setDsl(preset.definicion)
       setSemillaEditor(s => s + 1)
+      setForzarVisual(false)
       setEstrategiaActualId(null)
       setNombreActual(preset.nombre)
+      setDescripcionActual(null)
       setResultado(null)
       setErrores([])
+      setAvisoImport(null)
     }
   }
 
   function cargarGuardada(e: EstrategiaOut) {
     setDsl(e.definicion)
     setSemillaEditor(s => s + 1)
+    setForzarVisual(false)
     setEstrategiaActualId(e.id)
     setNombreActual(e.nombre)
+    setDescripcionActual(e.descripcion)
     setResultado(null)
     setErrores([])
+    setAvisoImport(null)
     // Sincronizar el toggle de variante con la que trae la estrategia guardada.
     onVariante(e.variante)
+  }
+
+  function importarTexto(texto: string) {
+    setErrores([])
+    setAvisoImport(null)
+    let archivo
+    try {
+      archivo = parsearArchivoEstrategia(texto)
+    } catch (e) {
+      setErrores([e instanceof Error ? e.message : 'No se pudo leer el archivo.'])
+      return
+    }
+    // Estrategia nueva (no un update): id en null y adoptamos sus metadatos.
+    setDsl(archivo.definicion)
+    setSemillaEditor(s => s + 1)
+    setForzarVisual(false)
+    setEstrategiaActualId(null)
+    setNombreActual(archivo.nombre ?? 'Estrategia importada')
+    setDescripcionActual(archivo.descripcion)
+    setResultado(null)
+    if (archivo.variante && seriesDisponibles.some(s => s.variante === archivo.variante)) {
+      onVariante(archivo.variante)
+    }
+    // No cambiamos el ticker de la página (podría no estar en cartera ni watchlist -> 404):
+    // sólo avisamos si difiere.
+    if (archivo.ticker && archivo.ticker !== ticker) {
+      setAvisoImport(`El archivo se exportó para ${archivo.ticker}; el backtest corre sobre ${ticker}.`)
+    }
+    setModalImportarOpen(false)
+    setTextoImportar('')
+    // Correr el backtest ya: un DSL inválido dispara el 422 al toque.
+    void correrBacktestCon(archivo.definicion)
+  }
+
+  function exportar() {
+    if (!dsl) return
+    const contenido = serializarEstrategia(dsl, {
+      nombre: nombreActual || null, descripcion: descripcionActual, ticker: null, variante,
+    })
+    descargarArchivo(nombreArchivoEstrategia(nombreActual || 'estrategia'), contenido, 'application/json')
   }
 
   async function guardar() {
     if (!dsl || !nombreParaGuardar.trim()) return
     try {
       if (estrategiaActualId) {
-        await actualizarEstrategia(estrategiaActualId, { nombre: nombreParaGuardar, ticker, definicion: dsl, variante })
+        await actualizarEstrategia(estrategiaActualId, { nombre: nombreParaGuardar, descripcion: descripcionActual, ticker, definicion: dsl, variante })
       } else {
-        const creada = await guardarEstrategia({ nombre: nombreParaGuardar, ticker, definicion: dsl, variante })
+        const creada = await guardarEstrategia({ nombre: nombreParaGuardar, descripcion: descripcionActual, ticker, definicion: dsl, variante })
         setEstrategiaActualId(creada.id)
       }
       setNombreActual(nombreParaGuardar)
       setModalGuardarOpen(false)
       void guardadasQuery.refetch()
     } catch (e) {
-      setErrores([parseApiError(e).message])
+      setErrores(erroresDesde(e))
     }
   }
 
@@ -302,7 +378,7 @@ function SeccionEstrategias({
       void guardadasQuery.refetch()
       cargarGuardada(dup)
     } catch (e) {
-      setErrores([parseApiError(e).message])
+      setErrores(erroresDesde(e))
     }
   }
 
@@ -312,7 +388,7 @@ function SeccionEstrategias({
       if (estrategiaActualId === id) setEstrategiaActualId(null)
       void guardadasQuery.refetch()
     } catch (e) {
-      setErrores([parseApiError(e).message])
+      setErrores(erroresDesde(e))
     }
   }
 
@@ -375,7 +451,20 @@ function SeccionEstrategias({
         )}
       </div>
 
-      {dsl && <EditorEstrategia key={semillaEditor} dslInicial={dsl} onCambiar={setDsl} erroresValidacion={errores} />}
+      {avisoImport && (
+        <div className="bg-app-gold-soft border border-app-gold/40 rounded-xl px-3 py-2 text-caption text-app-text-dim">
+          {avisoImport}
+        </div>
+      )}
+
+      {dsl && (esEditableVisual(dsl) || forzarVisual ? (
+        <EditorEstrategia key={semillaEditor} dslInicial={dsl} onCambiar={setDsl} erroresValidacion={errores} />
+      ) : (
+        <EstrategiaAvanzadaJson
+          dsl={dsl} onCambiar={setDsl} erroresValidacion={errores}
+          onEditarIgual={() => { setForzarVisual(true); setSemillaEditor(s => s + 1) }}
+        />
+      ))}
 
       <div className="flex gap-2 flex-wrap">
         <Button onClick={correrBacktest} disabled={cargando || !dsl}>{cargando ? 'Corriendo…' : 'Correr backtest'}</Button>
@@ -383,6 +472,8 @@ function SeccionEstrategias({
           Guardar
         </Button>
         {estrategiaActualId && <Button variant="outline" onClick={duplicar}>Duplicar</Button>}
+        <Button variant="outline" onClick={() => { setTextoImportar(''); setModalImportarOpen(true) }}>Importar JSON</Button>
+        <Button variant="outline" onClick={exportar} disabled={!dsl}>Exportar JSON</Button>
       </div>
 
       {resultado && dsl && <ResultadoBacktest resultado={resultado} dsl={dsl} />}
@@ -395,6 +486,34 @@ function SeccionEstrategias({
             className="bg-app-surface-2 border border-app-border rounded-lg px-3 py-2 text-body text-app-text"
           />
           <Button onClick={guardar} disabled={!nombreParaGuardar.trim()}>Guardar</Button>
+        </div>
+      </Modal>
+
+      <Modal open={modalImportarOpen} onClose={() => setModalImportarOpen(false)} title="Importar estrategia (JSON)">
+        <div className="flex flex-col gap-3">
+          <p className="text-caption text-app-text-dim">
+            Elegí un archivo <span className="font-mono">.json</span> exportado desde acá o desde el
+            laboratorio, o pegá el JSON directamente. También se acepta el DSL crudo (el
+            <span className="font-mono"> definicion</span> de un preset o de la API).
+          </p>
+          <input
+            type="file" accept="application/json,.json"
+            onChange={e => {
+              const f = e.target.files?.[0]
+              if (f) void f.text().then(importarTexto)
+              e.target.value = ''  // permitir reimportar el mismo archivo
+            }}
+            className="text-caption text-app-text-dim file:mr-2 file:rounded-lg file:border file:border-app-border file:bg-app-surface-2 file:px-3 file:py-1.5 file:text-app-text"
+          />
+          <textarea
+            value={textoImportar} onChange={e => setTextoImportar(e.target.value)}
+            placeholder='{ "formato": "inversiones-app/estrategia", ... }  o  { "version": 1, "entrada": ... }'
+            rows={8}
+            className="bg-app-surface-2 border border-app-border rounded-lg px-3 py-2 font-mono text-label text-app-text"
+          />
+          <Button onClick={() => importarTexto(textoImportar)} disabled={!textoImportar.trim()}>
+            Importar desde el texto
+          </Button>
         </div>
       </Modal>
     </div>

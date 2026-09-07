@@ -184,6 +184,116 @@ def test_invariante_longitud_igual_a_entrada_para_todo_indicador(nombre):
         assert len(resultado[salida]) == len(barras)
 
 
+# ── extremos ──────────────────────────────────────────────────────────────────
+
+def test_extremos_ventana_fija_valores_a_mano():
+    # cierres con OHLC degradado a (cierre, cierre): la ventana de 3 toma max/min de los cierres.
+    cierres = [10.0, 12.0, 11.0, 9.0, 13.0, 8.0]
+    barras = _barras(cierres)
+    out = ie.extremos(barras, ventana=3)
+    assert out["maximo"][:2] == [None, None]        # rodante: None hasta ventana completa
+    assert out["maximo"][2] == pytest.approx(12.0)  # max(10,12,11)
+    assert out["minimo"][2] == pytest.approx(10.0)
+    assert out["medio"][2] == pytest.approx(11.0)
+    assert out["maximo"][3] == pytest.approx(12.0)  # max(12,11,9)
+    assert out["minimo"][4] == pytest.approx(9.0)   # min(11,9,13)
+    assert out["maximo"][5] == pytest.approx(13.0)  # max(9,13,8)
+    for salida in out:
+        assert len(out[salida]) == len(barras)
+
+
+def test_extremos_usa_ohlc_cuando_esta():
+    cierres = [10.0, 10.0, 10.0]
+    maximos = [11.0, 15.0, 12.0]
+    minimos = [8.0, 9.0, 7.0]
+    barras = _barras(cierres, maximo=maximos, minimo=minimos)
+    out = ie.extremos(barras, ventana=3)
+    assert out["maximo"][2] == pytest.approx(15.0)  # del máximo de la vela, no del cierre
+    assert out["minimo"][2] == pytest.approx(7.0)
+
+
+def test_extremos_ventana_cero_es_acumulada_desde_el_inicio():
+    cierres = [10.0, 8.0, 12.0, 9.0, 15.0, 5.0]
+    barras = _barras(cierres)
+    out = ie.extremos(barras, ventana=0)
+    # Definido desde la barra 0; la primera barra es máximo y mínimo a la vez.
+    assert out["maximo"][0] == pytest.approx(10.0)
+    assert out["minimo"][0] == pytest.approx(10.0)
+    assert out["dist_min_pct"][0] == pytest.approx(0.0)
+    assert out["dist_max_pct"][0] == pytest.approx(0.0)
+    assert out["maximo"] == pytest.approx([10, 10, 12, 12, 15, 15])
+    assert out["minimo"] == pytest.approx([10, 8, 8, 8, 8, 5])
+
+
+def test_extremos_signos_de_dist_pct_y_cero_en_el_extremo_nuevo():
+    cierres = [10.0, 20.0, 5.0]  # barra 1 = máximo nuevo, barra 2 = mínimo nuevo
+    barras = _barras(cierres)
+    out = ie.extremos(barras, ventana=0)
+    assert out["dist_max_pct"][1] == pytest.approx(0.0)     # cierra en el máximo
+    assert out["dist_min_pct"][1] > 0                        # por encima del mínimo histórico
+    assert out["dist_min_pct"][2] == pytest.approx(0.0)     # cierra en el mínimo
+    assert out["dist_max_pct"][2] < 0                        # por debajo del máximo histórico
+
+
+def test_extremos_maximo_sube_solo_en_maximo_nuevo():
+    # Respalda el modismo `{"op":"subiendo","operando":{"ref":..,"salida":"maximo"}}` para
+    # "hoy hizo máximo nuevo".
+    cierres = [10.0, 12.0, 11.0, 15.0, 14.0]
+    barras = _barras(cierres)
+    maximo = ie.extremos(barras, ventana=0)["maximo"]
+    subio = [maximo[i] > maximo[i - 1] for i in range(1, len(maximo))]
+    assert subio == [True, False, True, False]
+
+
+def test_extremos_dist_pct_none_si_denominador_cero():
+    barras = _barras([0.0, 0.0, 0.0])
+    out = ie.extremos(barras, ventana=0)
+    assert out["dist_max_pct"] == [None, None, None]
+    assert out["dist_min_pct"] == [None, None, None]
+
+
+# ── percentil ─────────────────────────────────────────────────────────────────
+
+def test_percentil_cero_en_el_minimo_y_cien_en_el_maximo():
+    cierres = [50.0, 10.0, 30.0, 20.0, 40.0]
+    out = ie.percentil(cierres, ventana=0)
+    assert out[0] is None            # 1 solo dato: rank indefinido
+    assert out[1] == pytest.approx(0.0)      # 10 es el mínimo de {50,10}
+    assert out[-1] == pytest.approx(75.0)    # 40: 3 de {50,10,30,20} son menores -> 3/4*100
+    creciente = ie.percentil([1.0, 2.0, 3.0, 4.0, 5.0], ventana=0)
+    assert creciente[-1] == pytest.approx(100.0)  # el máximo
+
+
+def test_percentil_empates_no_cuentan_como_menor():
+    # cuatro valores iguales y uno mayor: el mayor tiene rank 100, los iguales rank 0.
+    out = ie.percentil([5.0, 5.0, 5.0, 5.0, 9.0], ventana=0)
+    assert out[3] == pytest.approx(0.0)      # ningún 5 es < 5
+    assert out[4] == pytest.approx(100.0)    # los cuatro 5 son < 9 -> 4/4*100
+
+
+def test_percentil_rodante_none_hasta_ventana_completa():
+    cierres = [float(i) for i in range(10)]
+    out = ie.percentil(cierres, ventana=5)
+    assert out[:4] == [None, None, None, None]
+    assert out[4] is not None
+    assert len(out) == len(cierres)
+
+
+# ── retorno ───────────────────────────────────────────────────────────────────
+
+def test_retorno_serie_mas_corta_que_periodo_todo_none():
+    assert ie.retorno([100.0, 101.0, 102.0], periodo=20) == [None, None, None]
+
+
+def test_retorno_valor_a_mano():
+    cierres = [100.0, 110.0, 121.0]
+    out = ie.retorno(cierres, periodo=1)
+    assert out[0] is None
+    assert out[1] == pytest.approx(10.0)
+    assert out[2] == pytest.approx(10.0)
+    assert ie.retorno([0.0, 100.0, 50.0], periodo=2)[2] is None  # cierre[i-periodo] == 0
+
+
 # ── clave / parsear_clave ──────────────────────────────────────────────────────
 
 def test_clave_y_parsear_clave_son_inversas():
@@ -192,6 +302,10 @@ def test_clave_y_parsear_clave_son_inversas():
         ("MACD", {"rapida": 12, "lenta": 26, "senal": 9}),
         ("BOLLINGER", {"periodo": 20, "desvios": 2.0}),
         ("OBV", {}),
+        ("EXTREMOS", {"ventana": 0}),
+        ("EXTREMOS", {"ventana": 20}),
+        ("PERCENTIL", {"ventana": 100}),
+        ("RETORNO", {"periodo": 20}),
     ]
     for nombre, params in casos:
         s = ie.clave(nombre, params)

@@ -335,6 +335,56 @@ def test_validar_estrategia_profundidad_y_nodos_maximos():
     assert ee.validar_estrategia(dsl2)
 
 
+# ── indicadores nuevos: EXTREMOS / rangos declarativos ───────────────────────────────────────
+
+def test_validar_estrategia_extremos_ventana_cero_valida():
+    dsl = _dsl_base(
+        entrada={"op": "y", "condiciones": [
+            {"op": "menor_igual", "izq": {"ref": "ext", "salida": "dist_min_pct"}, "der": {"const": 1}}]},
+        indicadores=[{"id": "ext", "tipo": "EXTREMOS", "params": {"ventana": 0}}],
+    )
+    assert ee.validar_estrategia(dsl) == []
+
+
+def test_validar_estrategia_ventana_fuera_de_rango_rechaza():
+    dsl = _dsl_base(
+        entrada={"op": "y", "condiciones": [
+            {"op": "menor_igual", "izq": {"ref": "ext", "salida": "dist_min_pct"}, "der": {"const": 1}}]},
+        indicadores=[{"id": "ext", "tipo": "EXTREMOS", "params": {"ventana": 5000}}],
+    )
+    assert ee.validar_estrategia(dsl)
+
+
+def test_validar_estrategia_sma_periodo_cero_sigue_rechazando():
+    # Regresión del mecanismo `rangos`: SMA no declara rango, cae en la heurística 1..500 y
+    # `periodo=0` tiene que seguir siendo inválido.
+    dsl = _dsl_base(
+        entrada={"op": "y", "condiciones": [{"op": "mayor", "izq": {"ref": "s"}, "der": {"const": 0}}]},
+        indicadores=[{"id": "s", "tipo": "SMA", "params": {"periodo": 0}}],
+    )
+    assert ee.validar_estrategia(dsl)
+
+
+def test_backtest_minimo_historico_serie_en_v():
+    # EXTREMOS(0): ventana expansiva. entrada = dist_min_pct <= 1 (a <=1% del mínimo histórico),
+    # salida = dist_max_pct >= -1 (a <=1% del máximo histórico).
+    #   cierres: 100 (bar 0, máximo y mínimo a la vez) -> baja en V hasta 50 -> sube a 100 (bar 10).
+    #   Entra en la barra 0 (dist_min_pct == 0). Mientras baja sigue "dentro" (se ignora entrada).
+    #   El máximo histórico queda clavado en 100; en la barra 10 (cierre 100) dist_max_pct vuelve
+    #   a 0 >= -1 -> sale en la barra 10 a 100. La barra 11 (110) ya no cumple la entrada.
+    cierres = [100, 90, 80, 70, 60, 50, 60, 70, 80, 90, 100, 110]
+    barras = _barras([float(c) for c in cierres])
+    dsl = ee.resolver_preset("extremos_historicos")
+    dsl["riesgo"] = {"stop_loss_pct": None, "take_profit_pct": None, "trailing_stop_pct": None, "max_barras": None}
+    dsl["ejecucion"] = {"lado": "long", "comision_pct": 0.0, "precio_ejecucion": "cierre", "demora_barras": 0}
+    resultado = ee.backtest(dsl, barras)
+    assert len(resultado.operaciones) == 1
+    op = resultado.operaciones[0]
+    assert op.indice_entrada == 0 and op.indice_salida == 10
+    assert op.precio_entrada == pytest.approx(100.0)
+    assert op.precio_salida == pytest.approx(100.0)
+
+
 # ── presets ───────────────────────────────────────────────────────────────────────────────────
 
 def _serie_sintetica(n=300):

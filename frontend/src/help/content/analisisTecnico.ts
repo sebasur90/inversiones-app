@@ -6,6 +6,8 @@ export type AnalisisTecnicoHelpKey =
   | 'analisis_tecnico_estrategias'
   | 'analisis_tecnico_backtest'
   | 'analisis_tecnico_precio_ejecucion'
+  | 'analisis_tecnico_extremos'
+  | 'analisis_tecnico_percentil'
 
 export const ANALISISTECNICO_HELP: Record<AnalisisTecnicoHelpKey, HelpContent> = {
   analisis_tecnico_titulo: {
@@ -34,5 +36,19 @@ export const ANALISISTECNICO_HELP: Record<AnalisisTecnicoHelpKey, HelpContent> =
     title: 'Precio de ejecución',
     shortDescription: '"Cierre": opera al cierre de la misma rueda que generó la señal (coincide con la flecha que ves en el gráfico). "Apertura siguiente": opera a la apertura de la rueda siguiente, sin el sesgo de saber el cierre antes de operar.',
     whyItMatters: 'Con "cierre" el backtest asume que pudiste operar exactamente al precio que generó la señal, algo que en la vida real no siempre es posible antes de que cierre la rueda.',
+  },
+  analisis_tecnico_extremos: {
+    title: 'Extremos (canal)',
+    shortDescription: 'Máximo, mínimo y medio de la ventana (canal de Donchian, incluye la barra actual), más la distancia porcentual del cierre a cada extremo: dist_max_pct (≤ 0, es 0 en un máximo nuevo) y dist_min_pct (≥ 0, es 0 en un mínimo nuevo).',
+    howItIsCalculated: 'dist_max_pct = (cierre / máximo − 1) × 100; dist_min_pct = (cierre / mínimo − 1) × 100. Con ventana = 0 la ventana es "toda la serie" (histórico acumulado); con ventana = N son las últimas N ruedas.',
+    howToInterpret: '"Comprar cerca del mínimo histórico" se escribe dist_min_pct ≤ 1 (a ≤ 1 % del mínimo). dist_max_pct con ventana = 0 es exactamente el drawdown desde el máximo histórico; con ventana = 252, el drawdown de 52 semanas (no hace falta un indicador aparte).',
+    limitations: 'Con ventana = 0, "histórico" es desde el inicio de la serie cargada, no desde el debut del instrumento. La primera barra de la serie es su propio máximo y mínimo, así que dist_min_pct y dist_max_pct valen 0 ahí: usá un período de análisis razonable. Muchas series de esta app no tienen velas OHLC — en ese caso el canal usa el cierre.',
+  },
+  analisis_tecnico_percentil: {
+    title: 'Percentil',
+    shortDescription: 'Ranking del cierre actual dentro de la ventana: 0 cuando es el mínimo de la ventana, 100 cuando es el máximo. Con ventana = 0 el ranking es contra toda la historia cargada.',
+    howItIsCalculated: '100 × (cantidad de cierres de la ventana estrictamente menores al actual) / (tamaño de la ventana − 1). Es un rank real, no un min-max: resiste outliers y da 0 y 100 exactos en los extremos.',
+    howToInterpret: 'Valores bajos (< 10) marcan que el precio está en la zona más baja de su rango histórico; valores altos (> 90), en la más alta. Las líneas de referencia del panel están en 10 y 90.',
+    limitations: 'Igual que Extremos: con ventana = 0, "histórico" es desde el inicio de la serie cargada. Necesita la ventana completa antes de dar el primer valor.',
   },
 }

@@ -589,7 +589,8 @@ def validar_estrategia(dsl) -> list[str]:
         if tipo not in indicadores_engine.INDICADORES:
             errores.append(f"tipo de indicador desconocido: {tipo!r}")
             continue
-        params_default = indicadores_engine.INDICADORES[tipo].params_default
+        espec_ind = indicadores_engine.INDICADORES[tipo]
+        params_default = espec_ind.params_default
         for clave_p, valor_p in params.items():
             if clave_p not in params_default:
                 errores.append(f"{tipo}: parámetro desconocido {clave_p!r}")
@@ -599,7 +600,14 @@ def validar_estrategia(dsl) -> list[str]:
             if not isinstance(valor_p, (int, float)) or isinstance(valor_p, bool):
                 errores.append(f"{tipo}.{clave_p} debe ser numérico")
                 continue
-            if isinstance(params_default[clave_p], float):
+            # Rango declarativo del indicador (p.ej. `ventana` de EXTREMOS: 0..500) antes de la
+            # heurística por tipo. Sin lista blanca de excepciones ni tipo aparte.
+            rango = espec_ind.rangos.get(clave_p)
+            if rango is not None:
+                lo, hi = rango
+                if not (lo <= valor_p <= hi):
+                    errores.append(f"{tipo}.{clave_p} debe estar entre {lo} y {hi}")
+            elif isinstance(params_default[clave_p], float):
                 if not (_PARAM_FLOAT_MIN <= valor_p <= _PARAM_FLOAT_MAX):
                     errores.append(f"{tipo}.{clave_p} debe estar entre {_PARAM_FLOAT_MIN} y {_PARAM_FLOAT_MAX}")
             elif not (_PERIODO_MIN <= valor_p <= _PERIODO_MAX):
@@ -799,6 +807,18 @@ PRESETS: dict[str, dict] = {
             {"op": "mayor", "izq": {"campo": "cierre"}, "der": {"ref": "bb20", "salida": "media"}},
         ]},
         "riesgo": {**_RIESGO_DEFAULT, "stop_loss_pct": 10.0},
+        "ejecucion": dict(_EJECUCION_DEFAULT),
+    },
+    "extremos_historicos": {
+        "version": 1,
+        "indicadores": [{"id": "ext", "tipo": "EXTREMOS", "params": {"ventana": 0}}],
+        "entrada": {"op": "y", "condiciones": [
+            {"op": "menor_igual", "izq": {"ref": "ext", "salida": "dist_min_pct"}, "der": {"const": 1}},
+        ]},
+        "salida": {"op": "y", "condiciones": [
+            {"op": "mayor_igual", "izq": {"ref": "ext", "salida": "dist_max_pct"}, "der": {"const": -1}},
+        ]},
+        "riesgo": {**_RIESGO_DEFAULT, "stop_loss_pct": 20.0},
         "ejecucion": dict(_EJECUCION_DEFAULT),
     },
 }

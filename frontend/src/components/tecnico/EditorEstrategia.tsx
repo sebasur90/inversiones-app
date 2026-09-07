@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react'
-import type { CondicionDsl, EjecucionDsl, EstrategiaDsl, IndicadorDsl, OperandoDsl, RiesgoDsl } from '../../api'
+import { useEffect, useRef, useState } from 'react'
+import type { EstrategiaDsl, IndicadorDsl, EjecucionDsl, RiesgoDsl } from '../../api'
 import { ESPEC_POR_TIPO, INDICADORES_UI, claveIndicador, paramsPorDefecto } from './indicadoresConfig'
+import {
+  type CampoPrecio, type FilaCondicion, type OpComparador, type OperandoForm,
+  bloqueADsl, bloqueDeDsl, nuevaFilaId, nuevoIdIndicador, operandoADsl, operandoDeDsl,
+} from './dslEditable'
 import Segmented from '../ui/Segmented'
 import { Icon } from '../icons/Icons'
 
-type CampoPrecio = 'cierre' | 'apertura' | 'maximo' | 'minimo' | 'volumen'
-type OpComparador = 'mayor' | 'menor' | 'mayor_igual' | 'menor_igual' | 'cruce_arriba' | 'cruce_abajo'
 const OPERADORES: { value: OpComparador; label: string }[] = [
   { value: 'mayor', label: 'es mayor que' },
   { value: 'menor', label: 'es menor que' },
@@ -14,21 +16,6 @@ const OPERADORES: { value: OpComparador; label: string }[] = [
   { value: 'cruce_arriba', label: 'cruza hacia arriba a' },
   { value: 'cruce_abajo', label: 'cruza hacia abajo a' },
 ]
-
-interface OperandoForm {
-  kind: 'ref' | 'const' | 'campo'
-  ref?: string
-  salida?: string
-  valor?: number
-  campo?: CampoPrecio
-}
-
-interface FilaCondicion {
-  id: string
-  op: OpComparador
-  izq: OperandoForm
-  der: OperandoForm
-}
 
 interface IndicadorForm {
   id: string
@@ -46,59 +33,9 @@ interface EstadoEstrategia {
   ejecucion: EjecucionDsl
 }
 
-let contador = 0
-const nuevoId = (prefijo: string) => `${prefijo}${++contador}`
-
 const OPERANDO_CIERRE: OperandoForm = { kind: 'campo', campo: 'cierre' }
 const OPERANDO_CONST_0: OperandoForm = { kind: 'const', valor: 0 }
-
-function estadoVacio(): EstadoEstrategia {
-  return {
-    indicadores: [],
-    entradaCombinador: 'y',
-    entrada: [{ id: nuevoId('c'), op: 'mayor', izq: { ...OPERANDO_CIERRE }, der: { ...OPERANDO_CONST_0 } }],
-    salidaCombinador: 'y',
-    salida: [],
-    riesgo: { stop_loss_pct: 8, take_profit_pct: null, trailing_stop_pct: null, max_barras: null },
-    ejecucion: { lado: 'long', comision_pct: 0.6, precio_ejecucion: 'cierre', demora_barras: 0 },
-  }
-}
-
-function operandoDeDsl(op: OperandoDsl): OperandoForm {
-  if ('ref' in op) return { kind: 'ref', ref: op.ref, salida: op.salida }
-  if ('campo' in op) return { kind: 'campo', campo: op.campo }
-  return { kind: 'const', valor: op.const }
-}
-
-function operandoADsl(op: OperandoForm): OperandoDsl {
-  if (op.kind === 'const') return { const: op.valor ?? 0 }
-  if (op.kind === 'campo') return { campo: op.campo ?? 'cierre' }
-  return op.salida ? { ref: op.ref ?? '', salida: op.salida } : { ref: op.ref ?? '' }
-}
-
-const ES_COMPARADOR = (op: string): op is OpComparador =>
-  ['mayor', 'menor', 'mayor_igual', 'menor_igual', 'cruce_arriba', 'cruce_abajo'].includes(op)
-
-function bloqueDeDsl(cond: CondicionDsl | null | undefined): { combinador: 'y' | 'o'; filas: FilaCondicion[] } {
-  if (!cond) return { combinador: 'y', filas: [] }
-  if (cond.op === 'y' || cond.op === 'o') {
-    const filas = cond.condiciones
-      .filter((c): c is Extract<CondicionDsl, { izq: OperandoDsl; der: OperandoDsl }> => ES_COMPARADOR(c.op))
-      .map(c => ({ id: nuevoId('c'), op: c.op as OpComparador, izq: operandoDeDsl(c.izq), der: operandoDeDsl(c.der) }))
-    return { combinador: cond.op, filas }
-  }
-  if (ES_COMPARADOR(cond.op) && 'izq' in cond && 'der' in cond) {
-    return { combinador: 'y', filas: [{ id: nuevoId('c'), op: cond.op, izq: operandoDeDsl(cond.izq), der: operandoDeDsl(cond.der) }] }
-  }
-  return { combinador: 'y', filas: [] }
-}
-
-function bloqueADsl(combinador: 'y' | 'o', filas: FilaCondicion[]): CondicionDsl | null {
-  if (filas.length === 0) return null
-  const condiciones = filas.map(f => ({ op: f.op, izq: operandoADsl(f.izq), der: operandoADsl(f.der) }) as CondicionDsl)
-  if (condiciones.length === 1) return condiciones[0]
-  return { op: combinador, condiciones }
-}
+const filaVacia = (): FilaCondicion => ({ id: nuevaFilaId(), op: 'mayor', izq: { ...OPERANDO_CIERRE }, der: { ...OPERANDO_CONST_0 } })
 
 export function dslDeEstado(estado: EstadoEstrategia): EstrategiaDsl {
   const indicadores: IndicadorDsl[] = estado.indicadores.map(i => ({ id: i.id, tipo: i.tipo, params: i.params }))
@@ -118,7 +55,7 @@ function estadoDeDsl(dsl: EstrategiaDsl): EstadoEstrategia {
   return {
     indicadores: dsl.indicadores.map(i => ({ id: i.id, tipo: i.tipo, params: i.params })),
     entradaCombinador: entradaB.combinador,
-    entrada: entradaB.filas.length ? entradaB.filas : [{ id: nuevoId('c'), op: 'mayor', izq: { ...OPERANDO_CIERRE }, der: { ...OPERANDO_CONST_0 } }],
+    entrada: entradaB.filas.length ? entradaB.filas : [filaVacia()],
     salidaCombinador: salidaB.combinador,
     salida: salidaB.filas,
     riesgo: dsl.riesgo ?? { stop_loss_pct: null, take_profit_pct: null, trailing_stop_pct: null, max_barras: null },
@@ -126,21 +63,26 @@ function estadoDeDsl(dsl: EstrategiaDsl): EstadoEstrategia {
   }
 }
 
+// `{campo:'maximo'}` (el máximo de la vela) convive en el mismo desplegable que la salida
+// `maximo` de EXTREMOS (el máximo del canal): se etiquetan distinto para que no se confundan.
+const ETIQUETA_SALIDA: Record<string, Record<string, string>> = {
+  EXTREMOS: {
+    maximo: 'máximo del canal', minimo: 'mínimo del canal', medio: 'medio del canal',
+    dist_max_pct: 'distancia al máximo %', dist_min_pct: 'distancia al mínimo %',
+  },
+}
+const etiquetaSalida = (tipo: string, salida: string) => ETIQUETA_SALIDA[tipo]?.[salida] ?? salida
+
 function opcionesOperando(indicadores: IndicadorForm[]): { grupo: string; value: string; label: string }[] {
   const opciones: { grupo: string; value: string; label: string }[] = []
   for (const ind of indicadores) {
     const espec = ESPEC_POR_TIPO[ind.tipo]
     if (!espec) continue
-    if (espec.destino !== 'precio' && espec.destino !== 'volumen' && espec.tipo !== 'RSI' && espec.tipo !== 'MACD' && espec.tipo !== 'ESTOCASTICO' && espec.tipo !== 'ATR') continue
-    // multi-salida: una opción por salida declarada en el registro del backend
-    const salidas: Record<string, string[]> = {
-      MACD: ['macd', 'senal', 'histograma'],
-      BOLLINGER: ['media', 'superior', 'inferior', 'ancho_pct', 'pctb'],
-      ESTOCASTICO: ['k', 'd'],
-    }
-    const lista = salidas[ind.tipo]
-    if (lista) {
-      for (const s of lista) opciones.push({ grupo: 'Indicadores', value: `ref:${ind.id}:${s}`, label: `${ind.id} (${s})` })
+    // Única fuente de verdad: las salidas declaradas en `indicadoresConfig` (espejo del backend).
+    if (espec.salidas.length > 1) {
+      for (const s of espec.salidas) {
+        opciones.push({ grupo: 'Indicadores', value: `ref:${ind.id}:${s}`, label: `${ind.id} (${etiquetaSalida(ind.tipo, s)})` })
+      }
     } else {
       opciones.push({ grupo: 'Indicadores', value: `ref:${ind.id}:`, label: ind.id })
     }
@@ -250,7 +192,7 @@ function BloqueCondiciones({
         ))}
       </div>
       <button
-        onClick={() => onCambiarFilas([...filas, { id: nuevoId('c'), op: 'mayor', izq: { ...OPERANDO_CIERRE }, der: { ...OPERANDO_CONST_0 } }])}
+        onClick={() => onCambiarFilas([...filas, filaVacia()])}
         className="mt-2 inline-flex items-center gap-1 text-label font-semibold text-app-gold"
       >
         <Icon name="plus" className="w-3 h-3" /> Agregar condición
@@ -272,14 +214,25 @@ export default function EditorEstrategia({
   // ya emite el DSL editado hacia arriba y hacerlo generaría un bucle infinito de renders.
   const [estado, setEstado] = useState<EstadoEstrategia>(() => estadoDeDsl(dslInicial))
 
+  // No emitir en el montaje: `estadoDeDsl(dslInicial)` puede diferir mínimamente de `dslInicial`
+  // (p.ej. agrega una fila de entrada por defecto), y emitir eso apenas monta subía un DSL
+  // "editado" al padre que un click en Guardar persistía. Con esto, `onCambiar` sólo dispara
+  // ante una edición real del usuario.
+  const montado = useRef(false)
   useEffect(() => {
+    if (!montado.current) {
+      montado.current = true
+      return
+    }
     onCambiar(dslDeEstado(estado))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estado])
 
   function agregarIndicador(tipo: string) {
-    const id = nuevoId(tipo.toLowerCase().slice(0, 3))
-    setEstado(s => ({ ...s, indicadores: [...s.indicadores, { id, tipo, params: paramsPorDefecto(tipo) }] }))
+    setEstado(s => {
+      const id = nuevoIdIndicador(tipo, s.indicadores.map(i => i.id))
+      return { ...s, indicadores: [...s.indicadores, { id, tipo, params: paramsPorDefecto(tipo) }] }
+    })
   }
 
   function quitarIndicador(id: string) {

@@ -1,0 +1,6 @@
+# Dependencias sólo del laboratorio de estrategias (servicio `lab` de docker-compose, perfil
+# opcional). Fuera de `requirements.txt` para no engordar la imagen de producción del backend.
+-r requirements.txt
+
+jupyterlab>=4.2,<5
+matplotlib>=3.8,<4

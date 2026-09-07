@@ -22,6 +22,9 @@ const COLOR_EJE = '#8ca39b'
  * que sí son precios): se excluyen acá para que no aplasten la escala de las velas. */
 const SALIDAS_EXCLUIDAS_PRECIO: Record<string, string[]> = {
   BOLLINGER: ['ancho_pct', 'pctb'],
+  // `dist_max_pct` (~0 a ~-40) y `dist_min_pct` (~0 a ~+80) son porcentajes: en la escala de las
+  // velas aplastarían el precio contra el borde. `maximo`/`minimo`/`medio` sí son precios.
+  EXTREMOS: ['dist_max_pct', 'dist_min_pct'],
 }
 function salidasGraficables(o: OverlayPrecio): [string, (number | null)[]][] {
   const excluidas = SALIDAS_EXCLUIDAS_PRECIO[o.tipo] ?? []

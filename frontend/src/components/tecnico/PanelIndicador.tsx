@@ -27,7 +27,7 @@ export default function PanelIndicador({
   const svgRef = useRef<SVGSVGElement>(null)
   const handlers = manejadoresPuntero(svgRef, escalaX, onHover)
 
-  const dominioFijo = tipo === 'RSI' || tipo === 'ESTOCASTICO' ? ([0, 100] as const) : null
+  const dominioFijo = tipo === 'RSI' || tipo === 'ESTOCASTICO' || tipo === 'PERCENTIL' ? ([0, 100] as const) : null
   const valores = Object.values(series).flatMap(s => s.filter((v): v is number => v != null))
   const minV = dominioFijo ? dominioFijo[0] : Math.min(0, ...(valores.length ? valores : [0]))
   const maxV = dominioFijo ? dominioFijo[1] : Math.max(0, ...(valores.length ? valores : [1]))
@@ -39,7 +39,8 @@ export default function PanelIndicador({
   const lineasReferencia =
     tipo === 'RSI' ? [30, 70] :
     tipo === 'ESTOCASTICO' ? [20, 80] :
-    tipo === 'MACD' ? [0] : []
+    tipo === 'PERCENTIL' ? [10, 90] :
+    tipo === 'MACD' || tipo === 'RETORNO' ? [0] : []
 
   const anchoBarra = Math.max(1, escalaX.pasoX * 0.6)
 

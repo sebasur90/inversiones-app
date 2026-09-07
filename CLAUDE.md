@@ -27,6 +27,22 @@ alias compose-corp='docker compose -f docker-compose.yml -f docker-compose.corpo
 # Luego usar: compose-corp up
 ```
 
+### Laboratorio de estrategias (JupyterLab, perfil opcional):
+```bash
+# No arranca con `docker compose up` normal. Levantarlo aparte:
+docker compose --profile lab up lab
+# (corporativo)
+docker compose -f docker-compose.yml -f docker-compose.corporate.yml --profile lab up lab
+```
+Abrir **http://127.0.0.1:8888** (sólo loopback, sin token). Los notebooks van en `lab/`;
+las estrategias exportadas en `lab/estrategias/*.json` (no se versionan). El lab lee la DB de
+la app en modo **solo lectura**. Ver `docs/laboratorio-estrategias.md`.
+
+Prueba rápida sin Jupyter (el ejemplo end-to-end):
+```bash
+docker compose exec backend python -m scripts.lab_ejemplo AAPL
+```
+
 ## Archivos de Configuración
 - **docker-compose.yml** - Versión local (sin proxy)
 - **docker-compose.corporate.yml** - Versión corporativa (carga proxy desde .env)

@@ -21,13 +21,31 @@ Supuestos:
   devolver todo `None`.
 - Bordes: `rsi` con `avg_loss==0` → `100.0`; con `avg_gain==0` (y `avg_loss>0`) → `0.0`. Serie
   más corta que el warm-up → todo `None`, nunca excepción.
+
+Relaciones entre indicadores que conviene explicitar (como Wilder vs EMA):
+- **`PERCENTIL` no es min-max**: usa rank real `100·#{j: cierre[j] < cierre[i]} / (W-1)`. El
+  min-max sobre una ventana *es literalmente* `ESTOCASTICO(N,1,1).k`; el rank da 0 exacto en el
+  mínimo, 100 en el máximo, es resistente a outliers y admite `ventana=0` (histórico acumulado).
+- **`EXTREMOS.dist_max_pct` con `ventana=0` *es* el drawdown desde el máximo histórico**; con
+  `ventana=252`, el drawdown de 52 semanas. No hay un indicador `DRAWDOWN` aparte: sería el mismo
+  cálculo con otro nombre.
+- **Alcance de "histórico" (`ventana=0`)**: es *desde el inicio de la serie cargada*, no desde el
+  debut del instrumento. Su `warm_up` devuelve `_WARM_UP_HISTORICO` para que el caller pida toda
+  la historia disponible. Consecuencia: con `ventana=0` la primera barra es máximo y mínimo a la
+  vez (`dist_min_pct[0] == dist_max_pct[0] == 0`).
 """
 from __future__ import annotations
 
+import bisect
 import re
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Callable
+
+# Ruedas de warm-up a pedir cuando un indicador se calcula "desde el inicio" (`ventana=0`):
+# cubre toda la historia que `estrategias_analytics` carga (`max_barras=3000`).
+_WARM_UP_HISTORICO = 3000
 
 
 @dataclass(frozen=True)
@@ -220,6 +238,104 @@ def volumen_promedio(barras: list[Barra], periodo: int = 20) -> list[float | Non
     return sma([b.volumen for b in barras], periodo)
 
 
+def extremos(barras: list[Barra], ventana: int = 20) -> dict:
+    """Canal Donchian sobre `_hl()` **incluyendo la barra `i`** (sin lookahead: sólo mira hasta
+    `i`). `ventana=0` = ventana expansiva desde el inicio de la serie (histórico acumulado).
+
+    - `maximo`/`minimo`: extremos de la ventana; `medio = (maximo + minimo) / 2`.
+    - `dist_max_pct = (cierre/maximo - 1)·100` (≤ 0, cero en máximo nuevo).
+    - `dist_min_pct = (cierre/minimo - 1)·100` (≥ 0, cero en mínimo nuevo).
+    - `dist_*_pct` es `None` si el denominador es 0.
+    - Modo rodante (`ventana>0`): `None` hasta que la ventana está completa, como `sma`.
+    """
+    n = len(barras)
+    maximo: list[float | None] = [None] * n
+    minimo: list[float | None] = [None] * n
+    medio: list[float | None] = [None] * n
+    dist_max_pct: list[float | None] = [None] * n
+    dist_min_pct: list[float | None] = [None] * n
+    hl = [_hl(b) for b in barras]
+
+    # Modo rodante: colas monótonas para O(N) (el naive O(N·W) se nota en `senales_recientes`,
+    # que recorre todas las estrategias guardadas en cada carga de la watchlist).
+    dq_hi: deque[int] = deque()   # índices, `hl[.][0]` decreciente
+    dq_lo: deque[int] = deque()   # índices, `hl[.][1]` creciente
+    run_hi: float | None = None
+    run_lo: float | None = None
+    for i in range(n):
+        hi_i, lo_i = hl[i]
+        if ventana <= 0:
+            run_hi = hi_i if run_hi is None else max(run_hi, hi_i)
+            run_lo = lo_i if run_lo is None else min(run_lo, lo_i)
+            hi, lo = run_hi, run_lo
+        else:
+            while dq_hi and hl[dq_hi[-1]][0] <= hi_i:
+                dq_hi.pop()
+            dq_hi.append(i)
+            while dq_lo and hl[dq_lo[-1]][1] >= lo_i:
+                dq_lo.pop()
+            dq_lo.append(i)
+            if dq_hi[0] <= i - ventana:
+                dq_hi.popleft()
+            if dq_lo[0] <= i - ventana:
+                dq_lo.popleft()
+            if i + 1 < ventana:
+                continue
+            hi = hl[dq_hi[0]][0]
+            lo = hl[dq_lo[0]][1]
+        c = barras[i].cierre
+        maximo[i] = hi
+        minimo[i] = lo
+        medio[i] = (hi + lo) / 2
+        dist_max_pct[i] = (c / hi - 1) * 100 if hi != 0 else None
+        dist_min_pct[i] = (c / lo - 1) * 100 if lo != 0 else None
+    return {
+        "maximo": maximo, "minimo": minimo, "medio": medio,
+        "dist_max_pct": dist_max_pct, "dist_min_pct": dist_min_pct,
+    }
+
+
+def percentil(cierres: list[float], ventana: int = 100) -> list[float | None]:
+    """Rank real del cierre dentro de la ventana: `100·#{j: cierre[j] < cierre[i]} / (W-1)`.
+
+    0 exacto en el mínimo de la ventana, 100 en el máximo; los empates no cuentan como "menor".
+    `ventana=0` = expansiva desde el inicio. Modo rodante: `None` hasta la ventana completa.
+    Implementado con lista ordenada + `bisect` (O(N·logW)): el naive O(N·W) en modo expansivo
+    sobre 3000 barras son ~9M comparaciones, y esto se recorre por cada estrategia guardada en
+    cada carga de la watchlist.
+    """
+    n = len(cierres)
+    out: list[float | None] = [None] * n
+    ordenados: list[float] = []
+    for i in range(n):
+        c = cierres[i]
+        bisect.insort(ordenados, c)
+        if ventana > 0 and i >= ventana:
+            del ordenados[bisect.bisect_left(ordenados, cierres[i - ventana])]
+        w = len(ordenados)
+        if ventana > 0 and w < ventana:
+            continue
+        if w <= 1:
+            continue
+        out[i] = 100.0 * bisect.bisect_left(ordenados, c) / (w - 1)
+    return out
+
+
+def retorno(cierres: list[float], periodo: int = 20) -> list[float | None]:
+    """`(cierre[i]/cierre[i-periodo] - 1)·100`. `None` hasta la barra `periodo`, y si el
+    denominador es 0. Serie más corta que el período → todo `None`."""
+    n = len(cierres)
+    out: list[float | None] = [None] * n
+    if periodo <= 0:
+        return out
+    for i in range(periodo, n):
+        base = cierres[i - periodo]
+        if base == 0:
+            continue
+        out[i] = (cierres[i] / base - 1) * 100
+    return out
+
+
 # ─── Registro de indicadores ─────────────────────────────────────────────────
 
 @dataclass(frozen=True)
@@ -228,6 +344,9 @@ class EspecIndicador:
     params_default: dict = field(default_factory=dict)  # orden = orden posicional en `clave()`
     salidas: tuple[str, ...] = ("valor",)
     warm_up: Callable[[dict], int] = lambda p: 1
+    # Rango declarativo por parámetro; el validador lo consulta antes de caer en su heurística
+    # (float → 0.1..10, entero → 1..500). Permite p.ej. `ventana=0` en EXTREMOS/PERCENTIL.
+    rangos: dict[str, tuple[float, float]] = field(default_factory=dict)
 
 
 def _fn_sma(barras, params):
@@ -266,6 +385,23 @@ def _fn_volumen_promedio(barras, params):
     return {"valor": volumen_promedio(barras, int(params["periodo"]))}
 
 
+def _fn_extremos(barras, params):
+    return extremos(barras, int(params["ventana"]))
+
+
+def _fn_percentil(barras, params):
+    return {"valor": percentil([b.cierre for b in barras], int(params["ventana"]))}
+
+
+def _fn_retorno(barras, params):
+    return {"valor": retorno([b.cierre for b in barras], int(params["periodo"]))}
+
+
+def _warm_up_ventana(p: dict) -> int:
+    """`ventana` ruedas en modo rodante; toda la historia disponible con `ventana=0`."""
+    return int(p["ventana"]) or _WARM_UP_HISTORICO
+
+
 INDICADORES: dict[str, EspecIndicador] = {
     "SMA": EspecIndicador(_fn_sma, {"periodo": 50}, ("valor",), lambda p: int(p["periodo"])),
     "EMA": EspecIndicador(_fn_ema, {"periodo": 20}, ("valor",), lambda p: int(p["periodo"])),
@@ -276,7 +412,7 @@ INDICADORES: dict[str, EspecIndicador] = {
     ),
     "BOLLINGER": EspecIndicador(
         _fn_bollinger, {"periodo": 20, "desvios": 2.0}, ("media", "superior", "inferior", "ancho_pct", "pctb"),
-        lambda p: int(p["periodo"]),
+        lambda p: int(p["periodo"]), {"desvios": (0.5, 4.0)},
     ),
     "ATR": EspecIndicador(_fn_atr, {"periodo": 14}, ("valor",), lambda p: int(p["periodo"]) + 1),
     "ESTOCASTICO": EspecIndicador(
@@ -285,6 +421,17 @@ INDICADORES: dict[str, EspecIndicador] = {
     ),
     "OBV": EspecIndicador(_fn_obv, {}, ("valor",), lambda p: 1),
     "VOLUMEN_PROMEDIO": EspecIndicador(_fn_volumen_promedio, {"periodo": 20}, ("valor",), lambda p: int(p["periodo"])),
+    "EXTREMOS": EspecIndicador(
+        _fn_extremos, {"ventana": 20},
+        ("maximo", "minimo", "medio", "dist_max_pct", "dist_min_pct"),
+        _warm_up_ventana, {"ventana": (0, 500)},
+    ),
+    "PERCENTIL": EspecIndicador(
+        _fn_percentil, {"ventana": 100}, ("valor",), _warm_up_ventana, {"ventana": (0, 500)},
+    ),
+    "RETORNO": EspecIndicador(
+        _fn_retorno, {"periodo": 20}, ("valor",), lambda p: int(p["periodo"]) + 1,
+    ),
 }
 
 

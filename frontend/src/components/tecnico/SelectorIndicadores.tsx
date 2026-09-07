@@ -1,4 +1,6 @@
 import { INDICADORES_UI } from './indicadoresConfig'
+import InfoTooltip from '../../help/components/InfoTooltip'
+import type { HelpKey } from '../../help/content/index'
 
 /** Chips activables/desactivables por tipo de indicador, con inputs numéricos inline para sus
  * parámetros cuando está activo. Re-tildar un indicador ya pedido no dispara request nuevo: la
@@ -41,6 +43,11 @@ export default function SelectorIndicadores({
                     />
                   </label>
                 ))}
+              </div>
+            )}
+            {activo && espec.ayuda && (
+              <div className="pl-0.5 text-label text-app-text-faint">
+                <InfoTooltip term={espec.ayuda as HelpKey} />
               </div>
             )}
           </div>
