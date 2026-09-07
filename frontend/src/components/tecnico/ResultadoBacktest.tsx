@@ -17,6 +17,12 @@ export default function ResultadoBacktest({ resultado }: { resultado: BacktestOu
 
   return (
     <div className="flex flex-col gap-3">
+      {resultado.variante === 'subyacente' && (
+        <div className="text-label text-app-text-dim">
+          Backtest sobre el subyacente en {resultado.moneda || 'USD'} (precios de entrada/salida en esa moneda).
+        </div>
+      )}
+
       {resultado.advertencias.length > 0 && (
         <div className="bg-app-surface-2 rounded-lg px-3 py-2 text-label text-app-text-dim">
           {resultado.advertencias.join(' · ')}

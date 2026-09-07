@@ -122,7 +122,7 @@ export default function Watchlist() {
                       {estado && <AlertaPrecioBadge estado={estado} pct={item.pct_a_objetivo} compacto />}
                       {senal && (
                         <span
-                          title={`${senal.estrategia_nombre} · ${senal.motivo} · ${senal.fecha}`}
+                          title={`${senal.estrategia_nombre} · ${senal.motivo} · ${senal.fecha} · ${senal.moneda || ''} ${senal.precio.toFixed(2)}${senal.variante === 'subyacente' ? ' (subyacente)' : ''}`}
                           className={`shrink-0 rounded-md px-1.5 py-0.5 text-label font-bold border ${
                             senal.tipo === 'compra'
                               ? 'border-app-teal/40 text-app-teal bg-app-teal-soft'
@@ -130,6 +130,7 @@ export default function Watchlist() {
                           }`}
                         >
                           {senal.tipo === 'compra' ? '▲' : '▼'} {senal.tipo}
+                          {senal.variante === 'subyacente' && <span className="ml-1 opacity-70">{senal.moneda || 'USD'}</span>}
                         </span>
                       )}
                     </div>

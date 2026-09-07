@@ -1231,12 +1231,21 @@ export const eliminarEscenario = (id: number) =>
 
 // ---- Análisis técnico ----
 
+export type VarianteSerie = 'local' | 'subyacente'
+
+export interface SerieVarianteOut {
+  variante: VarianteSerie
+  moneda: string
+  mercado: string
+}
+
 export interface TickerTecnicoOut {
   ticker: string
   nombre: string
   moneda: string
   tipo_instrumento: string
   origen: 'cartera' | 'watchlist' | 'ambos'
+  series: SerieVarianteOut[]
 }
 
 export interface BarraOut {
@@ -1252,6 +1261,8 @@ export interface SerieTecnicaOut {
   ticker: string
   nombre: string
   moneda: string
+  variante: VarianteSerie
+  mercado: string | null
   origen: 'cartera' | 'watchlist' | 'ambos' | null
   fuente_serie: 'velas' | 'mixta' | 'sin_datos'
   tiene_velas: boolean
@@ -1267,7 +1278,7 @@ export const getTickersTecnicos = () =>
 
 export const getSerieTecnica = (
   ticker: string,
-  params: { desde?: string; hasta?: string; indicadores?: string[]; max_barras?: number },
+  params: { desde?: string; hasta?: string; indicadores?: string[]; max_barras?: number; variante?: VarianteSerie },
 ) =>
   api.get<SerieTecnicaOut>(`/inversiones/tecnico/${encodeURIComponent(ticker)}/serie`, { params }).then(r => r.data)
 
@@ -1365,6 +1376,8 @@ export interface CurvaPuntoOut {
 
 export interface BacktestOut {
   ticker: string
+  variante: VarianteSerie
+  moneda: string
   senales: SenalOut[]
   operaciones: OperacionOut[]
   metricas: BacktestMetricasOut
@@ -1385,6 +1398,7 @@ export interface EstrategiaGuardarRequest {
   ticker?: string | null
   tipo_preset?: string | null
   definicion: EstrategiaDsl
+  variante?: VarianteSerie
 }
 
 export interface EstrategiaOut {
@@ -1394,6 +1408,7 @@ export interface EstrategiaOut {
   ticker: string | null
   tipo_preset: string | null
   definicion: EstrategiaDsl
+  variante: VarianteSerie
   fecha_creacion: string
   fecha_actualizacion: string
 }
@@ -1407,6 +1422,8 @@ export interface SenalTickerOut {
   precio: number
   motivo: string
   barras_desde: number
+  variante: VarianteSerie
+  moneda: string
 }
 
 export const getPresetsEstrategia = () =>
@@ -1415,8 +1432,10 @@ export const getPresetsEstrategia = () =>
 export const getSenalesTecnicas = () =>
   api.get<SenalTickerOut[]>('/inversiones/tecnico/senales').then(r => r.data)
 
-export const backtestEstrategia = (ticker: string, definicion: EstrategiaDsl, desde?: string, hasta?: string) =>
-  api.post<BacktestOut>(`/inversiones/tecnico/${encodeURIComponent(ticker)}/backtest`, { definicion, desde, hasta }).then(r => r.data)
+export const backtestEstrategia = (
+  ticker: string, definicion: EstrategiaDsl, desde?: string, hasta?: string, variante: VarianteSerie = 'local',
+) =>
+  api.post<BacktestOut>(`/inversiones/tecnico/${encodeURIComponent(ticker)}/backtest`, { definicion, desde, hasta, variante }).then(r => r.data)
 
 export const listarEstrategias = (ticker?: string) =>
   api.get<EstrategiaOut[]>('/inversiones/estrategias', { params: ticker ? { ticker } : {} }).then(r => r.data)

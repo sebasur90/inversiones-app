@@ -20,7 +20,7 @@ const COLOR_EJE = '#8ca39b'
 /** Precio (velas o línea de cierres) + overlays de indicadores (SMA/EMA/Bollinger) + flechas de
  * señales de estrategia, sobre la escala X compartida del gráfico técnico. */
 export default function PanelPrecio({
-  barras, escalaX, alto, tieneVelas, overlays, senales, primeraBarraEvaluable, hoverIndex, onHover,
+  barras, escalaX, alto, tieneVelas, overlays, senales, primeraBarraEvaluable, moneda, hoverIndex, onHover,
 }: {
   barras: BarraOut[]
   escalaX: EscalaX
@@ -29,6 +29,7 @@ export default function PanelPrecio({
   overlays: OverlayPrecio[]
   senales?: SenalOut[]
   primeraBarraEvaluable?: number | null
+  moneda?: string
   hoverIndex: number | null
   onHover: (i: number | null) => void
 }) {
@@ -63,6 +64,12 @@ export default function PanelPrecio({
       {[0.25, 0.5, 0.75].map(f => (
         <line key={f} x1={0} x2={escalaX.ancho} y1={alto * f} y2={alto * f} stroke={COLOR_GRID} strokeDasharray="3 3" />
       ))}
+
+      {moneda && (
+        <text x={4} y={12} fontSize={10} fill={COLOR_EJE} fillOpacity={0.85} className="font-mono">
+          {moneda}
+        </text>
+      )}
 
       {tieneVelas ? (
         barras.map((b, i) => {

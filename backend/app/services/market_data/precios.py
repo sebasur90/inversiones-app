@@ -30,8 +30,10 @@ para lo que analisistecnico no cubre (ONs, renta variable) — ver `fetch_backfi
 from datetime import date, timedelta
 from unicodedata import combining, normalize
 
+from ...database import BarraOHLCV
+from ..ohlcv_analytics import clave_serie
 from ..validation.types import Severity, ValidationIssue
-from . import analisistecnico, data912
+from . import analisistecnico, data912, yahoo
 from . import iol as iol_client
 from .ohlcv_types import BarraCruda
 
@@ -107,6 +109,12 @@ def _es_renta_fija(tipo_instrumento: str) -> bool:
 def _es_renta_variable(tipo_instrumento: str) -> bool:
     t = _sin_acentos(tipo_instrumento or "")
     return any(sub in t for sub in _SUBCADENAS_RENTA_VARIABLE)
+
+
+def _es_cedear(tipo_instrumento: str) -> bool:
+    """Un CEDEAR: el ticker local *es* el del subyacente por construcción, así que la resolución
+    automática del subyacente es segura (no hace falta match de nombre)."""
+    return "cedear" in _sin_acentos(tipo_instrumento or "")
 
 
 def _es_fci(tipo_instrumento: str) -> bool:
@@ -1001,7 +1009,23 @@ def fetch_backfill_ohlcv_watchlist(
         ya = ohlcv_existentes.get(ticker)
         est_entry = estado_por_ticker.setdefault(ticker, {}) if estado_por_ticker is not None else None
 
-        serie = analisistecnico.fetch_historico_ohlcv(ticker, piso_global, ayer)
+        # Serie local: para un CEDEAR se pide `TICKER:CEDEAR` (el CEDEAR local en ARS), no el
+        # ticker pelado — que analisistecnico resuelve a la acción del NASDAQ en USD y hace que el
+        # ratio contra el `Objetivo` en ARS caiga fuera de las ventanas de `_factor_escala`
+        # (issue `escala_desconocida` y todas las velas descartadas). Con `TICKER:CEDEAR` el ratio
+        # vuelve a ~1 y la serie carga sin tocar la calibración.
+        simbolo_local = f"{ticker}:CEDEAR" if _es_cedear(w.get("tipo_instrumento", "")) else ticker
+        if est_entry is not None:
+            anterior = est_entry.get("simbolo_local")
+            if anterior is not None and anterior != simbolo_local:
+                # El símbolo local cambió: las velas viejas pueden estar en otra unidad. Se
+                # borran una sola vez, antes de reescribir con la serie nueva.
+                db.query(BarraOHLCV).filter(BarraOHLCV.ticker == ticker).delete(synchronize_session=False)
+                db.flush()
+                ya = None
+            est_entry["simbolo_local"] = simbolo_local
+
+        serie = analisistecnico.fetch_historico_ohlcv(simbolo_local, piso_global, ayer)
         fuente_barras = "api"
         if serie is None:
             if llamadas_iol >= _MAX_BACKFILL_OHLCV_POR_SYNC:
@@ -1079,5 +1103,222 @@ def fetch_backfill_ohlcv_watchlist(
         min_serie = min((b.fecha for b in serie), default=None)
         if est_entry is not None and ya is not None and min_serie is not None and min_serie >= ya:
             est_entry["ohlcv_estado"] = "completo"
+
+    return filas, issues
+
+
+# --- Serie del subyacente en USD (yfinance) -----------------------------------------------------
+#
+# Para un CEDEAR (o una acción local con ADR) se baja la serie del instrumento subyacente tal
+# como cotiza en EE.UU., en USD nativo, para correr indicadores y backtests sobre el precio real
+# del mercado de origen en vez del CEDEAR local en ARS. Fuente: yfinance (ajusta splits solo y da
+# ~40 años de historia). Cero créditos de IOL, sin auth.
+#
+# Se guarda bajo la clave derivada `TICKER@SUB` en `serie_ohlcv` (ver `ohlcv_analytics`). **No
+# pasa por `_factor_escala`**: esa función reconcilia una serie contra el precio de referencia
+# *local* (Sheet / Objetivo); el subyacente es otro instrumento, en otro mercado, en otra moneda.
+# En su lugar:
+#   G1 — sólo se baja si `fetch_info` confirmó `moneda == "USD"` (resolución previa).
+#   G2 — la moneda sale de la fuente, nunca del Sheet ni del `WatchlistItem`.
+#   G3 — cordura: >=2 barras, cierres finitos y positivos.
+#   G4 — aislamiento de escritura: sólo `serie_ohlcv`, que ningún analytic de patrimonio /
+#        exposición / riesgo lee.
+
+_PISO_SUBYACENTE = timedelta(days=366 * 5)      # 5 años (yfinance trae todo en una sola llamada)
+_TOLERANCIA_PISO_SUBYACENTE_DIAS = 40
+_COLA_STALE_DIAS = 3                            # el tope de la serie se refresca si atrasa más
+_REINTENTO_RESOLUCION_DIAS = 180               # cooldown de un `sin_subyacente`
+_MAX_RESOLUCIONES_SUBYACENTE = 10
+_MAX_BACKFILL_SUBYACENTE_POR_SYNC = 12
+
+# Tokens de razón social sin valor discriminante para el match de nombre de una acción local.
+_STOP_NOMBRE = {
+    "sa", "s", "a", "inc", "incorporated", "corp", "corporation", "co", "company", "ltd",
+    "limited", "plc", "nv", "ag", "the", "class", "cedear", "adr", "holding", "holdings",
+    "group", "grupo", "and", "de", "argentina",
+}
+
+
+def _tokens_nombre(s: str) -> set[str]:
+    t = _sin_acentos(s or "")
+    for ch in ".,-/()&":
+        t = t.replace(ch, " ")
+    return {w for w in t.split() if len(w) > 1 and w not in _STOP_NOMBRE}
+
+
+def _nombre_matchea(a: str, b: str) -> bool:
+    """¿Los dos nombres de empresa se parecen lo suficiente? Heurística conservadora: al menos la
+    mitad de los tokens significativos del más corto en común. Para acciones locales el ticker
+    pelado puede resolver a **otra empresa** en Yahoo, así que si no matchea no se adivina."""
+    ta, tb = _tokens_nombre(a), _tokens_nombre(b)
+    if not ta or not tb:
+        return False
+    inter = ta & tb
+    return bool(inter) and len(inter) / min(len(ta), len(tb)) >= 0.5
+
+
+def resolver_subyacente(
+    activos: list[dict],
+    estado_por_ticker: dict[str, dict],
+    hoy: date | None = None,
+    max_resoluciones: int = _MAX_RESOLUCIONES_SUBYACENTE,
+) -> list[ValidationIssue]:
+    """Resuelve, para los tickers de renta variable de `activos`, el símbolo del subyacente en
+    Yahoo (ticker pelado, por la convención de Yahoo) y lo cachea en `estado_por_ticker`.
+
+    Un solo `yahoo.fetch_info(ticker)` por ticker no resuelto todavía, hasta `max_resoluciones`
+    por corrida. Se acepta el subyacente sólo si `moneda == "USD"` (G1). CEDEAR → aceptación
+    automática (el ticker local es el del subyacente). Acción local → sólo si el nombre del
+    instrumento matchea el que devuelve Yahoo (el pelado puede ser otra empresa). Un
+    `sin_subyacente` se reintenta a los ~180 días.
+
+    Muta `estado_por_ticker` in place (`simbolo_subyacente`, `mercado_subyacente`,
+    `moneda_subyacente`, `resolucion_estado`, `resolucion_intento`). Devuelve issues INFO.
+    """
+    hoy = hoy or date.today()
+    issues: list[ValidationIssue] = []
+
+    candidatos: list[dict] = []
+    for a in activos:
+        if not _es_renta_variable(a.get("tipo_instrumento", "")):
+            continue
+        ticker = a["ticker"]
+        est = estado_por_ticker.setdefault(ticker, {})
+        estado = est.get("resolucion_estado")
+        if estado == "ok" or estado == "ticker_no_apto":
+            continue
+        if estado == "sin_subyacente":
+            intento = est.get("resolucion_intento")
+            if intento is not None and (hoy - intento).days < _REINTENTO_RESOLUCION_DIAS:
+                continue
+        candidatos.append(a)
+
+    for a in candidatos[:max_resoluciones]:
+        ticker = a["ticker"]
+        est = estado_por_ticker.setdefault(ticker, {})
+        est["resolucion_intento"] = hoy
+        es_cedear = _es_cedear(a.get("tipo_instrumento", ""))
+
+        info = yahoo.fetch_info(ticker)
+        if info is None:
+            est["resolucion_estado"] = "sin_subyacente"
+            issues.append(ValidationIssue(
+                tab="Subyacente (USD)", campo=ticker, regla="subyacente_no_resuelto",
+                mensaje=f"{ticker}: Yahoo no devolvió información del símbolo",
+                impacto="La pestaña Subyacente (USD) no está disponible para este ticker; se reintenta en ~180 días",
+                severidad=Severity.INFO,
+            ))
+            continue
+
+        if info.get("moneda") != "USD":
+            est["resolucion_estado"] = "sin_subyacente"
+            issues.append(ValidationIssue(
+                tab="Subyacente (USD)", campo=ticker, regla="subyacente_no_usd",
+                mensaje=(f"{ticker}: el símbolo en Yahoo cotiza en {info.get('moneda') or '¿?'}, "
+                         "no en USD"),
+                impacto="No se baja serie del subyacente (sólo se acepta un subyacente en USD)",
+                severidad=Severity.INFO,
+            ))
+            continue
+
+        if not es_cedear and not _nombre_matchea(a.get("nombre", ""), info.get("nombre") or ""):
+            est["resolucion_estado"] = "sin_subyacente"
+            issues.append(ValidationIssue(
+                tab="Subyacente (USD)", campo=ticker, regla="subyacente_nombre_no_matchea",
+                mensaje=(f"{ticker}: el nombre en Yahoo ('{info.get('nombre') or '¿?'}') no se "
+                         f"parece al del instrumento ('{a.get('nombre') or '¿?'}')"),
+                impacto=("El ticker pelado podría ser otra empresa en Yahoo; no se baja serie del "
+                         "subyacente sin un match de nombre"),
+                severidad=Severity.INFO,
+            ))
+            continue
+
+        est["resolucion_estado"] = "ok"
+        est["simbolo_subyacente"] = ticker
+        est["mercado_subyacente"] = info.get("mercado") or ""
+        est["moneda_subyacente"] = "USD"
+
+    return issues
+
+
+def fetch_backfill_ohlcv_subyacente(
+    activos: list[dict],
+    ohlcv_existentes: dict[str, date],
+    ohlcv_maximos: dict[str, date],
+    estado_por_ticker: dict[str, dict],
+    hoy: date | None = None,
+    max_llamadas: int = _MAX_BACKFILL_SUBYACENTE_POR_SYNC,
+) -> tuple[list[dict], list[ValidationIssue]]:
+    """Baja/actualiza la serie del subyacente en USD (`TICKER@SUB`) para los tickers de `activos`
+    con `resolucion_estado == "ok"`.
+
+    Dos trabajos priorizados dentro de `max_llamadas`: (1) **refresco de cola** — esta serie no
+    tiene ruta *live* que le escriba el cierre del día, así que sin esto se congela; (2) backfill
+    hacia atrás hasta `_PISO_SUBYACENTE`. yfinance devuelve toda la historia en una sola llamada,
+    así que ambos trabajos se resuelven con el mismo fetch por ticker.
+
+    `ohlcv_existentes` / `ohlcv_maximos`: clave `@SUB` -> fecha más antigua / más nueva ya en
+    `serie_ohlcv`. Emite filas `{ticker=clave, ..., moneda="USD", fuente="yahoo"}` para el upsert
+    del sync. No usa `db`, no cae a IOL, no pasa por `_factor_escala`.
+    """
+    hoy = hoy or date.today()
+    ayer = hoy - timedelta(days=1)
+    issues: list[ValidationIssue] = []
+
+    piso = hoy - _PISO_SUBYACENTE
+
+    pendientes: list[tuple[int, str, str]] = []
+    for a in activos:
+        ticker = a["ticker"]
+        est = estado_por_ticker.get(ticker) or {}
+        if est.get("resolucion_estado") != "ok":
+            continue
+        simbolo = est.get("simbolo_subyacente")
+        if not simbolo or est.get("moneda_subyacente") != "USD":  # G1
+            continue
+
+        clave = clave_serie(ticker, "subyacente")
+        min_ya = ohlcv_existentes.get(clave)
+        max_ya = ohlcv_maximos.get(clave)
+        convergido_atras = min_ya is not None and min_ya <= piso + timedelta(days=_TOLERANCIA_PISO_SUBYACENTE_DIAS)
+        cola_fresca = max_ya is not None and max_ya >= ayer - timedelta(days=_COLA_STALE_DIAS)
+
+        if convergido_atras and cola_fresca:
+            continue
+
+        if min_ya is None:
+            prioridad = 0                      # todavía no hay nada
+        elif not cola_fresca:
+            prioridad = 1                      # refresco de cola
+        else:
+            prioridad = 2                      # sólo falta backfill hacia atrás
+        pendientes.append((prioridad, ticker, simbolo))
+
+    pendientes.sort(key=lambda x: x[0])
+
+    filas: list[dict] = []
+    for _prioridad, ticker, simbolo in pendientes[:max_llamadas]:
+        serie = yahoo.fetch_historico_ohlcv(simbolo, piso, ayer)
+        if serie is None:
+            issues.append(ValidationIssue(
+                tab="Subyacente (USD)", campo=ticker, regla="subyacente_sin_serie",
+                mensaje=f"{ticker}: yfinance no devolvió la serie de {simbolo}",
+                impacto="Se reintenta el próximo sync; la pestaña Subyacente (USD) queda con lo ya bajado",
+                severidad=Severity.INFO,
+            ))
+            continue
+        if len(serie) < 2:  # G3
+            continue
+
+        clave = clave_serie(ticker, "subyacente")
+        for b in serie:
+            if b.fecha >= hoy or b.cierre <= 0:
+                continue
+            filas.append({
+                "ticker": clave, "fecha": b.fecha,
+                "apertura": b.apertura, "maximo": b.maximo, "minimo": b.minimo,
+                "cierre": b.cierre, "volumen": b.volumen,
+                "moneda": "USD", "fuente": "yahoo",  # G2
+            })
 
     return filas, issues

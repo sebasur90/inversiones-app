@@ -5,7 +5,10 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.database import Base, BarraOHLCV, InstrumentoInversion, PrecioInstrumento, WatchlistItem
+from app.database import (
+    Base, BarraOHLCV, EstadoMarketDataTicker, InstrumentoInversion, PrecioInstrumento,
+    WatchlistItem,
+)
 from app.services import ohlcv_analytics as oa
 
 
@@ -192,3 +195,90 @@ def test_listar_tickers_tecnicos_union_cartera_y_watchlist():
     assert tickers["AL30"]["origen"] == "cartera"
     assert tickers["GGAL"]["origen"] == "watchlist"
     assert tickers["COMUN"]["origen"] == "ambos"
+
+
+# ── Serie del subyacente en USD (variante="subyacente", clave @SUB) ───────────
+
+def _db_con_msft_local_y_sub():
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    db = Session(engine)
+    db.add(WatchlistItem(ticker="MSFT", nombre="Microsoft CEDEAR", tipo_instrumento="CEDEAR",
+                         mercado="BCBA", moneda="ARS"))
+    db.add(EstadoMarketDataTicker(ticker="MSFT", simbolo_subyacente="MSFT",
+                                  mercado_subyacente="NMS", moneda_subyacente="USD",
+                                  resolucion_estado="ok"))
+    db.commit()
+    for i in range(5):
+        f = BASE + timedelta(days=i)
+        _precio(db, "MSFT", f, 26000 + i * 10, moneda="ARS", fuente="iol")          # CEDEAR local ARS
+        _vela(db, "MSFT@SUB", f, 500 + i, o=499 + i, h=501 + i, l=498 + i, v=1e7,   # subyacente USD
+              moneda="USD", fuente="yahoo")
+    return db
+
+
+def test_variante_subyacente_lee_sub_y_no_mergea_precios_instrumento():
+    db = _db_con_msft_local_y_sub()
+    r = oa.get_serie_barras("MSFT", BASE, BASE + timedelta(days=10), db, variante="subyacente")
+    assert r["variante"] == "subyacente"
+    assert r["moneda"] == "USD"
+    assert r["mercado"] == "NMS"
+    assert len(r["barras"]) == 5
+    assert all(490 < b.cierre < 520 for b in r["barras"])   # USD, no los ~26000 del CEDEAR
+    assert "moneda_mixta" not in r["advertencias"]
+
+
+def test_variante_local_sigue_en_ars_y_mergea_precios():
+    db = _db_con_msft_local_y_sub()
+    r = oa.get_serie_barras("MSFT", BASE, BASE + timedelta(days=10), db, variante="local")
+    assert r["variante"] == "local"
+    assert r["moneda"] == "ARS"
+    assert all(b.cierre > 20000 for b in r["barras"])
+
+
+def test_local_y_subyacente_no_comparten_entrada_de_cache():
+    db = _db_con_msft_local_y_sub()
+    local = oa.get_serie_barras("MSFT", BASE, BASE + timedelta(days=10), db, variante="local")
+    sub = oa.get_serie_barras("MSFT", BASE, BASE + timedelta(days=10), db, variante="subyacente")
+    assert local["barras"][0].cierre != sub["barras"][0].cierre
+    assert local["moneda"] == "ARS" and sub["moneda"] == "USD"
+
+
+def test_variante_subyacente_sin_datos_devuelve_serie_vacia():
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    db = Session(engine)
+    _watchlist(db, ticker="MSFT")
+    for i in range(5):
+        _precio(db, "MSFT", BASE + timedelta(days=i), 26000 + i)
+    r = oa.get_serie_barras("MSFT", BASE, BASE + timedelta(days=10), db, variante="subyacente")
+    assert r["barras"] == []
+    assert r["variante"] == "subyacente"
+
+
+def test_yahoo_gana_el_upsert_sobre_iol_y_api():
+    assert oa.debe_reemplazar_barra({"fuente": "iol", "tiene_velas": True},
+                                    {"fuente": "yahoo", "tiene_velas": False}) is True
+    assert oa.debe_reemplazar_barra({"fuente": "yahoo", "tiene_velas": True},
+                                    {"fuente": "iol", "tiene_velas": True}) is False
+
+
+def test_variantes_de_ticker_y_series_en_listar_tickers():
+    db = _db_con_msft_local_y_sub()
+    _instrumento(db, ticker="AL30")
+    for i in range(3):
+        _vela(db, "AL30", BASE + timedelta(days=i), 100 + i, o=99, h=101, l=98, moneda="ARS", fuente="iol")
+
+    # `variantes_de_ticker` refleja sólo lo que hay en `serie_ohlcv`: MSFT no tiene velas locales
+    # (su serie local vive en `precios_instrumento`), así que sólo aparece la del subyacente.
+    variantes = oa.variantes_de_ticker(db)
+    assert variantes["MSFT"] == [{"variante": "subyacente", "moneda": "USD", "mercado": "NMS"}]
+    assert [s["variante"] for s in variantes["AL30"]] == ["local"]
+
+    # `listar_tickers_tecnicos` siempre sintetiza la entrada `local`.
+    tickers = {t["ticker"]: t for t in oa.listar_tickers_tecnicos(db)}
+    assert [s["variante"] for s in tickers["MSFT"]["series"]] == ["local", "subyacente"]
+    # Un ticker sin ninguna vela igual trae la entrada local sintetizada.
+    _watchlist(db, ticker="SINDATOS", moneda="ARS")
+    tickers = {t["ticker"]: t for t in oa.listar_tickers_tecnicos(db)}
+    assert [s["variante"] for s in tickers["SINDATOS"]["series"]] == ["local"]

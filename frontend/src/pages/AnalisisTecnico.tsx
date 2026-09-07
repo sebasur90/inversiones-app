@@ -5,7 +5,7 @@ import {
   getTickersTecnicos, getSerieTecnica, getPresetsEstrategia, listarEstrategias,
   guardarEstrategia, actualizarEstrategia, duplicarEstrategia, eliminarEstrategiaTecnica,
   backtestEstrategia,
-  type EstrategiaDsl, type EstrategiaOut, type BacktestOut,
+  type EstrategiaDsl, type EstrategiaOut, type BacktestOut, type VarianteSerie,
 } from '../api'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
@@ -35,10 +35,19 @@ export default function AnalisisTecnico() {
   const [fullscreen, setFullscreen] = useState(false)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const [vista, setVista] = useState<Vista>('grafico')
+  // Preferencia de variante; la efectiva se deriva contra las variantes reales del ticker actual
+  // (sin useEffect, para que no haya flash al cambiar de ticker).
+  const [varianteSel, setVarianteSel] = useState<VarianteSerie | null>(null)
 
   const tickersQuery = useQuery({ queryKey: qk.de('tecnico-tickers'), queryFn: getTickersTecnicos })
   const tickers = tickersQuery.data ?? []
   const ticker = tickerSel ?? tickers[0]?.ticker ?? null
+  const tickerMeta = tickers.find(t => t.ticker === ticker)
+  const seriesDisponibles = tickerMeta?.series ?? []
+  const variante: VarianteSerie =
+    varianteSel && seriesDisponibles.some(s => s.variante === varianteSel) ? varianteSel : 'local'
+  const monedaSerie =
+    seriesDisponibles.find(s => s.variante === variante)?.moneda || tickerMeta?.moneda || ''
 
   // Ordenada para que reordenar el mismo conjunto de indicadores no invalide la caché de react-query.
   const claves = useMemo(
@@ -48,11 +57,12 @@ export default function AnalisisTecnico() {
   const desde = calcularDesde(periodo)
 
   const serieQuery = useQuery({
-    queryKey: qk.de('tecnico-serie', ticker, desde, claves.join(',')),
-    queryFn: () => getSerieTecnica(ticker as string, { desde, indicadores: claves }),
+    queryKey: qk.de('tecnico-serie', ticker, desde, claves.join(','), variante),
+    queryFn: () => getSerieTecnica(ticker as string, { desde, indicadores: claves, variante }),
     enabled: ticker !== null,
   })
   const serie = serieQuery.data
+  const monedaMostrada = serie?.moneda || monedaSerie
 
   function toggleIndicador(tipo: string) {
     setActivos(prev => {
@@ -115,8 +125,23 @@ export default function AnalisisTecnico() {
 
       {vista === 'grafico' ? (
         <>
-          <div className="mb-3">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
             <Segmented options={PERIODOS.map(p => ({ value: p, label: p }))} value={periodo} onChange={setPeriodo} />
+            {seriesDisponibles.length > 1 && (
+              <Segmented
+                options={seriesDisponibles.map(s => ({
+                  value: s.variante,
+                  label: s.variante === 'local' ? `Local (${s.moneda})` : `Subyacente (${s.moneda})`,
+                }))}
+                value={variante}
+                onChange={v => setVarianteSel(v as VarianteSerie)}
+              />
+            )}
+            {monedaMostrada && (
+              <span className="text-label font-semibold px-1.5 py-0.5 rounded border border-app-border text-app-text-dim">
+                {monedaMostrada}
+              </span>
+            )}
           </div>
           <div className="mb-3">
             <SelectorIndicadores
@@ -142,6 +167,7 @@ export default function AnalisisTecnico() {
               <GraficoTecnico
                 barras={serie.barras} indicadores={serie.indicadores} activos={activos}
                 tieneVelas={serie.tiene_velas} tieneVolumen={serie.tiene_volumen}
+                moneda={monedaMostrada}
                 onToggleFullscreen={() => setFullscreen(true)}
                 hoverIndex={hoverIndex} onHover={setHoverIndex}
               />
@@ -153,14 +179,23 @@ export default function AnalisisTecnico() {
           )}
         </>
       ) : (
-        ticker && <SeccionEstrategias ticker={ticker} desde={desde} />
+        ticker && (
+          <SeccionEstrategias
+            ticker={ticker} desde={desde} variante={variante} moneda={monedaSerie}
+            seriesDisponibles={seriesDisponibles} onVariante={setVarianteSel}
+          />
+        )
       )}
 
       {tieneGrafico && serie && (
-        <GraficoFullscreen open={fullscreen} onClose={() => setFullscreen(false)} title={`${ticker} · Análisis técnico`}>
+        <GraficoFullscreen
+          open={fullscreen} onClose={() => setFullscreen(false)}
+          title={`${ticker} · Análisis técnico${monedaMostrada ? ` (${monedaMostrada})` : ''}`}
+        >
           <GraficoTecnico
             barras={serie.barras} indicadores={serie.indicadores} activos={activos}
             tieneVelas={serie.tiene_velas} tieneVolumen={serie.tiene_volumen}
+            moneda={monedaMostrada}
             fullscreen onToggleFullscreen={() => setFullscreen(false)}
             hoverIndex={hoverIndex} onHover={setHoverIndex}
           />
@@ -170,7 +205,16 @@ export default function AnalisisTecnico() {
   )
 }
 
-function SeccionEstrategias({ ticker, desde }: { ticker: string; desde?: string }) {
+function SeccionEstrategias({
+  ticker, desde, variante, moneda, seriesDisponibles, onVariante,
+}: {
+  ticker: string
+  desde?: string
+  variante: VarianteSerie
+  moneda: string
+  seriesDisponibles: { variante: VarianteSerie; moneda: string; mercado: string }[]
+  onVariante: (v: VarianteSerie) => void
+}) {
   const presetsQuery = useQuery({ queryKey: qk.de('tecnico-presets'), queryFn: getPresetsEstrategia })
   const guardadasQuery = useQuery({ queryKey: qk.de('estrategias'), queryFn: () => listarEstrategias() })
 
@@ -197,7 +241,7 @@ function SeccionEstrategias({ ticker, desde }: { ticker: string; desde?: string 
     setCargando(true)
     setErrores([])
     try {
-      const r = await backtestEstrategia(ticker, dsl, desde)
+      const r = await backtestEstrategia(ticker, dsl, desde, undefined, variante)
       setResultado(r)
     } catch (e) {
       setErrores([parseApiError(e).message])
@@ -224,14 +268,16 @@ function SeccionEstrategias({ ticker, desde }: { ticker: string; desde?: string 
     setNombreActual(e.nombre)
     setResultado(null)
     setErrores([])
+    // Sincronizar el toggle de variante con la que trae la estrategia guardada.
+    onVariante(e.variante)
   }
 
   async function guardar() {
     if (!dsl || !nombreParaGuardar.trim()) return
     if (estrategiaActualId) {
-      await actualizarEstrategia(estrategiaActualId, { nombre: nombreParaGuardar, ticker, definicion: dsl })
+      await actualizarEstrategia(estrategiaActualId, { nombre: nombreParaGuardar, ticker, definicion: dsl, variante })
     } else {
-      const creada = await guardarEstrategia({ nombre: nombreParaGuardar, ticker, definicion: dsl })
+      const creada = await guardarEstrategia({ nombre: nombreParaGuardar, ticker, definicion: dsl, variante })
       setEstrategiaActualId(creada.id)
     }
     setNombreActual(nombreParaGuardar)
@@ -254,6 +300,22 @@ function SeccionEstrategias({ ticker, desde }: { ticker: string; desde?: string 
 
   return (
     <div className="flex flex-col gap-3">
+      {seriesDisponibles.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-label text-app-text-faint">Serie</span>
+          <Segmented
+            options={seriesDisponibles.map(s => ({
+              value: s.variante,
+              label: s.variante === 'local' ? `Local (${s.moneda})` : `Subyacente (${s.moneda})`,
+            }))}
+            value={variante}
+            onChange={v => onVariante(v as VarianteSerie)}
+          />
+          <span className="text-label text-app-text-dim">
+            El backtest corre sobre esta serie ({moneda || '—'}).
+          </span>
+        </div>
+      )}
       <div>
         <div className="text-label text-app-text-faint mb-1">Empezar desde un preset</div>
         <div className="flex flex-wrap gap-1.5 mb-2">
@@ -283,6 +345,7 @@ function SeccionEstrategias({ ticker, desde }: { ticker: string; desde?: string 
                 >
                   <button onClick={() => cargarGuardada(e)} className={`font-semibold text-caption ${estrategiaActualId === e.id ? 'text-app-gold' : 'text-app-text-dim'}`}>
                     {e.nombre}
+                    {e.variante === 'subyacente' && <span className="ml-1 text-label text-app-text-faint">· USD</span>}
                   </button>
                   <button onClick={() => eliminar(e.id)} aria-label={`Eliminar ${e.nombre}`} className="text-app-text-faint">
                     <Icon name="trash" className="w-3.5 h-3.5" />

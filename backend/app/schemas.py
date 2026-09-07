@@ -1091,12 +1091,20 @@ class OpportunityCostOut(BaseModel):
 
 # --- Análisis técnico ---
 
+class SerieVarianteOut(BaseModel):
+    variante: str  # "local" | "subyacente"
+    moneda: str
+    mercado: str = ""
+
+
 class TickerTecnicoOut(BaseModel):
     ticker: str
     nombre: str
     moneda: str
     tipo_instrumento: str
     origen: str  # "cartera" | "watchlist" | "ambos"
+    # Siempre incluye "local"; "subyacente" (USD) sólo si hay serie del subyacente bajada.
+    series: list[SerieVarianteOut] = Field(default_factory=list)
 
 
 class BarraOut(BaseModel):
@@ -1112,6 +1120,8 @@ class SerieTecnicaOut(BaseModel):
     ticker: str
     nombre: str
     moneda: str
+    variante: str = "local"      # "local" | "subyacente"
+    mercado: Optional[str] = None
     origen: Optional[str] = None
     fuente_serie: str  # "velas" | "mixta" | "sin_datos"
     tiene_velas: bool
@@ -1176,10 +1186,15 @@ class BacktestRequest(BaseModel):
     definicion: dict[str, Any]
     desde: Optional[date] = None
     hasta: Optional[date] = None
+    # Variante de serie sobre la que correr el backtest. Va en el body (no en el path) para que la
+    # clave `@SUB` nunca salga del backend y `_validar_ticker_tecnico` siga intacto.
+    variante: str = "local"
 
 
 class BacktestOut(BaseModel):
     ticker: str
+    variante: str = "local"
+    moneda: str = ""
     senales: list[SenalOut]
     operaciones: list[OperacionOut]
     metricas: BacktestMetricasOut
@@ -1203,6 +1218,8 @@ class SenalTickerOut(BaseModel):
     precio: float
     motivo: str
     barras_desde: int
+    variante: str = "local"
+    moneda: str = ""
 
 
 class EstrategiaGuardarRequest(BaseModel):
@@ -1211,6 +1228,7 @@ class EstrategiaGuardarRequest(BaseModel):
     ticker: Optional[str] = None
     tipo_preset: Optional[str] = None
     definicion: dict[str, Any]
+    variante: str = "local"
 
 
 class EstrategiaOut(BaseModel):
@@ -1220,5 +1238,6 @@ class EstrategiaOut(BaseModel):
     ticker: Optional[str] = None
     tipo_preset: Optional[str] = None
     definicion: dict[str, Any]
+    variante: str = "local"
     fecha_creacion: datetime
     fecha_actualizacion: datetime

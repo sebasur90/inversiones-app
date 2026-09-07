@@ -384,6 +384,7 @@ def sync_from_sheet(db: Session) -> dict:
     # `serie_ohlcv`, para las reglas de convergencia/primer llenado de los tres fetches.
     barras_ohlcv_out: list[dict] = []
     ohlcv_existentes: dict = {}
+    ohlcv_maximos: dict = {}
     if usa_apis:
         estado_por_ticker = {
             r.ticker: {
@@ -393,13 +394,22 @@ def sync_from_sheet(db: Session) -> dict:
                 "backfill_intento": r.backfill_intento,
                 "ohlcv_estado": r.ohlcv_estado,
                 "ohlcv_intento": r.ohlcv_intento,
+                "simbolo_local": r.simbolo_local,
+                "simbolo_subyacente": r.simbolo_subyacente,
+                "mercado_subyacente": r.mercado_subyacente,
+                "moneda_subyacente": r.moneda_subyacente,
+                "resolucion_estado": r.resolucion_estado,
+                "resolucion_intento": r.resolucion_intento,
             }
             for r in db.query(EstadoMarketDataTicker).all()
         }
         paneles_fn = market_data_precios.memo_paneles(db)
         fci_fn = market_data_precios.memo_fci(db)
-        for ticker, fecha_min in db.query(BarraOHLCV.ticker, func.min(BarraOHLCV.fecha)).group_by(BarraOHLCV.ticker):
-            ohlcv_existentes[ticker] = fecha_min
+        for tk, f_min, f_max in db.query(
+            BarraOHLCV.ticker, func.min(BarraOHLCV.fecha), func.max(BarraOHLCV.fecha)
+        ).group_by(BarraOHLCV.ticker):
+            ohlcv_existentes[tk] = f_min
+            ohlcv_maximos[tk] = f_max
 
     precios_api_count = 0
     if "Precios" not in tabs_bloqueadas:
@@ -593,6 +603,20 @@ def sync_from_sheet(db: Session) -> dict:
         issues.extend(issues_ohlcv_wl)
         barras_ohlcv_out.extend(backfill_ohlcv_wl)
 
+    # Serie del subyacente en USD (yfinance), para CEDEARs y acciones locales con ADR — cartera y
+    # watchlist juntas. Se guarda bajo la clave derivada `TICKER@SUB` en `serie_ohlcv`; no toca
+    # `precios_instrumento` ni gasta créditos de IOL. `ohlcv_existentes`/`ohlcv_maximos` traen la
+    # foto de arranque de la corrida (claves `@SUB` incluidas); el upsert final opera por
+    # (clave, fecha), así que las filas nuevas se resuelven ahí.
+    if usa_apis:
+        activos_rv = instrumentos_validos + watchlist_validos
+        issues.extend(market_data_precios.resolver_subyacente(activos_rv, estado_por_ticker))
+        filas_sub, issues_sub = market_data_precios.fetch_backfill_ohlcv_subyacente(
+            activos_rv, ohlcv_existentes, ohlcv_maximos, estado_por_ticker,
+        )
+        issues.extend(issues_sub)
+        barras_ohlcv_out.extend(filas_sub)
+
     # Precios huérfanos de tickers que salieron de la watchlist. Sólo con la pestaña sin bloquear:
     # bloqueada, `watchlist_validos` está vacía y el DELETE se llevaría todo.
     if "Watchlist" not in tabs_bloqueadas:
@@ -645,7 +669,12 @@ def sync_from_sheet(db: Session) -> dict:
     # Velas huérfanas: mismo guard del set vacío que la purga de PrecioWatchlist — con cualquiera
     # de las dos pestañas bloqueada el conjunto de tickers válidos no es confiable.
     if usa_apis and "Instrumentos" not in tabs_bloqueadas and "Watchlist" not in tabs_bloqueadas:
-        tickers_ohlcv_validos = {i["ticker"] for i in instrumentos_validos} | {w["ticker"] for w in watchlist_validos}
+        tickers_base = {i["ticker"] for i in instrumentos_validos} | {w["ticker"] for w in watchlist_validos}
+        # Whitelistear también las claves derivadas de la serie del subyacente (`TICKER@SUB`): sin
+        # esto la purga se llevaría la serie USD entera en cada sync (no está entre los tickers base).
+        tickers_ohlcv_validos = tickers_base | {
+            ohlcv_analytics.clave_serie(t, "subyacente") for t in tickers_base
+        }
         if tickers_ohlcv_validos:
             db.query(BarraOHLCV).filter(BarraOHLCV.ticker.notin_(tickers_ohlcv_validos)).delete(synchronize_session=False)
             db.flush()
@@ -667,6 +696,12 @@ def sync_from_sheet(db: Session) -> dict:
             fila_est.backfill_intento = est.get("backfill_intento")
             fila_est.ohlcv_estado = est.get("ohlcv_estado")
             fila_est.ohlcv_intento = est.get("ohlcv_intento")
+            fila_est.simbolo_local = est.get("simbolo_local")
+            fila_est.simbolo_subyacente = est.get("simbolo_subyacente")
+            fila_est.mercado_subyacente = est.get("mercado_subyacente")
+            fila_est.moneda_subyacente = est.get("moneda_subyacente")
+            fila_est.resolucion_estado = est.get("resolucion_estado")
+            fila_est.resolucion_intento = est.get("resolucion_intento")
         db.flush()
 
     indices_mercado_api_count = 0

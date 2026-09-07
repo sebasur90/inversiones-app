@@ -164,6 +164,19 @@ class EstadoMarketDataTicker(Base):
         'sin_serie_iol' (tampoco lo cubre IOL, la última fuente) | 'completo' (la serie histórica
         ya no baja más). Ninguno de los tres vuelve a consumir cupo de backfill.
       - `backfill_intento`: fecha del último intento (para reintentar 'sin_serie' cada ~90 días).
+
+    Serie del subyacente en USD (análisis técnico, fuente yfinance):
+      - `simbolo_local`: el símbolo con el que se pide la serie local del ticker a
+        analisistecnico (`"MSFT:CEDEAR"` para un CEDEAR, el ticker pelado para lo demás). Se
+        persiste para detectar un cambio y purgar las velas viejas, que podrían estar en otra
+        unidad.
+      - `simbolo_subyacente`: ticker pelado en Yahoo del subyacente (`"MSFT"`), o NULL si el
+        ticker no tiene subyacente apto.
+      - `mercado_subyacente` / `moneda_subyacente`: `"NMS"`/`"NYQ"` y `"USD"` — la moneda es la
+        que se escribe en `serie_ohlcv.moneda` de la variante subyacente.
+      - `resolucion_estado`: None | 'ok' | 'sin_subyacente' (no se pudo resolver un subyacente
+        USD) | 'ticker_no_apto' (renta fija u otro instrumento sin subyacente posible).
+      - `resolucion_intento`: fecha del último probe (cooldown de 180 días para 'sin_subyacente').
     """
     __tablename__ = "estado_market_data_ticker"
     ticker = Column(String, primary_key=True)
@@ -177,6 +190,13 @@ class EstadoMarketDataTicker(Base):
     # `backfill_estado` pero para el pipeline de OHLCV.
     ohlcv_estado = Column(String, nullable=True)
     ohlcv_intento = Column(Date, nullable=True)
+    # Serie del subyacente en USD (yfinance) — ver docstring.
+    simbolo_local = Column(String, nullable=True)
+    simbolo_subyacente = Column(String, nullable=True)
+    mercado_subyacente = Column(String, nullable=True)
+    moneda_subyacente = Column(String, nullable=True)
+    resolucion_estado = Column(String, nullable=True)
+    resolucion_intento = Column(Date, nullable=True)
 
 
 class WatchlistItem(Base):
@@ -300,6 +320,10 @@ class EstrategiaTecnica(Base):
     ticker = Column(String, nullable=True, index=True)
     tipo_preset = Column(String, nullable=True)  # nombre del preset de origen, si se partió de uno
     definicion = Column(JSON, nullable=False)
+    # 'local' (serie del ticker tal cual cotiza, default) | 'subyacente' (serie del subyacente en
+    # USD vía yfinance). `senales_recientes` corre las estrategias guardadas sin que nadie elija
+    # variante en la UI, así que la elección tiene que viajar en la estrategia.
+    variante = Column(String, nullable=False, default="local", server_default="local")
     fecha_creacion = Column(DateTime, nullable=False)
     fecha_actualizacion = Column(DateTime, nullable=False)
 
@@ -352,12 +376,27 @@ def init_db():
             conn.execute(text("ALTER TABLE indices_mercado ADD COLUMN riesgo_pais NUMERIC"))
             conn.commit()
 
-        # aseguramos compatibilidad con DB antiguas que no tenían el estado de backfill OHLCV.
+        # aseguramos compatibilidad con DB antiguas que no tenían el estado de backfill OHLCV
+        # ni la resolución de la serie del subyacente en USD.
         result = conn.execute(text("PRAGMA table_info(estado_market_data_ticker)"))
         cols = [row[1] for row in result.fetchall()]
-        if 'ohlcv_estado' not in cols:
-            conn.execute(text("ALTER TABLE estado_market_data_ticker ADD COLUMN ohlcv_estado TEXT"))
-            conn.commit()
-        if 'ohlcv_intento' not in cols:
-            conn.execute(text("ALTER TABLE estado_market_data_ticker ADD COLUMN ohlcv_intento DATE"))
+        for columna, tipo in (
+            ("ohlcv_estado", "TEXT"),
+            ("ohlcv_intento", "DATE"),
+            ("simbolo_local", "TEXT"),
+            ("simbolo_subyacente", "TEXT"),
+            ("mercado_subyacente", "TEXT"),
+            ("moneda_subyacente", "TEXT"),
+            ("resolucion_estado", "TEXT"),
+            ("resolucion_intento", "DATE"),
+        ):
+            if columna not in cols:
+                conn.execute(text(f"ALTER TABLE estado_market_data_ticker ADD COLUMN {columna} {tipo}"))
+                conn.commit()
+
+        # aseguramos compatibilidad con DB antiguas de estrategias_tecnicas sin `variante`.
+        result = conn.execute(text("PRAGMA table_info(estrategias_tecnicas)"))
+        cols = [row[1] for row in result.fetchall()]
+        if 'variante' not in cols:
+            conn.execute(text("ALTER TABLE estrategias_tecnicas ADD COLUMN variante TEXT NOT NULL DEFAULT 'local'"))
             conn.commit()

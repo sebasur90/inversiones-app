@@ -16,14 +16,21 @@ Resolución de la serie, por fecha, en orden de prioridad:
 Un ticker de watchlist recién agregado sólo tiene un punto en `precios_watchlist` (el precio del
 día que se agregó, no una serie histórica) — por diseño `get_serie_barras` no lo sirve.
 
-**No se convierte a USD**: los indicadores van sobre el precio cotizado tal cual; convertir por
-MEP metería la volatilidad del dólar dentro del RSI/las bandas de Bollinger.
+**Este módulo no convierte de moneda.** La variante `local` sirve el precio cotizado tal cual
+(convertir por MEP metería la volatilidad del dólar dentro del RSI/las bandas de Bollinger). La
+variante `subyacente` (`variante="subyacente"`) tampoco convierte: lee una serie distinta —la del
+subyacente en EE.UU., p.ej. la acción del NASDAQ detrás de un CEDEAR— que **ya cotiza
+nativamente en USD**, guardada bajo la clave derivada `TICKER@SUB` en `serie_ohlcv`. Son dos
+instrumentos, no el mismo precio en dos monedas.
 """
 from datetime import date
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..database import BarraOHLCV, InstrumentoInversion, PrecioInstrumento, WatchlistItem
+from ..database import (
+    BarraOHLCV, EstadoMarketDataTicker, InstrumentoInversion, PrecioInstrumento, WatchlistItem,
+)
 from .cache import cache_por_sync
 from .indicadores_engine import Barra
 
@@ -33,8 +40,31 @@ MIN_PUNTOS_SERIE = 2
 # aproxima con margen (fines de semana + feriados largos) en vez de contar ruedas hábiles.
 _GAP_DIAS_ADVERTENCIA = 15
 
+# `yahoo` sólo escribe filas bajo la clave `@SUB`, que ninguna otra fuente toca; su prioridad
+# relativa a `api`/`iol` sólo importa como "> -1" para que `debe_reemplazar_barra` la deje ganar
+# el upsert (una fuente desconocida ordena -1 y nunca pisaría).
+_PRIORIDAD_FUENTE = {"api": 0, "iol": 1, "yahoo": 2}
 
-_PRIORIDAD_FUENTE = {"api": 0, "iol": 1}
+# La serie del subyacente en USD se guarda bajo una clave derivada del ticker (no una columna
+# discriminadora): el UNIQUE de `serie_ohlcv` es `(ticker, fecha)` y SQLite no permite alterarlo
+# sin reconstruir la tabla. Además `MSFT@SUB` no existe en `precios_instrumento`, así que la
+# contaminación ARS↔USD en el merge de `get_serie_barras` es imposible por construcción.
+SUFIJO_SUBYACENTE = "@SUB"
+
+
+def clave_serie(ticker: str, variante: str = "local") -> str:
+    """Clave de fila en `serie_ohlcv` para `(ticker, variante)`. `local` -> el ticker tal cual;
+    `subyacente` -> `"MSFT@SUB"`."""
+    return f"{ticker}{SUFIJO_SUBYACENTE}" if variante == "subyacente" else ticker
+
+
+def ticker_base(clave: str) -> str:
+    """Inversa de `clave_serie`: quita el sufijo de variante si está presente."""
+    return clave[: -len(SUFIJO_SUBYACENTE)] if clave.endswith(SUFIJO_SUBYACENTE) else clave
+
+
+def variante_de_clave(clave: str) -> str:
+    return "subyacente" if clave.endswith(SUFIJO_SUBYACENTE) else "local"
 
 
 def debe_reemplazar_barra(existente: dict | None, nueva: dict) -> bool:
@@ -54,22 +84,77 @@ def debe_reemplazar_barra(existente: dict | None, nueva: dict) -> bool:
     return nueva["tiene_velas"] and not existente["tiene_velas"]
 
 
+def variantes_de_ticker(db: Session) -> dict[str, list[dict]]:
+    """Por ticker base, las variantes de serie que tienen filas reales en `serie_ohlcv`.
+
+    Cada entrada: `{variante, moneda, mercado}`. `moneda` es la dominante de esa clave de serie;
+    `mercado` sale de Instrumentos/Watchlist para `local` y de `EstadoMarketDataTicker` para
+    `subyacente`. `local` va siempre primero. Un ticker sin ninguna fila en `serie_ohlcv` no
+    aparece acá (lo completa `listar_tickers_tecnicos`).
+    """
+    conteo: dict[tuple[str, str], int] = {}
+    for clave, moneda, n in (
+        db.query(BarraOHLCV.ticker, BarraOHLCV.moneda, func.count(BarraOHLCV.id))
+        .group_by(BarraOHLCV.ticker, BarraOHLCV.moneda)
+    ):
+        conteo[(clave, moneda)] = n
+
+    moneda_dominante: dict[str, str] = {}
+    for (clave, moneda), n in conteo.items():
+        actual = moneda_dominante.get(clave)
+        if actual is None or n > conteo.get((clave, actual), 0):
+            moneda_dominante[clave] = moneda
+
+    mercado_inst = dict(db.query(InstrumentoInversion.ticker, InstrumentoInversion.mercado))
+    mercado_wl = dict(db.query(WatchlistItem.ticker, WatchlistItem.mercado))
+    mercado_sub = dict(
+        db.query(EstadoMarketDataTicker.ticker, EstadoMarketDataTicker.mercado_subyacente)
+    )
+
+    out: dict[str, list[dict]] = {}
+    for clave, moneda in moneda_dominante.items():
+        base = ticker_base(clave)
+        variante = variante_de_clave(clave)
+        if variante == "local":
+            mercado = mercado_inst.get(base) or mercado_wl.get(base) or ""
+        else:
+            mercado = mercado_sub.get(base) or ""
+        out.setdefault(base, []).append({"variante": variante, "moneda": moneda, "mercado": mercado})
+    for lst in out.values():
+        lst.sort(key=lambda s: 0 if s["variante"] == "local" else 1)
+    return out
+
+
 def listar_tickers_tecnicos(db: Session) -> list[dict]:
-    """Universo de tickers analizables: instrumentos de cartera ∪ watchlist."""
+    """Universo de tickers analizables: instrumentos de cartera ∪ watchlist.
+
+    Cada ticker trae `series`: las variantes con datos reales (`variantes_de_ticker`), garantizando
+    siempre una entrada `local` (sintetizada con la moneda/mercado del instrumento si todavía no
+    hay velas cargadas). La UI muestra el toggle Local/Subyacente sólo si `len(series) > 1`.
+    """
     instrumentos = {row.ticker: row for row in db.query(InstrumentoInversion).all()}
     watchlist = {row.ticker: row for row in db.query(WatchlistItem).all()}
+    variantes = variantes_de_ticker(db)
 
     resultado = []
     for ticker in sorted(set(instrumentos) | set(watchlist)):
         inst = instrumentos.get(ticker)
         wl = watchlist.get(ticker)
         origen = "ambos" if inst and wl else ("cartera" if inst else "watchlist")
+        moneda = (inst.moneda if inst else None) or (wl.moneda if wl else "ARS")
+        mercado = (inst.mercado if inst else None) or (wl.mercado if wl else "")
+
+        series = list(variantes.get(ticker, []))
+        if not any(s["variante"] == "local" for s in series):
+            series.insert(0, {"variante": "local", "moneda": moneda, "mercado": mercado})
+
         resultado.append({
             "ticker": ticker,
             "nombre": (inst.nombre if inst else None) or (wl.nombre if wl else ticker),
-            "moneda": (inst.moneda if inst else None) or (wl.moneda if wl else "ARS"),
+            "moneda": moneda,
             "tipo_instrumento": (inst.tipo_instrumento if inst else None) or (wl.tipo_instrumento if wl else ""),
             "origen": origen,
+            "series": series,
         })
     return resultado
 
@@ -84,9 +169,13 @@ def _fila_a_barra(fecha, cierre, apertura=None, maximo=None, minimo=None, volume
     )
 
 
-def _serie_vacia(ticker: str, nombre: str, moneda: str, origen: str | None, motivo: str) -> dict:
+def _serie_vacia(
+    ticker: str, nombre: str, moneda: str, origen: str | None, motivo: str,
+    variante: str = "local", mercado: str = "",
+) -> dict:
     return {
         "ticker": ticker, "nombre": nombre, "moneda": moneda, "origen": origen,
+        "variante": variante, "mercado": mercado,
         "fuente_serie": "sin_datos", "tiene_velas": False, "tiene_volumen": False,
         "indice_desde": 0, "barras": [], "advertencias": [motivo],
     }
@@ -96,21 +185,38 @@ def _serie_vacia(ticker: str, nombre: str, moneda: str, origen: str | None, moti
 def get_serie_barras(
     ticker: str, desde: date, hasta: date, db: Session,
     barras_previas: int = 0, max_barras: int = MAX_BARRAS_DEFAULT,
+    variante: str = "local",
 ) -> dict:
+    """`variante="subyacente"` lee la serie `TICKER@SUB` (subyacente en USD) y **no** mergea
+    `precios_instrumento` (son cierres ARS del CEDEAR; mezclarlos daría un salto de ~x50 entre
+    barras contiguas). La moneda del dict sale de la serie en ese caso, no del instrumento."""
+    es_sub = variante == "subyacente"
+    clave = clave_serie(ticker, variante)
+
     inst = db.query(InstrumentoInversion).filter(InstrumentoInversion.ticker == ticker).first()
     wl = db.query(WatchlistItem).filter(WatchlistItem.ticker == ticker).first()
     origen = "ambos" if inst and wl else ("cartera" if inst else ("watchlist" if wl else None))
     nombre = (inst.nombre if inst else None) or (wl.nombre if wl else ticker)
     moneda_instrumento = (inst.moneda if inst else None) or (wl.moneda if wl else "ARS")
+    # Para el subyacente la moneda la fija la serie (USD nativo), no el instrumento (declarado en
+    # ARS para un CEDEAR). Se ajusta más abajo con la moneda real de las barras de la ventana.
+    moneda_serie = "USD" if es_sub else moneda_instrumento
+    mercado_serie = (inst.mercado if inst else None) or (wl.mercado if wl else "") or ""
+    if es_sub:
+        est_sub = (
+            db.query(EstadoMarketDataTicker)
+            .filter(EstadoMarketDataTicker.ticker == ticker).first()
+        )
+        mercado_serie = (est_sub.mercado_subyacente if est_sub and est_sub.mercado_subyacente else "")
 
-    filas_precio = (
+    filas_precio = [] if es_sub else (
         db.query(PrecioInstrumento)
         .filter(PrecioInstrumento.ticker == ticker, PrecioInstrumento.fecha <= hasta)
         .order_by(PrecioInstrumento.fecha).all()
     )
     filas_ohlcv = (
         db.query(BarraOHLCV)
-        .filter(BarraOHLCV.ticker == ticker, BarraOHLCV.fecha <= hasta)
+        .filter(BarraOHLCV.ticker == clave, BarraOHLCV.fecha <= hasta)
         .order_by(BarraOHLCV.fecha).all()
     )
 
@@ -132,13 +238,13 @@ def get_serie_barras(
     fechas_ordenadas = sorted(barras_por_fecha.keys())
     if len(fechas_ordenadas) < MIN_PUNTOS_SERIE:
         motivo = "un_solo_punto" if fechas_ordenadas else "sin_serie"
-        return _serie_vacia(ticker, nombre, moneda_instrumento, origen, motivo)
+        return _serie_vacia(ticker, nombre, moneda_serie, origen, motivo, variante, mercado_serie)
 
     idx_desde = next((i for i, f in enumerate(fechas_ordenadas) if f >= desde), len(fechas_ordenadas))
     idx_inicio = max(0, idx_desde - barras_previas)
     fechas_ventana = fechas_ordenadas[idx_inicio:]
     if len(fechas_ventana) < MIN_PUNTOS_SERIE:
-        return _serie_vacia(ticker, nombre, moneda_instrumento, origen, "sin_serie")
+        return _serie_vacia(ticker, nombre, moneda_serie, origen, "sin_serie", variante, mercado_serie)
 
     barras = [barras_por_fecha[f] for f in fechas_ventana]
     origenes = [origen_por_fecha[f] for f in fechas_ventana]
@@ -164,8 +270,13 @@ def get_serie_barras(
     if len(set(monedas)) > 1:
         advertencias.append("moneda_mixta")
 
+    # La moneda efectiva sale de las barras de la ventana (para el subyacente, USD nativo; para
+    # la local, la del instrumento salvo que la serie diga otra cosa).
+    moneda_final = monedas[-1] if monedas else moneda_serie
+
     return {
-        "ticker": ticker, "nombre": nombre, "moneda": moneda_instrumento, "origen": origen,
+        "ticker": ticker, "nombre": nombre, "moneda": moneda_final if es_sub else moneda_instrumento,
+        "variante": variante, "mercado": mercado_serie, "origen": origen,
         "fuente_serie": fuente_serie, "tiene_velas": tiene_velas, "tiene_volumen": tiene_volumen,
         "indice_desde": indice_desde, "barras": barras, "advertencias": advertencias,
     }

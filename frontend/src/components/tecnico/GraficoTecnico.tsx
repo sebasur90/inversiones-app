@@ -13,7 +13,7 @@ import { Icon } from '../icons/Icons'
  * pantalla completa sin reiniciar estado. */
 export default function GraficoTecnico({
   barras, indicadores, activos, tieneVelas, tieneVolumen, senales, primeraBarraEvaluable,
-  fullscreen, onToggleFullscreen, hoverIndex, onHover,
+  moneda, fullscreen, onToggleFullscreen, hoverIndex, onHover,
 }: {
   barras: BarraOut[]
   indicadores: Record<string, Record<string, (number | null)[]>>
@@ -22,6 +22,7 @@ export default function GraficoTecnico({
   tieneVolumen: boolean
   senales?: SenalOut[]
   primeraBarraEvaluable?: number | null
+  moneda?: string
   fullscreen?: boolean
   onToggleFullscreen?: () => void
   hoverIndex: number | null
@@ -54,10 +55,17 @@ export default function GraficoTecnico({
   return (
     <div ref={containerRef} className="w-full">
       <div className="flex items-center justify-between mb-1.5 gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+        {moneda && (
+          <span className="shrink-0 text-label font-semibold px-1.5 py-0.5 rounded border border-app-border text-app-text-dim">
+            {moneda}
+          </span>
+        )}
         <div className="text-label text-app-text-dim font-mono tabular-nums h-4 truncate">
           {barraHover
-            ? `${barraHover.fecha} · O ${barraHover.apertura?.toFixed(2) ?? '—'} A ${barraHover.maximo?.toFixed(2) ?? '—'} B ${barraHover.minimo?.toFixed(2) ?? '—'} C ${barraHover.cierre.toFixed(2)}${barraHover.volumen != null ? ` · Vol ${Math.round(barraHover.volumen).toLocaleString('es-AR')}` : ''}`
+            ? `${barraHover.fecha} · ${moneda ? moneda + ' ' : ''}O ${barraHover.apertura?.toFixed(2) ?? '—'} A ${barraHover.maximo?.toFixed(2) ?? '—'} B ${barraHover.minimo?.toFixed(2) ?? '—'} C ${barraHover.cierre.toFixed(2)}${barraHover.volumen != null ? ` · Vol ${Math.round(barraHover.volumen).toLocaleString('es-AR')}` : ''}`
             : ' '}
+        </div>
         </div>
         {onToggleFullscreen && (
           <button
@@ -70,7 +78,7 @@ export default function GraficoTecnico({
       </div>
 
       <PanelPrecio
-        barras={barras} escalaX={escalaX} alto={altoPrecio} tieneVelas={tieneVelas}
+        barras={barras} escalaX={escalaX} alto={altoPrecio} tieneVelas={tieneVelas} moneda={moneda}
         overlays={overlaysPrecio} senales={senales} primeraBarraEvaluable={primeraBarraEvaluable}
         hoverIndex={hoverIndex} onHover={onHover}
       />

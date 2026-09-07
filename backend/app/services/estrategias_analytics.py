@@ -18,11 +18,13 @@ from . import estrategia_engine, ohlcv_analytics
 def crear_estrategia(
     nombre: str, definicion: dict, db: Session,
     descripcion: str | None = None, ticker: str | None = None, tipo_preset: str | None = None,
+    variante: str = "local",
 ) -> EstrategiaTecnica:
     ahora = datetime.utcnow()
     estrategia = EstrategiaTecnica(
         nombre=nombre, descripcion=descripcion, ticker=ticker, tipo_preset=tipo_preset,
-        definicion=definicion, fecha_creacion=ahora, fecha_actualizacion=ahora,
+        definicion=definicion, variante=variante or "local",
+        fecha_creacion=ahora, fecha_actualizacion=ahora,
     )
     db.add(estrategia)
     db.commit()
@@ -45,6 +47,7 @@ def actualizar_estrategia(
     estrategia_id: int, db: Session,
     nombre: str | None = None, descripcion: str | None = None,
     ticker: str | None = None, definicion: dict | None = None,
+    variante: str | None = None,
 ) -> EstrategiaTecnica | None:
     estrategia = obtener_estrategia(estrategia_id, db)
     if estrategia is None:
@@ -57,6 +60,8 @@ def actualizar_estrategia(
         estrategia.ticker = ticker
     if definicion is not None:
         estrategia.definicion = definicion
+    if variante is not None:
+        estrategia.variante = variante
     estrategia.fecha_actualizacion = datetime.utcnow()
     db.commit()
     db.refresh(estrategia)
@@ -71,6 +76,7 @@ def duplicar_estrategia(estrategia_id: int, nuevo_nombre: str | None, db: Sessio
         nombre=nuevo_nombre or f"{original.nombre} (copia)",
         definicion=original.definicion, db=db,
         descripcion=original.descripcion, ticker=original.ticker, tipo_preset=original.tipo_preset,
+        variante=getattr(original, "variante", None) or "local",
     )
 
 
@@ -86,8 +92,10 @@ def eliminar_estrategia(estrategia_id: int, db: Session) -> bool:
 def ejecutar_backtest(
     ticker: str, definicion: dict, db: Session,
     desde: date | None = None, hasta: date | None = None,
+    variante: str = "local",
 ) -> dict:
-    """Corre el backtest de `definicion` sobre la serie de `ticker`.
+    """Corre el backtest de `definicion` sobre la serie de `ticker` (variante `local` o
+    `subyacente` en USD).
 
     Pide `barras_minimas(definicion)` ruedas extra de warm-up antes de `desde` y las recorta
     después (vía `indice_desde`/`primera_barra_evaluable`), para que la primera barra visible ya
@@ -98,14 +106,16 @@ def ejecutar_backtest(
     warm_up = estrategia_engine.barras_minimas(definicion)
     serie = ohlcv_analytics.get_serie_barras(
         ticker, desde or date(1900, 1, 1), hasta, db,
-        barras_previas=warm_up, max_barras=3000,
+        barras_previas=warm_up, max_barras=3000, variante=variante,
     )
     barras = serie["barras"]
     advertencias = list(serie["advertencias"])
+    moneda = serie["moneda"]
 
     if len(barras) < 2:
         return {
-            "ticker": ticker, "senales": [], "operaciones": [],
+            "ticker": ticker, "variante": variante, "moneda": moneda,
+            "senales": [], "operaciones": [],
             "metricas": {
                 "estado": "datos_insuficientes", "retorno_total_pct": 0.0, "retorno_anualizado_pct": None,
                 "retorno_buy_hold_pct": 0.0, "exceso_vs_buy_hold_pp": 0.0, "operaciones": 0, "ganadoras": 0,
@@ -128,6 +138,8 @@ def ejecutar_backtest(
 
     return {
         "ticker": ticker,
+        "variante": variante,
+        "moneda": moneda,
         "senales": [
             {"indice": s.indice, "fecha": s.fecha, "tipo": s.tipo, "precio": s.precio, "motivo": s.motivo}
             for s in resultado.senales
@@ -174,9 +186,11 @@ def senales_recientes(db: Session, max_barras: int = MAX_BARRAS_SENAL_RECIENTE) 
         if estrategia_engine.validar_estrategia(estrategia.definicion):
             continue  # una definición inválida no debería frenar al resto de la lista
 
+        variante = getattr(estrategia, "variante", None) or "local"
         warm_up = estrategia_engine.barras_minimas(estrategia.definicion)
         serie = ohlcv_analytics.get_serie_barras(
             estrategia.ticker, date(1900, 1, 1), hoy, db, barras_previas=warm_up, max_barras=3000,
+            variante=variante,
         )
         barras = serie["barras"]
         if len(barras) < 2:
@@ -203,6 +217,8 @@ def senales_recientes(db: Session, max_barras: int = MAX_BARRAS_SENAL_RECIENTE) 
             "precio": ultima.precio,
             "motivo": ultima.motivo,
             "barras_desde": barras_desde,
+            "variante": variante,
+            "moneda": serie["moneda"],
         })
 
     resultado.sort(key=lambda s: (s["barras_desde"], s["ticker"]))

@@ -79,6 +79,23 @@ def test_duplicar_estrategia(db):
     assert dup.id != creada.id
 
 
+def test_variante_roundtrip_y_se_arrastra_al_duplicar(db):
+    creada = ea.crear_estrategia("Sub", _DSL, db, ticker="MSFT", variante="subyacente")
+    assert ea.obtener_estrategia(creada.id, db).variante == "subyacente"
+
+    ea.actualizar_estrategia(creada.id, db, variante="local")
+    assert ea.obtener_estrategia(creada.id, db).variante == "local"
+
+    ea.actualizar_estrategia(creada.id, db, variante="subyacente")
+    dup = ea.duplicar_estrategia(creada.id, None, db)
+    assert dup.variante == "subyacente"
+
+
+def test_variante_default_es_local(db):
+    creada = ea.crear_estrategia("Def", _DSL, db)
+    assert ea.obtener_estrategia(creada.id, db).variante == "local"
+
+
 def test_eliminar_estrategia(db):
     creada = ea.crear_estrategia("Borrar", _DSL, db)
     assert ea.eliminar_estrategia(creada.id, db) is True

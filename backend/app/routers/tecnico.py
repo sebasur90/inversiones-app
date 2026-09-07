@@ -20,6 +20,12 @@ router = APIRouter(prefix="/api/inversiones", tags=["tecnico"])
 
 _MAX_INDICADORES = 8
 _RANGO_DEFAULT_DIAS = 365
+_VARIANTES = ("local", "subyacente")
+
+
+def _validar_variante(variante: str) -> None:
+    if variante not in _VARIANTES:
+        raise HTTPException(status_code=422, detail=f"variante desconocida: '{variante}'")
 
 
 def _validar_ticker_tecnico(ticker: str, db: Session) -> None:
@@ -35,6 +41,7 @@ def _estrategia_out(e) -> EstrategiaOut:
     return EstrategiaOut(
         id=e.id, nombre=e.nombre, descripcion=e.descripcion, ticker=e.ticker,
         tipo_preset=e.tipo_preset, definicion=e.definicion,
+        variante=getattr(e, "variante", None) or "local",
         fecha_creacion=e.fecha_creacion, fecha_actualizacion=e.fecha_actualizacion,
     )
 
@@ -65,9 +72,11 @@ def serie_tecnica(
     hasta: Optional[date] = Query(None),
     indicadores: list[str] = Query([]),
     max_barras: int = Query(ohlcv_analytics.MAX_BARRAS_DEFAULT, ge=1, le=3000),
+    variante: str = Query("local"),
     db: Session = Depends(get_db),
 ):
     _validar_ticker_tecnico(ticker, db)
+    _validar_variante(variante)
     if len(indicadores) > _MAX_INDICADORES:
         raise HTTPException(status_code=422, detail=f"máximo {_MAX_INDICADORES} indicadores por pedido")
 
@@ -89,7 +98,13 @@ def serie_tecnica(
 
     serie = ohlcv_analytics.get_serie_barras(
         ticker, desde, hasta, db, barras_previas=barras_previas, max_barras=max_barras,
+        variante=variante,
     )
+
+    # `variante=subyacente` sobre un ticker sin serie del subyacente bajada -> 404 (a diferencia de
+    # `local` sin datos, que devuelve 200 con la serie vacía: la local siempre "existe").
+    if variante == "subyacente" and not serie["barras"]:
+        raise HTTPException(status_code=404, detail=f"'{ticker}' no tiene serie del subyacente en USD")
 
     resultado_indicadores: dict[str, dict[str, list]] = {}
     if serie["barras"]:
@@ -98,6 +113,7 @@ def serie_tecnica(
 
     return {
         "ticker": serie["ticker"], "nombre": serie["nombre"], "moneda": serie["moneda"],
+        "variante": serie["variante"], "mercado": serie["mercado"],
         "origen": serie["origen"], "fuente_serie": serie["fuente_serie"],
         "tiene_velas": serie["tiene_velas"], "tiene_volumen": serie["tiene_volumen"],
         "indice_desde": serie["indice_desde"], "barras": serie["barras"],
@@ -110,10 +126,13 @@ def serie_tecnica(
 @router.post("/tecnico/{ticker}/backtest", response_model=BacktestOut)
 def backtest_tecnico(ticker: str, body: BacktestRequest, db: Session = Depends(get_db)):
     _validar_ticker_tecnico(ticker, db)
+    _validar_variante(body.variante)
     errores = estrategia_engine.validar_estrategia(body.definicion)
     if errores:
         raise HTTPException(status_code=422, detail="; ".join(errores))
-    return estrategias_analytics.ejecutar_backtest(ticker, body.definicion, db, body.desde, body.hasta)
+    return estrategias_analytics.ejecutar_backtest(
+        ticker, body.definicion, db, body.desde, body.hasta, variante=body.variante,
+    )
 
 
 # ─── CRUD de estrategias guardadas ────────────────────────────────────────────
@@ -131,9 +150,11 @@ def crear_estrategia_endpoint(body: EstrategiaGuardarRequest, db: Session = Depe
     if errores:
         raise HTTPException(status_code=422, detail="; ".join(errores))
 
+    _validar_variante(body.variante)
     e = estrategias_analytics.crear_estrategia(
         nombre=body.nombre, definicion=body.definicion, db=db,
         descripcion=body.descripcion, ticker=body.ticker, tipo_preset=body.tipo_preset,
+        variante=body.variante,
     )
     return _estrategia_out(e)
 
@@ -154,9 +175,10 @@ def actualizar_estrategia_endpoint(estrategia_id: int, body: EstrategiaGuardarRe
     if errores:
         raise HTTPException(status_code=422, detail="; ".join(errores))
 
+    _validar_variante(body.variante)
     e = estrategias_analytics.actualizar_estrategia(
         estrategia_id, db, nombre=body.nombre, descripcion=body.descripcion,
-        ticker=body.ticker, definicion=body.definicion,
+        ticker=body.ticker, definicion=body.definicion, variante=body.variante,
     )
     if e is None:
         raise HTTPException(status_code=404, detail="Estrategia no encontrada")

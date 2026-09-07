@@ -286,6 +286,48 @@ def test_watchlist_ohlcv_factor_persistido_no_se_aplica_a_una_serie_en_otra_unid
     assert issues[0].tab == "Watchlist (OHLCV)"
 
 
+def test_watchlist_cedear_pide_simbolo_cedear_y_carga_velas(monkeypatch):
+    """Regresión: un CEDEAR con `Objetivo` en ARS. Pedir el ticker pelado a analisistecnico trae
+    la acción del NASDAQ en USD (~500) y el ratio contra el Objetivo en ARS (~26000) cae fuera de
+    las ventanas -> `escala_desconocida` y todas las velas descartadas. Con `TICKER:CEDEAR` la
+    serie viene en ARS (~26000), el ratio vuelve a ~1 y carga sin tocar la calibración."""
+    simbolos_pedidos = []
+
+    def _fake(sym, d, h):
+        simbolos_pedidos.append(sym)
+        if sym == "MSFT:CEDEAR":
+            return _serie((date(2026, 1, 1), 26000.0), (date(2026, 1, 2), 26100.0))
+        return _serie((date(2026, 1, 1), 500.0))   # el pelado: acción USD
+
+    monkeypatch.setattr(analisistecnico, "fetch_historico_ohlcv", _fake)
+
+    wl = [{"ticker": "MSFT", "moneda": "ARS", "objetivo": 26000.0, "tipo_instrumento": "CEDEAR"}]
+    estado: dict = {}
+    filas, issues = mdp.fetch_backfill_ohlcv_watchlist(
+        wl, [], {}, object(), hoy=HOY, estado_por_ticker=estado,
+    )
+    assert "MSFT:CEDEAR" in simbolos_pedidos
+    assert [i.regla for i in issues] == []
+    assert len(filas) == 2
+    assert round(filas[0]["cierre"], 0) == 26000.0
+    assert estado["MSFT"]["simbolo_local"] == "MSFT:CEDEAR"
+
+
+def test_watchlist_no_cedear_sigue_pidiendo_el_ticker_pelado(monkeypatch):
+    simbolos_pedidos = []
+
+    def _fake(sym, d, h):
+        simbolos_pedidos.append(sym)
+        return _serie((date(2026, 1, 1), 270.0), (date(2026, 1, 2), 271.0))
+
+    monkeypatch.setattr(analisistecnico, "fetch_historico_ohlcv", _fake)
+    mdp.fetch_backfill_ohlcv_watchlist(
+        [{"ticker": "GGAL", "moneda": "ARS", "objetivo": 2.70, "tipo_instrumento": "Accion"}],
+        [], {}, object(), hoy=HOY, estado_por_ticker={},
+    )
+    assert simbolos_pedidos == ["GGAL"]
+
+
 def test_watchlist_ohlcv_factor_persistido_se_aplica_si_la_serie_concuerda(monkeypatch):
     """Contracara del test anterior: si la fuente de velas está en la misma escala que la
     cotización live, el factor persistido se reusa (no se recalibra contra una referencia nueva)."""

@@ -6,7 +6,10 @@ Todos mockean `fetch_sheet_data` (sin red hacia Sheets) y, cuando corresponde, l
 from datetime import date, datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from backend.app.database import Base, IndiceMercado, BenchmarkValor, PrecioInstrumento, SyncIssue, BarraOHLCV
+from backend.app.database import (
+    Base, IndiceMercado, BenchmarkValor, PrecioInstrumento, SyncIssue, BarraOHLCV,
+    EstadoMarketDataTicker,
+)
 from backend.app.services.inversiones_sync import sync_from_sheet
 from backend.app.services.sheets_client import TabRaw
 import backend.app.services.inversiones_sync as sync_module
@@ -712,6 +715,118 @@ def test_purga_de_velas_con_set_vacio_no_borra_nada(monkeypatch):
         db.commit()
         sync_from_sheet(db)
         assert db.query(BarraOHLCV).filter(BarraOHLCV.ticker == "TZXD7").count() == 1
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
+# --- Serie del subyacente en USD (yfinance) dentro del sync --------------------------------------
+
+def _tabs_con_cedear_watchlist():
+    """Cartera con el bono TZXD7 (+ movimiento) y un CEDEAR (MSFT) sólo en la watchlist."""
+    tabs = _tabs_con_bono_y_movimiento()
+    tabs["Watchlist"] = TabRaw(
+        presente=True,
+        header=["Ticker", "Nombre", "Tipo Instrumento", "Mercado", "Moneda", "Objetivo"],
+        rows=[(2, {"Ticker": "MSFT", "Nombre": "Microsoft", "Tipo Instrumento": "CEDEAR",
+                   "Mercado": "BCBA", "Moneda": "ARS", "Objetivo": "26000"})],
+    )
+    return tabs
+
+
+def _mockear_yahoo(monkeypatch, contador=None):
+    yh = sync_module.market_data_precios.yahoo
+    bc = sync_module.market_data_precios.BarraCruda
+
+    def _info(t):
+        if contador is not None:
+            contador.append(t)
+        if t == "MSFT":
+            return {"moneda": "USD", "mercado": "NMS", "nombre": "Microsoft Corporation"}
+        return None
+
+    serie = [
+        bc(fecha=date(2026, 8, 27), cierre=499.0, apertura=498.0, maximo=500.0, minimo=497.0, volumen=1e7),
+        bc(fecha=date(2026, 8, 28), cierre=505.0, apertura=500.0, maximo=506.0, minimo=499.0, volumen=1e7),
+    ]
+    monkeypatch.setattr(yh, "fetch_info", _info)
+    monkeypatch.setattr(yh, "fetch_historico_ohlcv",
+                        lambda sym, d, h: serie if sym == "MSFT" else None)
+
+
+def test_sync_baja_serie_del_subyacente_y_no_toca_precios_instrumento(monkeypatch):
+    db = _make_db()
+    original_fetch = sync_module.fetch_sheet_data
+    sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_cedear_watchlist())
+    _mockear_apis_ohlcv(monkeypatch, {})
+    _mockear_yahoo(monkeypatch)
+
+    try:
+        sync_from_sheet(db)
+
+        sub = db.query(BarraOHLCV).filter(BarraOHLCV.ticker == "MSFT@SUB").all()
+        assert len(sub) == 2
+        assert all(b.moneda == "USD" and b.fuente == "yahoo" for b in sub)
+        assert {round(float(b.cierre), 1) for b in sub} == {499.0, 505.0}   # verbatim, sin factor
+
+        # Ninguna fila @SUB en precios_instrumento / precios_watchlist.
+        assert db.query(PrecioInstrumento).filter(PrecioInstrumento.ticker.like("%@SUB")).count() == 0
+
+        est = db.get(EstadoMarketDataTicker, "MSFT")
+        assert est.resolucion_estado == "ok"
+        assert est.simbolo_subyacente == "MSFT"
+        assert est.moneda_subyacente == "USD"
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
+def test_purga_no_borra_sub_mientras_el_ticker_este_y_si_cuando_sale(monkeypatch):
+    db = _make_db()
+    original_fetch = sync_module.fetch_sheet_data
+    sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_cedear_watchlist())
+    _mockear_apis_ohlcv(monkeypatch, {})
+    _mockear_yahoo(monkeypatch)
+
+    try:
+        sync_from_sheet(db)
+        assert db.query(BarraOHLCV).filter(BarraOHLCV.ticker == "MSFT@SUB").count() == 2
+
+        # Segundo sync: MSFT sale de la watchlist (la reemplaza otro ticker, para que la pestaña
+        # siga no-vacía y válida) -> la purga se lleva MSFT@SUB.
+        tabs_sin_msft = _tabs_con_bono_y_movimiento()
+        tabs_sin_msft["Watchlist"] = TabRaw(
+            presente=True,
+            header=["Ticker", "Nombre", "Tipo Instrumento", "Mercado", "Moneda", "Objetivo"],
+            rows=[(2, {"Ticker": "GGAL", "Nombre": "Galicia", "Tipo Instrumento": "Accion",
+                       "Mercado": "BCBA", "Moneda": "ARS", "Objetivo": "50"})],
+        )
+        sync_module.fetch_sheet_data = _mock_fetch(tabs_sin_msft)
+        sync_from_sheet(db)
+
+        assert db.query(BarraOHLCV).filter(BarraOHLCV.ticker == "MSFT@SUB").count() == 0
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
+def test_estado_de_resolucion_sobrevive_dos_syncs(monkeypatch):
+    db = _make_db()
+    original_fetch = sync_module.fetch_sheet_data
+    sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_cedear_watchlist())
+    _mockear_apis_ohlcv(monkeypatch, {})
+
+    llamadas_info: list = []
+    _mockear_yahoo(monkeypatch, contador=llamadas_info)
+
+    try:
+        sync_from_sheet(db)
+        sync_from_sheet(db)
+
+        # `fetch_info` se llamó una sola vez: el segundo sync ve `resolucion_estado == "ok"`.
+        assert llamadas_info.count("MSFT") == 1
+        est = db.get(EstadoMarketDataTicker, "MSFT")
+        assert est.resolucion_estado == "ok" and est.simbolo_subyacente == "MSFT"
     finally:
         sync_module.fetch_sheet_data = original_fetch
         db.close()
