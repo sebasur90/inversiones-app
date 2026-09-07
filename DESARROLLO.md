@@ -125,11 +125,24 @@ iol > sheet > api
 
 **Cupo mensual**: la API de IOL bonifica 25.000 llamadas por mes calendario; pasado eso cobra por
 bloque adicional. Como los paneles traen docenas de símbolos por llamada, un sync típico gasta
-~7 llamadas (1 token + paneles) en régimen normal, más hasta 15 llamadas de backfill mientras hay
-historia pendiente de bajar. El contador (tabla `estado_api_iol`, persistido en el volumen
-`backend_data`) corta las llamadas a IOL al llegar a `IOL_LIMITE_MENSUAL` (default 22.000, ~12%
-de colchón bajo el límite real) y cae a data912 por el resto del mes. `IOL_ENABLED=false` apaga
-sólo IOL sin tocar data912/analisistecnico.
+~8 llamadas (1 token + ~7 paneles) en régimen normal; mientras hay historia pendiente de bajar
+suma hasta 15 llamadas de backfill de valuación (`fetch_backfill_iol`) más 8 de backfill OHLCV de
+watchlist (`fetch_backfill_ohlcv_watchlist`) — pico de ~31 por corrida. El contador (tabla
+`estado_api_iol`, persistido en el volumen `backend_data`) corta las llamadas a IOL al llegar a
+`IOL_LIMITE_MENSUAL` (default 22.000, ~12% de colchón bajo el límite real) y cae a data912 por el
+resto del mes. `IOL_ENABLED=false` apaga sólo IOL sin tocar data912/analisistecnico.
+
+**Tope por corrida**: además del piso mensual, `IOL_MAX_LLAMADAS_POR_SYNC` (default 60) corta las
+llamadas de IOL dentro de un mismo sync — colchón para que un solo sync, o una ráfaga de re-syncs
+manuales durante la convergencia del backfill, no se coma el cupo del mes sin que nadie lo note.
+Al alcanzarlo la corrida cae a data912/analisistecnico y reintenta el resto el próximo sync.
+`0` deshabilita esta cota. El análisis técnico (`/api/inversiones/tecnico/*`, serie, indicadores,
+backtest) **no** consume cupo: lee sólo de `serie_ohlcv`/`precios_instrumento` en la DB; todo el
+gasto de IOL ocurre en el sync que puebla esas tablas.
+
+**Visibilidad**: cada `POST /api/inversiones/sync` devuelve `iol_llamadas` (lo que gastó esa
+corrida), `iol_llamadas_mes` e `iol_limite_mes`. `GET /api/inversiones/iol/estado` da el mismo
+acumulado del mes (con `restante` contra el cupo) sin necesidad de correr un sync.
 
 Sin `credentials/iol.json` (o con `IOL_ENABLED=false`), la integración con IOL simplemente no
 hace ninguna llamada — el comportamiento es el mismo de antes (data912/analisistecnico completan

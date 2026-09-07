@@ -11,6 +11,7 @@ services:
       # credentials/iol.json (montado abajo), nunca acá.
       - IOL_ENABLED=${IOL_ENABLED:-true}
       - IOL_LIMITE_MENSUAL=${IOL_LIMITE_MENSUAL:-22000}
+      - IOL_MAX_LLAMADAS_POR_SYNC=${IOL_MAX_LLAMADAS_POR_SYNC:-60}
     volumes:
       # /app/data en un volumen nombrado: la DB (contador de cupo de IOL incluido) y la serie
       # histórica bajada por market_data sobreviven a un `docker compose up --build`.

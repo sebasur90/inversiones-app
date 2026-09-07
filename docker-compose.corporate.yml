@@ -16,6 +16,7 @@ services:
       # credentials/iol.json (montado abajo), nunca acá.
       - IOL_ENABLED=${IOL_ENABLED:-true}
       - IOL_LIMITE_MENSUAL=${IOL_LIMITE_MENSUAL:-22000}
+      - IOL_MAX_LLAMADAS_POR_SYNC=${IOL_MAX_LLAMADAS_POR_SYNC:-60}
       # Proxy variables for runtime (if needed)
       - HTTP_PROXY=${HTTP_PROXY:-}
       - HTTPS_PROXY=${HTTPS_PROXY:-}

@@ -52,6 +52,14 @@ _MARGEN_EXPIRACION = timedelta(seconds=60)
 
 _LIMITE_MENSUAL_DEFAULT = 22_000  # colchón (~12%) bajo el límite bonificado real de 25.000
 
+# Tope de llamadas a IOL por corrida de sync. El mensual es el piso duro; éste es un colchón
+# adicional para que un solo sync —o una ráfaga de re-syncs manuales durante la convergencia del
+# backfill— no se coma el cupo del mes de golpe y sin que nadie lo note. En régimen normal un sync
+# gasta ~8 llamadas (1 token + ~7 paneles); mientras hay historia pendiente suma hasta 15 de
+# backfill de valuación + 8 de backfill OHLCV de watchlist. El default deja margen sobre ese pico
+# (~31) sin ser una cota que se toque a diario.
+_LIMITE_POR_CORRIDA_DEFAULT = 60
+
 
 def iol_enabled() -> bool:
     """Feature flag independiente de USE_EXTERNAL_APIS: permite apagar sólo IOL (p.ej. si se
@@ -64,6 +72,20 @@ def _limite_mensual() -> int:
         return int(os.getenv("IOL_LIMITE_MENSUAL", str(_LIMITE_MENSUAL_DEFAULT)))
     except (TypeError, ValueError):
         return _LIMITE_MENSUAL_DEFAULT
+
+
+def limite_mensual() -> int:
+    """Tope de llamadas a IOL para el mes calendario en curso (`IOL_LIMITE_MENSUAL`)."""
+    return _limite_mensual()
+
+
+def limite_por_corrida() -> int:
+    """Tope de llamadas a IOL por corrida de sync (`IOL_MAX_LLAMADAS_POR_SYNC`). `0` o negativo
+    deshabilita la cota por corrida (queda sólo el piso mensual)."""
+    try:
+        return int(os.getenv("IOL_MAX_LLAMADAS_POR_SYNC", str(_LIMITE_POR_CORRIDA_DEFAULT)))
+    except (TypeError, ValueError):
+        return _LIMITE_POR_CORRIDA_DEFAULT
 
 
 def _credentials_path() -> str:
@@ -98,10 +120,78 @@ def _periodo_actual() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m")
 
 
+class _ContadorCorrida:
+    """Cuenta las llamadas a IOL de la corrida de sync en curso y corta al llegar al tope por
+    corrida (ver `_LIMITE_POR_CORRIDA_DEFAULT`). Singleton en memoria, igual que `_TokenCache`:
+    se resetea con `iniciar_corrida()` al arrancar cada `sync_from_sheet` y se lee con
+    `finalizar_corrida()` al final. Fuera de una corrida (`activa=False`) no limita nada — así
+    una llamada suelta (p.ej. `scripts/iol_probe.py`) sólo queda sujeta al piso mensual."""
+
+    def __init__(self):
+        self.activa = False
+        self.hechas = 0
+        self.tope = 0
+        self.lock = threading.Lock()
+
+    def iniciar(self, tope: int) -> None:
+        with self.lock:
+            self.activa = True
+            self.hechas = 0
+            self.tope = tope
+
+    def finalizar(self) -> int:
+        with self.lock:
+            self.activa = False
+            return self.hechas
+
+    def registrar(self) -> None:
+        with self.lock:
+            if self.activa:
+                self.hechas += 1
+
+    def con_cupo(self) -> bool:
+        with self.lock:
+            return not self.activa or self.tope <= 0 or self.hechas < self.tope
+
+
+_corrida = _ContadorCorrida()
+
+
+def iniciar_corrida(tope: int | None = None) -> None:
+    """Arranca el conteo por corrida (lo llama `sync_from_sheet`). `tope=None` usa
+    `limite_por_corrida()`."""
+    _corrida.iniciar(tope if tope is not None else limite_por_corrida())
+
+
+def finalizar_corrida() -> int:
+    """Cierra la corrida y devuelve cuántas llamadas a IOL se hicieron en ella (0 si no había
+    corrida activa)."""
+    return _corrida.finalizar()
+
+
+def llamadas_mes(db: Session) -> int:
+    """Llamadas a IOL contabilizadas en el mes calendario en curso, o `0` si no se pudo leer.
+    Lectura sobre la sesión del llamador; refleja lo ya `flush`eado en esta corrida aunque todavía
+    no se haya comiteado."""
+    try:
+        fila = db.get(EstadoApiIol, _periodo_actual())
+        return fila.llamadas if fila is not None else 0
+    except Exception as exc:
+        logger.warning("market_data.iol: no se pudo leer el contador mensual: %s", exc)
+        return 0
+
+
 def cupo_disponible(db: Session) -> bool:
-    """True si todavía hay margen para llamar a IOL este mes calendario. Cualquier error de DB
-    se trata como "sin cupo" — nunca "cupo libre" — para no arriesgarse a llamar a IOL sin poder
-    contarlo. No comitea ni hace rollback: es una lectura sobre la sesión del llamador."""
+    """True si todavía hay margen para llamar a IOL: dentro del tope por corrida (si hay una
+    corrida activa) y del cupo mensual. Cualquier error de DB se trata como "sin cupo" — nunca
+    "cupo libre" — para no arriesgarse a llamar a IOL sin poder contarlo. No comitea ni hace
+    rollback: es una lectura sobre la sesión del llamador."""
+    if not _corrida.con_cupo():
+        logger.warning(
+            "market_data.iol: alcanzado el tope de %s llamadas por sync; no se llama más a IOL "
+            "en esta corrida (cae a data912/analisistecnico)", _corrida.tope,
+        )
+        return False
     try:
         fila = db.get(EstadoApiIol, _periodo_actual())
         llamadas = fila.llamadas if fila is not None else 0
@@ -128,6 +218,9 @@ def registrar_llamada(db: Session) -> None:
         # No se hace rollback: haría perder el resto de los cambios pendientes de `db` (el sync
         # en curso), no sólo este contador.
         logger.warning("market_data.iol: no se pudo persistir el contador de cupo mensual: %s", exc)
+    # Cuenta contra el tope por corrida aunque el flush del contador mensual haya fallado: la
+    # petición HTTP se hace igual y hay que contabilizarla.
+    _corrida.registrar()
 
 
 class _TokenCache:

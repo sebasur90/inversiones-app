@@ -19,8 +19,9 @@ def _db():
 
 @pytest.fixture(autouse=True)
 def _cache_limpio(monkeypatch):
-    """`_cache` es un singleton a nivel de módulo: aislarlo entre tests."""
+    """`_cache` y `_corrida` son singletons a nivel de módulo: aislarlos entre tests."""
     monkeypatch.setattr(iol_auth, "_cache", iol_auth._TokenCache())
+    monkeypatch.setattr(iol_auth, "_corrida", iol_auth._ContadorCorrida())
     monkeypatch.setattr(iol_auth, "_leer_credenciales", lambda: ("user", "pass"))
 
 
@@ -84,6 +85,66 @@ def test_registrar_llamada_usa_la_misma_sesion_sin_comitear(monkeypatch):
     assert commits == []  # no comitea la sesión del llamador
     fila = db.get(iol_auth.EstadoApiIol, iol_auth._periodo_actual())
     assert fila is not None and fila.llamadas == 1  # pero sí es visible en esa misma sesión
+
+
+# --- tope por corrida de sync ---------------------------------------------------------------
+
+def test_sin_corrida_activa_no_hay_tope_por_sync():
+    """Fuera de un sync (`iniciar_corrida` no llamado) sólo aplica el piso mensual."""
+    db = _db()
+    for _ in range(200):
+        iol_auth.registrar_llamada(db)
+    assert iol_auth.cupo_disponible(db) is True
+
+
+def test_tope_por_corrida_corta_las_llamadas(monkeypatch):
+    db = _db()
+    iol_auth.iniciar_corrida(tope=3)
+    for _ in range(3):
+        assert iol_auth.cupo_disponible(db) is True
+        iol_auth.registrar_llamada(db)
+    assert iol_auth.cupo_disponible(db) is False  # gastadas las 3 de la corrida
+
+    def _boom(*a, **kw):
+        raise AssertionError("no debería llamar a la red pasado el tope por corrida")
+
+    monkeypatch.setattr(iol_auth, "request_json", _boom)
+    assert iol_auth.get_autenticado(db, "https://api.invertironline.com/api/v2/x") is None
+
+
+def test_finalizar_corrida_devuelve_lo_gastado_y_desactiva_el_tope():
+    db = _db()
+    iol_auth.iniciar_corrida(tope=5)
+    iol_auth.registrar_llamada(db)
+    iol_auth.registrar_llamada(db)
+    assert iol_auth.finalizar_corrida() == 2
+    # Cerrada la corrida, el tope por sync ya no limita (queda sólo el mensual).
+    for _ in range(10):
+        iol_auth.registrar_llamada(db)
+    assert iol_auth.cupo_disponible(db) is True
+
+
+def test_tope_por_corrida_cero_lo_deshabilita(monkeypatch):
+    db = _db()
+    monkeypatch.setenv("IOL_MAX_LLAMADAS_POR_SYNC", "0")
+    iol_auth.iniciar_corrida()
+    for _ in range(50):
+        iol_auth.registrar_llamada(db)
+    assert iol_auth.cupo_disponible(db) is True
+
+
+def test_llamadas_mes_refleja_el_contador(monkeypatch):
+    db = _db()
+    assert iol_auth.llamadas_mes(db) == 0
+    iol_auth.registrar_llamada(db)
+    iol_auth.registrar_llamada(db)
+    assert iol_auth.llamadas_mes(db) == 2
+
+    def _boom(*a, **kw):
+        raise RuntimeError("tabla no existe")
+
+    monkeypatch.setattr(db, "get", _boom)
+    assert iol_auth.llamadas_mes(db) == 0  # error de DB -> 0, nunca lanza
 
 
 # --- autenticación / cacheo de token -----------------------------------------------------------

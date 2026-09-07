@@ -24,11 +24,25 @@ class SyncResult(BaseModel):
     benchmarks: int
     configuracion: int
     serie_ohlcv: int = 0
+    iol_llamadas: int = 0        # llamadas a la API de IOL que gastó esta corrida
+    iol_llamadas_mes: int = 0    # acumulado del mes calendario en curso
+    iol_limite_mes: int = 0      # tope mensual configurado (IOL_LIMITE_MENSUAL)
     health_score: int
     resultado: str
     duration_ms: int
     timestamp: datetime
     issues: list[SyncIssueOut]
+
+
+class IolEstadoOut(BaseModel):
+    """Consumo de la API de IOL sin necesidad de correr un sync. `restante` es contra el cupo
+    mensual bonificado (25.000); `limite`/`limite_por_sync` son los topes configurados."""
+    periodo: str            # "YYYY-MM" (UTC)
+    llamadas: int           # acumulado del mes calendario en curso
+    limite: int             # IOL_LIMITE_MENSUAL
+    restante: int           # max(0, limite - llamadas)
+    limite_por_sync: int    # IOL_MAX_LLAMADAS_POR_SYNC (0 = sin cota por corrida)
+    habilitada: bool        # IOL_ENABLED
 
 
 class SyncRunResumenOut(BaseModel):

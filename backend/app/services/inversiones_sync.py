@@ -20,6 +20,7 @@ from . import market_data
 from . import ohlcv_analytics
 from .market_data import indices as market_data_indices
 from .market_data import precios as market_data_precios
+from .market_data import iol_auth
 
 logger = logging.getLogger("calidad_datos")
 
@@ -65,6 +66,10 @@ def sync_from_sheet(db: Session) -> dict:
     # naive en UTC: la columna SyncRun.timestamp es DateTime sin timezone
     timestamp = datetime.now(UTC).replace(tzinfo=None)
     issues: list[ValidationIssue] = []
+
+    # Arranca el conteo de llamadas a IOL de esta corrida y su tope por sync (colchón adicional
+    # sobre el cupo mensual). Se cierra más abajo, al armar el resultado.
+    iol_auth.iniciar_corrida()
 
     # Leer datos del Sheet (raw)
     raw_data = fetch_sheet_data()
@@ -820,10 +825,17 @@ def sync_from_sheet(db: Session) -> dict:
     _prune_sync_runs(db, keep=20)
     db.commit()
 
+    # Cierra el conteo de IOL de esta corrida. `iol_llamadas` es lo que gastó este sync;
+    # `iol_llamadas_mes` / `iol_limite_mes` es el acumulado del mes contra el cupo bonificado.
+    iol_llamadas = iol_auth.finalizar_corrida()
+    iol_llamadas_mes = iol_auth.llamadas_mes(db)
+    iol_limite_mes = iol_auth.limite_mensual()
+
     logger.info(
         f"Sync completed: {score_result['resultado']}, score={score_result['score']}, "
         f"criticals={score_result['n_criticos']}, warnings={score_result['n_advertencias']}, "
-        f"duration={duracion_ms}ms"
+        f"duration={duracion_ms}ms, iol_llamadas={iol_llamadas} "
+        f"(mes {iol_llamadas_mes}/{iol_limite_mes})"
     )
 
     return {
@@ -836,6 +848,9 @@ def sync_from_sheet(db: Session) -> dict:
         "benchmarks": len(benchmarks_validos) + benchmarks_api_count,
         "configuracion": len(configuracion_validos),
         "serie_ohlcv": ohlcv_count,
+        "iol_llamadas": iol_llamadas,
+        "iol_llamadas_mes": iol_llamadas_mes,
+        "iol_limite_mes": iol_limite_mes,
         "health_score": score_result["score"],
         "resultado": score_result["resultado"],
         "duration_ms": duracion_ms,

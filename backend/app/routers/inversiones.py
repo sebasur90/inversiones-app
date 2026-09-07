@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db, MovimientoInversion, InstrumentoInversion
 from ..schemas import (
     SyncResult,
+    IolEstadoOut,
     CalidadDatosOut,
     WatchlistItemOut,
     CarteraInfo,
@@ -94,6 +95,23 @@ def sync(db: Session = Depends(get_db)):
     except SheetsClientError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return result
+
+
+@router.get("/iol/estado", response_model=IolEstadoOut)
+def iol_estado(db: Session = Depends(get_db)):
+    """Consumo actual de la API de IOL (llamadas del mes vs. cupo bonificado) sin correr un sync."""
+    from ..services.market_data import iol_auth
+
+    llamadas = iol_auth.llamadas_mes(db)
+    limite = iol_auth.limite_mensual()
+    return IolEstadoOut(
+        periodo=iol_auth._periodo_actual(),
+        llamadas=llamadas,
+        limite=limite,
+        restante=max(0, limite - llamadas),
+        limite_por_sync=iol_auth.limite_por_corrida(),
+        habilitada=iol_auth.iol_enabled(),
+    )
 
 
 @router.get("/carteras", response_model=list[CarteraInfo])
