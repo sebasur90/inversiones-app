@@ -219,6 +219,9 @@ function SeccionEstrategias({
   const guardadasQuery = useQuery({ queryKey: qk.de('estrategias'), queryFn: () => listarEstrategias() })
 
   const [dsl, setDsl] = useState<EstrategiaDsl | null>(null)
+  // Cambia solo al elegir preset / cargar guardada: fuerza el re-montaje de EditorEstrategia para
+  // que re-inicialice su estado interno desde el nuevo DSL (sin re-sincronizar en cada edición).
+  const [semillaEditor, setSemillaEditor] = useState(0)
   const [estrategiaActualId, setEstrategiaActualId] = useState<number | null>(null)
   const [nombreActual, setNombreActual] = useState('')
   const [resultado, setResultado] = useState<BacktestOut | null>(null)
@@ -231,6 +234,7 @@ function SeccionEstrategias({
     if (dsl === null && presetsQuery.data && presetsQuery.data.length > 0) {
       setDsl(presetsQuery.data[0].definicion)
       setNombreActual(presetsQuery.data[0].nombre)
+      setSemillaEditor(s => s + 1)
     }
     // sólo para inicializar una vez que llegan los presets
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -255,6 +259,7 @@ function SeccionEstrategias({
     const preset = presetsQuery.data?.find(p => p.nombre === nombre)
     if (preset) {
       setDsl(preset.definicion)
+      setSemillaEditor(s => s + 1)
       setEstrategiaActualId(null)
       setNombreActual(preset.nombre)
       setResultado(null)
@@ -264,6 +269,7 @@ function SeccionEstrategias({
 
   function cargarGuardada(e: EstrategiaOut) {
     setDsl(e.definicion)
+    setSemillaEditor(s => s + 1)
     setEstrategiaActualId(e.id)
     setNombreActual(e.nombre)
     setResultado(null)
@@ -357,7 +363,7 @@ function SeccionEstrategias({
         )}
       </div>
 
-      {dsl && <EditorEstrategia dslInicial={dsl} onCambiar={setDsl} erroresValidacion={errores} />}
+      {dsl && <EditorEstrategia key={semillaEditor} dslInicial={dsl} onCambiar={setDsl} erroresValidacion={errores} />}
 
       <div className="flex gap-2 flex-wrap">
         <Button onClick={correrBacktest} disabled={cargando || !dsl}>{cargando ? 'Corriendo…' : 'Correr backtest'}</Button>

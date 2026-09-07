@@ -266,14 +266,11 @@ export default function EditorEstrategia({
   onCambiar: (dsl: EstrategiaDsl) => void
   erroresValidacion?: string[]
 }) {
+  // `estado` es la única fuente de verdad mientras el editor está montado. Al elegir otro preset o
+  // cargar una estrategia guardada, el padre re-monta este componente vía `key`, y el estado se
+  // re-inicializa desde `dslInicial`. No re-sincronizamos con `dslInicial` en cada render: onCambiar
+  // ya emite el DSL editado hacia arriba y hacerlo generaría un bucle infinito de renders.
   const [estado, setEstado] = useState<EstadoEstrategia>(() => estadoDeDsl(dslInicial))
-
-  useEffect(() => {
-    setEstado(estadoDeDsl(dslInicial))
-    // sólo al cambiar la referencia del DSL inicial (elegir preset / cargar guardada), no en cada
-    // edición: onCambiar ya emite el DSL editado y no queremos pisarlo con el inicial de vuelta.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dslInicial])
 
   useEffect(() => {
     onCambiar(dslDeEstado(estado))
