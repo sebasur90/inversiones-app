@@ -209,6 +209,34 @@ def test_backtest_con_dsl_invalido_da_422(client):
     assert r.status_code == 422
 
 
+def test_backtest_devuelve_barras_e_indicadores_alineados(client):
+    dsl = {
+        "version": 1,
+        "indicadores": [
+            {"id": "mm_rapida", "tipo": "SMA", "params": {"periodo": 5}},
+            {"id": "mm_lenta", "tipo": "SMA", "params": {"periodo": 20}},
+        ],
+        "entrada": {"op": "y", "condiciones": [
+            {"op": "cruce_arriba", "izq": {"ref": "mm_rapida"}, "der": {"ref": "mm_lenta"}}]},
+        "salida": {"op": "y", "condiciones": [
+            {"op": "cruce_abajo", "izq": {"ref": "mm_rapida"}, "der": {"ref": "mm_lenta"}}]},
+        "riesgo": {"stop_loss_pct": None, "take_profit_pct": None, "trailing_stop_pct": None, "max_barras": None},
+        "ejecucion": {"lado": "long", "comision_pct": 0.5, "precio_ejecucion": "cierre", "demora_barras": 0},
+    }
+    r = client.post("/api/inversiones/tecnico/AL30/backtest", json={"definicion": dsl})
+    assert r.status_code == 200
+    data = r.json()
+    # Las barras vienen en el response y alineadas 1:1 con la curva de equity y las señales.
+    assert len(data["barras"]) == len(data["curva_equity"])
+    assert data["barras"][0]["fecha"] <= data["barras"][-1]["fecha"]
+    # Indicadores keyed por el `id` de la definición, misma longitud que las barras.
+    assert set(data["indicadores"].keys()) == {"mm_rapida", "mm_lenta"}
+    assert len(data["indicadores"]["mm_rapida"]["valor"]) == len(data["barras"])
+    for s in data["senales"]:
+        assert 0 <= s["indice"] < len(data["barras"])
+        assert data["barras"][s["indice"]]["fecha"] == s["fecha"]
+
+
 # --- Señales recientes (badge de la watchlist) ------------------------------------------------
 
 def _dsl_compra_siempre_que_cruce(umbral: float):

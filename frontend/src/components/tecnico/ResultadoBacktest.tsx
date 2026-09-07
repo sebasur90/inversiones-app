@@ -1,19 +1,18 @@
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import type { BacktestOut } from '../../api'
+import type { BacktestOut, EstrategiaDsl } from '../../api'
 import MetricTile from '../ui/MetricTile'
 import BotonExportarCsv from '../ui/BotonExportarCsv'
+import GraficoBacktest from './GraficoBacktest'
 
 function formatPctSigned(v: number | null | undefined): string {
   if (v == null) return '—'
   return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`
 }
 
-export default function ResultadoBacktest({ resultado }: { resultado: BacktestOut }) {
+export default function ResultadoBacktest({ resultado, dsl }: { resultado: BacktestOut; dsl: EstrategiaDsl }) {
   const m = resultado.metricas
   const insuficiente = m.estado === 'datos_insuficientes'
-  const datosGrafico = resultado.curva_equity.map((p, i) => ({
-    fecha: p.fecha, estrategia: p.valor, buyHold: resultado.curva_buy_hold[i]?.valor,
-  }))
+  const unaSolaCerrada = m.operaciones_cerradas === 1
+  const tieneGrafico = resultado.barras.length > 0
 
   return (
     <div className="flex flex-col gap-3">
@@ -37,7 +36,16 @@ export default function ResultadoBacktest({ resultado }: { resultado: BacktestOu
           value={`${m.exceso_vs_buy_hold_pp >= 0 ? '+' : ''}${m.exceso_vs_buy_hold_pp.toFixed(2)} pp`}
         />
         <MetricTile label="Retorno anualizado" value={formatPctSigned(m.retorno_anualizado_pct)} />
-        <MetricTile label="Operaciones" value={String(m.operaciones)} sub={`${m.ganadoras} ganadoras / ${m.perdedoras} perdedoras`} />
+        <MetricTile
+          label="Operaciones" value={String(m.operaciones)}
+          sub={`${m.ganadoras} ganadoras / ${m.perdedoras} perdedoras${m.operaciones_cerradas < m.operaciones ? ' · 1 abierta' : ''}`}
+        />
+        {m.retorno_abierta_pct != null && (
+          <MetricTile
+            label="Operación abierta (no realizado)" value={formatPctSigned(m.retorno_abierta_pct)}
+            tone={m.retorno_abierta_pct >= 0 ? 'pos' : 'neg'}
+          />
+        )}
         <MetricTile label="Win rate" value={m.win_rate_pct != null ? `${m.win_rate_pct.toFixed(1)}%` : '—'} insuficiente={insuficiente} />
         <MetricTile label="Profit factor" value={m.profit_factor != null ? m.profit_factor.toFixed(2) : '—'} insuficiente={insuficiente} />
         <MetricTile label="Máximo drawdown" value={m.max_drawdown_pct != null ? `${m.max_drawdown_pct.toFixed(2)}%` : '—'} tone="neg" />
@@ -49,22 +57,31 @@ export default function ResultadoBacktest({ resultado }: { resultado: BacktestOu
         <MetricTile label="Comisiones acumuladas" value={`${m.comisiones_pct_acum.toFixed(2)}%`} />
       </div>
 
+      {insuficiente && (
+        <div className="text-label text-app-text-dim">
+          La estrategia no cerró ninguna operación en el rango{resultado.operaciones.some(o => o.abierta) ? ' (quedó una posición abierta al final)' : ''}:
+          las métricas por operación (win rate, profit factor, duración…) necesitan al menos una operación cerrada. Probá ampliar el período o ajustar las reglas de salida.
+        </div>
+      )}
+      {!insuficiente && unaSolaCerrada && (
+        <div className="text-label text-app-text-dim">
+          Las métricas por operación están basadas en una sola operación cerrada: tomalas como referencia, no como estadística.
+        </div>
+      )}
+
       <div>
-        <div className="font-semibold text-caption text-app-text mb-1.5">Estrategia vs. buy &amp; hold (base 100)</div>
-        {datosGrafico.length === 0 ? (
-          <div className="h-[200px] flex items-center justify-center text-app-text-dim text-caption">Sin datos para graficar</div>
+        <div className="font-semibold text-caption text-app-text mb-1.5">Precio, estrategia y señales</div>
+        {tieneGrafico ? (
+          <GraficoBacktest
+            barras={resultado.barras} indicadoresSeries={resultado.indicadores} dslIndicadores={dsl.indicadores}
+            senales={resultado.senales} primeraBarraEvaluable={resultado.primera_barra_evaluable}
+            curvaEquity={resultado.curva_equity} curvaBuyHold={resultado.curva_buy_hold}
+            indiceDesde={resultado.indice_desde}
+            moneda={resultado.moneda} tieneVelas={resultado.barras.some(b => b.apertura != null)}
+            tieneVolumen={resultado.barras.some(b => b.volumen != null)}
+          />
         ) : (
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={datosGrafico} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#223028" />
-              <XAxis dataKey="fecha" stroke="#8ca39b" tick={{ fontSize: 10, fill: '#8ca39b' }} interval="preserveStartEnd" />
-              <YAxis stroke="#8ca39b" tick={{ fontSize: 10, fill: '#8ca39b' }} width={42} />
-              <Tooltip contentStyle={{ background: '#17221e', border: '1px solid #223028', borderRadius: 10, fontSize: 12 }} labelStyle={{ color: '#edf2ef' }} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Line type="monotone" dataKey="estrategia" name="Estrategia" stroke="#d8b14a" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="buyHold" name="Buy & hold" stroke="#8ca39b" strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
+          <div className="h-[200px] flex items-center justify-center text-app-text-dim text-caption">Sin datos para graficar</div>
         )}
       </div>
 

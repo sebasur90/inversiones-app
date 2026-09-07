@@ -189,6 +189,28 @@ def test_posicion_abierta_al_final_excluida_del_winrate():
     assert resultado.metricas["win_rate_pct"] is None
     assert resultado.metricas["ganadoras"] == 0
     assert resultado.metricas["perdedoras"] == 0
+    assert resultado.metricas["operaciones_cerradas"] == 0
+    # El P&L no realizado de la posición abierta sí se expone (entra en 101, cierra la serie en 120).
+    assert resultado.metricas["retorno_abierta_pct"] == pytest.approx((120 / 101 - 1) * 100, rel=1e-3)
+
+
+def test_una_sola_operacion_cerrada_calcula_metricas_por_operacion():
+    # Un único trade cerrado (entra al cruzar 100, sale al cruzar por debajo de 105) -> antes daba
+    # "datos_insuficientes"; ahora las métricas por operación se calculan sobre esa muestra.
+    cierres = [95, 98, 101, 108, 104, 103, 102, 101, 100, 99]
+    barras = _barras([float(c) for c in cierres])
+    dsl = _dsl_base(
+        entrada={"op": "y", "condiciones": [{"op": "cruce_arriba", "izq": {"campo": "cierre"}, "der": {"const": 100}}]},
+        salida={"op": "y", "condiciones": [{"op": "cruce_abajo", "izq": {"campo": "cierre"}, "der": {"const": 105}}]},
+    )
+    resultado = ee.backtest(dsl, barras)
+    cerradas = [o for o in resultado.operaciones if not o.abierta]
+    assert len(cerradas) == 1
+    assert resultado.metricas["estado"] == "ok"
+    assert resultado.metricas["operaciones_cerradas"] == 1
+    assert resultado.metricas["win_rate_pct"] in (0.0, 100.0)
+    assert resultado.metricas["retorno_medio_operacion_pct"] == pytest.approx(cerradas[0].retorno_neto_pct)
+    assert resultado.metricas["duracion_media_barras"] == pytest.approx(float(cerradas[0].barras))
 
 
 # ── stops intrabar, gap de apertura y trailing ───────────────────────────────────────────────

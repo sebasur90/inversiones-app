@@ -356,7 +356,13 @@ def _calcular_metricas(operaciones: list[Operacion], curva_equity, curva_buy_hol
     n_ops = len(operaciones)
     n_cerradas = len(cerradas)
 
-    if n_cerradas < 2:
+    op_abierta = next((o for o in operaciones if o.abierta), None)
+    retorno_abierta_pct = round(op_abierta.retorno_neto_pct, 4) if op_abierta is not None else None
+
+    # Con 0 operaciones cerradas no hay nada que promediar. Con 1 sí se calculan las métricas por
+    # operación (el `estado` pasa a "ok"); `operaciones_cerradas` deja que el front avise que están
+    # basadas en una sola muestra.
+    if n_cerradas < 1:
         estado = "datos_insuficientes"
         win_rate_pct = profit_factor = retorno_medio_operacion_pct = None
         mejor_operacion_pct = peor_operacion_pct = duracion_media_barras = None
@@ -390,6 +396,8 @@ def _calcular_metricas(operaciones: list[Operacion], curva_equity, curva_buy_hol
         "retorno_buy_hold_pct": round(retorno_buy_hold_pct, 4),
         "exceso_vs_buy_hold_pp": round(retorno_total_pct - retorno_buy_hold_pct, 4),
         "operaciones": n_ops,
+        "operaciones_cerradas": n_cerradas,
+        "retorno_abierta_pct": retorno_abierta_pct,
         "ganadoras": ganadoras,
         "perdedoras": perdedoras,
         "win_rate_pct": round(win_rate_pct, 2) if win_rate_pct is not None else None,

@@ -367,7 +367,7 @@ function SeccionEstrategias({
         {estrategiaActualId && <Button variant="outline" onClick={duplicar}>Duplicar</Button>}
       </div>
 
-      {resultado && <ResultadoBacktest resultado={resultado} />}
+      {resultado && dsl && <ResultadoBacktest resultado={resultado} dsl={dsl} />}
 
       <Modal open={modalGuardarOpen} onClose={() => setModalGuardarOpen(false)} title="Guardar estrategia">
         <div className="flex flex-col gap-3">

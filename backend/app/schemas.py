@@ -1162,6 +1162,8 @@ class BacktestMetricasOut(BaseModel):
     retorno_buy_hold_pct: float
     exceso_vs_buy_hold_pp: float
     operaciones: int
+    operaciones_cerradas: int = 0
+    retorno_abierta_pct: Optional[float] = None  # P&L no realizado de la operación abierta al final
     ganadoras: int
     perdedoras: int
     win_rate_pct: Optional[float] = None
@@ -1201,6 +1203,13 @@ class BacktestOut(BaseModel):
     curva_equity: list[CurvaPuntoOut]
     curva_buy_hold: list[CurvaPuntoOut]
     primera_barra_evaluable: Optional[int] = None
+    # Serie de barras usada por el backtest (incluye el warm-up previo a `desde`) y las series de
+    # indicadores ya calculadas, keyed por el `id` del indicador en la definición. Alineadas 1:1
+    # con `curva_equity` y con `senales[].indice`, para poder dibujar velas + indicadores + señales.
+    barras: list[BarraOut] = Field(default_factory=list)
+    indicadores: dict[str, dict[str, list[Optional[float]]]] = Field(default_factory=dict)
+    # Índice en `barras` donde arranca el rango pedido (`desde`); lo previo es warm-up de indicadores.
+    indice_desde: int = 0
     advertencias: list[str] = Field(default_factory=list)
 
 

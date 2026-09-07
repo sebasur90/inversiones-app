@@ -1354,6 +1354,8 @@ export interface BacktestMetricasOut {
   retorno_buy_hold_pct: number
   exceso_vs_buy_hold_pp: number
   operaciones: number
+  operaciones_cerradas: number
+  retorno_abierta_pct: number | null
   ganadoras: number
   perdedoras: number
   win_rate_pct: number | null
@@ -1384,6 +1386,11 @@ export interface BacktestOut {
   curva_equity: CurvaPuntoOut[]
   curva_buy_hold: CurvaPuntoOut[]
   primera_barra_evaluable: number | null
+  // Serie de barras del backtest (con warm-up) + series de indicadores keyed por `id` de la
+  // definición. Alineadas 1:1 con `curva_equity` y `senales[].indice`.
+  barras: BarraOut[]
+  indicadores: Record<string, Record<string, (number | null)[]>>
+  indice_desde: number
   advertencias: string[]
 }
 

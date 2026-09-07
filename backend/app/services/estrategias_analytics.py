@@ -111,6 +111,7 @@ def ejecutar_backtest(
     barras = serie["barras"]
     advertencias = list(serie["advertencias"])
     moneda = serie["moneda"]
+    indice_desde = serie.get("indice_desde", 0)
 
     if len(barras) < 2:
         return {
@@ -118,23 +119,31 @@ def ejecutar_backtest(
             "senales": [], "operaciones": [],
             "metricas": {
                 "estado": "datos_insuficientes", "retorno_total_pct": 0.0, "retorno_anualizado_pct": None,
-                "retorno_buy_hold_pct": 0.0, "exceso_vs_buy_hold_pp": 0.0, "operaciones": 0, "ganadoras": 0,
+                "retorno_buy_hold_pct": 0.0, "exceso_vs_buy_hold_pp": 0.0, "operaciones": 0,
+                "operaciones_cerradas": 0, "retorno_abierta_pct": None, "ganadoras": 0,
                 "perdedoras": 0, "win_rate_pct": None, "retorno_medio_operacion_pct": None,
                 "mejor_operacion_pct": None, "peor_operacion_pct": None, "profit_factor": None,
                 "max_drawdown_pct": None, "fecha_pico": None, "fecha_valle": None,
                 "duracion_media_barras": None, "exposicion_pct": 0.0, "comisiones_pct_acum": 0.0,
             },
             "curva_equity": [], "curva_buy_hold": [], "primera_barra_evaluable": None,
+            "barras": [], "indicadores": {}, "indice_desde": 0,
             "advertencias": advertencias + ["sin_serie"],
         }
 
     resultado = estrategia_engine.backtest(definicion, barras)
     advertencias.extend(resultado.advertencias)
+    # `compilar` se vuelve a correr acá (el backtest lo hace internamente) para exponer las series
+    # de indicadores ya calculadas y la primera barra evaluable, alineadas 1:1 con `barras`.
     compilado_primera = None
+    series_indicadores: dict = {}
     try:
-        compilado_primera = estrategia_engine.compilar(definicion, barras).primera_barra_evaluable
+        compilado = estrategia_engine.compilar(definicion, barras)
+        compilado_primera = compilado.primera_barra_evaluable
+        series_indicadores = compilado.series
     except Exception:
         compilado_primera = None
+        series_indicadores = {}
 
     return {
         "ticker": ticker,
@@ -159,6 +168,15 @@ def ejecutar_backtest(
         "curva_equity": [{"fecha": f, "valor": v} for f, v in resultado.curva_equity],
         "curva_buy_hold": [{"fecha": f, "valor": v} for f, v in resultado.curva_buy_hold],
         "primera_barra_evaluable": compilado_primera,
+        "barras": [
+            {
+                "fecha": b.fecha, "cierre": b.cierre, "apertura": b.apertura,
+                "maximo": b.maximo, "minimo": b.minimo, "volumen": b.volumen,
+            }
+            for b in barras
+        ],
+        "indicadores": series_indicadores,
+        "indice_desde": indice_desde,
         "advertencias": advertencias,
     }
 
