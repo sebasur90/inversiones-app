@@ -302,17 +302,26 @@ def _chequear_salida(
             return "regla_salida", precio, idx_ejec
 
     if max_barras is not None and (i - idx_entrada_ejec) >= int(max_barras):
+        ejec = _precio_ejecucion(barras, i, ejecucion, advertencias)
+        if ejec is not None:
+            idx_ejec, precio = ejec
+            return "max_barras", precio, idx_ejec
         return "max_barras", barra.cierre, i
 
     return None
 
 
-def _curva_buy_hold(barras: list[Barra]) -> list[tuple[date, float]]:
-    base = barras[0].cierre
+def _curva_buy_hold(barras: list[Barra], indice_inicio: int = 0) -> list[tuple[date, float]]:
+    """Base 100 en `barras[indice_inicio]`, no en `barras[0]`: si el caller pidió warm-up extra
+    para los indicadores, el buy&hold tiene que arrancar donde arranca la ventana pedida, igual
+    que la curva de equity (que ya empieza en 100 ahí porque no hay operaciones antes)."""
+    base = barras[indice_inicio].cierre
     return [(b.fecha, (b.cierre / base) * 100.0) for b in barras]
 
 
-def _construir_curva_equity(barras: list[Barra], operaciones: list[Operacion]) -> list[tuple[date, float]]:
+def _construir_curva_equity(
+    barras: list[Barra], operaciones: list[Operacion], comision_pct: float = 0.0,
+) -> list[tuple[date, float]]:
     n = len(barras)
     curva: list[tuple[date, float]] = []
     equity_actual = 100.0
@@ -333,7 +342,15 @@ def _construir_curva_equity(barras: list[Barra], operaciones: list[Operacion]) -
                 idx_op += 1
                 op_actual = None
             else:
-                equity_actual = equity_en_apertura * (barras[i].cierre / op_actual.precio_entrada)
+                retorno_pct = (barras[i].cierre / op_actual.precio_entrada - 1) * 100
+                # En la última barra de una posición que queda abierta ya no habrá salida que
+                # cargue la comisión: se descuenta acá (sólo la de entrada, como en
+                # `retorno_neto_pct` de la `Operacion` abierta) para que el equity final coincida
+                # con `retorno_abierta_pct`. Los días intermedios quedan a precio bruto a propósito
+                # (ver docstring del módulo): el salto de comisión es de una sola vez.
+                if i == n - 1 and op_actual.abierta:
+                    retorno_pct -= comision_pct
+                equity_actual = equity_en_apertura * (1 + retorno_pct / 100)
                 curva.append((barras[i].fecha, equity_actual))
             continue
 
@@ -341,15 +358,25 @@ def _construir_curva_equity(barras: list[Barra], operaciones: list[Operacion]) -
     return curva
 
 
-def _calcular_metricas(operaciones: list[Operacion], curva_equity, curva_buy_hold, comision_pct: float) -> dict:
-    retorno_total_pct = curva_equity[-1][1] - 100.0
-    retorno_buy_hold_pct = curva_buy_hold[-1][1] - 100.0
-    dias = (curva_equity[-1][0] - curva_equity[0][0]).days
-    retorno_anualizado_pct = None
-    if dias > 0 and curva_equity[-1][1] > 0:
-        retorno_anualizado_pct = ((curva_equity[-1][1] / 100.0) ** (365.0 / dias) - 1) * 100.0
+def _calcular_metricas(
+    operaciones: list[Operacion], curva_equity, curva_buy_hold, comision_pct: float, indice_inicio: int = 0,
+) -> dict:
+    """`curva_equity`/`curva_buy_hold` llegan alineadas 1:1 con la serie completa (incluye el
+    warm-up previo a `indice_inicio`, si lo hubo); acá se recortan a la ventana `[indice_inicio:]`
+    para que retorno total, días, drawdown y exposición reflejen sólo el período pedido, no el
+    warm-up. `operaciones` no necesita recorte: `backtest()` ya no abre posiciones antes de
+    `indice_inicio`."""
+    ventana_equity = curva_equity[indice_inicio:]
+    ventana_buy_hold = curva_buy_hold[indice_inicio:]
 
-    drawdown = risk_engine.calcular_drawdown(curva_equity)
+    retorno_total_pct = ventana_equity[-1][1] - 100.0
+    retorno_buy_hold_pct = ventana_buy_hold[-1][1] - 100.0
+    dias = (ventana_equity[-1][0] - ventana_equity[0][0]).days
+    retorno_anualizado_pct = None
+    if dias > 0 and ventana_equity[-1][1] > 0:
+        retorno_anualizado_pct = ((ventana_equity[-1][1] / 100.0) ** (365.0 / dias) - 1) * 100.0
+
+    drawdown = risk_engine.calcular_drawdown(ventana_equity)
     max_drawdown_pct = drawdown["maximo"] * 100 if drawdown["maximo"] is not None else None
 
     cerradas = [o for o in operaciones if not o.abierta]
@@ -382,11 +409,15 @@ def _calcular_metricas(operaciones: list[Operacion], curva_equity, curva_buy_hol
     ganadoras = sum(1 for o in cerradas if o.retorno_neto_pct > 0)
     perdedoras = sum(1 for o in cerradas if o.retorno_neto_pct <= 0)
 
+    # `indice_salida`/`indice_entrada` son índices absolutos (dentro de la serie completa, con
+    # warm-up incluido); el fallback de una posición abierta usa el último índice absoluto
+    # (`len(curva_equity) - 1`, la serie completa). La exposición, en cambio, se normaliza contra
+    # el largo de la ventana pedida (`ventana_equity`), no contra el warm-up.
     barras_en_mercado = sum(
         (o.indice_salida if o.indice_salida is not None else len(curva_equity) - 1) - o.indice_entrada + 1
         for o in operaciones
     )
-    exposicion_pct = (barras_en_mercado / len(curva_equity) * 100) if curva_equity else 0.0
+    exposicion_pct = (barras_en_mercado / len(ventana_equity) * 100) if ventana_equity else 0.0
     comisiones_pct_acum = n_cerradas * 2 * comision_pct + sum(1 for o in operaciones if o.abierta) * comision_pct
 
     return {
@@ -414,8 +445,16 @@ def _calcular_metricas(operaciones: list[Operacion], curva_equity, curva_buy_hol
     }
 
 
-def backtest(dsl: dict, barras: list[Barra]) -> ResultadoBacktest:
+def backtest(dsl: dict, barras: list[Barra], indice_inicio: int = 0) -> ResultadoBacktest:
+    """`indice_inicio`: primer índice desde el que se permite abrir posición (default 0 = toda la
+    serie). El caller típico (`estrategias_analytics.ejecutar_backtest`) le pide a `barras` unas
+    ruedas extra de warm-up antes del período pedido por el usuario para que los indicadores ya
+    estén calculados en la primera barra visible; sin este corte esas ruedas de warm-up quedarían
+    operables y contaminarían retorno total, buy&hold, drawdown y exposición con actividad de
+    fuera del período pedido. Los indicadores sí se calculan sobre la serie completa (`compilar`
+    no cambia): sólo se restringe cuándo puede *abrir* una operación."""
     n = len(barras)
+    indice_inicio = max(0, min(indice_inicio, n))
     compilado = compilar(dsl, barras)
     riesgo = dsl.get("riesgo") or {}
     ejecucion = dsl.get("ejecucion") or {}
@@ -437,14 +476,19 @@ def backtest(dsl: dict, barras: list[Barra]) -> ResultadoBacktest:
     i = 0
     while i < n:
         if estado == "fuera":
-            if compilado.entrada[i] is True:
+            if i >= indice_inicio and compilado.entrada[i] is True:
                 ejec = _precio_ejecucion(barras, i, ejecucion, advertencias)
                 if ejec is not None:
                     idx_ejec, precio = ejec
                     estado = "dentro"
                     precio_entrada = precio
                     idx_entrada_ejec = idx_ejec
-                    maximo_desde_entrada = _maximo_barra(barras[idx_ejec])
+                    # Sembrado con el precio de entrada, no con el máximo de la barra: ese máximo
+                    # puede haber ocurrido antes de entrar (p.ej. si se entra al cierre), y un
+                    # trailing stop sembrado más arriba del precio de entrada generaría una salida
+                    # con ganancia que nunca existió. Sólo las barras *posteriores* a la entrada
+                    # mueven el trailing hacia arriba (más abajo en el loop).
+                    maximo_desde_entrada = precio_entrada
                     senales.append(Senal(idx_ejec, barras[idx_ejec].fecha, "compra", precio, "entrada"))
                     i = idx_ejec
             i += 1
@@ -494,9 +538,9 @@ def backtest(dsl: dict, barras: list[Barra]) -> ResultadoBacktest:
         ))
         advertencias.add("posicion_abierta_al_final")
 
-    curva_equity = _construir_curva_equity(barras, operaciones)
-    curva_buy_hold = _curva_buy_hold(barras)
-    metricas = _calcular_metricas(operaciones, curva_equity, curva_buy_hold, comision_pct)
+    curva_equity = _construir_curva_equity(barras, operaciones, comision_pct)
+    curva_buy_hold = _curva_buy_hold(barras, indice_inicio)
+    metricas = _calcular_metricas(operaciones, curva_equity, curva_buy_hold, comision_pct, indice_inicio)
 
     return ResultadoBacktest(
         senales=senales, operaciones=operaciones, metricas=metricas,
@@ -513,6 +557,10 @@ _PROFUNDIDAD_MAXIMA = 4
 _NODOS_MAXIMOS = 20
 _PERIODO_MIN, _PERIODO_MAX = 1, 500
 _COMISION_MIN, _COMISION_MAX = 0.0, 5.0
+_PARAM_FLOAT_MIN, _PARAM_FLOAT_MAX = 0.1, 10.0  # p.ej. `desvios` de Bollinger: multiplicador, siempre positivo
+_RIESGO_PCT_MIN, _RIESGO_PCT_MAX = 0.1, 90.0
+_MAX_BARRAS_MIN = 1
+_DEMORA_MAX = 20
 
 
 def validar_estrategia(dsl) -> list[str]:
@@ -545,9 +593,17 @@ def validar_estrategia(dsl) -> list[str]:
         for clave_p, valor_p in params.items():
             if clave_p not in params_default:
                 errores.append(f"{tipo}: parámetro desconocido {clave_p!r}")
-            elif isinstance(valor_p, (int, float)) and not isinstance(params_default[clave_p], float):
-                if not (_PERIODO_MIN <= valor_p <= _PERIODO_MAX):
-                    errores.append(f"{tipo}.{clave_p} debe estar entre {_PERIODO_MIN} y {_PERIODO_MAX}")
+                continue
+            # `bool` es subclase de `int` en Python: sin este chequeo `True`/`False` colarían
+            # como "numérico" válido.
+            if not isinstance(valor_p, (int, float)) or isinstance(valor_p, bool):
+                errores.append(f"{tipo}.{clave_p} debe ser numérico")
+                continue
+            if isinstance(params_default[clave_p], float):
+                if not (_PARAM_FLOAT_MIN <= valor_p <= _PARAM_FLOAT_MAX):
+                    errores.append(f"{tipo}.{clave_p} debe estar entre {_PARAM_FLOAT_MIN} y {_PARAM_FLOAT_MAX}")
+            elif not (_PERIODO_MIN <= valor_p <= _PERIODO_MAX):
+                errores.append(f"{tipo}.{clave_p} debe estar entre {_PERIODO_MIN} y {_PERIODO_MAX}")
 
     contador_nodos = [0]
 
@@ -635,9 +691,24 @@ def validar_estrategia(dsl) -> list[str]:
     if salida is not None:
         _validar_condicion(salida, 1)
 
+    riesgo = dsl.get("riesgo") or {}
+    if not isinstance(riesgo, dict):
+        errores.append("riesgo debe ser un objeto")
+    else:
+        for campo_r in ("stop_loss_pct", "take_profit_pct", "trailing_stop_pct"):
+            valor_r = riesgo.get(campo_r)
+            if valor_r is None:
+                continue
+            if not isinstance(valor_r, (int, float)) or isinstance(valor_r, bool) or not (_RIESGO_PCT_MIN <= valor_r <= _RIESGO_PCT_MAX):
+                errores.append(f"riesgo.{campo_r} debe ser un número entre {_RIESGO_PCT_MIN} y {_RIESGO_PCT_MAX}")
+        max_barras_r = riesgo.get("max_barras")
+        if max_barras_r is not None:
+            if not isinstance(max_barras_r, int) or isinstance(max_barras_r, bool) or max_barras_r < _MAX_BARRAS_MIN:
+                errores.append(f"riesgo.max_barras debe ser un entero >= {_MAX_BARRAS_MIN}")
+
     ejecucion = dsl.get("ejecucion") or {}
     comision_pct = ejecucion.get("comision_pct", 0.0)
-    if not isinstance(comision_pct, (int, float)) or not (_COMISION_MIN <= comision_pct <= _COMISION_MAX):
+    if not isinstance(comision_pct, (int, float)) or isinstance(comision_pct, bool) or not (_COMISION_MIN <= comision_pct <= _COMISION_MAX):
         errores.append(f"comision_pct debe estar entre {_COMISION_MIN} y {_COMISION_MAX}")
     precio_ejecucion = ejecucion.get("precio_ejecucion", "cierre")
     if precio_ejecucion not in ("cierre", "apertura_siguiente"):
@@ -645,6 +716,20 @@ def validar_estrategia(dsl) -> list[str]:
     lado = ejecucion.get("lado", "long")
     if lado != "long":
         errores.append(f"lado {lado!r} no soportado todavía: sólo 'long'")
+
+    demora_barras = ejecucion.get("demora_barras", 0)
+    if not isinstance(demora_barras, int) or isinstance(demora_barras, bool):
+        errores.append("demora_barras debe ser un entero")
+    elif not (0 <= demora_barras <= _DEMORA_MAX):
+        errores.append(f"demora_barras debe estar entre 0 y {_DEMORA_MAX}")
+    elif precio_ejecucion == "apertura_siguiente" and demora_barras < 1:
+        # Con demora 0, la señal calculada con el cierre de la barra `i` ejecutaría en la apertura
+        # de esa misma barra `i` — anterior al cierre que la generó. Es lookahead: la estrategia
+        # "sabría" el resultado del día antes de que termine.
+        errores.append(
+            "con precio_ejecucion='apertura_siguiente', demora_barras debe ser >= 1 "
+            "(si no, ejecuta en la apertura de la misma barra de la señal, antes de que exista)"
+        )
 
     return errores
 

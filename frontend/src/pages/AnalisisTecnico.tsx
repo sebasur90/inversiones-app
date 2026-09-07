@@ -280,28 +280,40 @@ function SeccionEstrategias({
 
   async function guardar() {
     if (!dsl || !nombreParaGuardar.trim()) return
-    if (estrategiaActualId) {
-      await actualizarEstrategia(estrategiaActualId, { nombre: nombreParaGuardar, ticker, definicion: dsl, variante })
-    } else {
-      const creada = await guardarEstrategia({ nombre: nombreParaGuardar, ticker, definicion: dsl, variante })
-      setEstrategiaActualId(creada.id)
+    try {
+      if (estrategiaActualId) {
+        await actualizarEstrategia(estrategiaActualId, { nombre: nombreParaGuardar, ticker, definicion: dsl, variante })
+      } else {
+        const creada = await guardarEstrategia({ nombre: nombreParaGuardar, ticker, definicion: dsl, variante })
+        setEstrategiaActualId(creada.id)
+      }
+      setNombreActual(nombreParaGuardar)
+      setModalGuardarOpen(false)
+      void guardadasQuery.refetch()
+    } catch (e) {
+      setErrores([parseApiError(e).message])
     }
-    setNombreActual(nombreParaGuardar)
-    setModalGuardarOpen(false)
-    void guardadasQuery.refetch()
   }
 
   async function duplicar() {
     if (!estrategiaActualId) return
-    const dup = await duplicarEstrategia(estrategiaActualId)
-    void guardadasQuery.refetch()
-    cargarGuardada(dup)
+    try {
+      const dup = await duplicarEstrategia(estrategiaActualId)
+      void guardadasQuery.refetch()
+      cargarGuardada(dup)
+    } catch (e) {
+      setErrores([parseApiError(e).message])
+    }
   }
 
   async function eliminar(id: number) {
-    await eliminarEstrategiaTecnica(id)
-    if (estrategiaActualId === id) setEstrategiaActualId(null)
-    void guardadasQuery.refetch()
+    try {
+      await eliminarEstrategiaTecnica(id)
+      if (estrategiaActualId === id) setEstrategiaActualId(null)
+      void guardadasQuery.refetch()
+    } catch (e) {
+      setErrores([parseApiError(e).message])
+    }
   }
 
   return (

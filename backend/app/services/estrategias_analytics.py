@@ -131,7 +131,11 @@ def ejecutar_backtest(
             "advertencias": advertencias + ["sin_serie"],
         }
 
-    resultado = estrategia_engine.backtest(definicion, barras)
+    # `indice_desde` marca dónde arranca el período que pidió el usuario dentro de `barras` (que
+    # trae warm-up extra antepuesto): sin pasarlo, el backtest podría abrir operaciones dentro del
+    # warm-up y contaminar retorno total, buy&hold, drawdown y exposición con actividad anterior
+    # al período pedido.
+    resultado = estrategia_engine.backtest(definicion, barras, indice_inicio=indice_desde)
     advertencias.extend(resultado.advertencias)
     # `compilar` se vuelve a correr acá (el backtest lo hace internamente) para exponer las series
     # de indicadores ya calculadas y la primera barra evaluable, alineadas 1:1 con `barras`.
@@ -205,16 +209,18 @@ def senales_recientes(db: Session, max_barras: int = MAX_BARRAS_SENAL_RECIENTE) 
             continue  # una definición inválida no debería frenar al resto de la lista
 
         variante = getattr(estrategia, "variante", None) or "local"
-        warm_up = estrategia_engine.barras_minimas(estrategia.definicion)
-        serie = ohlcv_analytics.get_serie_barras(
-            estrategia.ticker, date(1900, 1, 1), hoy, db, barras_previas=warm_up, max_barras=3000,
-            variante=variante,
-        )
-        barras = serie["barras"]
-        if len(barras) < 2:
-            continue
-
         try:
+            # `barras_minimas` y `get_serie_barras` también van dentro del `try`: una estrategia
+            # guardada antes de que `validar_estrategia` chequeara los params de sus indicadores
+            # (o con params corruptos por otra vía) no debería tirar 500 y frenar la lista entera.
+            warm_up = estrategia_engine.barras_minimas(estrategia.definicion)
+            serie = ohlcv_analytics.get_serie_barras(
+                estrategia.ticker, date(1900, 1, 1), hoy, db, barras_previas=warm_up, max_barras=3000,
+                variante=variante,
+            )
+            barras = serie["barras"]
+            if len(barras) < 2:
+                continue
             backtest_out = estrategia_engine.backtest(estrategia.definicion, barras)
         except (ValueError, KeyError, TypeError):
             continue  # DSL válido para el validador pero roto para esta serie: se omite

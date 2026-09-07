@@ -17,6 +17,17 @@ const COLOR_PRECIO = '#d8b14a'
 const COLOR_GRID = '#223028'
 const COLOR_EJE = '#8ca39b'
 
+/** Salidas de un indicador de precio que NO están en la escala del precio (p.ej. Bollinger trae
+ * `ancho_pct`/`pctb`, que son porcentajes u oscilan 0-1, junto con `media`/`superior`/`inferior`
+ * que sí son precios): se excluyen acá para que no aplasten la escala de las velas. */
+const SALIDAS_EXCLUIDAS_PRECIO: Record<string, string[]> = {
+  BOLLINGER: ['ancho_pct', 'pctb'],
+}
+function salidasGraficables(o: OverlayPrecio): [string, (number | null)[]][] {
+  const excluidas = SALIDAS_EXCLUIDAS_PRECIO[o.tipo] ?? []
+  return Object.entries(o.series).filter(([salida]) => !excluidas.includes(salida))
+}
+
 /** Precio (velas o línea de cierres) + overlays de indicadores (SMA/EMA/Bollinger) + flechas de
  * señales de estrategia, sobre la escala X compartida del gráfico técnico. */
 export default function PanelPrecio({
@@ -39,7 +50,7 @@ export default function PanelPrecio({
   const valoresBase = tieneVelas
     ? barras.flatMap(b => [b.maximo ?? b.cierre, b.minimo ?? b.cierre])
     : barras.map(b => b.cierre)
-  const valoresOverlay = overlays.flatMap(o => Object.values(o.series).flatMap(s => s.filter((v): v is number => v != null)))
+  const valoresOverlay = overlays.flatMap(o => salidasGraficables(o).flatMap(([, s]) => s.filter((v): v is number => v != null)))
   const valoresSenales = (senales ?? []).map(s => s.precio)
   const todos = [...valoresBase, ...valoresOverlay, ...valoresSenales]
   const minV = todos.length ? Math.min(...todos) : 0
@@ -93,7 +104,7 @@ export default function PanelPrecio({
         <path d={trazoDeSerie(barras.map(b => b.cierre), escalaX, yDeValor)} fill="none" stroke={COLOR_PRECIO} strokeWidth={1.75} />
       )}
 
-      {overlays.map(o => Object.entries(o.series).map(([salida, vals]) => (
+      {overlays.map(o => salidasGraficables(o).map(([salida, vals]) => (
         <path
           key={`${o.clave}-${salida}`}
           d={trazoDeSerie(vals, escalaX, yDeValor)}

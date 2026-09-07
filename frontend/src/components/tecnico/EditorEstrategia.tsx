@@ -121,8 +121,8 @@ function estadoDeDsl(dsl: EstrategiaDsl): EstadoEstrategia {
     entrada: entradaB.filas.length ? entradaB.filas : [{ id: nuevoId('c'), op: 'mayor', izq: { ...OPERANDO_CIERRE }, der: { ...OPERANDO_CONST_0 } }],
     salidaCombinador: salidaB.combinador,
     salida: salidaB.filas,
-    riesgo: dsl.riesgo,
-    ejecucion: dsl.ejecucion,
+    riesgo: dsl.riesgo ?? { stop_loss_pct: null, take_profit_pct: null, trailing_stop_pct: null, max_barras: null },
+    ejecucion: dsl.ejecucion ?? { lado: 'long', comision_pct: 0, precio_ejecucion: 'cierre', demora_barras: 0 },
   }
 }
 
