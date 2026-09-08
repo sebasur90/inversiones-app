@@ -8,9 +8,14 @@ export type AnalisisTecnicoHelpKey =
   | 'analisis_tecnico_precio_ejecucion'
   | 'analisis_tecnico_extremos'
   | 'analisis_tecnico_percentil'
+  | 'screener_titulo'
+  | 'screener_universo'
   | 'screener_distancia'
   | 'screener_precio_gatillo'
   | 'screener_umbral'
+  | 'screener_dispara_ahora'
+  | 'screener_motivo'
+  | 'screener_condiciones'
 
 export const ANALISISTECNICO_HELP: Record<AnalisisTecnicoHelpKey, HelpContent> = {
   analisis_tecnico_titulo: {
@@ -54,6 +59,19 @@ export const ANALISISTECNICO_HELP: Record<AnalisisTecnicoHelpKey, HelpContent> =
     howToInterpret: 'Valores bajos (< 10) marcan que el precio está en la zona más baja de su rango histórico; valores altos (> 90), en la más alta. Las líneas de referencia del panel están en 10 y 90.',
     limitations: 'Igual que Extremos: con ventana = 0, "histórico" es desde el inicio de la serie cargada. Necesita la ventana completa antes de dar el primer valor.',
   },
+  screener_titulo: {
+    title: 'Screener de proximidad',
+    shortDescription: 'Recorre cada par (estrategia guardada, ticker de tu cartera ∪ watchlist) y te dice cuáles están a menos del umbral de distancia de disparar una compra o una venta.',
+    whyItMatters: 'Reemplaza abrir el gráfico de cada ticker uno por uno: en una sola corrida ves dónde vale la pena mirar de cerca.',
+    howToInterpret: 'Cada fila es una estrategia a punto de activarse en un ticker, ordenadas por distancia (arriba, lo más inminente). Verde = compra, rojo = venta; el borde dorado marca las que ya disparan hoy.',
+    limitations: 'Sólo evalúa estrategias guardadas. Una estrategia atada a un ticker se evalúa nada más que sobre ese ticker; para que corra sobre todo el universo, guardala como "reutilizable" (sin ticker fijo) desde Análisis técnico. Los cruces de dos medias casi nunca aparecen salvo que las medias ya estén casi tocándose.',
+    relatedTerms: ['screener_distancia', 'screener_precio_gatillo', 'screener_umbral'],
+  },
+  screener_universo: {
+    title: 'Universo',
+    shortDescription: 'Qué tickers entran al escaneo: "Todos" (cartera ∪ watchlist), sólo los que tenés en cartera, o sólo los de la watchlist.',
+    whyItMatters: 'Acotar a "Cartera" sirve para vigilar salidas y stops de lo que ya tenés; "Watchlist", para cazar entradas de lo que venís siguiendo.',
+  },
   screener_distancia: {
     title: 'Distancia al disparo',
     shortDescription: 'Cuánto tiene que moverse el precio (en %, con signo: negativo = tiene que bajar) para que la estrategia dispare compra o venta. Se busca el movimiento mínimo que hace cumplir la regla, no una proyección de hacia dónde va el precio.',
@@ -71,5 +89,21 @@ export const ANALISISTECNICO_HELP: Record<AnalisisTecnicoHelpKey, HelpContent> =
     title: 'Umbral de proximidad',
     shortDescription: 'El screener sólo muestra los pares (ticker, estrategia) cuya distancia al disparo es menor o igual a este porcentaje.',
     whyItMatters: 'Un umbral más angosto (1-2%) muestra sólo lo más inminente; uno más amplio (10%) da una vista más temprana, con más ruido.',
+  },
+  screener_dispara_ahora: {
+    title: 'Dispara ahora',
+    shortDescription: 'La estrategia cumple su regla con el precio actual, sin que el ticker tenga que moverse (distancia = 0%). Se marca con el borde dorado.',
+    whyItMatters: 'Es la señal más urgente: no es "está cerca", es "está dada". Conviene revisar el gráfico y el desglose de condiciones antes de operar.',
+    limitations: 'Que la regla esté dada hoy no implica que siga dada mañana ni que la señal sea buena: es lo que la estrategia pediría, nada más.',
+  },
+  screener_motivo: {
+    title: 'Motivo',
+    shortDescription: 'Qué parte de la estrategia está por dispararse: Entrada (abrir posición), Regla de salida (cierre por condición) o Stop loss / Take profit / Trailing stop (los límites de riesgo).',
+    howToInterpret: 'Los motivos de salida y de stop sólo aparecen cuando la estrategia tiene una posición abierta en ese ticker; si no hay posición, únicamente puede aparecer Entrada.',
+  },
+  screener_condiciones: {
+    title: 'Desglose de condiciones',
+    shortDescription: 'Cada línea es una condición de la regla que está por dispararse, con su valor actual: el tilde marca las que ya se cumplen y la cruz las que faltan.',
+    howToInterpret: 'La distancia al disparo es el movimiento de precio que hace que se cumplan todas a la vez. Si ya están casi todas tildadas, suele bastar un movimiento chico.',
   },
 }

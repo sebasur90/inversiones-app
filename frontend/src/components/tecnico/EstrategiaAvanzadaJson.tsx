@@ -1,5 +1,6 @@
 import type { EjecucionDsl, EstrategiaDsl, RiesgoDsl } from '../../api'
 import Segmented from '../ui/Segmented'
+import InfoTooltip from '../../help/components/InfoTooltip'
 
 const RIESGO_CAMPOS = [
   ['stop_loss_pct', 'Stop loss %'],
@@ -100,7 +101,10 @@ export default function EstrategiaAvanzadaJson({
             />
           </label>
           <div>
-            <div className="text-label text-app-text-dim mb-1">Precio de ejecución</div>
+            <div className="flex items-center gap-1 text-label text-app-text-dim mb-1">
+              Precio de ejecución
+              <InfoTooltip term="analisis_tecnico_precio_ejecucion" />
+            </div>
             <Segmented
               options={[
                 { value: 'cierre', label: 'Cierre' },

@@ -7,6 +7,7 @@ import {
 } from './dslEditable'
 import Segmented from '../ui/Segmented'
 import { Icon } from '../icons/Icons'
+import InfoTooltip from '../../help/components/InfoTooltip'
 
 const OPERADORES: { value: OpComparador; label: string }[] = [
   { value: 'mayor', label: 'es mayor que' },
@@ -338,7 +339,10 @@ export default function EditorEstrategia({
             />
           </label>
           <div>
-            <div className="text-label text-app-text-dim mb-1">Precio de ejecución</div>
+            <div className="flex items-center gap-1 text-label text-app-text-dim mb-1">
+              Precio de ejecución
+              <InfoTooltip term="analisis_tecnico_precio_ejecucion" />
+            </div>
             <Segmented
               options={[
                 { value: 'cierre', label: 'Cierre' },

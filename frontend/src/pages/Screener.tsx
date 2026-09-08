@@ -100,6 +100,10 @@ export default function Screener() {
     <div className="pb-4">
       <ScreenHeader title="Screener" onBack={() => navigate(-1)} />
 
+      <div className="mb-3">
+        <InfoTooltip term="screener_titulo" label="Cómo funciona el screener" />
+      </div>
+
       <Card className="mb-3 flex flex-col gap-3">
         <div>
           <div className="text-label font-bold text-app-text-dim uppercase mb-1.5">Estrategias</div>
@@ -139,7 +143,10 @@ export default function Screener() {
         </div>
 
         <div>
-          <div className="text-label font-bold text-app-text-dim uppercase mb-1.5">Universo</div>
+          <div className="flex items-center gap-1 text-label font-bold text-app-text-dim uppercase mb-1.5">
+            Universo
+            <InfoTooltip term="screener_universo" />
+          </div>
           <Segmented
             options={[
               { value: 'todos' as const, label: 'Todos' },
@@ -264,6 +271,18 @@ export default function Screener() {
                               </span>
                               <span className="font-mono font-bold text-app-text">{formatMoneda(f.precio_gatillo, f.moneda)}</span>
                             </div>
+                            <div className="flex items-center gap-1 text-label text-app-text-dim">
+                              <span className="inline-flex items-center gap-0.5">
+                                Motivo
+                                <InfoTooltip term="screener_motivo" />
+                              </span>
+                              <span className="font-bold text-app-text">{MOTIVO_LABEL[f.motivo] ?? f.motivo}</span>
+                            </div>
+                            {f.dispara_ahora && (
+                              <div className="text-label text-app-gold">
+                                <InfoTooltip term="screener_dispara_ahora" label="Dispara ahora" />
+                              </div>
+                            )}
                             {f.posicion_abierta && f.retorno_abierta_pct != null && (
                               <div className="text-label text-app-text-dim">
                                 Posición abierta desde la entrada: <span className="font-mono font-bold text-app-text">{formatPct(f.retorno_abierta_pct)}</span>
@@ -271,6 +290,9 @@ export default function Screener() {
                             )}
                             {f.condiciones.length > 0 && (
                               <div className="flex flex-col gap-1">
+                                <div className="text-label text-app-text-dim">
+                                  <InfoTooltip term="screener_condiciones" label="Condiciones" />
+                                </div>
                                 {f.condiciones.map((c, i) => (
                                   <div key={i} className="flex items-center gap-1.5 text-label">
                                     <Icon

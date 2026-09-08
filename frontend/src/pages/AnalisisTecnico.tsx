@@ -166,6 +166,10 @@ export default function AnalisisTecnico() {
             )}
           </div>
           <div className="mb-3">
+            <div className="flex items-center gap-1 text-label font-bold text-app-text-dim uppercase mb-1.5">
+              Indicadores
+              <InfoTooltip term="analisis_tecnico_indicadores" />
+            </div>
             <SelectorIndicadores
               activos={activos} onToggle={toggleIndicador} onCambiarParam={cambiarParamIndicador}
               tieneVolumen={serie?.tiene_volumen ?? true}
@@ -394,6 +398,10 @@ function SeccionEstrategias({
 
   return (
     <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-1 text-label font-bold text-app-text-dim uppercase">
+        Estrategias
+        <InfoTooltip term="analisis_tecnico_estrategias" />
+      </div>
       {seriesDisponibles.length > 1 && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-label text-app-text-faint">Serie</span>
@@ -466,6 +474,10 @@ function SeccionEstrategias({
         />
       ))}
 
+      <div className="flex items-center gap-1 text-label font-bold text-app-text-dim uppercase">
+        Backtest
+        <InfoTooltip term="analisis_tecnico_backtest" />
+      </div>
       <div className="flex gap-2 flex-wrap">
         <Button onClick={correrBacktest} disabled={cargando || !dsl}>{cargando ? 'Corriendo…' : 'Correr backtest'}</Button>
         <Button variant="outline" onClick={() => { setNombreParaGuardar(nombreActual); setModalGuardarOpen(true) }} disabled={!dsl}>
