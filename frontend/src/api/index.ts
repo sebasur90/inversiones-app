@@ -1458,3 +1458,54 @@ export const duplicarEstrategia = (id: number, nuevoNombre?: string) =>
 
 export const eliminarEstrategiaTecnica = (id: number) =>
   api.delete(`/inversiones/estrategias/${id}`).then(() => undefined)
+
+// ---- Screener ----
+
+export type OrigenScreener = 'todos' | 'cartera' | 'watchlist'
+
+export interface ScreenerRequest {
+  estrategia_ids?: number[]
+  umbral_pct?: number
+  origen?: OrigenScreener
+}
+
+export interface ScreenerCondicionOut {
+  op: string
+  cumple: boolean
+  izq_etiqueta: string
+  izq_valor: number | null
+  der_etiqueta: string
+  der_valor: number | null
+}
+
+export interface ScreenerFilaOut {
+  ticker: string
+  nombre: string
+  origen: 'cartera' | 'watchlist' | 'ambos'
+  estrategia_id: number
+  estrategia_nombre: string
+  variante: VarianteSerie
+  moneda: string
+  tipo: 'compra' | 'venta'
+  motivo: string
+  distancia_pct: number
+  precio_actual: number
+  precio_gatillo: number
+  fecha_precio: string
+  dispara_ahora: boolean
+  posicion_abierta: boolean
+  retorno_abierta_pct: number | null
+  condiciones: ScreenerCondicionOut[]
+}
+
+export interface ScreenerOut {
+  filas: ScreenerFilaOut[]
+  tickers_evaluados: number
+  pares_evaluados: number
+  umbral_pct: number
+  fecha: string
+  advertencias: string[]
+}
+
+export const correrScreener = (body: ScreenerRequest) =>
+  api.post<ScreenerOut>('/inversiones/tecnico/screener', body).then(r => r.data)

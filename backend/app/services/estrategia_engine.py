@@ -40,6 +40,7 @@ from .indicadores_engine import Barra
 __all__ = [
     "Barra", "Compilado", "Senal", "Operacion", "ResultadoBacktest",
     "compilar", "backtest", "validar_estrategia", "barras_minimas",
+    "maximo_barra", "resolver_operando",
     "PRESETS", "resolver_preset",
 ]
 
@@ -99,7 +100,9 @@ _CAMPO_GETTERS = {
 }
 
 
-def _resolver_operando(operando: dict, barras: list[Barra], series: dict) -> list:
+def resolver_operando(operando: dict, barras: list[Barra], series: dict) -> list:
+    """Serie de valores de un operando (`ref`/`const`/`campo`). Pública para que `screener_engine`
+    pueda leer izq/der de una hoja sin duplicar el `match` de `_resolver_operando`."""
     if "ref" in operando:
         serie_dict = series.get(operando["ref"])
         if serie_dict is None:
@@ -117,6 +120,10 @@ def _resolver_operando(operando: dict, barras: list[Barra], series: dict) -> lis
             raise ValueError(f"campo desconocido: {operando['campo']!r}")
         return [getter(b) for b in barras]
     raise ValueError(f"operando inválido: {operando!r}")
+
+
+# Alias interno: el resto del módulo ya usa este nombre: se mantiene para no tocar cada call site.
+_resolver_operando = resolver_operando
 
 
 # ─── Hojas trivaluadas ────────────────────────────────────────────────────────
@@ -248,8 +255,13 @@ def compilar(dsl: dict, barras: list[Barra]) -> Compilado:
 
 # ─── Backtest ─────────────────────────────────────────────────────────────────
 
-def _maximo_barra(barra: Barra) -> float:
+def maximo_barra(barra: Barra) -> float:
+    """Máximo de la barra, degradando a `cierre` sin OHLC. Pública para que `screener_engine`
+    siembre el trailing stop con la misma regla que usa el backtest."""
     return barra.maximo if barra.maximo is not None else barra.cierre
+
+
+_maximo_barra = maximo_barra
 
 
 def _precio_ejecucion(barras: list[Barra], indice_senal: int, ejecucion: dict, advertencias: set) -> tuple[int, float] | None:

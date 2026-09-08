@@ -12,8 +12,9 @@ from ..schemas import (
     TickerTecnicoOut, SerieTecnicaOut,
     BacktestRequest, BacktestOut, PresetEstrategiaOut, SenalTickerOut,
     EstrategiaGuardarRequest, EstrategiaOut,
+    ScreenerRequest, ScreenerOut,
 )
-from ..services import ohlcv_analytics, estrategias_analytics
+from ..services import ohlcv_analytics, estrategias_analytics, screener_analytics
 from ..services import indicadores_engine, estrategia_engine
 
 router = APIRouter(prefix="/api/inversiones", tags=["tecnico"])
@@ -63,6 +64,20 @@ def listar_senales_recientes(db: Session = Depends(get_db)):
     """Última señal de cada estrategia guardada con ticker asignado, si es reciente. La consume
     la watchlist para mostrar un badge sin tener que abrir el gráfico de cada ticker."""
     return estrategias_analytics.senales_recientes(db)
+
+
+_ORIGENES_SCREENER = ("todos", "cartera", "watchlist")
+
+
+@router.post("/tecnico/screener", response_model=ScreenerOut)
+def correr_screener(body: ScreenerRequest, db: Session = Depends(get_db)):
+    """Qué pares (estrategia guardada, ticker de cartera ∪ watchlist) están a menos de
+    `umbral_pct` de disparar compra o venta. `estrategia_ids` vacío corre todas las guardadas."""
+    if body.origen not in _ORIGENES_SCREENER:
+        raise HTTPException(status_code=422, detail=f"origen desconocido: '{body.origen}'")
+    return screener_analytics.escanear(
+        db, tuple(sorted(set(body.estrategia_ids))), body.umbral_pct, body.origen,
+    )
 
 
 @router.get("/tecnico/{ticker}/serie", response_model=SerieTecnicaOut)

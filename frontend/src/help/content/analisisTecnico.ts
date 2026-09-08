@@ -8,6 +8,9 @@ export type AnalisisTecnicoHelpKey =
   | 'analisis_tecnico_precio_ejecucion'
   | 'analisis_tecnico_extremos'
   | 'analisis_tecnico_percentil'
+  | 'screener_distancia'
+  | 'screener_precio_gatillo'
+  | 'screener_umbral'
 
 export const ANALISISTECNICO_HELP: Record<AnalisisTecnicoHelpKey, HelpContent> = {
   analisis_tecnico_titulo: {
@@ -50,5 +53,23 @@ export const ANALISISTECNICO_HELP: Record<AnalisisTecnicoHelpKey, HelpContent> =
     howItIsCalculated: '100 × (cantidad de cierres de la ventana estrictamente menores al actual) / (tamaño de la ventana − 1). Es un rank real, no un min-max: resiste outliers y da 0 y 100 exactos en los extremos.',
     howToInterpret: 'Valores bajos (< 10) marcan que el precio está en la zona más baja de su rango histórico; valores altos (> 90), en la más alta. Las líneas de referencia del panel están en 10 y 90.',
     limitations: 'Igual que Extremos: con ventana = 0, "histórico" es desde el inicio de la serie cargada. Necesita la ventana completa antes de dar el primer valor.',
+  },
+  screener_distancia: {
+    title: 'Distancia al disparo',
+    shortDescription: 'Cuánto tiene que moverse el precio (en %, con signo: negativo = tiene que bajar) para que la estrategia dispare compra o venta. Se busca el movimiento mínimo que hace cumplir la regla, no una proyección de hacia dónde va el precio.',
+    whyItMatters: 'Ordena el universo por qué tan cerca está cada estrategia de activarse, sin tener que abrir el gráfico de cada ticker uno por uno.',
+    limitations: 'Es una medida de distancia, no una predicción: que el precio esté a 1% de disparar no dice nada sobre si va a moverse en esa dirección.',
+    relatedTerms: ['analisis_tecnico_estrategias', 'screener_precio_gatillo'],
+  },
+  screener_precio_gatillo: {
+    title: 'Precio gatillo',
+    shortDescription: 'El precio al que, de llegar el ticker, la estrategia dispararía hoy: `precio actual × (1 + distancia / 100)`.',
+    whyItMatters: 'Es el número concreto para poner una alerta de precio o comparar contra el book, en vez de tener que calcular el porcentaje a mano.',
+    relatedTerms: ['screener_distancia'],
+  },
+  screener_umbral: {
+    title: 'Umbral de proximidad',
+    shortDescription: 'El screener sólo muestra los pares (ticker, estrategia) cuya distancia al disparo es menor o igual a este porcentaje.',
+    whyItMatters: 'Un umbral más angosto (1-2%) muestra sólo lo más inminente; uno más amplio (10%) da una vista más temprana, con más ruido.',
   },
 }

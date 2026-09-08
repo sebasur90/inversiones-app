@@ -1250,3 +1250,50 @@ class EstrategiaOut(BaseModel):
     variante: str = "local"
     fecha_creacion: datetime
     fecha_actualizacion: datetime
+
+
+# ─── Screener ───────────────────────────────────────────────────────────────
+
+class ScreenerRequest(BaseModel):
+    # Vacío = todas las estrategias guardadas.
+    estrategia_ids: list[int] = Field(default_factory=list)
+    umbral_pct: float = Field(3.0, gt=0, le=15)
+    origen: str = "todos"  # "todos" | "cartera" | "watchlist" — filtra el universo de tickers
+
+
+class ScreenerCondicionOut(BaseModel):
+    op: str
+    cumple: bool
+    izq_etiqueta: str
+    izq_valor: Optional[float] = None
+    der_etiqueta: str
+    der_valor: Optional[float] = None
+
+
+class ScreenerFilaOut(BaseModel):
+    ticker: str
+    nombre: str
+    origen: str  # "cartera" | "watchlist" | "ambos"
+    estrategia_id: int
+    estrategia_nombre: str
+    variante: str = "local"
+    moneda: str = ""
+    tipo: str  # "compra" | "venta"
+    motivo: str  # "entrada" | "regla_salida" | "stop_loss" | "take_profit" | "trailing_stop"
+    distancia_pct: float
+    precio_actual: float
+    precio_gatillo: float
+    fecha_precio: date
+    dispara_ahora: bool
+    posicion_abierta: bool
+    retorno_abierta_pct: Optional[float] = None
+    condiciones: list[ScreenerCondicionOut] = Field(default_factory=list)
+
+
+class ScreenerOut(BaseModel):
+    filas: list[ScreenerFilaOut]
+    tickers_evaluados: int
+    pares_evaluados: int
+    umbral_pct: float
+    fecha: date
+    advertencias: list[str] = Field(default_factory=list)
