@@ -43,10 +43,16 @@ def obtener_estrategia(estrategia_id: int, db: Session) -> EstrategiaTecnica | N
     return db.query(EstrategiaTecnica).filter(EstrategiaTecnica.id == estrategia_id).first()
 
 
+# Centinela para `actualizar_estrategia`: distingue "no tocar este campo" de "poner en None".
+# Hace falta para `ticker`, que puede pasar de un ticker fijo a NULL (estrategia reusable en todo
+# el universo, la que consume el screener).
+_SIN_CAMBIO: object = object()
+
+
 def actualizar_estrategia(
     estrategia_id: int, db: Session,
     nombre: str | None = None, descripcion: str | None = None,
-    ticker: str | None = None, definicion: dict | None = None,
+    ticker: str | None | object = _SIN_CAMBIO, definicion: dict | None = None,
     variante: str | None = None,
 ) -> EstrategiaTecnica | None:
     estrategia = obtener_estrategia(estrategia_id, db)
@@ -56,7 +62,7 @@ def actualizar_estrategia(
         estrategia.nombre = nombre
     if descripcion is not None:
         estrategia.descripcion = descripcion
-    if ticker is not None:
+    if ticker is not _SIN_CAMBIO:
         estrategia.ticker = ticker
     if definicion is not None:
         estrategia.definicion = definicion

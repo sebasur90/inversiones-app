@@ -71,6 +71,18 @@ def test_actualizar_estrategia(db):
     assert actualizada.definicion == _DSL
 
 
+def test_actualizar_estrategia_no_pisa_ticker_si_no_se_pasa(db):
+    creada = ea.crear_estrategia("Con ticker", _DSL, db, ticker="AL30")
+    ea.actualizar_estrategia(creada.id, db, nombre="Otro nombre")
+    assert ea.obtener_estrategia(creada.id, db).ticker == "AL30"
+
+
+def test_actualizar_estrategia_ticker_none_explicito_la_vuelve_reusable(db):
+    creada = ea.crear_estrategia("Con ticker", _DSL, db, ticker="AL30")
+    ea.actualizar_estrategia(creada.id, db, ticker=None)
+    assert ea.obtener_estrategia(creada.id, db).ticker is None
+
+
 def test_duplicar_estrategia(db):
     creada = ea.crear_estrategia("Original", _DSL, db, ticker="AL30")
     dup = ea.duplicar_estrategia(creada.id, None, db)
@@ -131,6 +143,19 @@ def test_router_crud_completo(client):
     assert r.status_code == 204
     r = client.get(f"/api/inversiones/estrategias/{estrategia['id']}")
     assert r.status_code == 404
+
+
+def test_router_put_acepta_ticker_null_explicito(client):
+    # El PUT es un reemplazo completo: `ticker: null` en el body deja la estrategia reusable
+    # (sin ticker fijo), no la deja como estaba. La transición "tenía ticker -> null" se cubre a
+    # nivel analytics en test_actualizar_estrategia_ticker_none_explicito_la_vuelve_reusable.
+    r = client.post("/api/inversiones/estrategias", json={"nombre": "E", "definicion": _DSL})
+    assert r.status_code == 201
+    eid = r.json()["id"]
+
+    r = client.put(f"/api/inversiones/estrategias/{eid}", json={"nombre": "E", "definicion": _DSL, "ticker": None})
+    assert r.status_code == 200
+    assert r.json()["ticker"] is None
 
 
 def test_router_rechaza_dsl_invalido(client):

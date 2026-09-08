@@ -260,6 +260,9 @@ function SeccionEstrategias({
   const [cargando, setCargando] = useState(false)
   const [modalGuardarOpen, setModalGuardarOpen] = useState(false)
   const [nombreParaGuardar, setNombreParaGuardar] = useState('')
+  // Guardar sin ticker fijo: la estrategia queda reusable en cualquier instrumento y el screener
+  // la corre sobre todo el universo (cartera ∪ watchlist), no sólo sobre un ticker.
+  const [reutilizable, setReutilizable] = useState(false)
   const [modalImportarOpen, setModalImportarOpen] = useState(false)
   const [textoImportar, setTextoImportar] = useState('')
 
@@ -298,6 +301,7 @@ function SeccionEstrategias({
       setEstrategiaActualId(null)
       setNombreActual(preset.nombre)
       setDescripcionActual(null)
+      setReutilizable(false)
       setResultado(null)
       setErrores([])
       setAvisoImport(null)
@@ -311,6 +315,7 @@ function SeccionEstrategias({
     setEstrategiaActualId(e.id)
     setNombreActual(e.nombre)
     setDescripcionActual(e.descripcion)
+    setReutilizable(e.ticker === null)
     setResultado(null)
     setErrores([])
     setAvisoImport(null)
@@ -335,6 +340,7 @@ function SeccionEstrategias({
     setEstrategiaActualId(null)
     setNombreActual(archivo.nombre ?? 'Estrategia importada')
     setDescripcionActual(archivo.descripcion)
+    setReutilizable(!archivo.ticker)
     setResultado(null)
     if (archivo.variante && seriesDisponibles.some(s => s.variante === archivo.variante)) {
       onVariante(archivo.variante)
@@ -360,11 +366,12 @@ function SeccionEstrategias({
 
   async function guardar() {
     if (!dsl || !nombreParaGuardar.trim()) return
+    const tickerAGuardar = reutilizable ? null : ticker
     try {
       if (estrategiaActualId) {
-        await actualizarEstrategia(estrategiaActualId, { nombre: nombreParaGuardar, descripcion: descripcionActual, ticker, definicion: dsl, variante })
+        await actualizarEstrategia(estrategiaActualId, { nombre: nombreParaGuardar, descripcion: descripcionActual, ticker: tickerAGuardar, definicion: dsl, variante })
       } else {
-        const creada = await guardarEstrategia({ nombre: nombreParaGuardar, descripcion: descripcionActual, ticker, definicion: dsl, variante })
+        const creada = await guardarEstrategia({ nombre: nombreParaGuardar, descripcion: descripcionActual, ticker: tickerAGuardar, definicion: dsl, variante })
         setEstrategiaActualId(creada.id)
       }
       setNombreActual(nombreParaGuardar)
@@ -497,6 +504,18 @@ function SeccionEstrategias({
             placeholder="Nombre de la estrategia"
             className="bg-app-surface-2 border border-app-border rounded-lg px-3 py-2 text-body text-app-text"
           />
+          <label className="flex items-start gap-2 text-caption text-app-text-dim cursor-pointer">
+            <input
+              type="checkbox" className="mt-0.5"
+              checked={reutilizable} onChange={e => setReutilizable(e.target.checked)}
+            />
+            <span>
+              Reutilizable en todo el universo (sin ticker fijo).{' '}
+              {reutilizable
+                ? 'El screener la evalúa sobre toda la cartera y watchlist.'
+                : `Queda atada a ${ticker}.`}
+            </span>
+          </label>
           <Button onClick={guardar} disabled={!nombreParaGuardar.trim()}>Guardar</Button>
         </div>
       </Modal>
