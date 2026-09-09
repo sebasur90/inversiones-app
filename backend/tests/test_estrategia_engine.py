@@ -387,7 +387,10 @@ def test_backtest_minimo_historico_serie_en_v():
 
 # ── presets ───────────────────────────────────────────────────────────────────────────────────
 
-def _serie_sintetica(n=300):
+def _serie_sintetica(n=700):
+    # 700 barras y no 300: los presets de horizonte largo (`momentum_12m` pide RETORNO(252) sobre
+    # SMA(200)) recién quedan definidos pasada la barra 253, y con una serie corta el test los
+    # daría por buenos sin haber evaluado nunca su condición de entrada.
     base = date(2023, 1, 1)
     out = []
     precio = 100.0
@@ -410,3 +413,84 @@ def test_presets_validan_y_corren_sobre_serie_sintetica(nombre):
     assert resultado.metricas["estado"] in ("ok", "datos_insuficientes")
     assert len(resultado.curva_equity) == len(barras)
     assert len(resultado.curva_buy_hold) == len(barras)
+
+
+@pytest.mark.parametrize("nombre,espec", list(ee.PRESETS.items()))
+def test_presets_declaran_metadatos_coherentes(nombre, espec):
+    assert espec.etiqueta.strip()
+    assert espec.categoria in ee.CATEGORIAS_PRESET
+    # La etiqueta es la identidad de la estrategia sembrada en DB: dos presets con la misma se
+    # pisarían mutuamente en cada arranque.
+    assert sum(1 for e in ee.PRESETS.values() if e.etiqueta == espec.etiqueta) == 1
+    # `requiere_volumen` tiene que ser consecuencia del DSL, no una etiqueta suelta.
+    usa_volumen = "volumen" in str(espec.definicion).lower()
+    assert espec.requiere_volumen == usa_volumen
+    # Los campos `maximo`/`minimo` de la barra son `None` en una serie sin velas, y con la lógica
+    # trivaluada eso deja la condición sin evaluar: la estrategia no operaría nunca. Si el DSL los
+    # usa, `requiere_velas` tiene que declararlo para que la UI lo avise.
+    usa_ohlc = any(f"'campo': '{c}'" in str(espec.definicion) for c in ("maximo", "minimo", "apertura"))
+    if usa_ohlc:
+        assert espec.requiere_velas
+
+
+def test_resolver_preset_devuelve_copia_del_dsl_no_la_espec():
+    dsl = ee.resolver_preset("cruce_medias")
+    assert isinstance(dsl, dict) and dsl["version"] == 1
+    dsl["riesgo"]["stop_loss_pct"] = 99.0
+    assert ee.PRESETS["cruce_medias"].definicion["riesgo"]["stop_loss_pct"] == 8.0
+
+
+# ── niveles de riesgo expuestos por el motor ──────────────────────────────────────────────────
+
+def _dsl_siempre_dentro(riesgo: dict) -> dict:
+    """Entra en la primera barra evaluable y nunca sale por regla: la salida la deciden los stops."""
+    return {
+        "version": 1,
+        "indicadores": [{"id": "sma1", "tipo": "SMA", "params": {"periodo": 1}}],
+        "entrada": {"op": "mayor", "izq": {"ref": "sma1"}, "der": {"const": 0}},
+        "salida": None,
+        "riesgo": riesgo,
+        "ejecucion": {"lado": "long", "comision_pct": 0.0, "precio_ejecucion": "cierre", "demora_barras": 0},
+    }
+
+
+def _barras_de_cierres(cierres: list[float]) -> list[Barra]:
+    """Barras que abren en el cierre anterior (sin gaps): así una caída pasa *por* los niveles de
+    stop en vez de saltárselos, que es el caso en que el precio de salida es el nivel exacto."""
+    base = date(2024, 1, 1)
+    out = []
+    for i, c in enumerate(cierres):
+        apertura = cierres[i - 1] if i else c
+        out.append(Barra(
+            fecha=base + timedelta(days=i), cierre=c, apertura=apertura,
+            maximo=max(apertura, c), minimo=min(apertura, c),
+        ))
+    return out
+
+
+def test_operacion_expone_niveles_de_stop_loss_y_take_profit():
+    dsl = _dsl_siempre_dentro({"stop_loss_pct": 10.0, "take_profit_pct": 20.0,
+                               "trailing_stop_pct": None, "max_barras": None})
+    resultado = ee.backtest(dsl, _barras_de_cierres([100.0, 101.0, 102.0]))
+    op = resultado.operaciones[0]
+    assert op.precio_entrada == pytest.approx(100.0)
+    assert op.nivel_stop_loss == pytest.approx(90.0)
+    assert op.nivel_take_profit == pytest.approx(120.0)
+    assert op.trailing is None  # la estrategia no configuró trailing
+
+
+def test_trailing_expuesto_coincide_con_el_nivel_que_dispara_la_salida():
+    # Sube a 120 (el trailing al 10% queda en 108) y después cae: la salida tiene que darse en 108,
+    # y el último nivel de la serie publicada tiene que ser exactamente ese.
+    dsl = _dsl_siempre_dentro({"stop_loss_pct": None, "take_profit_pct": None,
+                               "trailing_stop_pct": 10.0, "max_barras": None})
+    resultado = ee.backtest(dsl, _barras_de_cierres([100.0, 110.0, 120.0, 105.0, 104.0]))
+    op = resultado.operaciones[0]
+
+    assert op.motivo_salida == "trailing_stop"
+    assert op.precio_salida == pytest.approx(108.0)
+    assert op.trailing[-1] == pytest.approx(op.precio_salida)
+    # Un valor por barra desde la entrada, monótono no decreciente (el trailing nunca baja).
+    assert len(op.trailing) == op.indice_salida - op.indice_entrada + 1
+    assert op.trailing == sorted(op.trailing)
+    assert op.trailing[0] == pytest.approx(90.0)  # sembrado en el precio de entrada, no en el máximo

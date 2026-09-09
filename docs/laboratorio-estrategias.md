@@ -173,10 +173,16 @@ importador de la app **también acepta un DSL crudo** (tiene `version` y `entrad
 tiene `definicion`), así pegar el `definicion` de un preset o de una respuesta de la API funciona
 sin fricción. `ticker: null` es lo que hace la estrategia reusable en cualquier activo.
 
-Al importar en **Análisis técnico → Estrategias → Importar JSON**: se crea una estrategia nueva
-(no un update), se adoptan `nombre`/`descripcion`/`variante` y se corre el backtest al toque (un
-DSL inválido dispara el 422 ahí mismo). El ticker de la página **no** cambia aunque el archivo
-traiga otro — sólo se avisa si difieren.
+Al importar en **Análisis técnico → Estrategias → Importar JSON**: se adoptan
+`nombre`/`descripcion`/`variante` y se corre el backtest al toque (un DSL inválido dispara el 422
+ahí mismo). El ticker de la página **no** cambia aunque el archivo traiga otro — sólo se avisa si
+difieren.
+
+Al guardar, **el nombre identifica a la estrategia**: si ya existe una guardada con ese nombre
+(ignorando mayúsculas y acentos), se sobrescribe en vez de crear una segunda con el mismo texto, y
+la app avisa que la pisó. Así, reexportar desde el notebook y reimportar la misma estrategia N
+veces deja una sola fila, no N. Para quedarte con las dos versiones, cambiale el nombre a una
+(o usá "Duplicar", que busca el primer `… (copia)`, `… (copia) (2)` libre).
 
 ---
 

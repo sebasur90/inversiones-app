@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import type { EscalaX } from './useEscalaX'
 import { manejadoresPuntero } from './crosshair'
-import { trazoDeSerie } from './trazo'
+import { trazoDeSerie, valoresVisibles } from './trazo'
 
 const PALETA_SUBSERIE: Record<string, string> = {
   valor: '#9c7aa0', k: '#5b8ba0', d: '#d8b14a',
@@ -28,7 +28,9 @@ export default function PanelIndicador({
   const handlers = manejadoresPuntero(svgRef, escalaX, onHover)
 
   const dominioFijo = tipo === 'RSI' || tipo === 'ESTOCASTICO' || tipo === 'PERCENTIL' ? ([0, 100] as const) : null
-  const valores = Object.values(series).flatMap(s => s.filter((v): v is number => v != null))
+  // Sólo el tramo visible: al acercar el zoom, un oscilador sin dominio fijo (MACD, ATR, RETORNO)
+  // tiene que reescalar sobre lo que se está mirando.
+  const valores = Object.values(series).flatMap(s => valoresVisibles(s, escalaX))
   const minV = dominioFijo ? dominioFijo[0] : Math.min(0, ...(valores.length ? valores : [0]))
   const maxV = dominioFijo ? dominioFijo[1] : Math.max(0, ...(valores.length ? valores : [1]))
   const pad = dominioFijo ? 0 : (maxV - minV) * 0.12 || 1
@@ -53,7 +55,7 @@ export default function PanelIndicador({
         ))}
 
         {tipo === 'MACD' && series.histograma?.map((v, i) => {
-          if (v == null) return null
+          if (v == null || !escalaX.visible(i)) return null
           const x = escalaX.xDeIndice(i)
           const yZero = yDeValor(0)
           const y = yDeValor(v)
@@ -73,7 +75,7 @@ export default function PanelIndicador({
           />
         ))}
 
-        {hoverIndex != null && (
+        {hoverIndex != null && escalaX.visible(hoverIndex) && (
           <line x1={escalaX.xDeIndice(hoverIndex)} x2={escalaX.xDeIndice(hoverIndex)} y1={0} y2={alto} stroke={COLOR_EJE} strokeOpacity={0.5} />
         )}
       </svg>

@@ -1153,6 +1153,13 @@ class OperacionOut(BaseModel):
     retorno_neto_pct: float
     motivo_salida: Optional[str] = None
     abierta: bool
+    # Niveles de riesgo vigentes durante la operación, calculados por el motor para que el gráfico
+    # los dibuje sin reimplementar la regla. `trailing` arranca en `indice_entrada` y trae un valor
+    # por barra consecutiva (puede terminar antes de `indice_salida` si la salida se ejecutó con
+    # demora); `None` cuando la estrategia no configuró ese límite.
+    nivel_stop_loss: Optional[float] = None
+    nivel_take_profit: Optional[float] = None
+    trailing: Optional[list[float]] = None
 
 
 class BacktestMetricasOut(BaseModel):
@@ -1214,8 +1221,20 @@ class BacktestOut(BaseModel):
 
 
 class PresetEstrategiaOut(BaseModel):
-    nombre: str
+    nombre: str                 # slug estable, el que viaja en `EstrategiaOut.tipo_preset`
+    etiqueta: str               # nombre legible, el que se muestra en el selector
+    categoria: str              # "tendencia" | "reversion" | "ruptura" | "momentum"
     definicion: dict[str, Any]
+    # El motor degrada solo si faltan: son para avisar en la UI que sobre esta serie la estrategia
+    # no mide lo que promete (sin OHLC el canal usa cierres; sin volumen el filtro nunca se cumple).
+    requiere_velas: bool = False
+    requiere_volumen: bool = False
+
+
+class SiembraPresetsOut(BaseModel):
+    creadas: int
+    actualizadas: int
+    sin_cambios: int
 
 
 class SenalTickerOut(BaseModel):

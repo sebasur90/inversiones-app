@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from app.database import Base, get_db
 from app.main import app
 from app.services import estrategias_analytics as ea
-from app.services.estrategia_engine import PRESETS
+from app.services.estrategia_engine import resolver_preset
 from fastapi.testclient import TestClient
 
 
@@ -38,7 +38,7 @@ def client():
     app.dependency_overrides.clear()
 
 
-_DSL = PRESETS["rsi_sobreventa"]
+_DSL = resolver_preset("rsi_sobreventa")
 
 
 # ── analytics: CRUD + round-trip del JSON ─────────────────────────────────────
@@ -187,3 +187,58 @@ def test_router_acepta_dsl_avanzado_con_entre_y_no_anidado(client):
     r = client.get(f"/api/inversiones/estrategias/{r.json()['id']}")
     assert r.status_code == 200
     assert r.json()["definicion"] == dsl
+
+
+# ── el nombre identifica a la estrategia (upsert) ──────────────────────────────
+
+def test_normalizar_nombre_ignora_mayusculas_acentos_y_espacios():
+    assert ea.normalizar_nombre("Mínimo  Histórico") == ea.normalizar_nombre("minimo historico")
+    assert ea.normalizar_nombre("  RSI en Sobreventa ") == "rsi en sobreventa"
+
+
+def test_guardar_por_nombre_pisa_la_existente_en_vez_de_duplicar(db):
+    primera, creada = ea.guardar_por_nombre("Mi estrategia", _DSL, db, ticker="AL30")
+    assert creada is True
+
+    otro_dsl = resolver_preset("cruce_medias")
+    segunda, creada = ea.guardar_por_nombre("MI  ESTRATEGIA", otro_dsl, db, ticker=None)
+    assert creada is False
+    # Misma fila (el id sobrevive, así lo que el front tenga cargado sigue valiendo).
+    assert segunda.id == primera.id
+    assert segunda.definicion == otro_dsl
+    assert segunda.ticker is None
+    assert len(ea.listar_estrategias(None, db)) == 1
+
+
+def test_renombrar_sobre_un_nombre_existente_absorbe_a_la_otra(db):
+    vieja = ea.crear_estrategia("Cruce", _DSL, db)
+    otra = ea.crear_estrategia("Momentum", _DSL, db)
+
+    ea.actualizar_estrategia(otra.id, db, nombre="cruce")
+
+    assert ea.obtener_estrategia(vieja.id, db) is None
+    assert [e.nombre for e in ea.listar_estrategias(None, db)] == ["cruce"]
+
+
+def test_duplicar_dos_veces_no_pisa_la_primera_copia(db):
+    creada = ea.crear_estrategia("Original", _DSL, db)
+    primera = ea.duplicar_estrategia(creada.id, None, db)
+    segunda = ea.duplicar_estrategia(creada.id, None, db)
+
+    assert primera.nombre == "Original (copia)"
+    assert segunda.nombre == "Original (copia) (2)"
+    assert len(ea.listar_estrategias(None, db)) == 3
+
+
+def test_router_post_con_nombre_repetido_actualiza_y_devuelve_200(client):
+    r = client.post("/api/inversiones/estrategias", json={"nombre": "RSI test", "definicion": _DSL})
+    assert r.status_code == 201
+    id_original = r.json()["id"]
+
+    otro_dsl = resolver_preset("macd_cruce")
+    r = client.post("/api/inversiones/estrategias", json={"nombre": "rsi TEST", "definicion": otro_dsl})
+    assert r.status_code == 200, r.text     # 200 = pisó una existente; 201 sería una nueva
+    assert r.json()["id"] == id_original
+    assert r.json()["definicion"] == otro_dsl
+
+    assert len(client.get("/api/inversiones/estrategias").json()) == 1

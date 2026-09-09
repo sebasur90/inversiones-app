@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import type { BacktestOut, EstrategiaDsl } from '../../api'
 import MetricTile from '../ui/MetricTile'
 import BotonExportarCsv from '../ui/BotonExportarCsv'
 import GraficoBacktest from './GraficoBacktest'
+import GraficoFullscreen from './GraficoFullscreen'
+import { DESCRIPCION_MOTIVO, etiquetaMotivo } from './motivosSalida'
 
 function formatPctSigned(v: number | null | undefined): string {
   if (v == null) return '—'
@@ -13,6 +16,27 @@ export default function ResultadoBacktest({ resultado, dsl }: { resultado: Backt
   const insuficiente = m.estado === 'datos_insuficientes'
   const unaSolaCerrada = m.operaciones_cerradas === 1
   const tieneGrafico = resultado.barras.length > 0
+  const [fullscreen, setFullscreen] = useState(false)
+
+  const propsGrafico = {
+    barras: resultado.barras,
+    indicadoresSeries: resultado.indicadores,
+    dslIndicadores: dsl.indicadores,
+    senales: resultado.senales,
+    operaciones: resultado.operaciones,
+    primeraBarraEvaluable: resultado.primera_barra_evaluable,
+    curvaEquity: resultado.curva_equity,
+    curvaBuyHold: resultado.curva_buy_hold,
+    indiceDesde: resultado.indice_desde,
+    moneda: resultado.moneda,
+    tieneVelas: resultado.barras.some(b => b.apertura != null),
+    tieneVolumen: resultado.barras.some(b => b.volumen != null),
+  }
+
+  // Sólo los motivos que efectivamente aparecieron: explicar los cinco siempre sería ruido.
+  const motivosUsados = Array.from(
+    new Set(resultado.operaciones.map(o => o.motivo_salida).filter((x): x is string => !!x)),
+  )
 
   return (
     <div className="flex flex-col gap-3">
@@ -72,18 +96,20 @@ export default function ResultadoBacktest({ resultado, dsl }: { resultado: Backt
       <div>
         <div className="font-semibold text-caption text-app-text mb-1.5">Precio, estrategia y señales</div>
         {tieneGrafico ? (
-          <GraficoBacktest
-            barras={resultado.barras} indicadoresSeries={resultado.indicadores} dslIndicadores={dsl.indicadores}
-            senales={resultado.senales} primeraBarraEvaluable={resultado.primera_barra_evaluable}
-            curvaEquity={resultado.curva_equity} curvaBuyHold={resultado.curva_buy_hold}
-            indiceDesde={resultado.indice_desde}
-            moneda={resultado.moneda} tieneVelas={resultado.barras.some(b => b.apertura != null)}
-            tieneVolumen={resultado.barras.some(b => b.volumen != null)}
-          />
+          <GraficoBacktest {...propsGrafico} onToggleFullscreen={() => setFullscreen(true)} />
         ) : (
           <div className="h-[200px] flex items-center justify-center text-app-text-dim text-caption">Sin datos para graficar</div>
         )}
       </div>
+
+      {tieneGrafico && (
+        <GraficoFullscreen
+          open={fullscreen} onClose={() => setFullscreen(false)}
+          title={`${resultado.ticker} · Backtest${resultado.moneda ? ` (${resultado.moneda})` : ''}`}
+        >
+          <GraficoBacktest {...propsGrafico} fullscreen onToggleFullscreen={() => setFullscreen(false)} />
+        </GraficoFullscreen>
+      )}
 
       <div>
         <div className="flex items-center justify-between mb-1.5">
@@ -94,7 +120,7 @@ export default function ResultadoBacktest({ resultado, dsl }: { resultado: Backt
               encabezados={['Entrada', 'Salida', 'Precio entrada', 'Precio salida', 'Barras', 'Retorno neto %', 'Motivo salida', 'Abierta']}
               filas={() => resultado.operaciones.map(o => [
                 o.fecha_entrada, o.fecha_salida ?? '', o.precio_entrada, o.precio_salida ?? '', o.barras,
-                Number(o.retorno_neto_pct.toFixed(4)), o.motivo_salida ?? '', o.abierta ? 'sí' : 'no',
+                Number(o.retorno_neto_pct.toFixed(4)), o.motivo_salida ? etiquetaMotivo(o.motivo_salida) : '', o.abierta ? 'sí' : 'no',
               ])}
             />
           )}
@@ -117,7 +143,7 @@ export default function ResultadoBacktest({ resultado, dsl }: { resultado: Backt
                   <td className={`py-1.5 pr-2 text-right font-mono tabular-nums ${o.retorno_neto_pct >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
                     {formatPctSigned(o.retorno_neto_pct)}
                   </td>
-                  <td className="py-1.5 pr-2 text-app-text-dim">{o.motivo_salida ?? '—'}</td>
+                  <td className="py-1.5 pr-2 text-app-text-dim">{etiquetaMotivo(o.motivo_salida)}</td>
                 </tr>
               ))}
               {resultado.operaciones.length === 0 && (
@@ -126,6 +152,16 @@ export default function ResultadoBacktest({ resultado, dsl }: { resultado: Backt
             </tbody>
           </table>
         </div>
+
+        {motivosUsados.length > 0 && (
+          <div className="mt-2 text-label text-app-text-dim space-y-0.5">
+            {motivosUsados.map(m2 => (
+              <div key={m2}>
+                <span className="text-app-text font-semibold">{etiquetaMotivo(m2)}</span>: {DESCRIPCION_MOTIVO[m2] ?? '—'}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

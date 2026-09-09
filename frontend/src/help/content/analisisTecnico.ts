@@ -4,6 +4,7 @@ export type AnalisisTecnicoHelpKey =
   | 'analisis_tecnico_titulo'
   | 'analisis_tecnico_indicadores'
   | 'analisis_tecnico_estrategias'
+  | 'analisis_tecnico_riesgo'
   | 'analisis_tecnico_backtest'
   | 'analisis_tecnico_precio_ejecucion'
   | 'analisis_tecnico_extremos'
@@ -31,8 +32,19 @@ export const ANALISISTECNICO_HELP: Record<AnalisisTecnicoHelpKey, HelpContent> =
   },
   analisis_tecnico_estrategias: {
     title: 'Estrategias',
-    shortDescription: 'Reglas de compra y venta combinables (cruces de medias, niveles de RSI, bandas de Bollinger, etc.) que se pueden guardar, duplicar y reusar en cualquier ticker.',
+    shortDescription: 'Reglas de compra y venta combinables (cruces de medias, niveles de RSI, bandas de Bollinger, rupturas, momentum…) que se pueden guardar, duplicar y reusar en cualquier ticker. El catálogo trae las más usadas ya armadas, agrupadas por familia; cada una tiene su ficha con cuándo compra, cuándo vende y cómo corta pérdidas.',
     whyItMatters: 'Formalizar la regla te obliga a ser explícito sobre cuándo entrarías y saldrías, y permite contrastarla contra la historia antes de arriesgar capital real.',
+    howToInterpret: 'Las cuatro familias responden a ideas distintas: tendencia (entrar cuando el precio ya se mueve a favor), reversión (comprar la baja apostando a que vuelve), ruptura (entrar cuando sale del rango) y momentum (quedarse con lo que viene subiendo hace tiempo). Sobre un mismo ticker suelen dar resultados muy distintos, y esa diferencia dice más del activo que de la estrategia.',
+    limitations: 'El nombre identifica a la estrategia: guardar o importar con un nombre ya usado sobrescribe la existente en vez de dejar dos iguales (la app te lo avisa). Las estrategias del catálogo se cargan solas la primera vez, y "Restaurar catálogo" las devuelve a su definición original, pisando los ajustes que les hayas hecho.',
+    relatedTerms: ['analisis_tecnico_backtest', 'analisis_tecnico_riesgo'],
+  },
+  analisis_tecnico_riesgo: {
+    title: 'Límites de riesgo (stop loss, take profit, trailing)',
+    shortDescription: 'Las cuatro formas en que una estrategia puede cerrar una posición sin que se cumpla su regla de venta: stop loss, take profit, trailing stop y máximo de barras.',
+    howItIsCalculated: 'El stop loss es un nivel fijo bajo el precio de entrada (8 % = sale si cae a 92 de 100). El take profit, uno fijo por encima. El trailing stop se recalcula barra a barra desde el máximo alcanzado desde que entró: sube con el precio y nunca baja, así que va asegurando la ganancia acumulada. El máximo de barras cierra por tiempo, sin mirar el precio.',
+    howToInterpret: 'En el gráfico del backtest los tres niveles se dibujan sobre el tramo de cada operación: el stop loss y el take profit como líneas punteadas rectas, y el trailing como una escalera que sólo sube. El marcador de salida dice cuál de los cuatro cerró la operación (SL, TP, TS, T) o si fue la regla de venta (▼).',
+    limitations: 'Los stops se chequean contra el máximo y el mínimo de la rueda, no contra el cierre: si el precio pasó por el nivel durante el día, el backtest considera que la operación se cerró ahí. Si la rueda abrió ya pasada del nivel (un gap), se toma el precio de apertura, que es peor — el criterio conservador.',
+    relatedTerms: ['analisis_tecnico_backtest'],
   },
   analisis_tecnico_backtest: {
     title: 'Backtest',

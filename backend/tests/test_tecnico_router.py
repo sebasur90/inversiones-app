@@ -148,8 +148,16 @@ def test_backtest_variante_invalida_422(client_msft):
 def test_listar_presets(client):
     r = client.get("/api/inversiones/tecnico/presets")
     assert r.status_code == 200
-    nombres = {p["nombre"] for p in r.json()}
+    presets = r.json()
+    nombres = {p["nombre"] for p in presets}
     assert "cruce_medias" in nombres
+
+    # El front agrupa el selector por categoría y muestra `etiqueta`, no el slug.
+    for p in presets:
+        assert p["etiqueta"] and p["categoria"]
+        assert p["definicion"]["version"] == 1
+    con_volumen = [p for p in presets if p["requiere_volumen"]]
+    assert con_volumen, "el catálogo debería incluir al menos una estrategia con filtro de volumen"
 
 
 def test_ticker_no_encontrado_404(client):

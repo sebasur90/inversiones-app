@@ -7,12 +7,48 @@ acá una estrategia con `ticker IS NULL` es simplemente reusable en cualquier ti
 "todas las estrategias" es la lista correcta para poblar un selector. Vale este comentario para
 que no se copie el patrón de escenarios sin pensarlo.
 """
+import re
+import unicodedata
 from datetime import date, datetime
 
 from sqlalchemy.orm import Session
 
 from ..database import EstrategiaTecnica
 from . import estrategia_engine, ohlcv_analytics
+
+
+# ─── Identidad por nombre ─────────────────────────────────────────────────────
+
+_ESPACIOS = re.compile(r"\s+")
+
+
+def normalizar_nombre(nombre: str) -> str:
+    """Clave de identidad de una estrategia: minúsculas, sin acentos, espacios colapsados.
+
+    Dos estrategias con el mismo nombre normalizado **son la misma**: guardar o importar con un
+    nombre ya usado pisa la existente en vez de dejar un duplicado (que el screener después
+    correría dos veces y el selector mostraría con el mismo texto). "Mínimo histórico",
+    "minimo historico" y "MÍNIMO  HISTÓRICO" son la misma estrategia.
+    """
+    sin_acentos = "".join(
+        c for c in unicodedata.normalize("NFD", nombre or "") if unicodedata.category(c) != "Mn"
+    )
+    return _ESPACIOS.sub(" ", sin_acentos).strip().lower()
+
+
+def buscar_por_nombre(nombre: str, db: Session, excluir_id: int | None = None) -> EstrategiaTecnica | None:
+    """Estrategia cuyo nombre normalizado coincide con `nombre`, o `None`.
+
+    Filtra en Python y no en SQL: SQLite no sabe sacar acentos (`lower()` sí, `unaccent` no
+    existe), y la tabla tiene decenas de filas, no millones. Ante varias coincidencias (filas
+    viejas, previas a esta regla) devuelve la de `id` más alto, la más reciente.
+    """
+    objetivo = normalizar_nombre(nombre)
+    candidatas = [
+        e for e in db.query(EstrategiaTecnica).all()
+        if normalizar_nombre(e.nombre) == objetivo and e.id != excluir_id
+    ]
+    return max(candidatas, key=lambda e: e.id) if candidatas else None
 
 
 def crear_estrategia(
@@ -53,12 +89,20 @@ def actualizar_estrategia(
     estrategia_id: int, db: Session,
     nombre: str | None = None, descripcion: str | None = None,
     ticker: str | None | object = _SIN_CAMBIO, definicion: dict | None = None,
-    variante: str | None = None,
+    variante: str | None = None, tipo_preset: str | None | object = _SIN_CAMBIO,
 ) -> EstrategiaTecnica | None:
+    """Actualiza los campos pasados. **Renombrar sobre un nombre ya usado absorbe a la otra**:
+    la fila homónima se elimina y ésta se queda con el nombre — es la misma regla de "el nombre
+    identifica a la estrategia" de `guardar_por_nombre`, vista desde el renombre. Sin esto,
+    renombrar sería la puerta de atrás para volver a tener dos estrategias que se llaman igual.
+    """
     estrategia = obtener_estrategia(estrategia_id, db)
     if estrategia is None:
         return None
     if nombre is not None:
+        homonima = buscar_por_nombre(nombre, db, excluir_id=estrategia_id)
+        if homonima is not None:
+            db.delete(homonima)
         estrategia.nombre = nombre
     if descripcion is not None:
         estrategia.descripcion = descripcion
@@ -68,10 +112,54 @@ def actualizar_estrategia(
         estrategia.definicion = definicion
     if variante is not None:
         estrategia.variante = variante
+    if tipo_preset is not _SIN_CAMBIO:
+        estrategia.tipo_preset = tipo_preset
     estrategia.fecha_actualizacion = datetime.utcnow()
     db.commit()
     db.refresh(estrategia)
     return estrategia
+
+
+def guardar_por_nombre(
+    nombre: str, definicion: dict, db: Session,
+    descripcion: str | None = None, ticker: str | None = None, tipo_preset: str | None = None,
+    variante: str = "local",
+) -> tuple[EstrategiaTecnica, bool]:
+    """Upsert por nombre normalizado. Devuelve `(estrategia, creada)`.
+
+    Es lo que usa `POST /estrategias`: guardar o importar con un nombre ya usado **pisa** la
+    estrategia existente (definición, descripción, ticker, preset de origen y variante) en vez de
+    dejar dos filas homónimas. El `id` sobrevive, así que las referencias guardadas en el front
+    (la estrategia cargada en el editor, la selección del screener) siguen valiendo.
+    """
+    existente = buscar_por_nombre(nombre, db)
+    if existente is None:
+        creada = crear_estrategia(
+            nombre=nombre, definicion=definicion, db=db, descripcion=descripcion,
+            ticker=ticker, tipo_preset=tipo_preset, variante=variante,
+        )
+        return creada, True
+
+    actualizada = actualizar_estrategia(
+        existente.id, db, nombre=nombre, descripcion=descripcion, ticker=ticker,
+        definicion=definicion, variante=variante, tipo_preset=tipo_preset,
+    )
+    return actualizada, False
+
+
+def _nombre_libre(base: str, db: Session) -> str:
+    """`base`, o el primer `base (2)`, `base (3)`… que no esté usado.
+
+    Duplicar es la única operación que *quiere* una fila nueva: sin esto chocaría con el upsert
+    por nombre y duplicar dos veces pisaría la primera copia en lugar de crear la segunda.
+    """
+    if buscar_por_nombre(base, db) is None:
+        return base
+    for n in range(2, 100):
+        candidato = f"{base} ({n})"
+        if buscar_por_nombre(candidato, db) is None:
+            return candidato
+    return f"{base} ({datetime.utcnow():%Y%m%d%H%M%S})"
 
 
 def duplicar_estrategia(estrategia_id: int, nuevo_nombre: str | None, db: Session) -> EstrategiaTecnica | None:
@@ -79,7 +167,7 @@ def duplicar_estrategia(estrategia_id: int, nuevo_nombre: str | None, db: Sessio
     if original is None:
         return None
     return crear_estrategia(
-        nombre=nuevo_nombre or f"{original.nombre} (copia)",
+        nombre=_nombre_libre(nuevo_nombre or f"{original.nombre} (copia)", db),
         definicion=original.definicion, db=db,
         descripcion=original.descripcion, ticker=original.ticker, tipo_preset=original.tipo_preset,
         variante=getattr(original, "variante", None) or "local",
@@ -171,6 +259,8 @@ def ejecutar_backtest(
                 "barras": o.barras, "retorno_bruto_pct": o.retorno_bruto_pct,
                 "retorno_neto_pct": o.retorno_neto_pct, "motivo_salida": o.motivo_salida,
                 "abierta": o.abierta,
+                "nivel_stop_loss": o.nivel_stop_loss, "nivel_take_profit": o.nivel_take_profit,
+                "trailing": o.trailing,
             }
             for o in resultado.operaciones
         ],

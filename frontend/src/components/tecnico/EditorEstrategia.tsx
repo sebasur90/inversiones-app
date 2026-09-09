@@ -302,7 +302,9 @@ export default function EditorEstrategia({
       />
 
       <div className="bg-app-surface border border-app-border rounded-2xl p-3">
-        <div className="font-semibold text-caption text-app-text mb-2">Riesgo</div>
+        <div className="font-semibold text-caption text-app-text mb-2 flex items-center gap-1">
+          <InfoTooltip term="analisis_tecnico_riesgo" label="Riesgo" />
+        </div>
         <div className="grid grid-cols-2 gap-2">
           {([
             ['stop_loss_pct', 'Stop loss %'],

@@ -41,7 +41,7 @@ __all__ = [
     "Barra", "Compilado", "Senal", "Operacion", "ResultadoBacktest",
     "compilar", "backtest", "validar_estrategia", "barras_minimas",
     "maximo_barra", "resolver_operando",
-    "PRESETS", "resolver_preset",
+    "EspecPreset", "PRESETS", "CATEGORIAS_PRESET", "resolver_preset",
 ]
 
 
@@ -77,6 +77,14 @@ class Operacion:
     retorno_neto_pct: float
     motivo_salida: str | None
     abierta: bool
+    # Niveles de riesgo vigentes durante la operación, para que el gráfico los dibuje sin
+    # reimplementar la regla (que vive en `_chequear_salida`): un front que recalcule el trailing
+    # por su cuenta termina mostrando una línea que no es la que disparó la salida.
+    # `stop_loss`/`take_profit` son constantes (dependen sólo del precio de entrada); `trailing`
+    # es una serie de un valor por barra, desde `indice_entrada` hasta `indice_salida` inclusive.
+    nivel_stop_loss: float | None = None
+    nivel_take_profit: float | None = None
+    trailing: list | None = None       # list[float] | None
 
 
 @dataclass
@@ -484,6 +492,9 @@ def backtest(dsl: dict, barras: list[Barra], indice_inicio: int = 0) -> Resultad
     precio_entrada = None
     idx_entrada_ejec = None
     maximo_desde_entrada = None
+    trailing_serie: list | None = None
+    nivel_stop_loss = None
+    nivel_take_profit = None
 
     i = 0
     while i < n:
@@ -501,6 +512,12 @@ def backtest(dsl: dict, barras: list[Barra], indice_inicio: int = 0) -> Resultad
                     # con ganancia que nunca existió. Sólo las barras *posteriores* a la entrada
                     # mueven el trailing hacia arriba (más abajo en el loop).
                     maximo_desde_entrada = precio_entrada
+                    nivel_stop_loss = precio_entrada * (1 - stop_loss_pct / 100) if stop_loss_pct is not None else None
+                    nivel_take_profit = precio_entrada * (1 + take_profit_pct / 100) if take_profit_pct is not None else None
+                    trailing_serie = (
+                        [maximo_desde_entrada * (1 - trailing_stop_pct / 100)]
+                        if trailing_stop_pct is not None else None
+                    )
                     senales.append(Senal(idx_ejec, barras[idx_ejec].fecha, "compra", precio, "entrada"))
                     i = idx_ejec
             i += 1
@@ -511,6 +528,10 @@ def backtest(dsl: dict, barras: list[Barra], indice_inicio: int = 0) -> Resultad
             continue
 
         maximo_desde_entrada = max(maximo_desde_entrada, _maximo_barra(barras[i]))
+        if trailing_serie is not None:
+            # Se agrega antes de chequear la salida, con el máximo ya actualizado por la barra en
+            # curso: es exactamente el nivel contra el que `_chequear_salida` compara acá.
+            trailing_serie.append(maximo_desde_entrada * (1 - trailing_stop_pct / 100))
         resultado_salida = _chequear_salida(
             barras, i, precio_entrada, maximo_desde_entrada,
             stop_loss_pct, take_profit_pct, trailing_stop_pct, max_barras, idx_entrada_ejec,
@@ -528,12 +549,17 @@ def backtest(dsl: dict, barras: list[Barra], indice_inicio: int = 0) -> Resultad
                 barras=idx_salida_ejec - idx_entrada_ejec,
                 retorno_bruto_pct=retorno_bruto, retorno_neto_pct=retorno_neto,
                 motivo_salida=motivo, abierta=False,
+                nivel_stop_loss=nivel_stop_loss, nivel_take_profit=nivel_take_profit,
+                trailing=trailing_serie,
             ))
             estado = "fuera"
             i = idx_salida_ejec
             precio_entrada = None
             idx_entrada_ejec = None
             maximo_desde_entrada = None
+            trailing_serie = None
+            nivel_stop_loss = None
+            nivel_take_profit = None
         i += 1
 
     if estado == "dentro":
@@ -547,6 +573,8 @@ def backtest(dsl: dict, barras: list[Barra], indice_inicio: int = 0) -> Resultad
             barras=(n - 1) - idx_entrada_ejec,
             retorno_bruto_pct=retorno_bruto, retorno_neto_pct=retorno_neto,
             motivo_salida=None, abierta=True,
+            nivel_stop_loss=nivel_stop_loss, nivel_take_profit=nivel_take_profit,
+            trailing=trailing_serie,
         ))
         advertencias.add("posicion_abierta_al_final")
 
@@ -767,77 +795,372 @@ def barras_minimas(dsl: dict) -> int:
 # ─── Presets ──────────────────────────────────────────────────────────────────
 
 _EJECUCION_DEFAULT = {"lado": "long", "comision_pct": 0.6, "precio_ejecucion": "cierre", "demora_barras": 0}
-_RIESGO_DEFAULT = {"stop_loss_pct": 8.0, "take_profit_pct": None, "trailing_stop_pct": None, "max_barras": None}
 
-PRESETS: dict[str, dict] = {
-    "cruce_medias": {
-        "version": 1,
-        "indicadores": [
-            {"id": "mm_rapida", "tipo": "SMA", "params": {"periodo": 50}},
-            {"id": "mm_lenta", "tipo": "SMA", "params": {"periodo": 200}},
-        ],
-        "entrada": {"op": "y", "condiciones": [
-            {"op": "cruce_arriba", "izq": {"ref": "mm_rapida"}, "der": {"ref": "mm_lenta"}},
-        ]},
-        "salida": {"op": "y", "condiciones": [
-            {"op": "cruce_abajo", "izq": {"ref": "mm_rapida"}, "der": {"ref": "mm_lenta"}},
-        ]},
-        "riesgo": dict(_RIESGO_DEFAULT),
-        "ejecucion": dict(_EJECUCION_DEFAULT),
-    },
-    "rsi_sobreventa": {
-        "version": 1,
-        "indicadores": [{"id": "rsi14", "tipo": "RSI", "params": {"periodo": 14}}],
-        "entrada": {"op": "y", "condiciones": [
-            {"op": "menor", "izq": {"ref": "rsi14"}, "der": {"const": 30}},
-        ]},
-        "salida": {"op": "y", "condiciones": [
-            {"op": "mayor", "izq": {"ref": "rsi14"}, "der": {"const": 60}},
-        ]},
-        "riesgo": {**_RIESGO_DEFAULT, "stop_loss_pct": 10.0},
-        "ejecucion": dict(_EJECUCION_DEFAULT),
-    },
-    "macd_cruce": {
-        "version": 1,
-        "indicadores": [{"id": "macd_std", "tipo": "MACD", "params": {"rapida": 12, "lenta": 26, "senal": 9}}],
-        "entrada": {"op": "y", "condiciones": [
-            {"op": "cruce_arriba", "izq": {"ref": "macd_std", "salida": "macd"}, "der": {"ref": "macd_std", "salida": "senal"}},
-        ]},
-        "salida": {"op": "y", "condiciones": [
-            {"op": "cruce_abajo", "izq": {"ref": "macd_std", "salida": "macd"}, "der": {"ref": "macd_std", "salida": "senal"}},
-        ]},
-        "riesgo": dict(_RIESGO_DEFAULT),
-        "ejecucion": dict(_EJECUCION_DEFAULT),
-    },
-    "bollinger_reversion": {
-        "version": 1,
-        "indicadores": [{"id": "bb20", "tipo": "BOLLINGER", "params": {"periodo": 20, "desvios": 2.0}}],
-        "entrada": {"op": "y", "condiciones": [
-            {"op": "menor", "izq": {"campo": "cierre"}, "der": {"ref": "bb20", "salida": "inferior"}},
-        ]},
-        "salida": {"op": "y", "condiciones": [
-            {"op": "mayor", "izq": {"campo": "cierre"}, "der": {"ref": "bb20", "salida": "media"}},
-        ]},
-        "riesgo": {**_RIESGO_DEFAULT, "stop_loss_pct": 10.0},
-        "ejecucion": dict(_EJECUCION_DEFAULT),
-    },
-    "extremos_historicos": {
-        "version": 1,
-        "indicadores": [{"id": "ext", "tipo": "EXTREMOS", "params": {"ventana": 0}}],
-        "entrada": {"op": "y", "condiciones": [
-            {"op": "menor_igual", "izq": {"ref": "ext", "salida": "dist_min_pct"}, "der": {"const": 1}},
-        ]},
-        "salida": {"op": "y", "condiciones": [
-            {"op": "mayor_igual", "izq": {"ref": "ext", "salida": "dist_max_pct"}, "der": {"const": -1}},
-        ]},
-        "riesgo": {**_RIESGO_DEFAULT, "stop_loss_pct": 20.0},
-        "ejecucion": dict(_EJECUCION_DEFAULT),
-    },
+
+def _riesgo(stop_loss_pct=None, take_profit_pct=None, trailing_stop_pct=None, max_barras=None) -> dict:
+    return {
+        "stop_loss_pct": stop_loss_pct, "take_profit_pct": take_profit_pct,
+        "trailing_stop_pct": trailing_stop_pct, "max_barras": max_barras,
+    }
+
+
+@dataclass(frozen=True)
+class EspecPreset:
+    """Un preset del catálogo: el DSL más lo que la UI necesita para presentarlo.
+
+    `etiqueta` es el nombre que ve el usuario (y el que usa la siembra en DB como `nombre`);
+    la clave del dict es el slug estable que viaja en `EstrategiaTecnica.tipo_preset` y que
+    enlaza con la ficha explicativa del front (`help/content/estrategias.ts`,
+    clave `estrategia_<slug>`). **Los slugs no se renombran**: hay estrategias guardadas
+    apuntando a ellos.
+
+    `requiere_velas`/`requiere_volumen` no bloquean nada — el motor degrada solo (sin OHLC el
+    canal y el estocástico usan el cierre; sin volumen OBV devuelve todo `None`) —, son para que
+    la UI avise que sobre esa serie la estrategia no está midiendo lo que promete.
+    """
+    etiqueta: str
+    categoria: str          # "tendencia" | "reversion" | "ruptura" | "momentum"
+    definicion: dict
+    requiere_velas: bool = False
+    requiere_volumen: bool = False
+
+
+CATEGORIAS_PRESET: tuple[str, ...] = ("tendencia", "reversion", "ruptura", "momentum")
+
+
+PRESETS: dict[str, EspecPreset] = {
+    # ── Tendencia: entrar cuando el precio ya se está moviendo a favor ────────────────────────
+    "cruce_medias": EspecPreset(
+        etiqueta="Cruce de medias 50/200 (golden cross)",
+        categoria="tendencia",
+        definicion={
+            "version": 1,
+            "indicadores": [
+                {"id": "mm_rapida", "tipo": "SMA", "params": {"periodo": 50}},
+                {"id": "mm_lenta", "tipo": "SMA", "params": {"periodo": 200}},
+            ],
+            "entrada": {"op": "y", "condiciones": [
+                {"op": "cruce_arriba", "izq": {"ref": "mm_rapida"}, "der": {"ref": "mm_lenta"}},
+            ]},
+            "salida": {"op": "y", "condiciones": [
+                {"op": "cruce_abajo", "izq": {"ref": "mm_rapida"}, "der": {"ref": "mm_lenta"}},
+            ]},
+            "riesgo": _riesgo(stop_loss_pct=8.0),
+            "ejecucion": dict(_EJECUCION_DEFAULT),
+        },
+    ),
+    "cruce_ema_corto": EspecPreset(
+        etiqueta="Cruce de EMAs 9/21 (swing corto)",
+        categoria="tendencia",
+        definicion={
+            "version": 1,
+            "indicadores": [
+                {"id": "ema_rapida", "tipo": "EMA", "params": {"periodo": 9}},
+                {"id": "ema_lenta", "tipo": "EMA", "params": {"periodo": 21}},
+            ],
+            "entrada": {"op": "y", "condiciones": [
+                {"op": "cruce_arriba", "izq": {"ref": "ema_rapida"}, "der": {"ref": "ema_lenta"}},
+            ]},
+            "salida": {"op": "y", "condiciones": [
+                {"op": "cruce_abajo", "izq": {"ref": "ema_rapida"}, "der": {"ref": "ema_lenta"}},
+            ]},
+            "riesgo": _riesgo(stop_loss_pct=6.0, trailing_stop_pct=8.0),
+            "ejecucion": dict(_EJECUCION_DEFAULT),
+        },
+    ),
+    "tendencia_media_larga": EspecPreset(
+        etiqueta="Precio vs. media de 200",
+        categoria="tendencia",
+        definicion={
+            "version": 1,
+            "indicadores": [{"id": "mm200", "tipo": "SMA", "params": {"periodo": 200}}],
+            "entrada": {"op": "y", "condiciones": [
+                {"op": "cruce_arriba", "izq": {"campo": "cierre"}, "der": {"ref": "mm200"}},
+            ]},
+            "salida": {"op": "y", "condiciones": [
+                {"op": "cruce_abajo", "izq": {"campo": "cierre"}, "der": {"ref": "mm200"}},
+            ]},
+            "riesgo": _riesgo(stop_loss_pct=10.0),
+            "ejecucion": dict(_EJECUCION_DEFAULT),
+        },
+    ),
+    "macd_cruce": EspecPreset(
+        etiqueta="Cruce de MACD",
+        categoria="tendencia",
+        definicion={
+            "version": 1,
+            "indicadores": [{"id": "macd_std", "tipo": "MACD", "params": {"rapida": 12, "lenta": 26, "senal": 9}}],
+            "entrada": {"op": "y", "condiciones": [
+                {"op": "cruce_arriba", "izq": {"ref": "macd_std", "salida": "macd"}, "der": {"ref": "macd_std", "salida": "senal"}},
+            ]},
+            "salida": {"op": "y", "condiciones": [
+                {"op": "cruce_abajo", "izq": {"ref": "macd_std", "salida": "macd"}, "der": {"ref": "macd_std", "salida": "senal"}},
+            ]},
+            "riesgo": _riesgo(stop_loss_pct=8.0),
+            "ejecucion": dict(_EJECUCION_DEFAULT),
+        },
+    ),
+    "macd_con_tendencia": EspecPreset(
+        etiqueta="MACD con filtro de tendencia",
+        categoria="tendencia",
+        definicion={
+            "version": 1,
+            "indicadores": [
+                {"id": "macd_std", "tipo": "MACD", "params": {"rapida": 12, "lenta": 26, "senal": 9}},
+                {"id": "mm200", "tipo": "SMA", "params": {"periodo": 200}},
+            ],
+            # El filtro de la MM200 es lo único que distingue este preset de `macd_cruce`: el cruce
+            # de MACD dispara igual en un rebote de mercado bajista, donde la mayoría de las señales
+            # se dan vuelta.
+            "entrada": {"op": "y", "condiciones": [
+                {"op": "cruce_arriba", "izq": {"ref": "macd_std", "salida": "macd"}, "der": {"ref": "macd_std", "salida": "senal"}},
+                {"op": "mayor", "izq": {"campo": "cierre"}, "der": {"ref": "mm200"}},
+            ]},
+            "salida": {"op": "o", "condiciones": [
+                {"op": "cruce_abajo", "izq": {"ref": "macd_std", "salida": "macd"}, "der": {"ref": "macd_std", "salida": "senal"}},
+                {"op": "menor", "izq": {"campo": "cierre"}, "der": {"ref": "mm200"}},
+            ]},
+            "riesgo": _riesgo(stop_loss_pct=8.0, trailing_stop_pct=12.0),
+            "ejecucion": dict(_EJECUCION_DEFAULT),
+        },
+    ),
+
+    # ── Reversión: comprar la baja, apostando a que el precio vuelve a su media ───────────────
+    "rsi_sobreventa": EspecPreset(
+        etiqueta="RSI en sobreventa",
+        categoria="reversion",
+        definicion={
+            "version": 1,
+            "indicadores": [{"id": "rsi14", "tipo": "RSI", "params": {"periodo": 14}}],
+            "entrada": {"op": "y", "condiciones": [
+                {"op": "menor", "izq": {"ref": "rsi14"}, "der": {"const": 30}},
+            ]},
+            "salida": {"op": "y", "condiciones": [
+                {"op": "mayor", "izq": {"ref": "rsi14"}, "der": {"const": 60}},
+            ]},
+            "riesgo": _riesgo(stop_loss_pct=10.0),
+            "ejecucion": dict(_EJECUCION_DEFAULT),
+        },
+    ),
+    "bollinger_reversion": EspecPreset(
+        etiqueta="Reversión a la banda de Bollinger",
+        categoria="reversion",
+        definicion={
+            "version": 1,
+            "indicadores": [{"id": "bb20", "tipo": "BOLLINGER", "params": {"periodo": 20, "desvios": 2.0}}],
+            "entrada": {"op": "y", "condiciones": [
+                {"op": "menor", "izq": {"campo": "cierre"}, "der": {"ref": "bb20", "salida": "inferior"}},
+            ]},
+            "salida": {"op": "y", "condiciones": [
+                {"op": "mayor", "izq": {"campo": "cierre"}, "der": {"ref": "bb20", "salida": "media"}},
+            ]},
+            "riesgo": _riesgo(stop_loss_pct=10.0),
+            "ejecucion": dict(_EJECUCION_DEFAULT),
+        },
+    ),
+    "estocastico_sobreventa": EspecPreset(
+        etiqueta="Estocástico saliendo de sobreventa",
+        categoria="reversion",
+        requiere_velas=True,
+        definicion={
+            "version": 1,
+            "indicadores": [{"id": "estoc", "tipo": "ESTOCASTICO", "params": {"periodo_k": 14, "suavizado_k": 3, "periodo_d": 3}}],
+            # No alcanza con que %K esté bajo: se espera el cruce de %K sobre %D, que es lo que
+            # marca que la caída dejó de acelerar.
+            "entrada": {"op": "y", "condiciones": [
+                {"op": "cruce_arriba", "izq": {"ref": "estoc", "salida": "k"}, "der": {"ref": "estoc", "salida": "d"}},
+                {"op": "menor", "izq": {"ref": "estoc", "salida": "k"}, "der": {"const": 30}},
+            ]},
+            "salida": {"op": "y", "condiciones": [
+                {"op": "mayor", "izq": {"ref": "estoc", "salida": "k"}, "der": {"const": 80}},
+            ]},
+            "riesgo": _riesgo(stop_loss_pct=8.0, take_profit_pct=15.0),
+            "ejecucion": dict(_EJECUCION_DEFAULT),
+        },
+    ),
+    "pullback_en_tendencia": EspecPreset(
+        etiqueta="Pullback en tendencia alcista (RSI-2)",
+        categoria="reversion",
+        definicion={
+            "version": 1,
+            "indicadores": [
+                {"id": "mm200", "tipo": "SMA", "params": {"periodo": 200}},
+                # RSI de 2 ruedas (Connors): brutalmente más nervioso que el de 14, es el punto —
+                # marca la corrección corta dentro de una tendencia que sigue siendo alcista.
+                {"id": "rsi2", "tipo": "RSI", "params": {"periodo": 2}},
+            ],
+            "entrada": {"op": "y", "condiciones": [
+                {"op": "mayor", "izq": {"campo": "cierre"}, "der": {"ref": "mm200"}},
+                {"op": "menor", "izq": {"ref": "rsi2"}, "der": {"const": 10}},
+            ]},
+            "salida": {"op": "o", "condiciones": [
+                {"op": "mayor", "izq": {"ref": "rsi2"}, "der": {"const": 70}},
+                {"op": "menor", "izq": {"campo": "cierre"}, "der": {"ref": "mm200"}},
+            ]},
+            "riesgo": _riesgo(stop_loss_pct=8.0, max_barras=10),
+            "ejecucion": dict(_EJECUCION_DEFAULT),
+        },
+    ),
+    "percentil_bajo": EspecPreset(
+        etiqueta="Zona baja del rango con rebote (percentil)",
+        categoria="reversion",
+        definicion={
+            "version": 1,
+            "indicadores": [
+                {"id": "pct252", "tipo": "PERCENTIL", "params": {"ventana": 252}},
+                {"id": "ret20", "tipo": "RETORNO", "params": {"periodo": 20}},
+            ],
+            # El percentil solo compraría en caída libre: el retorno de 20 ruedas positivo pide que
+            # el precio ya haya dejado de bajar.
+            "entrada": {"op": "y", "condiciones": [
+                {"op": "menor", "izq": {"ref": "pct252"}, "der": {"const": 10}},
+                {"op": "mayor", "izq": {"ref": "ret20"}, "der": {"const": 0}},
+            ]},
+            "salida": {"op": "y", "condiciones": [
+                {"op": "mayor", "izq": {"ref": "pct252"}, "der": {"const": 60}},
+            ]},
+            "riesgo": _riesgo(stop_loss_pct=12.0),
+            "ejecucion": dict(_EJECUCION_DEFAULT),
+        },
+    ),
+    "recuperacion_drawdown": EspecPreset(
+        etiqueta="Recuperación tras caída fuerte",
+        categoria="reversion",
+        definicion={
+            "version": 1,
+            "indicadores": [
+                # `ventana=0` = extremos desde el inicio de la serie cargada: `dist_max_pct` es
+                # exactamente el drawdown desde el máximo histórico.
+                {"id": "ext_hist", "tipo": "EXTREMOS", "params": {"ventana": 0}},
+                {"id": "ret10", "tipo": "RETORNO", "params": {"periodo": 10}},
+            ],
+            "entrada": {"op": "y", "condiciones": [
+                {"op": "menor_igual", "izq": {"ref": "ext_hist", "salida": "dist_max_pct"}, "der": {"const": -30}},
+                {"op": "mayor", "izq": {"ref": "ret10"}, "der": {"const": 0}},
+            ]},
+            "salida": {"op": "y", "condiciones": [
+                {"op": "mayor_igual", "izq": {"ref": "ext_hist", "salida": "dist_max_pct"}, "der": {"const": -10}},
+            ]},
+            "riesgo": _riesgo(stop_loss_pct=15.0, trailing_stop_pct=15.0),
+            "ejecucion": dict(_EJECUCION_DEFAULT),
+        },
+    ),
+    "extremos_historicos": EspecPreset(
+        etiqueta="Mínimo histórico",
+        categoria="reversion",
+        definicion={
+            "version": 1,
+            "indicadores": [{"id": "ext", "tipo": "EXTREMOS", "params": {"ventana": 0}}],
+            "entrada": {"op": "y", "condiciones": [
+                {"op": "menor_igual", "izq": {"ref": "ext", "salida": "dist_min_pct"}, "der": {"const": 1}},
+            ]},
+            "salida": {"op": "y", "condiciones": [
+                {"op": "mayor_igual", "izq": {"ref": "ext", "salida": "dist_max_pct"}, "der": {"const": -1}},
+            ]},
+            "riesgo": _riesgo(stop_loss_pct=20.0),
+            "ejecucion": dict(_EJECUCION_DEFAULT),
+        },
+    ),
+
+    # ── Ruptura: entrar cuando el precio sale del rango en el que venía ───────────────────────
+    "bollinger_ruptura": EspecPreset(
+        etiqueta="Ruptura de la banda de Bollinger",
+        categoria="ruptura",
+        definicion={
+            "version": 1,
+            "indicadores": [{"id": "bb20", "tipo": "BOLLINGER", "params": {"periodo": 20, "desvios": 2.0}}],
+            # La cara opuesta de `bollinger_reversion` sobre el mismo indicador: acá tocar la banda
+            # superior se lee como fuerza, no como exceso.
+            "entrada": {"op": "y", "condiciones": [
+                {"op": "cruce_arriba", "izq": {"campo": "cierre"}, "der": {"ref": "bb20", "salida": "superior"}},
+            ]},
+            "salida": {"op": "y", "condiciones": [
+                {"op": "menor", "izq": {"campo": "cierre"}, "der": {"ref": "bb20", "salida": "media"}},
+            ]},
+            "riesgo": _riesgo(stop_loss_pct=8.0, trailing_stop_pct=10.0),
+            "ejecucion": dict(_EJECUCION_DEFAULT),
+        },
+    ),
+    "ruptura_maximos": EspecPreset(
+        etiqueta="Ruptura de máximos de 20 ruedas (Donchian)",
+        categoria="ruptura",
+        requiere_velas=True,
+        definicion={
+            "version": 1,
+            "indicadores": [
+                {"id": "canal20", "tipo": "EXTREMOS", "params": {"ventana": 20}},
+                {"id": "canal10", "tipo": "EXTREMOS", "params": {"ventana": 10}},
+            ],
+            # Se compara el máximo de la barra contra el techo del canal, no el cierre: como
+            # `EXTREMOS` incluye la barra en curso, `maximo >= canal.maximo` es exactamente "esta
+            # rueda hizo el máximo de las últimas 20", sin umbrales arbitrarios. Con el cierre
+            # habría que tolerar un margen (el techo del canal es el máximo *intradiario*, que el
+            # cierre casi nunca alcanza) y elegirlo bien dependería de la volatilidad del activo.
+            # El costo es que **sobre una serie sin velas no opera nunca**: `{campo: "maximo"}` es
+            # `None` y la lógica trivaluada deja la condición sin evaluar. De ahí `requiere_velas`,
+            # que la UI usa para avisarlo antes de correr el backtest.
+            "entrada": {"op": "y", "condiciones": [
+                {"op": "mayor_igual", "izq": {"campo": "maximo"}, "der": {"ref": "canal20", "salida": "maximo"}},
+            ]},
+            "salida": {"op": "y", "condiciones": [
+                {"op": "menor_igual", "izq": {"campo": "minimo"}, "der": {"ref": "canal10", "salida": "minimo"}},
+            ]},
+            "riesgo": _riesgo(trailing_stop_pct=12.0),
+            "ejecucion": dict(_EJECUCION_DEFAULT),
+        },
+    ),
+    "ruptura_con_volumen": EspecPreset(
+        etiqueta="Ruptura con volumen",
+        categoria="ruptura",
+        requiere_volumen=True,
+        definicion={
+            "version": 1,
+            "indicadores": [
+                {"id": "mm20", "tipo": "SMA", "params": {"periodo": 20}},
+                {"id": "vol20", "tipo": "VOLUMEN_PROMEDIO", "params": {"periodo": 20}},
+            ],
+            # El DSL no multiplica operandos, así que el filtro es "volumen por encima de su
+            # promedio de 20 ruedas" y no el clásico "1,5× el promedio".
+            "entrada": {"op": "y", "condiciones": [
+                {"op": "cruce_arriba", "izq": {"campo": "cierre"}, "der": {"ref": "mm20"}},
+                {"op": "mayor", "izq": {"campo": "volumen"}, "der": {"ref": "vol20"}},
+            ]},
+            "salida": {"op": "y", "condiciones": [
+                {"op": "menor", "izq": {"campo": "cierre"}, "der": {"ref": "mm20"}},
+            ]},
+            "riesgo": _riesgo(stop_loss_pct=8.0, trailing_stop_pct=10.0),
+            "ejecucion": dict(_EJECUCION_DEFAULT),
+        },
+    ),
+
+    # ── Momentum: quedarse con lo que viene subiendo hace tiempo ──────────────────────────────
+    "momentum_12m": EspecPreset(
+        etiqueta="Momentum de 12 meses",
+        categoria="momentum",
+        definicion={
+            "version": 1,
+            "indicadores": [
+                {"id": "ret252", "tipo": "RETORNO", "params": {"periodo": 252}},
+                {"id": "mm200", "tipo": "SMA", "params": {"periodo": 200}},
+            ],
+            "entrada": {"op": "y", "condiciones": [
+                {"op": "mayor", "izq": {"ref": "ret252"}, "der": {"const": 0}},
+                {"op": "mayor", "izq": {"campo": "cierre"}, "der": {"ref": "mm200"}},
+            ]},
+            "salida": {"op": "y", "condiciones": [
+                {"op": "menor", "izq": {"campo": "cierre"}, "der": {"ref": "mm200"}},
+            ]},
+            "riesgo": _riesgo(stop_loss_pct=15.0),
+            "ejecucion": dict(_EJECUCION_DEFAULT),
+        },
+    ),
 }
 
 
 def resolver_preset(nombre: str) -> dict:
-    """Espejo de `escenario_engine.resolver_preset`: devuelve una copia profunda del preset."""
-    if nombre not in PRESETS:
+    """Espejo de `escenario_engine.resolver_preset`: copia profunda del **DSL** del preset
+    (no de la `EspecPreset`, que además lleva los metadatos de presentación)."""
+    espec = PRESETS.get(nombre)
+    if espec is None:
         raise ValueError(f"preset desconocido: {nombre!r}")
-    return deepcopy(PRESETS[nombre])
+    return deepcopy(espec.definicion)

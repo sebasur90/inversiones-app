@@ -400,3 +400,21 @@ def init_db():
         if 'variante' not in cols:
             conn.execute(text("ALTER TABLE estrategias_tecnicas ADD COLUMN variante TEXT NOT NULL DEFAULT 'local'"))
             conn.commit()
+
+    # El nombre identifica a una estrategia (ver `estrategias_analytics.normalizar_nombre`): las
+    # DB creadas antes de esa regla pueden tener homónimas duplicadas, que el selector muestra dos
+    # veces y el screener corre dos veces. Después, sembramos el catálogo de presets **sin pisar**
+    # lo existente: un arranque no puede deshacer los ajustes del usuario.
+    # Import local: `services` importa `database`, y a nivel de módulo esto sería circular.
+    from .services import estrategias_seed
+
+    db = SessionLocal()
+    try:
+        estrategias_seed.deduplicar_por_nombre(db)
+        estrategias_seed.sembrar_presets(db, forzar=False)
+    except Exception:
+        # Un catálogo no sembrado no puede impedir que la app levante: las plantillas siguen
+        # disponibles en el editor y el usuario puede sembrar a mano desde la UI.
+        db.rollback()
+    finally:
+        db.close()

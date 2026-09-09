@@ -4,8 +4,9 @@ import { qk } from '../api/queryClient'
 import {
   getTickersTecnicos, getSerieTecnica, getPresetsEstrategia, listarEstrategias,
   guardarEstrategia, actualizarEstrategia, duplicarEstrategia, eliminarEstrategiaTecnica,
-  backtestEstrategia,
-  type EstrategiaDsl, type EstrategiaOut, type BacktestOut, type VarianteSerie,
+  backtestEstrategia, sembrarPresetsEstrategia,
+  type CategoriaPreset, type EstrategiaDsl, type EstrategiaOut, type BacktestOut,
+  type PresetEstrategiaOut, type VarianteSerie,
 } from '../api'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
@@ -24,6 +25,7 @@ import GraficoFullscreen from '../components/tecnico/GraficoFullscreen'
 import EditorEstrategia from '../components/tecnico/EditorEstrategia'
 import EstrategiaAvanzadaJson from '../components/tecnico/EstrategiaAvanzadaJson'
 import ResultadoBacktest from '../components/tecnico/ResultadoBacktest'
+import FichaEstrategia from '../components/tecnico/FichaEstrategia'
 import { esEditableVisual } from '../components/tecnico/dslEditable'
 import { parseApiError } from '../help/errors/apiErrors'
 import { descargarArchivo } from '../utils/descargar'
@@ -209,6 +211,7 @@ export default function AnalisisTecnico() {
           <SeccionEstrategias
             ticker={ticker} desde={desde} variante={variante} moneda={monedaSerie}
             seriesDisponibles={seriesDisponibles} onVariante={setVarianteSel}
+            tieneVelas={serie?.tiene_velas ?? true} tieneVolumen={serie?.tiene_volumen ?? true}
           />
         )
       )}
@@ -231,8 +234,15 @@ export default function AnalisisTecnico() {
   )
 }
 
+const ETIQUETA_CATEGORIA: Record<CategoriaPreset, string> = {
+  tendencia: 'Seguir la tendencia',
+  reversion: 'Comprar la baja (reversión)',
+  ruptura: 'Rupturas',
+  momentum: 'Momentum',
+}
+
 function SeccionEstrategias({
-  ticker, desde, variante, moneda, seriesDisponibles, onVariante,
+  ticker, desde, variante, moneda, seriesDisponibles, onVariante, tieneVelas, tieneVolumen,
 }: {
   ticker: string
   desde?: string
@@ -240,6 +250,8 @@ function SeccionEstrategias({
   moneda: string
   seriesDisponibles: { variante: VarianteSerie; moneda: string; mercado: string }[]
   onVariante: (v: VarianteSerie) => void
+  tieneVelas: boolean
+  tieneVolumen: boolean
 }) {
   const presetsQuery = useQuery({ queryKey: qk.de('tecnico-presets'), queryFn: getPresetsEstrategia })
   const guardadasQuery = useQuery({ queryKey: qk.de('estrategias'), queryFn: () => listarEstrategias() })
@@ -250,6 +262,9 @@ function SeccionEstrategias({
   const [semillaEditor, setSemillaEditor] = useState(0)
   const [estrategiaActualId, setEstrategiaActualId] = useState<number | null>(null)
   const [nombreActual, setNombreActual] = useState('')
+  // Slug del preset del que salió lo que está en el editor: viaja como `tipo_preset` al guardar y
+  // es lo que enlaza la estrategia con su ficha explicativa.
+  const [presetActual, setPresetActual] = useState<string | null>(null)
   const [descripcionActual, setDescripcionActual] = useState<string | null>(null)
   // Se activa desde el panel avanzado ("Editar igual"): fuerza el editor visual aunque el DSL
   // tenga condiciones no representables (que se van a perder al guardar).
@@ -265,11 +280,16 @@ function SeccionEstrategias({
   const [reutilizable, setReutilizable] = useState(false)
   const [modalImportarOpen, setModalImportarOpen] = useState(false)
   const [textoImportar, setTextoImportar] = useState('')
+  const [avisoGuardado, setAvisoGuardado] = useState<string | null>(null)
+  const [modalRestaurarOpen, setModalRestaurarOpen] = useState(false)
+  const [restaurando, setRestaurando] = useState(false)
 
   useEffect(() => {
     if (dsl === null && presetsQuery.data && presetsQuery.data.length > 0) {
-      setDsl(presetsQuery.data[0].definicion)
-      setNombreActual(presetsQuery.data[0].nombre)
+      const primero = presetsQuery.data[0]
+      setDsl(primero.definicion)
+      setNombreActual(primero.etiqueta)
+      setPresetActual(primero.nombre)
       setSemillaEditor(s => s + 1)
     }
     // sólo para inicializar una vez que llegan los presets
@@ -299,12 +319,14 @@ function SeccionEstrategias({
       setSemillaEditor(s => s + 1)
       setForzarVisual(false)
       setEstrategiaActualId(null)
-      setNombreActual(preset.nombre)
+      setNombreActual(preset.etiqueta)
+      setPresetActual(preset.nombre)
       setDescripcionActual(null)
       setReutilizable(false)
       setResultado(null)
       setErrores([])
       setAvisoImport(null)
+      setAvisoGuardado(null)
     }
   }
 
@@ -314,6 +336,8 @@ function SeccionEstrategias({
     setForzarVisual(false)
     setEstrategiaActualId(e.id)
     setNombreActual(e.nombre)
+    setPresetActual(e.tipo_preset ?? null)
+    setAvisoGuardado(null)
     setDescripcionActual(e.descripcion)
     setReutilizable(e.ticker === null)
     setResultado(null)
@@ -339,6 +363,8 @@ function SeccionEstrategias({
     setForzarVisual(false)
     setEstrategiaActualId(null)
     setNombreActual(archivo.nombre ?? 'Estrategia importada')
+    setPresetActual(null)
+    setAvisoGuardado(null)
     setDescripcionActual(archivo.descripcion)
     setReutilizable(!archivo.ticker)
     setResultado(null)
@@ -367,18 +393,46 @@ function SeccionEstrategias({
   async function guardar() {
     if (!dsl || !nombreParaGuardar.trim()) return
     const tickerAGuardar = reutilizable ? null : ticker
+    const cuerpo = {
+      nombre: nombreParaGuardar, descripcion: descripcionActual, ticker: tickerAGuardar,
+      tipo_preset: presetActual, definicion: dsl, variante,
+    }
     try {
       if (estrategiaActualId) {
-        await actualizarEstrategia(estrategiaActualId, { nombre: nombreParaGuardar, descripcion: descripcionActual, ticker: tickerAGuardar, definicion: dsl, variante })
+        await actualizarEstrategia(estrategiaActualId, cuerpo)
+        setAvisoGuardado(`Estrategia «${nombreParaGuardar}» actualizada.`)
       } else {
-        const creada = await guardarEstrategia({ nombre: nombreParaGuardar, descripcion: descripcionActual, ticker: tickerAGuardar, definicion: dsl, variante })
-        setEstrategiaActualId(creada.id)
+        // El nombre identifica a la estrategia: si ya existía una con ese nombre, el backend la
+        // pisa en vez de dejar dos homónimas, y `sobrescrita` es cómo lo avisamos.
+        const guardada = await guardarEstrategia(cuerpo)
+        setEstrategiaActualId(guardada.id)
+        setAvisoGuardado(
+          guardada.sobrescrita
+            ? `Ya existía una estrategia llamada «${guardada.nombre}»: se sobrescribió con esta definición.`
+            : `Estrategia «${guardada.nombre}» guardada.`,
+        )
       }
       setNombreActual(nombreParaGuardar)
       setModalGuardarOpen(false)
       void guardadasQuery.refetch()
     } catch (e) {
       setErrores(erroresDesde(e))
+    }
+  }
+
+  async function restaurarCatalogo() {
+    setRestaurando(true)
+    try {
+      const r = await sembrarPresetsEstrategia(true)
+      setAvisoGuardado(
+        `Catálogo restaurado: ${r.creadas} nueva(s), ${r.actualizadas} devuelta(s) a su definición original.`,
+      )
+      setModalRestaurarOpen(false)
+      void guardadasQuery.refetch()
+    } catch (e) {
+      setErrores(erroresDesde(e))
+    } finally {
+      setRestaurando(false)
     }
   }
 
@@ -426,24 +480,49 @@ function SeccionEstrategias({
         </div>
       )}
       <div>
-        <div className="text-label text-app-text-faint mb-1">Empezar desde un preset</div>
-        <div className="flex flex-wrap gap-1.5 mb-2">
-          {(presetsQuery.data ?? []).map(p => (
-            <button
-              key={p.nombre} onClick={() => elegirPreset(p.nombre)}
-              className={`font-semibold text-caption px-2.5 py-1.5 rounded-[10px] border transition-colors ${
-                nombreActual === p.nombre && estrategiaActualId === null
-                  ? 'border-app-gold text-app-gold bg-app-gold-soft'
-                  : 'border-app-border text-app-text-dim bg-app-surface'
-              }`}
-            >
-              {p.nombre}
-            </button>
+        <div className="text-label text-app-text-faint mb-1">Empezar desde una estrategia del catálogo</div>
+        <div className="flex flex-col gap-2 mb-2">
+          {agruparPorCategoria(presetsQuery.data ?? []).map(([categoria, presets]) => (
+            <div key={categoria}>
+              <div className="text-label text-app-text-faint mb-1">{ETIQUETA_CATEGORIA[categoria]}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {presets.map(p => {
+                  // La estrategia igual corre: el motor degrada (sin velas, el canal usa cierres;
+                  // sin volumen, el filtro nunca se cumple). El aviso es para que el resultado no
+                  // se lea como si estuviera midiendo lo que promete.
+                  const faltaDato = (p.requiere_volumen && !tieneVolumen) || (p.requiere_velas && !tieneVelas)
+                  return (
+                    <button
+                      key={p.nombre} onClick={() => elegirPreset(p.nombre)}
+                      title={faltaDato
+                        ? `${ticker} no tiene ${p.requiere_volumen && !tieneVolumen ? 'volumen' : 'velas'} en esta serie`
+                        : undefined}
+                      className={`font-semibold text-caption px-2.5 py-1.5 rounded-[10px] border transition-colors ${
+                        presetActual === p.nombre && estrategiaActualId === null
+                          ? 'border-app-gold text-app-gold bg-app-gold-soft'
+                          : 'border-app-border text-app-text-dim bg-app-surface'
+                      }`}
+                    >
+                      {p.etiqueta}
+                      {faltaDato && <span className="ml-1 text-app-text-faint">·⚠</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
           ))}
         </div>
         {(guardadasQuery.data ?? []).length > 0 && (
           <>
-            <div className="text-label text-app-text-faint mb-1">Mis estrategias guardadas</div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-label text-app-text-faint">Mis estrategias guardadas</span>
+              <button
+                onClick={() => setModalRestaurarOpen(true)}
+                className="text-label text-app-text-faint underline"
+              >
+                Restaurar catálogo
+              </button>
+            </div>
             <div className="flex flex-wrap gap-1.5">
               {(guardadasQuery.data ?? []).map(e => (
                 <div
@@ -471,6 +550,14 @@ function SeccionEstrategias({
           {avisoImport}
         </div>
       )}
+
+      {avisoGuardado && (
+        <div className="bg-app-surface-2 rounded-xl px-3 py-2 text-caption text-app-text-dim">
+          {avisoGuardado}
+        </div>
+      )}
+
+      <FichaEstrategia preset={presetActual} />
 
       {dsl && (esEditableVisual(dsl) || forzarVisual ? (
         <EditorEstrategia key={semillaEditor} dslInicial={dsl} onCambiar={setDsl} erroresValidacion={errores} />
@@ -547,6 +634,32 @@ function SeccionEstrategias({
           </Button>
         </div>
       </Modal>
+
+      <Modal open={modalRestaurarOpen} onClose={() => setModalRestaurarOpen(false)} title="Restaurar catálogo">
+        <div className="flex flex-col gap-3">
+          <p className="text-caption text-app-text-dim">
+            Vuelve a guardar todas las estrategias del catálogo con su definición original, como
+            reutilizables (sin ticker fijo), para que el screener y la watchlist las evalúen.
+          </p>
+          <p className="text-caption text-app-text-dim">
+            Las que tengan el mismo nombre <strong>se sobrescriben</strong>: si le ajustaste el stop
+            loss o las reglas a alguna, esos cambios se pierden. Tus estrategias con otro nombre no
+            se tocan.
+          </p>
+          <Button onClick={restaurarCatalogo} disabled={restaurando}>
+            {restaurando ? 'Restaurando…' : 'Restaurar catálogo'}
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
+}
+
+/** Presets por categoría, en el orden en que se muestran. El orden es deliberado: de lo más
+ * conocido y direccional (tendencia) a lo más específico (momentum). */
+function agruparPorCategoria(presets: PresetEstrategiaOut[]): [CategoriaPreset, PresetEstrategiaOut[]][] {
+  const orden: CategoriaPreset[] = ['tendencia', 'reversion', 'ruptura', 'momentum']
+  return orden
+    .map(c => [c, presets.filter(p => p.categoria === c)] as [CategoriaPreset, PresetEstrategiaOut[]])
+    .filter(([, ps]) => ps.length > 0)
 }

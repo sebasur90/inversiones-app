@@ -4,17 +4,17 @@ CRUD de estrategias guardadas.
 from datetime import date, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
 from ..database import get_db, InstrumentoInversion, WatchlistItem
 from ..schemas import (
     TickerTecnicoOut, SerieTecnicaOut,
     BacktestRequest, BacktestOut, PresetEstrategiaOut, SenalTickerOut,
-    EstrategiaGuardarRequest, EstrategiaOut,
+    EstrategiaGuardarRequest, EstrategiaOut, SiembraPresetsOut,
     ScreenerRequest, ScreenerOut,
 )
-from ..services import ohlcv_analytics, estrategias_analytics, screener_analytics
+from ..services import ohlcv_analytics, estrategias_analytics, screener_analytics, estrategias_seed
 from ..services import indicadores_engine, estrategia_engine
 
 router = APIRouter(prefix="/api/inversiones", tags=["tecnico"])
@@ -56,7 +56,25 @@ def listar_tickers_tecnicos(db: Session = Depends(get_db)):
 
 @router.get("/tecnico/presets", response_model=list[PresetEstrategiaOut])
 def listar_presets():
-    return [{"nombre": nombre, "definicion": definicion} for nombre, definicion in estrategia_engine.PRESETS.items()]
+    return [
+        {
+            "nombre": nombre, "etiqueta": espec.etiqueta, "categoria": espec.categoria,
+            "definicion": espec.definicion,
+            "requiere_velas": espec.requiere_velas, "requiere_volumen": espec.requiere_volumen,
+        }
+        for nombre, espec in estrategia_engine.PRESETS.items()
+    ]
+
+
+@router.post("/tecnico/presets/sembrar", response_model=SiembraPresetsOut)
+def sembrar_presets_endpoint(forzar: bool = Query(False), db: Session = Depends(get_db)):
+    """Materializa el catálogo de presets como estrategias guardadas reutilizables (`ticker=None`),
+    que es lo que hace que el screener y las señales de la watchlist las vean.
+
+    Con `forzar=false` sólo agrega las que faltan; con `forzar=true` devuelve las existentes a su
+    definición de fábrica, pisando los ajustes que el usuario les haya hecho.
+    """
+    return estrategias_seed.sembrar_presets(db, forzar=forzar)
 
 
 @router.get("/tecnico/senales", response_model=list[SenalTickerOut])
@@ -158,7 +176,12 @@ def listar_estrategias(ticker: Optional[str] = Query(None), db: Session = Depend
 
 
 @router.post("/estrategias", response_model=EstrategiaOut, status_code=201)
-def crear_estrategia_endpoint(body: EstrategiaGuardarRequest, db: Session = Depends(get_db)):
+def crear_estrategia_endpoint(body: EstrategiaGuardarRequest, response: Response, db: Session = Depends(get_db)):
+    """Guarda una estrategia. **El nombre la identifica**: si ya existe una con ese nombre
+    (ignorando mayúsculas y acentos) se sobrescribe en vez de dejar dos homónimas — el status
+    distingue el caso, 201 si la creó y 200 si pisó una existente, que es lo que el front usa
+    para avisarle al usuario.
+    """
     if body.ticker is not None:
         _validar_ticker_tecnico(body.ticker, db)
     errores = estrategia_engine.validar_estrategia(body.definicion)
@@ -166,11 +189,13 @@ def crear_estrategia_endpoint(body: EstrategiaGuardarRequest, db: Session = Depe
         raise HTTPException(status_code=422, detail="; ".join(errores))
 
     _validar_variante(body.variante)
-    e = estrategias_analytics.crear_estrategia(
+    e, creada = estrategias_analytics.guardar_por_nombre(
         nombre=body.nombre, definicion=body.definicion, db=db,
         descripcion=body.descripcion, ticker=body.ticker, tipo_preset=body.tipo_preset,
         variante=body.variante,
     )
+    if not creada:
+        response.status_code = 200
     return _estrategia_out(e)
 
 
@@ -194,6 +219,7 @@ def actualizar_estrategia_endpoint(estrategia_id: int, body: EstrategiaGuardarRe
     e = estrategias_analytics.actualizar_estrategia(
         estrategia_id, db, nombre=body.nombre, descripcion=body.descripcion,
         ticker=body.ticker, definicion=body.definicion, variante=body.variante,
+        tipo_preset=body.tipo_preset,
     )
     if e is None:
         raise HTTPException(status_code=404, detail="Estrategia no encontrada")

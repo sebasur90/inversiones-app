@@ -1345,7 +1345,16 @@ export interface OperacionOut {
   retorno_neto_pct: number
   motivo_salida: string | null
   abierta: boolean
+  /** Niveles de riesgo vigentes durante la operación, calculados por el motor de backtest para
+   * que el gráfico los dibuje sin reimplementar la regla. `trailing` arranca en `indice_entrada`
+   * y trae un valor por barra consecutiva; `null` cuando la estrategia no configuró ese límite. */
+  nivel_stop_loss?: number | null
+  nivel_take_profit?: number | null
+  trailing?: number[] | null
 }
+
+/** Los motivos que emite `estrategia_engine`. `entrada` sólo aparece en `SenalOut`. */
+export type MotivoSalida = 'regla_salida' | 'stop_loss' | 'take_profit' | 'trailing_stop' | 'max_barras'
 
 export interface BacktestMetricasOut {
   estado: 'ok' | 'datos_insuficientes'
@@ -1394,9 +1403,23 @@ export interface BacktestOut {
   advertencias: string[]
 }
 
+export type CategoriaPreset = 'tendencia' | 'reversion' | 'ruptura' | 'momentum'
+
 export interface PresetEstrategiaOut {
+  /** Slug estable: es el `tipo_preset` de las guardadas y la clave de su ficha de ayuda. */
   nombre: string
+  /** Nombre legible; también el `nombre` con el que la siembra las guarda en la DB. */
+  etiqueta: string
+  categoria: CategoriaPreset
   definicion: EstrategiaDsl
+  requiere_velas: boolean
+  requiere_volumen: boolean
+}
+
+export interface SiembraPresetsOut {
+  creadas: number
+  actualizadas: number
+  sin_cambios: number
 }
 
 export interface EstrategiaGuardarRequest {
@@ -1447,8 +1470,14 @@ export const backtestEstrategia = (
 export const listarEstrategias = (ticker?: string) =>
   api.get<EstrategiaOut[]>('/inversiones/estrategias', { params: ticker ? { ticker } : {} }).then(r => r.data)
 
+export const sembrarPresetsEstrategia = (forzar = false) =>
+  api.post<SiembraPresetsOut>('/inversiones/tecnico/presets/sembrar', null, { params: { forzar } }).then(r => r.data)
+
+/** El nombre identifica a la estrategia: si ya existía una con ese nombre, el backend la pisa y
+ * responde 200 en vez de 201. `sobrescrita` traduce ese status para que la UI pueda avisarlo. */
 export const guardarEstrategia = (body: EstrategiaGuardarRequest) =>
-  api.post<EstrategiaOut>('/inversiones/estrategias', body).then(r => r.data)
+  api.post<EstrategiaOut>('/inversiones/estrategias', body)
+    .then(r => ({ ...r.data, sobrescrita: r.status === 200 }))
 
 export const actualizarEstrategia = (id: number, body: EstrategiaGuardarRequest) =>
   api.put<EstrategiaOut>(`/inversiones/estrategias/${id}`, body).then(r => r.data)
