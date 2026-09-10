@@ -945,9 +945,11 @@ def fetch_backfill_ohlcv_watchlist(
     escala. Fuera de las ventanas de ratio conocidas -> issue `escala_desconocida` con el mismo
     texto de remedio que ya usa la watchlist.
 
-    analisistecnico primero (gratis); IOL sólo si el primero devuelve `None`, y sólo esa llamada
-    cuenta contra `_MAX_BACKFILL_OHLCV_POR_SYNC` — analisistecnico no tiene cupo mensual, así que
-    no hace falta racionarlo.
+    analisistecnico primero (gratis); IOL sólo si el primero devuelve `None`. El loop se corta a
+    `_MAX_BACKFILL_OHLCV_POR_SYNC` tickers por corrida: analisistecnico no tiene cupo mensual, pero
+    cada GET es tiempo de pared con la transacción del sync abierta (y este backfill hace
+    `delete()`+`flush()` dentro del loop), así que igual hay que racionarlo — mismo patrón que los
+    otros tres backfills de este módulo.
 
     `ohlcv_existentes`: ticker -> fecha más antigua ya en `serie_ohlcv` (define qué tickers
     todavía no convergieron). `estado_por_ticker` (opcional): se muta in place con
@@ -1003,7 +1005,10 @@ def fetch_backfill_ohlcv_watchlist(
 
     filas: list[dict] = []
     llamadas_iol = 0
-    for item in pendientes:
+    # Cota por corrida (huecos más grandes primero, ya ordenados arriba): acota el tiempo de pared
+    # con la transacción del sync abierta. Es el único de los cuatro backfills del módulo que le
+    # faltaba.
+    for item in pendientes[:_MAX_BACKFILL_OHLCV_POR_SYNC]:
         w = item["w"]
         ticker = w["ticker"]
         ya = ohlcv_existentes.get(ticker)
