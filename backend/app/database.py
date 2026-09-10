@@ -1,11 +1,37 @@
-from sqlalchemy import create_engine, Column, Integer, String, Date, DateTime, Numeric, ForeignKey, UniqueConstraint, text, JSON
+from sqlalchemy import create_engine, event, Column, Integer, String, Date, DateTime, Numeric, ForeignKey, UniqueConstraint, text, JSON
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 import os
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "data.db")
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
-engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread": False})
+# `timeout=30`: si otra conexión tiene el lock de escritura (el sync a mitad de camino), esta
+# espera hasta 30 s en vez de fallar al toque con "database is locked".
+engine = create_engine(
+    f"sqlite:///{DB_PATH}",
+    connect_args={"check_same_thread": False, "timeout": 30},
+)
+
+
+@event.listens_for(engine, "connect")
+def _sqlite_pragmas(dbapi_connection, connection_record):
+    """WAL + synchronous=NORMAL en cada conexión nueva.
+
+    En rollback-journal (el default) los lectores se bloquean mientras el escritor tiene el
+    commit tomado: es exactamente el síntoma "la web se cuelga durante el sync". Con WAL los
+    lectores siguen leyendo la última versión consistente mientras el sync escribe.
+
+    `foreign_keys` se deja en el default (OFF) a propósito: las FK de
+    `MovimientoInversion.ticker` / `PrecioInstrumento.ticker` son decorativas hoy y el sync
+    inserta con aislamiento por pestaña (puede quedar un movimiento de un ticker cuya pestaña
+    Instrumentos quedó bloqueada). Activarlo hay que validarlo contra un sync real antes.
+    """
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.close()
+
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
