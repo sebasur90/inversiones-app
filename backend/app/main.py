@@ -1,4 +1,7 @@
+import faulthandler
 import os
+import signal
+import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -7,10 +10,27 @@ from .database import init_db
 from .routers import inversiones, objetivos_inversion, escenarios, tecnico
 
 
+def _habilitar_volcado_de_stacks() -> None:
+    """Diagnóstico de cuelgues: `docker kill -s USR1 <backend>` imprime en los logs el stack de
+    TODOS los threads sin matar el proceso.
+
+    Cuando la app "deja de responder" pero el contenedor sigue arriba, esto dice exactamente en qué
+    línea está trabado cada worker (una llamada de red sin timeout, un lock tomado, la DB
+    bloqueada). Sin esto sólo se ve un proceso vivo y mudo.
+
+    `dump_traceback_later` es la red de seguridad: si el event loop queda bloqueado más de 5
+    minutos, vuelca los stacks solo. `exit=False` para que sólo registre y no tumbe el proceso.
+    """
+    faulthandler.enable()
+    if hasattr(faulthandler, "register"):  # no existe en Windows
+        faulthandler.register(signal.SIGUSR1, file=sys.stderr, all_threads=True, chain=False)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup. El MEP y el CER salen del Sheet (tabla IndiceMercado), no de una API externa:
     # el arranque no depende de la red.
+    _habilitar_volcado_de_stacks()
     init_db()
     yield
 
