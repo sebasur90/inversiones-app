@@ -1,11 +1,18 @@
 """Lectura de las pestañas del Google Sheet de inversiones (cuenta de servicio) o Excel local."""
 import os
+import httplib2
 import pandas as pd
 from dataclasses import dataclass
 from google.oauth2 import service_account
+from google_auth_httplib2 import AuthorizedHttp
 from googleapiclient.discovery import build
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+
+# httplib2 (lo que usa googleapiclient por debajo) arranca con timeout None = cuelgue indefinido.
+# El sync es lo primero que llama acá (fetch_sheet_data), así que sin esto un problema de red
+# congela un worker para siempre.
+_SHEETS_HTTP_TIMEOUT = 30
 
 SPREADSHEET_ID = "1c-dr1C793IVSNzfQZATf01kg2TCPO7nSjYoVKJBtxks"
 
@@ -52,7 +59,10 @@ def _get_service():
         )
     try:
         credentials = service_account.Credentials.from_service_account_file(path, scopes=SCOPES)
-        return build("sheets", "v4", credentials=credentials)
+        # `http=` explícito (en vez de `credentials=`) para poder fijarle el timeout: si no,
+        # googleapiclient arma un httplib2.Http() sin timeout.
+        authed_http = AuthorizedHttp(credentials, http=httplib2.Http(timeout=_SHEETS_HTTP_TIMEOUT))
+        return build("sheets", "v4", http=authed_http)
     except Exception as exc:
         raise SheetsClientError(f"Credenciales de Google inválidas: {exc}") from exc
 

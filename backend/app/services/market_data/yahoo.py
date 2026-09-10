@@ -30,6 +30,11 @@ from .ohlcv_types import BarraCruda
 
 logger = logging.getLogger("market_data.yahoo")
 
+# Tope explícito por request. yfinance ya trae un default interno, pero pasarlo a mano deja el
+# límite a la vista y lo fija aunque cambie el default de la librería. Un peor caso son decenas de
+# llamadas secuenciales por sync (resolución + backfill del subyacente).
+_YF_TIMEOUT = 30
+
 
 def _num(x) -> float | None:
     """`float` finito, o `None` (incluye NaN de pandas, que no es igual a sí mismo)."""
@@ -87,8 +92,10 @@ def fetch_historico_ohlcv(ticker: str, desde: date, hasta: date) -> list[BarraCr
             auto_adjust=True,
             actions=False,
             raise_errors=False,
+            timeout=_YF_TIMEOUT,
         )
-    except Exception:
+    except Exception as exc:
+        logger.warning("yahoo: falló la serie histórica de %s: %s", ticker, exc)
         return None
 
     if df is None or getattr(df, "empty", True):
@@ -136,7 +143,8 @@ def fetch_info(ticker: str) -> dict | None:
         fi = t.fast_info
         moneda = _texto(fi.get("currency")).upper()
         mercado = _texto(fi.get("exchange"))
-    except Exception:
+    except Exception as exc:
+        logger.warning("yahoo: fast_info falló para %s: %s", ticker, exc)
         return None
 
     if not moneda and not mercado:
@@ -146,7 +154,8 @@ def fetch_info(ticker: str) -> dict | None:
     try:
         info = t.get_info() or {}
         nombre = _texto(info.get("longName") or info.get("shortName")) or None
-    except Exception:
+    except Exception as exc:
+        logger.warning("yahoo: get_info falló para %s (se sigue sin nombre): %s", ticker, exc)
         nombre = None
 
     return {"moneda": moneda, "mercado": mercado, "nombre": nombre}
