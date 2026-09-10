@@ -1,3 +1,4 @@
+import threading
 from datetime import date
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -87,13 +88,23 @@ from ..services.ticker_analytics import (
 
 router = APIRouter(prefix="/api/inversiones", tags=["inversiones"])
 
+# Un solo sync a la vez. Dos corridas concurrentes (dos pestañas, `useAutoSync` en dos
+# dispositivos) se pisaban: la segunda chocaba con el lock de escritura de SQLite y además
+# `iol_auth.iniciar_corrida()` resetea el contador por-corrida del sync en vuelo. No bloqueante:
+# encolar sólo alargaría el tiempo con la DB tomada, así que la segunda corrida se rechaza con 409.
+_sync_lock = threading.Lock()
+
 
 @router.post("/sync", response_model=SyncResult)
 def sync(db: Session = Depends(get_db)):
+    if not _sync_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Ya hay una sincronización en curso")
     try:
         result = sync_from_sheet(db)
     except SheetsClientError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        _sync_lock.release()
     return result
 
 
