@@ -1,6 +1,13 @@
 import axios from 'axios'
 
-const api = axios.create({ baseURL: '/api' })
+// Sin `timeout` una request colgada del backend (nginx permite hasta 300s de proxy_read_timeout)
+// nunca rechaza: el skeleton gira para siempre, `retry` no se dispara y QueryBoundary jamás
+// muestra el error. 30s cubre de sobra al endpoint legítimo más lento salvo el sync.
+const api = axios.create({ baseURL: '/api', timeout: 30_000 })
+
+// El sync recolecta de Google Sheets + IOL + yfinance y puede tardar varios minutos por diseño
+// (ver DESARROLLO.md). Timeout propio y más holgado para no cortarlo antes de tiempo.
+export const SYNC_TIMEOUT_MS = 300_000
 
 export default api
 
@@ -259,7 +266,7 @@ const carteraPath = (cartera: string | null) =>
   cartera ? `/inversiones/carteras/${encodeURIComponent(cartera)}` : '/inversiones/consolidado'
 
 export const syncInversiones = () =>
-  api.post<SyncResult>('/inversiones/sync').then(r => r.data)
+  api.post<SyncResult>('/inversiones/sync', undefined, { timeout: SYNC_TIMEOUT_MS }).then(r => r.data)
 
 export const getCalidadDatos = () =>
   api.get<CalidadDatosOut>('/inversiones/calidad-datos').then(r => r.data)
