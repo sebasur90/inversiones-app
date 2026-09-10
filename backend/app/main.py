@@ -1,13 +1,29 @@
 import faulthandler
+import logging
 import os
 import signal
 import sys
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from sqlalchemy import create_engine, text
+from sqlalchemy.pool import NullPool
 
-from .database import init_db
+from .database import init_db, DB_PATH
 from .routers import inversiones, objetivos_inversion, escenarios, tecnico
+
+logger = logging.getLogger("inversiones")
+
+# Engine dedicado al healthcheck: `timeout=2` (que el sondeo falle rápido en vez de colgarse los
+# 30 s del engine principal) y `NullPool` (nunca retiene una conexión). WAL hace que este SELECT
+# no se bloquee contra el escritor del sync; lo que sí detecta es la DB genuinamente trabada
+# (lock tomado en rollback-journal, disco lleno, archivo corrupto), que es cuando el contenedor
+# figuraba `healthy` sin poder servir nada.
+_health_engine = create_engine(
+    f"sqlite:///{DB_PATH}",
+    connect_args={"check_same_thread": False, "timeout": 2},
+    poolclass=NullPool,
+)
 
 
 def _habilitar_volcado_de_stacks() -> None:
@@ -57,5 +73,15 @@ app.include_router(tecnico.router)
 
 
 @app.get("/health")
-def health():
-    return {"status": "ok"}
+def health(response: Response):
+    """Toca la DB (no sólo devuelve 200): el healthcheck de docker-compose depende de esto para
+    detectar el cuelgue real. Un `return {"status": "ok"}` a secas deja al contenedor `healthy`
+    aunque la base esté trabada, y entonces `restart: unless-stopped` nunca actúa."""
+    try:
+        with _health_engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"status": "ok"}
+    except Exception as exc:
+        logger.warning("healthcheck: la DB no respondió: %s", exc)
+        response.status_code = 503
+        return {"status": "error", "detail": "db unavailable"}
