@@ -195,7 +195,9 @@ EOF
             || echo "   ✗ NADIE ESCUCHA EN $PUERTO"
 
         echo
-        echo "── 4. ¿Responde? ──"
+        echo "── 4. ¿Responde DESDE ESTE HOST? ──"
+        echo "   OJO: esto NO prueba el acceso externo. El tráfico local no atraviesa la cadena"
+        echo "   FORWARD, que es justo donde se cae el tráfico de otras máquinas. Ver el paso 5."
         for destino in "127.0.0.1" $(hostname -I 2>/dev/null); do
             codigo=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://$destino:$PUERTO/" 2>/dev/null)
             [ "$codigo" = "200" ] && echo "   ✓ $destino:$PUERTO -> $codigo" \
@@ -203,29 +205,63 @@ EOF
         done
 
         echo
-        echo "── 5. Firewall ──"
-        echo "   iptables INPUT policy: $(iptables -S INPUT 2>/dev/null | head -1)"
-        echo "   iptables FORWARD policy: $(iptables -S FORWARD 2>/dev/null | head -1)"
-        echo "   (FORWARD en DROP rompe los puertos publicados por Docker desde otras interfaces)"
+        echo "── 5. ¿Responde COMO SI VINIERA DE AFUERA? ──"
+        # Un contenedor en otra red sale por el bridge y su tráfico SÍ atraviesa FORWARD: es la
+        # única forma de reproducir el acceso externo sin una segunda máquina.
+        ip_host=$(hostname -I 2>/dev/null | awk '{print $1}')
+        # Se reutiliza la imagen del frontend (nginx:alpine, ya presente y con el wget de busybox):
+        # así la prueba no depende de bajar nada, que en este entorno puede no salir.
+        imagen=$(docker ps --filter "name=frontend" --format '{{.Image}}' | head -1)
+        imagen="${imagen:-alpine:latest}"
+        if [ -n "$ip_host" ]; then
+            salida=$(timeout 20 docker run --rm --network bridge "$imagen" \
+                     wget -q -O /dev/null -T 5 "http://$ip_host:$PUERTO/" 2>&1)
+            if [ $? -eq 0 ]; then
+                echo "   ✓ desde un contenedor -> LLEGA. El firewall no es el problema."
+            else
+                echo "   ✗ desde un contenedor -> NO LLEGA (${salida:-timeout})"
+                echo "     Reproduce el fallo: el tráfico externo se está cayendo en FORWARD."
+            fi
+        fi
+
+        echo
+        echo "── 6. Firewall ──"
+        echo "   INPUT policy:   $(iptables -S INPUT 2>/dev/null | head -1)   <- por acá entra el SSH"
+        echo "   FORWARD policy: $(iptables -S FORWARD 2>/dev/null | head -1)   <- por acá entra Docker"
+        echo
+        echo "   Reglas de FORWARD (deben estar DOCKER, DOCKER-USER y DOCKER-ISOLATION):"
+        iptables -S FORWARD 2>/dev/null | sed 's/^/     /'
+        echo
+        if iptables -S FORWARD 2>/dev/null | grep -q "DOCKER"; then
+            echo "   ✓ Las cadenas de Docker están presentes en FORWARD."
+            echo "     Si aun así no llega, revisar si hay un -j DROP/REJECT ANTES de ellas."
+        else
+            echo "   ✗ NO están las cadenas de Docker en FORWARD: con la policy en DROP, todo el"
+            echo "     tráfico externo hacia los contenedores se descarta. Suele pasar cuando un"
+            echo "     firewall (ufw/firewalld) se recarga después de Docker y le pisa las reglas."
+            echo "     Solución habitual: systemctl restart docker (las recrea)."
+        fi
         if command -v ufw >/dev/null 2>&1; then
             echo "   ufw:"; ufw status 2>/dev/null | head -12 | sed 's/^/     /'
         fi
 
         echo
-        echo "── 6. Comparación: TODOS los puertos publicados por Docker ──"
+        echo "── 7. Comparación: TODOS los puertos publicados por Docker ──"
         echo "   (comparar el mapeo de los servicios que SÍ se alcanzan contra este)"
         docker ps --format '   {{.Names}} | {{.Ports}}'
 
         echo
-        echo "── 7. Tailscale ──"
+        echo "── 8. Tailscale ──"
         if command -v tailscale >/dev/null 2>&1; then
             echo "   IP tailscale: $(tailscale ip -4 2>/dev/null | head -1)"
             echo "   Rutas anunciadas por este host:"
             tailscale status --json 2>/dev/null | grep -i "advertise\|AllowedIPs" | head -5 | sed 's/^/     /'
-            echo "   (si este host NO anuncia 192.168.1.0/24, desde Tailscale hay que entrar"
-            echo "    por la IP 100.x, no por la 192.168.x)"
         else
-            echo "   tailscale no está instalado en este host"
+            echo "   tailscale NO está instalado en este host."
+            echo "   Si igual llegás por SSH, entrás vía un subnet router de la red. Ojo con la"
+            echo "   asimetría: el SSH lo atiende el host (cadena INPUT, en ACCEPT) mientras que"
+            echo "   los puertos de Docker pasan por FORWARD. Que el SSH ande no dice nada sobre"
+            echo "   si el puerto del contenedor es alcanzable."
         fi
         echo
         echo "═══ FIN ═══"
