@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react'
 import { useInversiones } from '../hooks/useInversiones'
+import { leerPreferencia, guardarPreferencia, CLAVE_TOUR_VISTO } from '../hooks/usePreferencia'
 import type { SyncIssueOut } from '../api'
 
 interface ToastState {
@@ -24,6 +25,11 @@ interface InversionesContextValue extends ReturnType<typeof useInversiones> {
    * React Query no lo necesitan (`sincronizar` invalida la caché de queries).
    */
   syncVersion: number
+  /** Tour de bienvenida: se abre solo la primera vez (ver estado inicial en el provider) y se
+   *  puede reabrir a mano desde Ajustes o el Centro de ayuda. */
+  tourAbierto: boolean
+  abrirTour: () => void
+  cerrarTour: () => void
 }
 
 const InversionesContext = createContext<InversionesContextValue | null>(null)
@@ -37,6 +43,9 @@ export function InversionesProvider({ children }: { children: ReactNode }) {
   const [syncResultado, setSyncResultado] = useState('')
   const [syncResumenTexto, setSyncResumenTexto] = useState('')
   const [syncVersion, setSyncVersion] = useState(0)
+  // Arranca abierto si nunca se vio (o se salteó): la única forma de que quede en `false` acá es
+  // que `cerrarTour` ya haya corrido antes, en esta pestaña o en una sesión previa.
+  const [tourAbierto, setTourAbierto] = useState(() => !leerPreferencia(CLAVE_TOUR_VISTO))
 
   const { sincronizar } = inversiones
 
@@ -67,6 +76,11 @@ export function InversionesProvider({ children }: { children: ReactNode }) {
   )
   const dismissToast = useCallback(() => setToast(null), [])
   const closeSyncSheet = useCallback(() => setSyncSheetOpen(false), [])
+  const abrirTour = useCallback(() => setTourAbierto(true), [])
+  const cerrarTour = useCallback(() => {
+    setTourAbierto(false)
+    guardarPreferencia(CLAVE_TOUR_VISTO, '1')
+  }, [])
 
   // Memoizado: sin esto el value se recreaba en cada render y hacía re-renderizar a todos
   // los consumidores (21 pantallas, varias con gráficos de recharts).
@@ -84,10 +98,14 @@ export function InversionesProvider({ children }: { children: ReactNode }) {
       syncResultado,
       syncResumenTexto,
       syncVersion,
+      tourAbierto,
+      abrirTour,
+      cerrarTour,
     }),
     [
       inversiones, triggerSync, toast, showToast, dismissToast, syncSheetOpen, closeSyncSheet,
       syncIssues, syncHealthScore, syncResultado, syncResumenTexto, syncVersion,
+      tourAbierto, abrirTour, cerrarTour,
     ],
   )
 

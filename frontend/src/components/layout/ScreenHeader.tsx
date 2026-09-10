@@ -5,6 +5,7 @@ import IconButton from '../ui/IconButton'
 import Pill from '../ui/Pill'
 import Modal from '../ui/Modal'
 import BuscadorGlobal from './BuscadorGlobal'
+import GuiaPantalla from '../../help/components/GuiaPantalla'
 import { calcularFrescura, type NivelFrescura } from '../../utils/frescura'
 
 const COLOR_FRESCURA: Record<NivelFrescura, string> = {
@@ -25,12 +26,15 @@ export default function ScreenHeader({ title, onBack }: { title: string; onBack?
 
   if (onBack) {
     return (
-      <div className="flex items-center gap-3 mb-3.5">
-        <IconButton onClick={onBack} aria-label="Volver">
-          <Icon name="back" />
-        </IconButton>
-        <h1 className="font-display text-heading font-semibold text-app-text truncate">{title}</h1>
-      </div>
+      <>
+        <div className="flex items-center gap-3 mb-3.5">
+          <IconButton onClick={onBack} aria-label="Volver">
+            <Icon name="back" />
+          </IconButton>
+          <h1 className="font-display text-heading font-semibold text-app-text truncate">{title}</h1>
+        </div>
+        <GuiaPantalla />
+      </>
     )
   }
 
@@ -70,14 +74,25 @@ export default function ScreenHeader({ title, onBack }: { title: string; onBack?
       </div>
 
       {/* Frescura de los datos: sin esto no había forma de saber si los números son de hoy
-          o de la semana pasada sin entrar a Calidad de datos. */}
+          o de la semana pasada sin entrar a Calidad de datos. El texto explícito en los
+          niveles viejo/desconocido es a propósito: el color solo no le dice nada a nadie que
+          no conozca ya la convención de la app. */}
       <button
         onClick={triggerSync}
         disabled={syncing}
-        className={`text-caption mb-3 ${COLOR_FRESCURA[frescura.nivel]} disabled:opacity-60`}
+        className={`inline-flex items-center gap-1 text-caption mb-3 ${COLOR_FRESCURA[frescura.nivel]} disabled:opacity-60`}
       >
-        {syncing ? 'Sincronizando…' : `Datos ${frescura.etiqueta}`}
+        {(frescura.nivel === 'viejo' || frescura.nivel === 'desconocido') && !syncing && (
+          <Icon name="alert" className="w-3.5 h-3.5 shrink-0" />
+        )}
+        {syncing
+          ? 'Sincronizando…'
+          : frescura.nivel === 'viejo' || frescura.nivel === 'desconocido'
+            ? `Datos ${frescura.etiqueta} — tocá para sincronizar`
+            : `Datos ${frescura.etiqueta}`}
       </button>
+
+      <GuiaPantalla />
 
       <Modal open={carteraModalOpen} onClose={() => setCarteraModalOpen(false)} title="Elegir cartera">
         <div className="flex flex-col gap-1.5">

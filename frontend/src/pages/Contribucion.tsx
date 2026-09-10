@@ -12,13 +12,14 @@ import { formatPct } from '../utils'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import EmptyState from '../components/ui/EmptyState'
 import Segmented from '../components/ui/Segmented'
-import InfoTerm from '../components/ui/InfoTerm'
+import InfoTooltip from '../help/components/InfoTooltip'
 import MetricTile from '../components/ui/MetricTile'
 import CorrelacionMatriz from '../components/charts/CorrelacionMatriz'
 import { Icon } from '../components/icons/Icons'
 import { SkeletonFilas } from '../components/ui/Skeleton'
 import QueryBoundary from '../components/ui/QueryBoundary'
 import { qk } from '../api/queryClient'
+import { nivelConcentracion } from '../utils/niveles'
 
 function toneClass(v: number | null | undefined): string {
   if (v == null) return 'text-app-text'
@@ -47,13 +48,6 @@ function ContribucionBar({ item, maxAbs }: { item: ContribucionItem; maxAbs: num
       </div>
     </div>
   )
-}
-
-function etiquetaHhi(hhi: number | null): string | undefined {
-  if (hhi == null) return undefined
-  if (hhi < 1500) return 'Poco concentrado'
-  if (hhi <= 2500) return 'Moderadamente concentrado'
-  return 'Muy concentrado'
 }
 
 const OPCIONES_UNIVERSO: { value: UniversoCorrelacion; label: string }[] = [
@@ -107,7 +101,7 @@ export default function Contribucion() {
       </div>
 
       <h3 className="text-body font-bold text-app-text mb-2.5">
-        <InfoTerm term="contribucion" label="Contribución al rendimiento" />
+        <InfoTooltip term="contribucion" label="Contribución al rendimiento" />
       </h3>
       <QueryBoundary
         isLoading={loadingContribucion}
@@ -153,7 +147,7 @@ export default function Contribucion() {
                 label="HHI"
                 infoTerm="hhi"
                 value={ejeActivoConcentracion.hhi != null ? ejeActivoConcentracion.hhi.toFixed(0) : '—'}
-                sub={etiquetaHhi(ejeActivoConcentracion.hhi)}
+                nivel={nivelConcentracion(ejeActivoConcentracion.hhi)}
                 insuficiente={ejeActivoConcentracion.estado !== 'ok'}
               />
               <MetricTile
@@ -169,7 +163,7 @@ export default function Contribucion() {
       )}
 
       <h3 className="text-body font-bold text-app-text mb-2.5">
-        <InfoTerm term="correlacion" label="Correlación entre activos" />
+        <InfoTooltip term="correlacion" label="Correlación entre activos" />
       </h3>
       <div className="mb-3">
         <Segmented options={OPCIONES_UNIVERSO} value={universo} onChange={setUniverso} />

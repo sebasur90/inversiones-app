@@ -1,26 +1,54 @@
 # Sistema de Ayuda Contextual — Referencia
 
-Este directorio centraliza todo el contenido y componentes del sistema de ayuda contextual de la app.
+Este directorio centraliza todo el contenido y componentes del sistema de ayuda contextual de la app:
+el glosario término por término (`InfoTooltip`), las guías por pantalla (`GuiaPantalla`), el tour de
+bienvenida (`TourBienvenida`) y el Centro de ayuda (`pages/Ayuda.tsx`, fuera de este directorio por
+ser una pantalla y no un componente reutilizable).
 
 ## Estructura
 
-- **`types.ts`** — Definición de `HelpContent` y alias `HelpKey`
+- **`types.ts`** — Definición de `HelpContent` (un término) y `GuiaPantalla` (una pantalla entera)
 - **`content/`** — Contenido editable (separado de presentación)
-  - `glosario.ts` — 31 términos del glosario fallback (no enriquecidos)
-  - `simulador.ts` — 12 keys para Piloto A (Simulador de escenarios)
-  - `objetivo.ts` — 9 keys para Piloto B (Objetivo/Proyección)
-  - `benchmarks.ts` — 4 keys para Piloto C (Benchmarks)
-  - `patrimonio.ts` — 5 keys para Patrimonio (Batch 1)
-  - `index.ts` — Combina todo en un Record único
+  - `glosario.ts` — términos generales del glosario
+  - `simulador.ts`, `objetivo.ts`, `benchmarks.ts`, `patrimonio.ts`, `calidaddatos.ts`,
+    `diagnostico.ts`, `movimientos.ts`, `posiciones.ts`, `exposicion.ts`, `vencimientos.ts`,
+    `precios.ts`, `indicadoresmacro.ts`, `comparador.ts`, `performancerelativa.ts`,
+    `tickerdetalle.ts`, `comisiones.ts`, `rebalanceo.ts`, `flujocaja.ts`, `watchlist.ts`,
+    `analisisTecnico.ts`, `estrategias.ts` — keys por pantalla, cada una con su propio archivo
+  - `index.ts` — Combina todo en un Record único (`HELP`) y expone el alias `HelpKey`
+  - `guias.ts` — `GUIAS_PANTALLA`: una guía "Cómo leer esta pantalla" por ruta, resuelta por
+    `useLocation().pathname` (no se toca cada página para agregar/editar una)
+  - `tour.ts` — Los pasos del tour de bienvenida
+  - `tutoriales.ts` — Recorridos paso a paso multi-pantalla, para el Centro de ayuda
+  - `faq.ts` — Preguntas frecuentes, para el Centro de ayuda
 - **`components/`** — Componentes reutilizables
-  - `InfoTooltip.tsx` — Reemplaza `InfoTerm`, botón "(i)" + Modal con secciones
+  - `InfoTooltip.tsx` — Botón "(i)" + Modal con secciones; exporta también `InfoTooltipLink`
+    (chip que abre el mismo modal, usado por `GuiaPantalla` y el buscador) y `ContenidoTermino`
+    (el cuerpo del modal en sí, para reusar fuera de un tooltip — p. ej. el glosario del Centro
+    de ayuda)
   - `FormHelp.tsx` — Wrapper sobre InfoTooltip + rango de validación
+  - `GuiaPantalla.tsx` — Banner colapsable "💡 Cómo leer esta pantalla", montado una sola vez en
+    `ScreenHeader` y resuelto por ruta contra `content/guias.ts`
+  - `TourBienvenida.tsx` — Modal-carrusel de bienvenida; estado (`tourAbierto`) vive en
+    `InversionesContext`, igual que `syncSheetOpen`
   - `ScenarioIntentBanner.tsx` — Callout "¿Qué estás haciendo?" / "¿Qué vas a obtener?"
   - `ResultInterpretation.tsx` — Bloque "🔎 Interpretación" post-resultado
   - `ErrorBanner.tsx` — Presentación visual de ParsedApiError
 - **`errors/`** — Manejo de errores amigables
   - `escenarioLimits.ts` — Espejo de límites de `backend/app/schemas.py` (fuente única de verdad en frontend)
   - `apiErrors.ts` — `parseApiError()` que maneja errores Pydantic y customizados
+
+## Fuera de `help/` pero parte del mismo sistema
+
+- **`pages/Ayuda.tsx`** (`/ayuda`) — Centro de ayuda: tutoriales (`content/tutoriales.ts`),
+  glosario buscable (sobre `HELP`), preguntas frecuentes (`content/faq.ts`) y acceso al tour.
+- **`components/ui/Semaforo.tsx`** + **`utils/niveles.ts`** — "bien/atención/riesgo" en palabras,
+  no sólo color, para drawdown, volatilidad, concentración (HHI) y los scores de salud/calidad.
+  Los umbrales de drawdown/volatilidad/concentración son los mismos que ya dispara
+  `backend/app/services/diagnostico_engine.py` para generar un hallazgo.
+- **`hooks/usePreferencia.ts`** — `CLAVE_MODO_GUIADO`, `CLAVE_TOUR_VISTO`,
+  `PREFIJO_GUIA_COLAPSADA` y `limpiarGuiasColapsadas()`: el interruptor de Ajustes y la
+  persistencia de qué guías quedaron colapsadas.
 
 ## Uso
 
@@ -117,11 +145,13 @@ try {
 ## Notas para mantainers
 
 - **Cambios en backend de validación**: actualizar `escenarioLimits.ts` línea que apunta a `backend/app/schemas.py:136-149`
-- **Cambios en `MetricCard.tsx` original**: verificar que no hay otros consumidores con `grep -rl "ui/MetricCard"` antes de eliminar
-- **EmptyState.tsx**: no se toca en este rollout salvo necesidad puntual
-- **Modo guía/tours/centro de ayuda**: diferidos a Fase 2, sin diseño adicional aquí
+- **Cambios en umbrales de `diagnostico_engine.py`** (drawdown/volatilidad/concentración): actualizar también `utils/niveles.ts`, que los replica a propósito para no inventar un criterio nuevo
+- **Agregar una guía de pantalla nueva**: una entrada más en `content/guias.ts` — no hace falta tocar la pantalla en sí, `ScreenHeader` ya renderiza `GuiaPantalla` en todas
+- **Agregar un tutorial o una FAQ**: una entrada más en `content/tutoriales.ts` o `content/faq.ts`; aparecen solas en el Centro de ayuda
+- **EmptyState.tsx**: no se toca salvo necesidad puntual — la mayoría ya explica qué falta y cómo resolverlo, no hace falta un texto genérico "Sin datos"
 
 ## Referencias
 
-- Plan original: `/home/slrodriguez/.claude/plans/sistema-de-peaceful-quasar.md`
-- Estado de implementación: `/home/slrodriguez/.claude/projects/-home-slrodriguez-inversiones-app/memory/plan_ayuda_fase1_avance.md`
+- Plan original (Fase 1): `/home/slrodriguez/.claude/plans/sistema-de-peaceful-quasar.md`
+- Estado de implementación (Fase 1): `/home/slrodriguez/.claude/projects/-home-slrodriguez-inversiones-app/memory/plan_ayuda_fase1_avance.md`
+- Plan de onboarding (guías, tour, Centro de ayuda): `/home/slrodriguez/.claude/plans/agrega-info-tutoriales-simplificaciones-binary-gadget.md`

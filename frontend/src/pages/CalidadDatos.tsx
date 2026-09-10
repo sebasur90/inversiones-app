@@ -7,6 +7,8 @@ import { parseApiError, type ParsedApiError } from '../help/errors/apiErrors'
 import ErrorBanner from '../help/components/ErrorBanner'
 import InfoTooltip from '../help/components/InfoTooltip'
 import SkeletonPantalla from '../components/ui/Skeleton'
+import Semaforo from '../components/ui/Semaforo'
+import { nivelScore } from '../utils/niveles'
 import { useQuery } from '@tanstack/react-query'
 import { qk } from '../api/queryClient'
 
@@ -41,6 +43,7 @@ export default function CalidadDatos() {
   }
 
   const { ultimo_sync, issues, issues_por_tab, historial, reglas_recurrentes } = calidad
+  const nivelCalidad = ultimo_sync ? nivelScore(ultimo_sync.health_score) : null
 
   const sevColor = (s: string) =>
     s === 'critico' ? 'text-app-coral' : s === 'advertencia' ? 'text-app-gold' : 'text-app-text-dim'
@@ -65,6 +68,7 @@ export default function CalidadDatos() {
                 <InfoTooltip term="calidaddatos_health_score" />
               </div>
             </div>
+            {nivelCalidad && <Semaforo nivel={nivelCalidad.nivel} etiqueta={nivelCalidad.etiqueta} className="mb-2" />}
             <div className="text-body text-app-text-dim">
               Última sincronización: {new Date(ultimo_sync.timestamp).toLocaleString()}
               <br />

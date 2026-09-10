@@ -18,6 +18,8 @@ import ComparacionChart from '../components/charts/ComparacionChart'
 import InfoTooltip from '../help/components/InfoTooltip'
 import QueryBoundary from '../components/ui/QueryBoundary'
 import SkeletonPantalla from '../components/ui/Skeleton'
+import Semaforo from '../components/ui/Semaforo'
+import { nivelScore } from '../utils/niveles'
 
 export default function Resumen() {
   const navigate = useNavigate()
@@ -44,6 +46,8 @@ export default function Resumen() {
   const calidad = calidadQuery.data ?? null
 
   const topPosiciones = rendimientoPorTicker.slice(0, 5)
+  const nivelSalud = diagnostico ? nivelScore(diagnostico.salud.score_total) : null
+  const nivelCalidad = calidad?.ultimo_sync ? nivelScore(calidad.ultimo_sync.health_score) : null
 
   return (
     <div className="pb-4">
@@ -86,6 +90,7 @@ export default function Resumen() {
                   {diagnostico.salud.score_total !== null ? Math.round(diagnostico.salud.score_total) : '—'}
                   <span className="text-body text-app-text-dim">/100</span>
                 </div>
+                {nivelSalud && <Semaforo nivel={nivelSalud.nivel} etiqueta={nivelSalud.etiqueta} className="mb-0.5" />}
                 <div className="text-caption text-app-text-dim">
                   {diagnostico.hallazgos.length} hallazgo{diagnostico.hallazgos.length !== 1 ? 's' : ''}
                   <Icon name="chevron" className="w-3.5 h-3.5 inline-block -rotate-90 ml-0.5" />
@@ -103,6 +108,7 @@ export default function Resumen() {
                   {calidad.ultimo_sync.health_score}
                   <span className="text-body text-app-text-dim">/100</span>
                 </div>
+                {nivelCalidad && <Semaforo nivel={nivelCalidad.nivel} etiqueta={nivelCalidad.etiqueta} className="mb-0.5" />}
                 <div className="text-caption text-app-text-dim">
                   {calidad.issues.length} problema{calidad.issues.length !== 1 ? 's' : ''}
                   <Icon name="chevron" className="w-3.5 h-3.5 inline-block -rotate-90 ml-0.5" />

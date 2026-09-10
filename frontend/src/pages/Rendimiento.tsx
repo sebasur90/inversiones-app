@@ -12,7 +12,7 @@ import RendimientoHeatmap from '../components/charts/RendimientoHeatmap'
 import DescomposicionFxChart from '../components/charts/DescomposicionFxChart'
 import { Icon } from '../components/icons/Icons'
 import MetricTile from '../components/ui/MetricTile'
-import InfoTerm from '../components/ui/InfoTerm'
+import InfoTooltip from '../help/components/InfoTooltip'
 import type { HelpKey } from '../help/content/index'
 import SkeletonPantalla from '../components/ui/Skeleton'
 import QueryBoundary from '../components/ui/QueryBoundary'
@@ -198,10 +198,10 @@ export default function Rendimiento() {
                   <th className="text-left text-app-text-faint font-bold uppercase text-label pb-2">&nbsp;</th>
                   <th className="text-right text-app-text-faint font-bold uppercase text-label pb-2 px-1.5">ARS Nominal</th>
                   <th className="text-right text-app-text-faint font-bold uppercase text-label pb-2 px-1.5">
-                    <InfoTerm term="cer" label="ARS Real (CER)" className="justify-end" />
+                    <InfoTooltip term="cer" label="ARS Real (CER)" className="justify-end" />
                   </th>
                   <th className="text-right text-app-text-faint font-bold uppercase text-label pb-2 px-1.5">
-                    <InfoTerm term="mep" label="USD (MEP)" className="justify-end" />
+                    <InfoTooltip term="mep" label="USD (MEP)" className="justify-end" />
                   </th>
                 </tr>
               </thead>
@@ -209,7 +209,7 @@ export default function Rendimiento() {
                 {filas.map(fila => (
                   <tr key={fila.label} className="border-t border-app-border">
                     <td className="py-2 font-semibold text-app-text">
-                      <InfoTerm term={fila.infoTerm} label={fila.label} />
+                      <InfoTooltip term={fila.infoTerm} label={fila.label} />
                     </td>
                     {fila.valores.map((v, i) => (
                       <td key={i} className={`py-2 px-1.5 text-right font-mono font-bold tabular-nums ${toneClass(v)}`}>
@@ -230,7 +230,7 @@ export default function Rendimiento() {
           </Card>
 
           <h3 className="text-body font-bold text-app-text mb-2.5">
-            <InfoTerm term="twr" label="Mapa de calor: rendimiento mensual" />
+            <InfoTooltip term="twr" label="Mapa de calor: rendimiento mensual" />
           </h3>
           {!rendimientoMensual || rendimientoMensual.meses.length === 0 ? (
             <EmptyState title="Sin historial mensual" description="No hay suficientes meses de actividad para armar el mapa de calor." />
@@ -239,7 +239,7 @@ export default function Rendimiento() {
           )}
 
           <h3 className="text-body font-bold text-app-text mb-2.5">
-            <InfoTerm term="benchmark" label="Performance vs benchmark" />
+            <InfoTooltip term="benchmark" label="Performance vs benchmark" />
           </h3>
           {perfRelativa?.estado === 'ok' ? (
             <Card className="mb-4">
@@ -280,7 +280,7 @@ export default function Rendimiento() {
           )}
 
           <h3 className="text-body font-bold text-app-text mb-2.5">
-            <InfoTerm term="benchmark" label="Cartera vs. benchmarks (ARS)" />
+            <InfoTooltip term="benchmark" label="Cartera vs. benchmarks (ARS)" />
           </h3>
           <Card className="mb-4">
             <ComparacionChart resumen={resumen} />

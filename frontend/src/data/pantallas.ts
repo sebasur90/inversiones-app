@@ -8,6 +8,12 @@ export type GrupoPantallas = { titulo: string; items: PantallaItem[] }
 // Posiciones, Rendimiento y Movimientos — no están acá: se listan aparte en PANTALLAS_NAV.
 export const GRUPOS_PANTALLAS: GrupoPantallas[] = [
   {
+    titulo: 'Ayuda',
+    items: [
+      { to: '/ayuda', label: 'Centro de ayuda', desc: 'Tutoriales, glosario, preguntas frecuentes y el tour de bienvenida', icon: 'info' },
+    ],
+  },
+  {
     titulo: 'Cartera',
     items: [
       { to: '/watchlist', label: 'Watchlist', desc: 'Instrumentos a seguir y su distancia al precio de compra', icon: 'target' },

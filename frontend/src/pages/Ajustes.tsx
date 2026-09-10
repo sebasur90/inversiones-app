@@ -7,12 +7,15 @@ import Segmented from '../components/ui/Segmented'
 import Button from '../components/ui/Button'
 import {
   usePreferenciaNumerica,
+  usePreferenciaBooleana,
   guardarPreferencia,
+  limpiarGuiasColapsadas,
   CLAVE_AUTOSYNC_HORAS,
   CLAVE_ESCALA_TEXTO,
   CLAVE_CARTERA,
   CLAVE_MONEDA,
   CLAVE_UMBRAL_PROXIMIDAD,
+  CLAVE_MODO_GUIADO,
   UMBRAL_PROXIMIDAD_DEFAULT,
   AUTOSYNC_HORAS_DEFAULT,
   AUTOSYNC_HORAS_MAX,
@@ -43,6 +46,11 @@ const OPCIONES_ESCALA: { value: string; label: string }[] = [
   { value: '1.3', label: 'Muy grande' },
 ]
 
+const OPCIONES_MODO_GUIADO: { value: string; label: string }[] = [
+  { value: '1', label: 'Activado' },
+  { value: '0', label: 'Desactivado' },
+]
+
 function Seccion({ titulo, ayuda, children }: { titulo: string; ayuda: string; children: ReactNode }) {
   return (
     <Card className="mb-3">
@@ -55,7 +63,7 @@ function Seccion({ titulo, ayuda, children }: { titulo: string; ayuda: string; c
 
 export default function Ajustes() {
   const navigate = useNavigate()
-  const { monedaSeleccionada, setMonedaSeleccionada, umbralProximidadPct, setUmbralProximidadPct, ultimoSync, showToast } =
+  const { monedaSeleccionada, setMonedaSeleccionada, umbralProximidadPct, setUmbralProximidadPct, ultimoSync, showToast, abrirTour } =
     useInversionesContext()
 
   const [autoSyncHoras, setAutoSyncHoras] = usePreferenciaNumerica(
@@ -64,6 +72,7 @@ export default function Ajustes() {
   const [escalaTexto, setEscalaTexto] = usePreferenciaNumerica(
     CLAVE_ESCALA_TEXTO, ESCALA_TEXTO_DEFAULT, ESCALA_TEXTO_MIN, ESCALA_TEXTO_MAX,
   )
+  const [modoGuiado, setModoGuiado] = usePreferenciaBooleana(CLAVE_MODO_GUIADO, true)
 
   function cambiarEscala(valor: number) {
     setEscalaTexto(valor)
@@ -71,13 +80,15 @@ export default function Ajustes() {
   }
 
   function restablecer() {
-    for (const clave of [CLAVE_AUTOSYNC_HORAS, CLAVE_ESCALA_TEXTO, CLAVE_CARTERA, CLAVE_MONEDA, CLAVE_UMBRAL_PROXIMIDAD]) {
+    for (const clave of [CLAVE_AUTOSYNC_HORAS, CLAVE_ESCALA_TEXTO, CLAVE_CARTERA, CLAVE_MONEDA, CLAVE_UMBRAL_PROXIMIDAD, CLAVE_MODO_GUIADO]) {
       guardarPreferencia(clave, null)
     }
+    limpiarGuiasColapsadas()
     setAutoSyncHoras(AUTOSYNC_HORAS_DEFAULT)
     cambiarEscala(ESCALA_TEXTO_DEFAULT)
     setMonedaSeleccionada('USD')
     setUmbralProximidadPct(UMBRAL_PROXIMIDAD_DEFAULT)
+    setModoGuiado(true)
     showToast('Preferencias restablecidas.')
   }
 
@@ -136,7 +147,31 @@ export default function Ajustes() {
         />
       </Seccion>
 
-      <Seccion titulo="Restablecer preferencias" ayuda="Vuelve moneda, cartera, auto-sync y tamaño de texto a los valores iniciales. No toca los datos.">
+      <Seccion
+        titulo="Modo guiado"
+        ayuda='Con el modo guiado activado, la franja "💡 Cómo leer esta pantalla" aparece abierta en cada pantalla. Apagarlo no borra el contenido: sólo lo colapsa por defecto.'
+      >
+        <Segmented options={OPCIONES_MODO_GUIADO} value={modoGuiado ? '1' : '0'} onChange={v => setModoGuiado(v === '1')} />
+        <div className="flex flex-col gap-2 mt-3">
+          <Button
+            variant="outline"
+            onClick={() => {
+              limpiarGuiasColapsadas()
+              showToast('Se volvieron a mostrar todas las guías.')
+            }}
+          >
+            Volver a mostrar todas las guías
+          </Button>
+          <Button variant="outline" onClick={abrirTour}>
+            Ver el tour de bienvenida
+          </Button>
+          <Button variant="outline" onClick={() => navigate('/ayuda')}>
+            Ir al Centro de ayuda
+          </Button>
+        </div>
+      </Seccion>
+
+      <Seccion titulo="Restablecer preferencias" ayuda="Vuelve moneda, cartera, auto-sync, tamaño de texto y modo guiado a los valores iniciales. No toca los datos.">
         <Button variant="danger" onClick={restablecer}>
           Restablecer
         </Button>

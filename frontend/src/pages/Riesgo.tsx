@@ -17,6 +17,7 @@ import Segmented from '../components/ui/Segmented'
 import { Icon } from '../components/icons/Icons'
 import SkeletonPantalla from '../components/ui/Skeleton'
 import { qk } from '../api/queryClient'
+import { nivelDrawdown, nivelVolatilidad } from '../utils/niveles'
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
@@ -195,6 +196,7 @@ export default function Riesgo() {
               value={formatPctRatio(riesgo.drawdown.actual)}
               insuficiente={riesgo.drawdown.estado !== 'ok'}
               tone={tonoDeValor(riesgo.drawdown.actual)}
+              nivel={nivelDrawdown(riesgo.drawdown.actual)}
             />
             <MetricTile
               label="Drawdown máximo"
@@ -202,12 +204,14 @@ export default function Riesgo() {
               value={formatPctRatio(riesgo.drawdown.maximo)}
               insuficiente={riesgo.drawdown.estado !== 'ok'}
               tone="neg"
+              nivel={nivelDrawdown(riesgo.drawdown.maximo)}
             />
             <MetricTile
               label="Volatilidad anualizada"
               infoTerm="volatilidad"
               value={formatPctRatio(riesgo.volatilidad.anualizada)}
               insuficiente={riesgo.volatilidad.estado !== 'ok'}
+              nivel={nivelVolatilidad(riesgo.volatilidad.anualizada)}
             />
             <MetricTile
               label="Calmar"

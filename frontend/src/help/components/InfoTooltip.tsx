@@ -2,8 +2,67 @@ import { useState } from 'react'
 import Modal from '../../components/ui/Modal'
 import { Icon } from '../../components/icons/Icons'
 import { HELP, type HelpKey } from '../content/index'
+import type { HelpContent } from '../types'
 
-function InfoTooltipLink({ term, title }: { term: HelpKey; title: string }) {
+/**
+ * Cuerpo del modal de un término: lo comparten `InfoTooltip`, `InfoTooltipLink` y cualquier otro
+ * lugar que necesite mostrar un `HelpContent` completo (el buscador de glosario del Centro de
+ * ayuda, por ejemplo) sin reimplementar el mapeo de secciones.
+ */
+export function ContenidoTermino({ entry }: { entry: HelpContent }) {
+  return (
+    <div className="text-body text-app-text-dim leading-relaxed space-y-3">
+      {entry.shortDescription && <p>{entry.shortDescription}</p>}
+      {entry.whyItMatters && (
+        <div>
+          <div className="font-semibold text-app-text mb-1">¿Por qué importa?</div>
+          <p>{entry.whyItMatters}</p>
+        </div>
+      )}
+      {entry.howItIsCalculated && (
+        <div>
+          <div className="font-semibold text-app-text mb-1">Cómo se calcula</div>
+          <p>{entry.howItIsCalculated}</p>
+        </div>
+      )}
+      {entry.howToInterpret && (
+        <div>
+          <div className="font-semibold text-app-text mb-1">Cómo interpretarlo</div>
+          <p>{entry.howToInterpret}</p>
+        </div>
+      )}
+      {entry.example && (
+        <div>
+          <div className="font-semibold text-app-text mb-1">Ejemplo</div>
+          <p>{entry.example}</p>
+        </div>
+      )}
+      {entry.limitations && (
+        <div>
+          <div className="font-semibold text-app-text mb-1">Limitaciones</div>
+          <p>{entry.limitations}</p>
+        </div>
+      )}
+      {entry.relatedTerms && entry.relatedTerms.length > 0 && (
+        <div>
+          <div className="font-semibold text-app-text mb-1">Ver también</div>
+          <div className="flex flex-wrap gap-2">
+            {entry.relatedTerms.map(relatedKey => {
+              const relatedEntry = HELP[relatedKey as HelpKey]
+              return relatedEntry ? (
+                <InfoTooltipLink key={relatedKey} term={relatedKey as HelpKey} title={relatedEntry.title} />
+              ) : null
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Exportado: `GuiaPantalla` y el Centro de ayuda lo reutilizan como chip/botón que abre el modal
+// de un término, sin reimplementar el manejo de estado del modal.
+export function InfoTooltipLink({ term, title }: { term: HelpKey; title: string }) {
   const [open, setOpen] = useState(false)
   const entry = HELP[term]
 
@@ -19,56 +78,7 @@ function InfoTooltipLink({ term, title }: { term: HelpKey; title: string }) {
         {title}
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={entry.title}>
-        <div className="text-body text-app-text-dim leading-relaxed space-y-3">
-          {entry.shortDescription && <p>{entry.shortDescription}</p>}
-          {entry.whyItMatters && (
-            <div>
-              <div className="font-semibold text-app-text mb-1">¿Por qué importa?</div>
-              <p>{entry.whyItMatters}</p>
-            </div>
-          )}
-          {entry.howItIsCalculated && (
-            <div>
-              <div className="font-semibold text-app-text mb-1">Cómo se calcula</div>
-              <p>{entry.howItIsCalculated}</p>
-            </div>
-          )}
-          {entry.howToInterpret && (
-            <div>
-              <div className="font-semibold text-app-text mb-1">Cómo interpretarlo</div>
-              <p>{entry.howToInterpret}</p>
-            </div>
-          )}
-          {entry.example && (
-            <div>
-              <div className="font-semibold text-app-text mb-1">Ejemplo</div>
-              <p>{entry.example}</p>
-            </div>
-          )}
-          {entry.limitations && (
-            <div>
-              <div className="font-semibold text-app-text mb-1">Limitaciones</div>
-              <p>{entry.limitations}</p>
-            </div>
-          )}
-          {entry.relatedTerms && entry.relatedTerms.length > 0 && (
-            <div>
-              <div className="font-semibold text-app-text mb-1">Ver también</div>
-              <div className="flex flex-wrap gap-2">
-                {entry.relatedTerms.map(relatedKey => {
-                  const relatedEntry = HELP[relatedKey as HelpKey]
-                  return relatedEntry ? (
-                    <InfoTooltipLink
-                      key={relatedKey}
-                      term={relatedKey as HelpKey}
-                      title={relatedEntry.title}
-                    />
-                  ) : null
-                })}
-              </div>
-            </div>
-          )}
-        </div>
+        <ContenidoTermino entry={entry} />
       </Modal>
     </>
   )
@@ -98,56 +108,7 @@ export default function InfoTooltip({ term, label, className = '' }: { term: Hel
         <Icon name="info" className="w-3.5 h-3.5" />
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={entry.title}>
-        <div className="text-body text-app-text-dim leading-relaxed space-y-3">
-          {entry.shortDescription && <p>{entry.shortDescription}</p>}
-          {entry.whyItMatters && (
-            <div>
-              <div className="font-semibold text-app-text mb-1">¿Por qué importa?</div>
-              <p>{entry.whyItMatters}</p>
-            </div>
-          )}
-          {entry.howItIsCalculated && (
-            <div>
-              <div className="font-semibold text-app-text mb-1">Cómo se calcula</div>
-              <p>{entry.howItIsCalculated}</p>
-            </div>
-          )}
-          {entry.howToInterpret && (
-            <div>
-              <div className="font-semibold text-app-text mb-1">Cómo interpretarlo</div>
-              <p>{entry.howToInterpret}</p>
-            </div>
-          )}
-          {entry.example && (
-            <div>
-              <div className="font-semibold text-app-text mb-1">Ejemplo</div>
-              <p>{entry.example}</p>
-            </div>
-          )}
-          {entry.limitations && (
-            <div>
-              <div className="font-semibold text-app-text mb-1">Limitaciones</div>
-              <p>{entry.limitations}</p>
-            </div>
-          )}
-          {entry.relatedTerms && entry.relatedTerms.length > 0 && (
-            <div>
-              <div className="font-semibold text-app-text mb-1">Ver también</div>
-              <div className="flex flex-wrap gap-2">
-                {entry.relatedTerms.map(relatedKey => {
-                  const relatedEntry = HELP[relatedKey as HelpKey]
-                  return relatedEntry ? (
-                    <InfoTooltipLink
-                      key={relatedKey}
-                      term={relatedKey as HelpKey}
-                      title={relatedEntry.title}
-                    />
-                  ) : null
-                })}
-              </div>
-            </div>
-          )}
-        </div>
+        <ContenidoTermino entry={entry} />
       </Modal>
     </span>
   )

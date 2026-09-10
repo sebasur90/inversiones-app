@@ -2,7 +2,7 @@ import type { EvolucionPunto, InversionesResumen } from '../../api'
 import { formatARS, formatPctRatio, formatUSD } from '../../utils'
 import { Icon } from '../icons/Icons'
 import Sparkline from '../charts/Sparkline'
-import InfoTerm from '../ui/InfoTerm'
+import InfoTooltip from '../../help/components/InfoTooltip'
 
 export default function HeroValorCard({
   resumen,
@@ -34,7 +34,7 @@ export default function HeroValorCard({
       {resumen && rendimiento != null && (
         <div className="mt-2.5">
           <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">
-            <InfoTerm term="simple" label="Rendimiento total" />
+            <InfoTooltip term="simple" label="Rendimiento total" />
           </div>
           <div className="flex items-center gap-2">
             <span

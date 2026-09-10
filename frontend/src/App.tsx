@@ -9,6 +9,7 @@ import AppShell from './components/layout/AppShell'
 import Toast from './components/ui/Toast'
 import { useAutoSync } from './hooks/useAutoSync'
 import Modal from './components/ui/Modal'
+import TourBienvenida from './help/components/TourBienvenida'
 const Resumen = lazy(() => import('./pages/Resumen'))
 const Exposicion = lazy(() => import('./pages/Exposicion'))
 const Movimientos = lazy(() => import('./pages/Movimientos'))
@@ -37,6 +38,7 @@ const AnalisisTecnico = lazy(() => import('./pages/AnalisisTecnico'))
 const Screener = lazy(() => import('./pages/Screener'))
 const Mas = lazy(() => import('./pages/Mas'))
 const Ajustes = lazy(() => import('./pages/Ajustes'))
+const Ayuda = lazy(() => import('./pages/Ayuda'))
 
 function SyncResultModal() {
   const { syncSheetOpen, closeSyncSheet, syncIssues, syncHealthScore, syncResultado, syncResumenTexto } = useInversionesContext()
@@ -164,12 +166,16 @@ function Root() {
             <Route path="screener" element={<Screener />} />
             <Route path="mas" element={<Mas />} />
             <Route path="ajustes" element={<Ajustes />} />
+            <Route path="ayuda" element={<Ayuda />} />
             <Route path="*" element={<Navigate to="/resumen" replace />} />
           </Route>
         </Routes>
       )}
       <Toast message={toast?.message ?? null} tone={toast?.tone} onDone={dismissToast} />
       <SyncResultModal />
+      {/* Sólo con datos reales en pantalla: con `sinDatos` ya está el Splash pidiendo sincronizar,
+          y el tour ahí compite por atención con lo único que hay que hacer primero. */}
+      {!sinDatos && <TourBienvenida />}
     </>
   )
 }

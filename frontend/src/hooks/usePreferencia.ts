@@ -66,11 +66,40 @@ export function usePreferenciaNumerica(
   )
 }
 
+/** Preferencia booleana ('1'/'0' en localStorage). */
+export function usePreferenciaBooleana(
+  clave: string,
+  valorPorDefecto: boolean,
+): [boolean, (valor: boolean) => void] {
+  return usePreferencia<boolean>(
+    clave,
+    valorPorDefecto,
+    crudo => (crudo === '1' ? true : crudo === '0' ? false : null),
+    v => (v ? '1' : '0'),
+  )
+}
+
 export const CLAVE_CARTERA = 'inversiones-cartera'
 export const CLAVE_MONEDA = 'inversiones-moneda'
 export const CLAVE_AUTOSYNC_HORAS = 'inversiones-autosync-horas'
 export const CLAVE_ESCALA_TEXTO = 'inversiones-escala-texto'
 export const CLAVE_UMBRAL_PROXIMIDAD = 'inversiones-alerta-proximidad-pct'
+/** Interruptor global de "Ajustes": si está apagado, las guías 💡 arrancan colapsadas en toda la app. */
+export const CLAVE_MODO_GUIADO = 'inversiones-modo-guiado'
+/** Si ya se vio (o salteó) el tour de bienvenida. */
+export const CLAVE_TOUR_VISTO = 'inversiones-tour-visto'
+/** Prefijo de la clave de colapso por pantalla: se completa con la ruta (`claveRutaGuia`). */
+export const PREFIJO_GUIA_COLAPSADA = 'inversiones-guia-colapsada:'
+
+/** "Volver a mostrar todas las guías" en Ajustes: borra el colapso guardado de cada pantalla. */
+export function limpiarGuiasColapsadas(): void {
+  try {
+    const claves = Object.keys(localStorage).filter(k => k.startsWith(PREFIJO_GUIA_COLAPSADA))
+    for (const k of claves) localStorage.removeItem(k)
+  } catch {
+    // sin acceso a localStorage, no hay nada que limpiar
+  }
+}
 
 /** 0 = auto-sync desactivado. */
 export const AUTOSYNC_HORAS_DEFAULT = 12

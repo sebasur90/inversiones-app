@@ -14,6 +14,8 @@ import { parseApiError, type ParsedApiError } from '../help/errors/apiErrors'
 import ErrorBanner from '../help/components/ErrorBanner'
 import InfoTooltip from '../help/components/InfoTooltip'
 import SkeletonPantalla from '../components/ui/Skeleton'
+import Semaforo from '../components/ui/Semaforo'
+import { nivelScore } from '../utils/niveles'
 
 export default function Diagnostico() {
   const navigate = useNavigate()
@@ -36,6 +38,7 @@ export default function Diagnostico() {
   }, [diagnostico, objetivo])
 
   const visibles = expandido ? hallazgos : hallazgos.slice(0, 5)
+  const nivelSalud = diagnostico ? nivelScore(diagnostico.salud.score_total) : null
 
   if (contextLoading || diagnosticoQuery.isLoading) {
     return (
@@ -77,6 +80,7 @@ export default function Diagnostico() {
               {diagnostico.salud.score_total !== null ? Math.round(diagnostico.salud.score_total) : '—'}
               <span className="salud-score-divider">/100</span>
             </div>
+            {nivelSalud && <Semaforo nivel={nivelSalud.nivel} etiqueta={nivelSalud.etiqueta} className="mt-1.5" />}
           </div>
 
           {diagnostico.salud.score_total !== null && (

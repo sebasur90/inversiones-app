@@ -1,5 +1,7 @@
 import InfoTooltip from '../../help/components/InfoTooltip'
+import Semaforo from './Semaforo'
 import type { HelpKey } from '../../help/content/index'
+import type { NivelInfo } from '../../utils/niveles'
 
 interface MetricTileProps {
   label: string
@@ -8,6 +10,8 @@ interface MetricTileProps {
   tone?: 'pos' | 'neg'
   suffix?: string
   sub?: string
+  /** "Bien / atención / riesgo" en palabras, además del color. Se muestra en vez de `sub`. */
+  nivel?: NivelInfo | null
   insuficiente?: boolean
   size?: 'sm' | 'md'
 }
@@ -19,6 +23,7 @@ export default function MetricTile({
   tone,
   suffix,
   sub,
+  nivel,
   insuficiente,
   size = 'sm',
 }: MetricTileProps) {
@@ -39,7 +44,8 @@ export default function MetricTile({
           {suffix && <span className="text-label font-semibold text-app-text-faint ml-1">{suffix}</span>}
         </div>
       )}
-      {sub && !insuficiente && <div className="text-label text-app-text-dim mt-0.5">{sub}</div>}
+      {!insuficiente && nivel && <Semaforo nivel={nivel.nivel} etiqueta={nivel.etiqueta} className="mt-1" />}
+      {sub && !insuficiente && !nivel && <div className="text-label text-app-text-dim mt-0.5">{sub}</div>}
     </div>
   )
 }

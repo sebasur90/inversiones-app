@@ -2,22 +2,31 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useInversionesContext } from '../../context/InversionesContext'
 import { TODAS_LAS_PANTALLAS } from '../../data/pantallas'
+import { HELP, type HelpKey } from '../../help/content/index'
+import { ContenidoTermino } from '../../help/components/InfoTooltip'
+import { normalizarTexto as normalizar } from '../../utils/texto'
 import { Icon } from '../icons/Icons'
 import Modal from '../ui/Modal'
 
 const MAX_POR_SECCION = 6
-
-// Sin acentos y en minúsculas: buscar "exposicion" tiene que encontrar "Exposición".
-function normalizar(texto: string): string {
-  return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-}
 
 export default function BuscadorGlobal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate()
   const { rendimientoPorTicker } = useInversionesContext()
   const [consulta, setConsulta] = useState('')
 
+  const [terminoAbierto, setTerminoAbierto] = useState<HelpKey | null>(null)
+
   const q = normalizar(consulta.trim())
+
+  // Sólo con búsqueda activa: mostrar los 171 términos del glosario en la carga inicial no
+  // aportaría nada (a diferencia de "pantallas", que sí tiene sentido listar vacío).
+  const conceptos = useMemo(() => {
+    if (!q) return []
+    return (Object.keys(HELP) as HelpKey[])
+      .filter(k => normalizar(HELP[k].title).includes(q) || normalizar(HELP[k].shortDescription).includes(q))
+      .slice(0, MAX_POR_SECCION)
+  }, [q])
 
   // Los tickers ya están en el contexto: buscar no dispara ningún fetch.
   const tickers = useMemo(() => {
@@ -40,7 +49,7 @@ export default function BuscadorGlobal({ open, onClose }: { open: boolean; onClo
     navigate(destino)
   }
 
-  const sinResultados = q !== '' && tickers.length === 0 && pantallas.length === 0
+  const sinResultados = q !== '' && tickers.length === 0 && pantallas.length === 0 && conceptos.length === 0
 
   return (
     <Modal open={open} onClose={onClose} title="Buscar">
@@ -92,7 +101,7 @@ export default function BuscadorGlobal({ open, onClose }: { open: boolean; onClo
       )}
 
       {pantallas.length > 0 && (
-        <div>
+        <div className="mb-4">
           <div className="text-label font-bold uppercase tracking-wide text-app-text-dim mb-1.5">
             {q ? 'Pantallas' : 'Ir a'}
           </div>
@@ -115,6 +124,37 @@ export default function BuscadorGlobal({ open, onClose }: { open: boolean; onClo
             ))}
           </div>
         </div>
+      )}
+
+      {/* Sólo aparece buscando: "sharpe" o "que es tir" antes no encontraba nada porque el
+          buscador sólo miraba tickers y pantallas, nunca el glosario de 171 términos. */}
+      {conceptos.length > 0 && (
+        <div>
+          <div className="text-label font-bold uppercase tracking-wide text-app-text-dim mb-1.5">Conceptos</div>
+          <div className="flex flex-col gap-1">
+            {conceptos.map(k => (
+              <button
+                key={k}
+                onClick={() => setTerminoAbierto(k)}
+                className="flex items-center gap-3 text-left px-3 py-2.5 rounded-xl bg-app-surface-2 border border-app-border"
+              >
+                <div className="w-8 h-8 rounded-lg bg-app-teal-soft text-app-teal flex items-center justify-center shrink-0">
+                  <Icon name="info" className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-body font-semibold text-app-text truncate">{HELP[k].title}</div>
+                  <div className="text-caption text-app-text-dim truncate">{HELP[k].shortDescription}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {terminoAbierto && (
+        <Modal open onClose={() => setTerminoAbierto(null)} title={HELP[terminoAbierto].title}>
+          <ContenidoTermino entry={HELP[terminoAbierto]} />
+        </Modal>
       )}
     </Modal>
   )
