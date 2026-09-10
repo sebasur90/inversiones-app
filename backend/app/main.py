@@ -18,8 +18,8 @@ def _habilitar_volcado_de_stacks() -> None:
     línea está trabado cada worker (una llamada de red sin timeout, un lock tomado, la DB
     bloqueada). Sin esto sólo se ve un proceso vivo y mudo.
 
-    `dump_traceback_later` es la red de seguridad: si el event loop queda bloqueado más de 5
-    minutos, vuelca los stacks solo. `exit=False` para que sólo registre y no tumbe el proceso.
+    Quien dispara la señal es `scripts/watchdog.sh` al detectar el cuelgue, sin intervención
+    manual. `chain=False` porque no hay otro handler de USR1 que encadenar.
     """
     faulthandler.enable()
     if hasattr(faulthandler, "register"):  # no existe en Windows
