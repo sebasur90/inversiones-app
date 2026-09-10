@@ -64,8 +64,11 @@ services:
       - HTTPS_PROXY=${HTTPS_PROXY:-}
       - NO_PROXY=${NO_PROXY:-}
       - no_proxy=${NO_PROXY:-}
+    # Publicado SÓLO en loopback (127.0.0.1), igual que en docker-compose.yml: este archivo
+    # sobreescribe el mapeo de puertos del servicio `lab`, así que el prefijo 127.0.0.1 tiene que
+    # repetirse acá. Jupyter corre código arbitrario como root; nunca dejarlo en "8888:8888".
     ports:
-      - "8888:8888"
+      - "127.0.0.1:8888:8888"
 
 volumes:
   backend_data:

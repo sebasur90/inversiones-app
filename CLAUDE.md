@@ -34,7 +34,8 @@ docker compose --profile lab up lab
 # (corporativo)
 docker compose -f docker-compose.yml -f docker-compose.corporate.yml --profile lab up lab
 ```
-Abrir **http://127.0.0.1:8888** (sólo loopback, sin token). Los notebooks van en `lab/`;
+Abrir **http://127.0.0.1:8888** (el puerto se publica sólo en `127.0.0.1`, por eso va sin token;
+Jupyter corre código arbitrario como root). Los notebooks van en `lab/`;
 las estrategias exportadas en `lab/estrategias/*.json` (no se versionan). El lab lee la DB de
 la app en modo **solo lectura**. Ver `docs/laboratorio-estrategias.md`.
 

@@ -161,6 +161,25 @@ Independientemente del modo:
 - Las columnas deben coincidir exactamente con el Google Sheet original
 - En modo local no se requiere acceso a internet
 
+## Modelo de amenaza (decisión explícita, no es deuda)
+
+**La API del backend no tiene autenticación, a propósito.** Es una PWA de un solo usuario que
+corre en una LAN de confianza; agregar login/tokens no compra nada acá y sí agrega fricción. No
+re-abrir esto como si fuera un descuido.
+
+Consecuencias operativas a tener presentes si algún día esto cambia de contexto:
+
+- **`POST /api/inversiones/sync` sin auth gasta cupo de IOL.** Cualquiera que llegue al puerto del
+  backend puede disparar syncs y quemar el cupo mensual bonificado (ver "Cupo mensual" arriba).
+  Por eso la app **no debe publicarse fuera de la LAN** sin revisar antes este punto (poner auth,
+  o al menos un rate-limit / mutex en el endpoint — el mutex ya está, ver
+  `routers/inversiones.py`).
+- **El resto de los endpoints exponen la cartera entera en lectura** (montos, movimientos,
+  tickers). Mismo criterio: LAN de confianza.
+- **El laboratorio (`--profile lab`) es aparte y más grave:** Jupyter ahí ejecuta código
+  arbitrario como root con el volumen de la DB montado. Se publica **sólo en `127.0.0.1`** por eso
+  (ver `docker-compose.yml`, servicio `lab`); nunca en `0.0.0.0`.
+
 ## Precio Objetivo y Stop Loss
 
 La pestaña `Instrumentos` admite 4 columnas opcionales para fijar, por ticker, un precio

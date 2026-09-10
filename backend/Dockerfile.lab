@@ -21,8 +21,10 @@ ENV PYTHONPATH=/app
 
 EXPOSE 8888
 
-# Loopback-only (lo publica docker-compose en 127.0.0.1); Jupyter ejecuta código arbitrario, así
-# que en una red corporativa no debe escuchar en todas las interfaces. Con eso, el token se puede
-# desactivar por comodidad.
+# `--ip=0.0.0.0` es para que el reenvío de puerto de Docker llegue a Jupyter DENTRO del contenedor;
+# la restricción a loopback la impone el publish `127.0.0.1:8888:8888` de docker-compose.yml
+# (servicio `lab`), NO este flag. Jupyter ejecuta código arbitrario como root con la DB de la
+# cartera montada: si el puerto se publicara sin el prefijo 127.0.0.1 quedaría accesible desde toda
+# la LAN sin token. El token se desactiva sólo porque el puerto no sale de la máquina.
 CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", \
      "--ServerApp.token=", "--ServerApp.password=", "--notebook-dir=/app/lab"]

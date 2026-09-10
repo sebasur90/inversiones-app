@@ -19,7 +19,10 @@ docker compose --profile lab up lab
 docker compose -f docker-compose.yml -f docker-compose.corporate.yml --profile lab up lab
 ```
 
-Abrir **http://127.0.0.1:8888** (sólo loopback, sin token). Los notebooks viven en `lab/`; las
+Abrir **http://127.0.0.1:8888**. El puerto se publica sólo en `127.0.0.1` (ver el `ports:` del
+servicio `lab` en `docker-compose.yml`), y por eso el servidor va sin token: Jupyter ejecuta
+código arbitrario como root con la DB de la cartera montada, así que **no** debe publicarse en
+`0.0.0.0` ni quedar accesible desde la LAN. Los notebooks viven en `lab/`; las
 estrategias exportadas en `lab/estrategias/*.json` (no se versionan). El lab monta la base de la
 app en **solo lectura**: nunca escribe.
 

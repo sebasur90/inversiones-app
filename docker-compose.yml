@@ -55,9 +55,12 @@ services:
       - ./backend/app:/app/app:ro
       # Notebooks y JSON exportados, con escritura.
       - ./lab:/app/lab
-    # Sólo loopback: Jupyter ejecuta código arbitrario y no debe escuchar en todas las interfaces.
+    # Publicado SÓLO en loopback (127.0.0.1). Jupyter acá corre código arbitrario como root con el
+    # volumen de la cartera montado; el prefijo 127.0.0.1 del publish es lo único que impide que
+    # cualquiera en la LAN lo alcance mientras el perfil `lab` esté arriba. Nunca dejarlo en
+    # "8888:8888" (eso publica en 0.0.0.0). Ver docs/laboratorio-estrategias.md.
     ports:
-      - "8888:8888"
+      - "127.0.0.1:8888:8888"
     restart: unless-stopped
 
 volumes:
