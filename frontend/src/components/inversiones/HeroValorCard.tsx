@@ -39,7 +39,7 @@ export default function HeroValorCard({
           <div className="flex items-center gap-2">
             <span
               className={`inline-flex items-center gap-0.5 font-mono font-bold text-caption px-2 py-1 rounded-lg tabular-nums ${
-                positivo ? 'text-app-teal bg-app-teal-soft' : 'text-app-coral bg-app-coral-soft'
+                positivo ? 'text-app-pos bg-app-pos-soft' : 'text-app-neg bg-app-neg-soft'
               }`}
             >
               <Icon name={positivo ? 'up' : 'down'} className="w-3 h-3" />
@@ -55,7 +55,7 @@ export default function HeroValorCard({
         </div>
       )}
 
-      <Sparkline data={serie} color={positivo ? '#4fd1ae' : '#e2665a'} className="w-full h-13 mt-2.5" />
+      <Sparkline data={serie} color={positivo ? '#10b981' : '#ef4444'} className="w-full h-13 mt-2.5" />
     </div>
   )
 }

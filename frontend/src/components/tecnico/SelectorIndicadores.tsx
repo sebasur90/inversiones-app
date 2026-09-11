@@ -25,7 +25,7 @@ export default function SelectorIndicadores({
               onClick={() => onToggle(espec.tipo)}
               title={deshabilitado ? 'Este ticker no tiene datos de volumen' : undefined}
               className={`font-semibold text-caption px-2.5 py-1.5 rounded-[10px] border transition-colors whitespace-nowrap ${
-                activo ? 'border-app-gold text-app-gold bg-app-gold-soft' : 'border-app-border text-app-text-dim bg-app-surface'
+                activo ? 'border-app-accent text-app-accent bg-app-accent-soft' : 'border-app-border text-app-text-dim bg-app-surface'
               }`}
             >
               {espec.label}

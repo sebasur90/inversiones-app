@@ -118,10 +118,10 @@ export default function Diagnostico() {
                         <div
                           className={`h-full rounded-full transition-all ${
                             dim.score >= 70
-                              ? 'bg-app-teal'
+                              ? 'bg-app-pos'
                               : dim.score >= 40
-                                ? 'bg-app-gold'
-                                : 'bg-app-coral'
+                                ? 'bg-app-accent'
+                                : 'bg-app-neg'
                           }`}
                           style={{ width: `${Math.max(5, dim.score)}%` }}
                         />

@@ -14,8 +14,8 @@ import SkeletonPantalla from '../components/ui/Skeleton'
 import QueryBoundary from '../components/ui/QueryBoundary'
 
 function toneClass(v: number): string {
-  if (v > 0) return 'text-app-teal'
-  if (v < 0) return 'text-app-coral'
+  if (v > 0) return 'text-app-pos'
+  if (v < 0) return 'text-app-neg'
   return 'text-app-text'
 }
 

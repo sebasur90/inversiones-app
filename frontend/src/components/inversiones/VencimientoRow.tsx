@@ -3,8 +3,8 @@ import type { VencimientoItem } from '../../api'
 import { formatARS, formatUSD } from '../../utils'
 
 function badgeClase(item: VencimientoItem): string {
-  if (item.vencido || item.dias_restantes < 30) return 'bg-app-coral-soft text-app-coral'
-  if (item.dias_restantes < 180) return 'bg-app-gold-soft text-app-gold'
+  if (item.vencido || item.dias_restantes < 30) return 'bg-app-neg-soft text-app-neg'
+  if (item.dias_restantes < 180) return 'bg-app-accent-soft text-app-accent'
   return 'bg-app-surface-2 text-app-text-dim'
 }
 

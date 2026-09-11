@@ -29,7 +29,7 @@ export default function MetricTile({
 }: MetricTileProps) {
   const fontSize = size === 'md' ? 'text-strong' : 'text-strong'
   const toneClass =
-    tone === 'pos' ? 'text-app-teal' : tone === 'neg' ? 'text-app-coral' : 'text-app-text'
+    tone === 'pos' ? 'text-app-pos' : tone === 'neg' ? 'text-app-neg' : 'text-app-text'
 
   return (
     <div className="bg-app-surface border border-app-border rounded-[13px] px-2.5 py-2.5">

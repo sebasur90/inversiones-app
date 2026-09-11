@@ -91,9 +91,9 @@ export default function Precios() {
   }).filter(p => p.valor != null) as { fecha: string; valor: number }[]
 
   const colorLinea =
-    vista === 'usd' || (vista === 'nominal' && !esARS) ? '#4fd1ae' :
-    vista === 'cer'                                    ? '#9c7aa0' :
-                                                         '#d8b14a'
+    vista === 'usd' || (vista === 'nominal' && !esARS) ? '#10b981' :
+    vista === 'cer'                                    ? '#8b5cf6' :
+                                                         '#3b82f6'
 
   const ultimoPunto = datosGrafico.length > 0 ? datosGrafico[datosGrafico.length - 1] : undefined
 
@@ -159,7 +159,7 @@ export default function Precios() {
             onClick={() => setTickerSel(t.ticker)}
             className={`shrink-0 font-semibold text-caption px-3 py-1.5 rounded-[10px] border transition-colors ${
               t.ticker === tickerSel
-                ? 'bg-app-gold-soft border-app-gold text-app-gold'
+                ? 'bg-app-accent-soft border-app-accent text-app-accent'
                 : 'bg-app-surface border-app-border text-app-text-dim'
             }`}
           >
@@ -205,23 +205,23 @@ export default function Precios() {
       ) : (
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={datosGrafico} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#223028" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#1c1f2a" />
             <XAxis
               dataKey="fecha"
-              stroke="#8ca39b"
-              tick={{ fontSize: 10, fill: '#8ca39b' }}
+              stroke="#94a3b8"
+              tick={{ fontSize: 10, fill: '#94a3b8' }}
               tickFormatter={formatFechaLabel}
               interval="preserveStartEnd"
             />
             <YAxis
-              stroke="#8ca39b"
-              tick={{ fontSize: 10, fill: '#8ca39b' }}
+              stroke="#94a3b8"
+              tick={{ fontSize: 10, fill: '#94a3b8' }}
               width={62}
               tickFormatter={v => formatCompact(v, vistaEsUSD)}
             />
             <Tooltip
-              contentStyle={{ background: '#17221e', border: '1px solid #223028', borderRadius: 10, fontSize: 12 }}
-              labelStyle={{ color: '#edf2ef' }}
+              contentStyle={{ background: '#171b26', border: '1px solid #1c1f2a', borderRadius: 10, fontSize: 12 }}
+              labelStyle={{ color: '#f8fafc' }}
               formatter={(v: number) => [formatCompact(v, vistaEsUSD), 'Precio']}
               labelFormatter={formatFechaTooltip}
               cursor={{ stroke: colorLinea, strokeWidth: 1 }}

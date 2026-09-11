@@ -119,7 +119,7 @@ export default function Screener() {
                 onClick={() => setEstrategiaIds([])}
                 className={`text-label font-bold px-2.5 py-1.5 rounded-lg border ${
                   estrategiaIds.length === 0
-                    ? 'bg-app-gold-soft text-app-gold border-app-gold/40'
+                    ? 'bg-app-accent-soft text-app-accent border-app-accent/40'
                     : 'bg-app-surface text-app-text-dim border-app-border'
                 }`}
               >
@@ -131,7 +131,7 @@ export default function Screener() {
                   onClick={() => toggleEstrategia(e.id)}
                   className={`text-label font-bold px-2.5 py-1.5 rounded-lg border truncate max-w-[160px] ${
                     estrategiaIds.includes(e.id)
-                      ? 'bg-app-gold-soft text-app-gold border-app-gold/40'
+                      ? 'bg-app-accent-soft text-app-accent border-app-accent/40'
                       : 'bg-app-surface text-app-text-dim border-app-border'
                   }`}
                 >
@@ -201,7 +201,7 @@ export default function Screener() {
               </div>
 
               {scanQuery.data.advertencias.includes('universo_truncado') && (
-                <div className="text-label text-app-gold mb-2">
+                <div className="text-label text-app-accent mb-2">
                   Se alcanzó el máximo de pares evaluables: algunos pares pueden haber quedado afuera.
                 </div>
               )}
@@ -217,10 +217,10 @@ export default function Screener() {
                     const key = claveFila(f)
                     const abierta = expandida === key
                     const avatarClase = f.dispara_ahora
-                      ? 'border-app-gold/40 text-app-gold'
+                      ? 'border-app-accent/40 text-app-accent'
                       : f.tipo === 'compra'
-                        ? 'border-app-teal/40 text-app-teal'
-                        : 'border-app-coral/40 text-app-coral'
+                        ? 'border-app-pos/40 text-app-pos'
+                        : 'border-app-neg/40 text-app-neg'
                     return (
                       <div key={key} className="border-b border-app-border-soft last:border-b-0">
                         <button
@@ -236,8 +236,8 @@ export default function Screener() {
                               <span
                                 className={`shrink-0 rounded-md px-1.5 py-0.5 text-label font-bold border ${
                                   f.tipo === 'compra'
-                                    ? 'border-app-teal/40 text-app-teal bg-app-teal-soft'
-                                    : 'border-app-coral/40 text-app-coral bg-app-coral-soft'
+                                    ? 'border-app-pos/40 text-app-pos bg-app-pos-soft'
+                                    : 'border-app-neg/40 text-app-neg bg-app-neg-soft'
                                 }`}
                               >
                                 {f.tipo === 'compra' ? '▲' : '▼'} {f.tipo}
@@ -279,7 +279,7 @@ export default function Screener() {
                               <span className="font-bold text-app-text">{MOTIVO_LABEL[f.motivo] ?? f.motivo}</span>
                             </div>
                             {f.dispara_ahora && (
-                              <div className="text-label text-app-gold">
+                              <div className="text-label text-app-accent">
                                 <InfoTooltip term="screener_dispara_ahora" label="Dispara ahora" />
                               </div>
                             )}
@@ -297,7 +297,7 @@ export default function Screener() {
                                   <div key={i} className="flex items-center gap-1.5 text-label">
                                     <Icon
                                       name={c.cumple ? 'check' : 'close'}
-                                      className={`w-3 h-3 shrink-0 ${c.cumple ? 'text-app-teal' : 'text-app-text-faint'}`}
+                                      className={`w-3 h-3 shrink-0 ${c.cumple ? 'text-app-pos' : 'text-app-text-faint'}`}
                                     />
                                     <span className="font-mono text-app-text-dim truncate">
                                       {c.izq_etiqueta} {c.izq_valor != null && `(${formatPrecio(c.izq_valor)})`} {c.op} {c.der_etiqueta}

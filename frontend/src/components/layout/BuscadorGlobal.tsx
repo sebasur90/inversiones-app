@@ -112,7 +112,7 @@ export default function BuscadorGlobal({ open, onClose }: { open: boolean; onClo
                 onClick={() => ir(p.to)}
                 className="flex items-center gap-3 text-left px-3 py-2.5 rounded-xl bg-app-surface-2 border border-app-border"
               >
-                <div className="w-8 h-8 rounded-lg bg-app-gold-soft text-app-gold flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-app-accent-soft text-app-accent flex items-center justify-center shrink-0">
                   <Icon name={p.icon} className="w-4 h-4" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -138,7 +138,7 @@ export default function BuscadorGlobal({ open, onClose }: { open: boolean; onClo
                 onClick={() => setTerminoAbierto(k)}
                 className="flex items-center gap-3 text-left px-3 py-2.5 rounded-xl bg-app-surface-2 border border-app-border"
               >
-                <div className="w-8 h-8 rounded-lg bg-app-teal-soft text-app-teal flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-app-pos-soft text-app-pos flex items-center justify-center shrink-0">
                   <Icon name="info" className="w-4 h-4" />
                 </div>
                 <div className="min-w-0 flex-1">

@@ -40,7 +40,7 @@ export default function GuiaPantalla() {
   const terminos = (guia.terminos ?? []).filter((t): t is HelpKey => t in HELP)
 
   return (
-    <div className="mb-3.5 bg-app-gold-soft/40 border border-app-gold/20 rounded-2xl overflow-hidden">
+    <div className="mb-3.5 bg-app-accent-soft/40 border border-app-accent/20 rounded-2xl overflow-hidden">
       <button
         type="button"
         onClick={toggle}
@@ -66,7 +66,7 @@ export default function GuiaPantalla() {
           </ul>
 
           {guia.queHacer && guia.queHacer.length > 0 && (
-            <ul className="list-disc pl-4 space-y-1 mb-2 marker:text-app-teal">
+            <ul className="list-disc pl-4 space-y-1 mb-2 marker:text-app-pos">
               {guia.queHacer.map((linea, i) => (
                 <li key={i} className="text-app-text">{linea}</li>
               ))}
@@ -75,7 +75,7 @@ export default function GuiaPantalla() {
 
           {guia.ojo && (
             <div className="flex items-start gap-1.5 mt-2 p-2.5 bg-app-surface rounded-[9px] border border-app-border">
-              <Icon name="alert" className="w-3.5 h-3.5 text-app-gold shrink-0 mt-0.5" />
+              <Icon name="alert" className="w-3.5 h-3.5 text-app-accent shrink-0 mt-0.5" />
               <p>{guia.ojo}</p>
             </div>
           )}

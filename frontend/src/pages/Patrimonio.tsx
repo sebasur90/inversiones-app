@@ -51,9 +51,9 @@ const TIPO_LABELS: Record<string, string> = {
 }
 
 const COLOR_EVENTO: Record<TipoEvento, string> = {
-  aporte: '#4fd1ae',
-  retiro: '#e2665a',
-  ingreso: '#5b8ba0',
+  aporte: '#10b981',
+  retiro: '#ef4444',
+  ingreso: '#f59e0b',
 }
 
 const LABEL_EVENTO: Record<TipoEvento, string> = {
@@ -118,9 +118,9 @@ function formatFechaTooltip(iso: string): string {
 }
 
 const COLOR_POR_VISTA: Record<Vista, string> = {
-  ars: '#d8b14a',
-  ars_real: '#9c7aa0',
-  usd: '#4fd1ae',
+  ars: '#3b82f6',
+  ars_real: '#8b5cf6',
+  usd: '#10b981',
 }
 
 function EventoDot(props: any) {
@@ -129,9 +129,9 @@ function EventoDot(props: any) {
   const color = COLOR_EVENTO[payload.tipo as TipoEvento]
   return (
     <g style={{ cursor: 'pointer' }}>
-      <circle cx={cx} cy={cy} r={7} fill={color} stroke="#0b1210" strokeWidth={2} />
+      <circle cx={cx} cy={cy} r={7} fill={color} stroke="#0a0e18" strokeWidth={2} />
       {payload.cantidad > 1 && (
-        <text x={cx} y={cy + 3} textAnchor="middle" fontSize={8} fontWeight={700} fill="#0b1210">
+        <text x={cx} y={cy + 3} textAnchor="middle" fontSize={8} fontWeight={700} fill="#0a0e18">
           {payload.cantidad}
         </text>
       )}
@@ -276,7 +276,7 @@ export default function Patrimonio() {
             {deltaAbs != null && variacionPct != null && (
               <div className="text-right shrink-0 ml-4">
                 <div className="text-label text-app-text-faint uppercase tracking-wide mb-0.5">Variación del período</div>
-                <div className={`font-mono font-bold text-strong tabular-nums ${variacionPct >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
+                <div className={`font-mono font-bold text-strong tabular-nums ${variacionPct >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
                   {variacionPct >= 0 ? '+' : ''}{formatCompact(deltaAbs, esUSD)} ({variacionPct >= 0 ? '+' : ''}{variacionPct.toFixed(1)}%)
                 </div>
               </div>
@@ -288,7 +288,7 @@ export default function Patrimonio() {
             const ganancia = valor !== null && capital !== null ? valor - capital : null
             return ganancia !== null ? (
               <div className="text-label text-app-text-dim mb-3">
-                Ganancia: <span className={ganancia >= 0 ? 'text-app-teal' : 'text-app-coral'}>{formatCompact(ganancia, esUSD)}</span>
+                Ganancia: <span className={ganancia >= 0 ? 'text-app-pos' : 'text-app-neg'}>{formatCompact(ganancia, esUSD)}</span>
               </div>
             ) : null
           })()}
@@ -301,7 +301,7 @@ export default function Patrimonio() {
           <InfoTooltip term="patrimonio_valor_mercado" label="Valor de mercado" />
         </div>
         <div className="flex items-center gap-1.5 text-label text-app-text-dim">
-          <span className="w-2.5 h-0.5 rounded-full shrink-0" style={{ backgroundColor: '#8ca39b' }} />
+          <span className="w-2.5 h-0.5 rounded-full shrink-0" style={{ backgroundColor: '#94a3b8' }} />
           <InfoTooltip term="patrimonio_capital_aportado" label="Capital aportado" />
         </div>
       </div>
@@ -320,17 +320,17 @@ export default function Patrimonio() {
                   <stop offset="95%" stopColor={colorLinea} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#223028" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#1c1f2a" />
               <XAxis
                 dataKey="fecha"
-                stroke="#8ca39b"
-                tick={{ fontSize: 10, fill: '#8ca39b' }}
+                stroke="#94a3b8"
+                tick={{ fontSize: 10, fill: '#94a3b8' }}
                 tickFormatter={formatFechaLabel}
                 interval="preserveStartEnd"
               />
               <YAxis
-                stroke="#8ca39b"
-                tick={{ fontSize: 10, fill: '#8ca39b' }}
+                stroke="#94a3b8"
+                tick={{ fontSize: 10, fill: '#94a3b8' }}
                 width={62}
                 tickFormatter={v => formatCompact(v, esUSD)}
               />
@@ -347,10 +347,10 @@ export default function Patrimonio() {
                     return true
                   })
                   return (
-                    <div style={{ background: '#17221e', border: '1px solid #223028', borderRadius: 10, fontSize: 12, padding: '8px 10px' }}>
-                      <div style={{ color: '#edf2ef', marginBottom: 4 }}>{formatFechaTooltip(String(label))}</div>
+                    <div style={{ background: '#171b26', border: '1px solid #1c1f2a', borderRadius: 10, fontSize: 12, padding: '8px 10px' }}>
+                      <div style={{ color: '#f8fafc', marginBottom: 4 }}>{formatFechaTooltip(String(label))}</div>
                       {filas.map(item => (
-                        <div key={String(item.dataKey)} style={{ color: item.dataKey === 'valor' ? colorLinea : '#8ca39b' }}>
+                        <div key={String(item.dataKey)} style={{ color: item.dataKey === 'valor' ? colorLinea : '#94a3b8' }}>
                           {item.dataKey === 'valor' ? 'Valor de mercado' : 'Capital aportado'}: {formatCompact(Number(item.value), esUSD)}
                         </div>
                       ))}
@@ -361,9 +361,9 @@ export default function Patrimonio() {
               {hwm != null && (
                 <ReferenceLine
                   y={hwm}
-                  stroke="#5e736a"
+                  stroke="#6b7280"
                   strokeDasharray="6 3"
-                  label={{ value: 'Máximo histórico', position: 'insideTopLeft', fill: '#5e736a', fontSize: 10 }}
+                  label={{ value: 'Máximo histórico', position: 'insideTopLeft', fill: '#6b7280', fontSize: 10 }}
                 />
               )}
               <Area
@@ -379,11 +379,11 @@ export default function Patrimonio() {
               <Line
                 type="stepAfter"
                 dataKey="capitalAportado"
-                stroke="#8ca39b"
+                stroke="#94a3b8"
                 strokeWidth={1.5}
                 strokeDasharray="5 3"
                 dot={false}
-                activeDot={{ r: 4, fill: '#8ca39b' }}
+                activeDot={{ r: 4, fill: '#94a3b8' }}
                 connectNulls
               />
               <Scatter
@@ -448,7 +448,7 @@ export default function Patrimonio() {
                 <span className="text-app-text-dim">
                   <InfoTooltip term="patrimonio_descomposicion_rendimiento" label="Rendimiento:" className="text-app-text-dim" />
                 </span>
-                <span className={`font-mono ${(vista === 'usd' ? patrimonioSummary.descomposicion.rendimiento_usd : patrimonioSummary.descomposicion.rendimiento_ars) >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
+                <span className={`font-mono ${(vista === 'usd' ? patrimonioSummary.descomposicion.rendimiento_usd : patrimonioSummary.descomposicion.rendimiento_ars) >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
                   {formatCompact(vista === 'usd' ? patrimonioSummary.descomposicion.rendimiento_usd : patrimonioSummary.descomposicion.rendimiento_ars, esUSD)}
                 </span>
               </div>

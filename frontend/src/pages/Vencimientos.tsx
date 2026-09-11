@@ -45,7 +45,7 @@ function ResumenPorAnio({
               </div>
               <div className="mt-1 h-1.5 rounded-full bg-app-surface-2 overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-app-teal"
+                  className="h-full rounded-full bg-app-pos"
                   style={{ width: `${Math.max(3, (pct / maxPct) * 100)}%` }}
                 />
               </div>

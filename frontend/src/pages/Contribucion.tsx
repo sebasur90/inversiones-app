@@ -23,7 +23,7 @@ import { nivelConcentracion } from '../utils/niveles'
 
 function toneClass(v: number | null | undefined): string {
   if (v == null) return 'text-app-text'
-  return v >= 0 ? 'text-app-teal' : 'text-app-coral'
+  return v >= 0 ? 'text-app-pos' : 'text-app-neg'
 }
 
 function ContribucionBar({ item, maxAbs }: { item: ContribucionItem; maxAbs: number }) {
@@ -38,7 +38,7 @@ function ContribucionBar({ item, maxAbs }: { item: ContribucionItem; maxAbs: num
       </div>
       <div className="h-1.5 rounded-full bg-app-surface-2 overflow-hidden mb-1">
         <div
-          className={`h-full rounded-full ${item.contribucion_pct >= 0 ? 'bg-app-teal' : 'bg-app-coral'}`}
+          className={`h-full rounded-full ${item.contribucion_pct >= 0 ? 'bg-app-pos' : 'bg-app-neg'}`}
           style={{ width: `${ancho}%` }}
         />
       </div>
@@ -182,8 +182,8 @@ export default function Contribucion() {
       ) : (
         <>
           {correlaciones.advertencia_historial_corto && (
-            <div className="mb-3 bg-app-gold-soft rounded-xl px-3 py-2.5 flex items-start gap-2">
-              <Icon name="alert" className="w-3.5 h-3.5 shrink-0 mt-0.5 text-app-gold" />
+            <div className="mb-3 bg-app-accent-soft rounded-xl px-3 py-2.5 flex items-start gap-2">
+              <Icon name="alert" className="w-3.5 h-3.5 shrink-0 mt-0.5 text-app-accent" />
               <span className="text-caption text-app-text">
                 La mayoría de los pares todavía no tienen suficiente historial de precios (mínimo 6 meses solapados) para
                 calcular una correlación confiable.

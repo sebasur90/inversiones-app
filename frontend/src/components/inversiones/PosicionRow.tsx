@@ -9,9 +9,9 @@ import type { Severidad } from './SeverityBadge'
 // El avatar del ticker se tiñe con la severidad: en una lista larga el color del borde se
 // ve antes que el badge y ancla la fila de un vistazo.
 const AVATAR_ALERTA: Record<Severidad, string> = {
-  critico: 'border-app-coral/40 text-app-coral',
-  advertencia: 'border-app-gold/40 text-app-gold',
-  info: 'border-app-teal/40 text-app-teal',
+  critico: 'border-app-neg/40 text-app-neg',
+  advertencia: 'border-app-accent/40 text-app-accent',
+  info: 'border-app-pos/40 text-app-pos',
 }
 
 export default function PosicionRow({
@@ -64,7 +64,7 @@ export default function PosicionRow({
       <div className="text-right shrink-0">
         <div className="font-mono text-caption font-bold text-app-text tabular-nums">{formatMoneda(valor)}</div>
         {rendimiento != null && (
-          <div className={`flex items-center justify-end gap-0.5 font-mono text-label font-bold mt-0.5 tabular-nums ${positivo ? 'text-app-teal' : 'text-app-coral'}`}>
+          <div className={`flex items-center justify-end gap-0.5 font-mono text-label font-bold mt-0.5 tabular-nums ${positivo ? 'text-app-pos' : 'text-app-neg'}`}>
             <Icon name={positivo ? 'up' : 'down'} className="w-2.5 h-2.5" />
             {formatPctRatio(rendimiento)}
             <InfoTooltip term="posiciones_rendimiento_simple" />

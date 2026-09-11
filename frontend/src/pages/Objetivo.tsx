@@ -257,7 +257,7 @@ export default function Objetivo() {
         <>
           {/* Header + anillo de progreso */}
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-[46px] h-[46px] rounded-2xl bg-app-gold-soft flex items-center justify-center text-heading shrink-0">
+            <div className="w-[46px] h-[46px] rounded-2xl bg-app-accent-soft flex items-center justify-center text-heading shrink-0">
               {objetivo.icono}
             </div>
             <div className="flex-1 min-w-0">
@@ -275,7 +275,7 @@ export default function Objetivo() {
               <div
                 className="relative w-[130px] h-[130px] rounded-full shrink-0"
                 style={{
-                  background: `conic-gradient(${objetivo.alcanzable ? '#d8b14a' : '#e2665a'} 0% ${progreso}%, #223028 ${progreso}% 100%)`,
+                  background: `conic-gradient(${objetivo.alcanzable ? '#3b82f6' : '#ef4444'} 0% ${progreso}%, #1c1f2a ${progreso}% 100%)`,
                 }}
               >
                 <div className="absolute inset-3.5 rounded-full bg-app-surface flex flex-col items-center justify-center">
@@ -303,8 +303,8 @@ export default function Objetivo() {
                 <span
                   className={`inline-flex items-center gap-1.5 font-bold text-label px-2.5 py-1.5 rounded-lg w-fit ${
                     objetivo.alcanzable
-                      ? 'bg-app-teal-soft text-app-teal'
-                      : 'bg-app-coral-soft text-app-coral'
+                      ? 'bg-app-pos-soft text-app-pos'
+                      : 'bg-app-neg-soft text-app-neg'
                   }`}
                 >
                   <Icon name={objetivo.alcanzable ? 'up' : 'down'} className="w-3 h-3" />
@@ -352,7 +352,7 @@ export default function Objetivo() {
 
           {/* Fechas estimadas */}
           <h3 className="text-body font-bold text-app-text mb-2.5 flex items-center gap-1.5">
-            <Icon name="trend" className="w-3.5 h-3.5 text-app-gold" />
+            <Icon name="trend" className="w-3.5 h-3.5 text-app-accent" />
             <InfoTooltip term="objetivo_fechas_estimadas" label="Fechas estimadas" />
           </h3>
           <Card>
@@ -394,7 +394,7 @@ export default function Objetivo() {
                       onClick={() => setAporteBonusMultiplier(idx)}
                       className={`text-label px-2 py-1 rounded-lg font-semibold transition-colors ${
                         aporteBonusMultiplier === idx
-                          ? 'bg-app-gold text-app-text'
+                          ? 'bg-app-accent text-app-text'
                           : 'bg-app-surface-2 text-app-text-dim hover:text-app-text'
                       }`}
                     >
@@ -429,8 +429,8 @@ export default function Objetivo() {
                         <span
                           className={`inline-flex text-label font-semibold px-2 py-1 rounded-md w-full text-center justify-center ${
                             alcanzable
-                              ? 'bg-app-teal-soft text-app-teal'
-                              : 'bg-app-coral-soft text-app-coral'
+                              ? 'bg-app-pos-soft text-app-pos'
+                              : 'bg-app-neg-soft text-app-neg'
                           }`}
                         >
                           {alcanzable ? 'Alcanzable' : 'En riesgo'}

@@ -112,7 +112,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
                     onClick={() => setPeriodo(p)}
                     className={`px-2.5 py-1.5 rounded text-label font-semibold ${
                       periodo === p
-                        ? 'bg-app-teal text-app-bg'
+                        ? 'bg-app-pos text-app-bg'
                         : 'bg-app-border text-app-text-dim hover:text-app-text'
                     }`}
                   >
@@ -130,7 +130,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
                     onClick={() => setMoneda(m)}
                     className={`px-2.5 py-1.5 rounded text-label font-semibold ${
                       moneda === m
-                        ? 'bg-app-teal text-app-bg'
+                        ? 'bg-app-pos text-app-bg'
                         : 'bg-app-border text-app-text-dim hover:text-app-text'
                     }`}
                   >
@@ -156,7 +156,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
                     }
                     className={`px-2 py-1 rounded text-label ${
                       benchmarks.includes(b)
-                        ? 'bg-app-teal text-app-bg'
+                        ? 'bg-app-pos text-app-bg'
                         : 'bg-app-border text-app-text-dim'
                     }`}
                   >
@@ -179,7 +179,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
                     }
                     className={`px-2 py-1 rounded text-label whitespace-nowrap ${
                       tickers.includes(t)
-                        ? 'bg-app-teal text-app-bg'
+                        ? 'bg-app-pos text-app-bg'
                         : 'bg-app-border text-app-text-dim'
                     }`}
                   >
@@ -196,7 +196,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
 
       {loading && (
         <div className="flex items-center justify-center py-8">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-app-teal"></div>
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-app-pos"></div>
         </div>
       )}
 
@@ -209,7 +209,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
                 onClick={() => setActiveTab(tab)}
                 className={`px-3 py-2 text-caption font-semibold border-b-2 ${
                   activeTab === tab
-                    ? 'border-app-teal text-app-teal'
+                    ? 'border-app-pos text-app-pos'
                     : 'border-transparent text-app-text-dim hover:text-app-text'
                 }`}
               >
@@ -305,7 +305,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
                                   {formatUSD(pos.valor_shadow_usd)}
                                 </td>
                                 <td className={`py-1.5 px-2 text-right font-mono ${
-                                  pos.costo_oportunidad_usd > 0 ? 'text-app-coral' : 'text-app-teal'
+                                  pos.costo_oportunidad_usd > 0 ? 'text-app-neg' : 'text-app-pos'
                                 }`}>
                                   {formatUSD(pos.costo_oportunidad_usd)}
                                 </td>

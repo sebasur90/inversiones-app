@@ -27,32 +27,32 @@ export default function AportesChart({
         <ComposedChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 4 }}>
           <defs>
             <linearGradient id="aportesFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#d8b14a" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#d8b14a" stopOpacity={0} />
+              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#223028" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#1c1f2a" />
           <XAxis
             dataKey="mes_label"
-            tick={{ fill: '#8ca39b', fontSize: 10 }}
+            tick={{ fill: '#94a3b8', fontSize: 10 }}
             tickFormatter={v => dayjs(`${v}-01`).format('MMM YY')}
             interval="preserveStartEnd"
           />
-          <YAxis tick={{ fill: '#8ca39b', fontSize: 10 }} tickFormatter={v => `$${((v as number) / 1000).toFixed(0)}k`} width={42} />
+          <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} tickFormatter={v => `$${((v as number) / 1000).toFixed(0)}k`} width={42} />
           <Tooltip
-            contentStyle={{ background: '#17221e', border: '1px solid #223028', borderRadius: 10, fontSize: 12 }}
-            labelStyle={{ color: '#edf2ef' }}
+            contentStyle={{ background: '#171b26', border: '1px solid #1c1f2a', borderRadius: 10, fontSize: 12 }}
+            labelStyle={{ color: '#f8fafc' }}
             labelFormatter={v => dayjs(`${v}-01`).format('MMMM YYYY')}
             formatter={(v: number, name: string) => (name === 'aportes_netos_acumulados' ? [formatUSD(v), 'Aportes acumulados'] : [v, name])}
           />
           {montoObjetivo && (
-            <ReferenceLine y={montoObjetivo} stroke="#4fd1ae" strokeDasharray="6 3" label={{ value: 'Meta', fill: '#4fd1ae', fontSize: 11 }} />
+            <ReferenceLine y={montoObjetivo} stroke="#10b981" strokeDasharray="6 3" label={{ value: 'Meta', fill: '#10b981', fontSize: 11 }} />
           )}
-          <Area type="monotone" dataKey="aportes_netos_acumulados" stroke="#d8b14a" strokeWidth={2} fill="url(#aportesFill)" dot={false} />
+          <Area type="monotone" dataKey="aportes_netos_acumulados" stroke="#3b82f6" strokeWidth={2} fill="url(#aportesFill)" dot={false} />
           <Scatter
             name="Valor actual (hoy)"
             dataKey="__valor_actual"
-            fill="#4fd1ae"
+            fill="#10b981"
             shape="circle"
             data={[{ __valor_actual: aportesHistoricos.valor_actual_usd, mes_label: data[data.length - 1]?.mes_label || '' }]}
           />
@@ -63,7 +63,7 @@ export default function AportesChart({
         <div>Valor actual (hoy): <strong className="text-app-text">{formatUSD(aportesHistoricos.valor_actual_usd)}</strong></div>
         <div>
           Rendimiento acumulado:{' '}
-          <strong className={rendimientoAcumulado >= 0 ? 'text-app-teal' : 'text-app-coral'}>
+          <strong className={rendimientoAcumulado >= 0 ? 'text-app-pos' : 'text-app-neg'}>
             {rendimientoAcumulado >= 0 ? '+' : ''}{formatUSD(rendimientoAcumulado)} ({rendimientoPct >= 0 ? '+' : ''}{rendimientoPct.toFixed(1)}%)
           </strong>
         </div>

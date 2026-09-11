@@ -46,7 +46,7 @@ export default function CalidadDatos() {
   const nivelCalidad = ultimo_sync ? nivelScore(ultimo_sync.health_score) : null
 
   const sevColor = (s: string) =>
-    s === 'critico' ? 'text-app-coral' : s === 'advertencia' ? 'text-app-gold' : 'text-app-text-dim'
+    s === 'critico' ? 'text-app-neg' : s === 'advertencia' ? 'text-app-accent' : 'text-app-text-dim'
   const sevIcon = (s: string) => (s === 'critico' ? '🔴' : s === 'advertencia' ? '🟡' : 'ℹ️')
 
   const scores = historial.map(h => h.health_score)
@@ -77,13 +77,13 @@ export default function CalidadDatos() {
             {ultimo_sync.resultado !== 'ok' && (
               <div className="mt-2 text-caption">
                 {ultimo_sync.filas_error > 0 && (
-                  <div className="text-app-coral flex items-center gap-1">
+                  <div className="text-app-neg flex items-center gap-1">
                     🔴 {ultimo_sync.filas_error} error(es) crítico(s)
                     <InfoTooltip term="calidaddatos_filas_error" />
                   </div>
                 )}
                 {ultimo_sync.filas_advertencia > 0 && (
-                  <div className="text-app-gold flex items-center gap-1">
+                  <div className="text-app-accent flex items-center gap-1">
                     🟡 {ultimo_sync.filas_advertencia} advertencia(s)
                     <InfoTooltip term="calidaddatos_filas_advertencia" />
                   </div>
@@ -100,7 +100,7 @@ export default function CalidadDatos() {
                   {scoreDelta !== null && (
                     <span
                       className={`text-label font-mono tabular-nums ${
-                        scoreDelta > 0 ? 'text-app-teal' : scoreDelta < 0 ? 'text-app-coral' : 'text-app-text-dim'
+                        scoreDelta > 0 ? 'text-app-pos' : scoreDelta < 0 ? 'text-app-neg' : 'text-app-text-dim'
                       }`}
                     >
                       {scoreDelta > 0 ? '+' : ''}
@@ -112,10 +112,10 @@ export default function CalidadDatos() {
                   data={scores}
                   color={
                     ultimo_sync.health_score >= 80
-                      ? '#4bbf9a'
+                      ? '#10b981'
                       : ultimo_sync.health_score >= 50
-                        ? '#d8b14a'
-                        : '#e0685f'
+                        ? '#f59e0b'
+                        : '#ef4444'
                   }
                 />
                 <div className="flex justify-between text-label text-app-text-faint mt-0.5 tabular-nums">

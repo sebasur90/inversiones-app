@@ -55,7 +55,7 @@ function SeccionTutoriales() {
               <div className="px-3.5 pb-3.5 flex flex-col gap-3 border-t border-app-border pt-3">
                 {tutorial.pasos.map((paso, i) => (
                   <div key={i} className="flex gap-2.5">
-                    <div className="w-5 h-5 rounded-full bg-app-gold-soft text-app-gold text-label font-bold flex items-center justify-center shrink-0 mt-0.5">
+                    <div className="w-5 h-5 rounded-full bg-app-accent-soft text-app-accent text-label font-bold flex items-center justify-center shrink-0 mt-0.5">
                       {i + 1}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -65,7 +65,7 @@ function SeccionTutoriales() {
                         {paso.ruta && (
                           <button
                             onClick={() => navigate(paso.ruta as string)}
-                            className="text-xs px-2 py-1 rounded-md bg-app-gold-soft text-app-gold font-semibold"
+                            className="text-xs px-2 py-1 rounded-md bg-app-accent-soft text-app-accent font-semibold"
                           >
                             Ir ahí →
                           </button>

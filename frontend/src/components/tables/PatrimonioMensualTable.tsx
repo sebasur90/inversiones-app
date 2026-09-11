@@ -68,10 +68,10 @@ export default function PatrimonioMensualTable({ puntos, esUSD }: PatrimonioMens
               <td className="text-left text-app-text-dim py-2 px-2">{d.fecha}</td>
               <td className="text-right text-app-text font-mono py-2 px-2 tabular-nums">{formatCompact(d.aportes_delta, esUSD)}</td>
               <td className="text-right text-app-text font-mono py-2 px-2 tabular-nums font-semibold">{formatCompact(d.valor, esUSD)}</td>
-              <td className={`text-right font-mono py-2 px-2 tabular-nums ${d.ganancia >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
+              <td className={`text-right font-mono py-2 px-2 tabular-nums ${d.ganancia >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
                 {formatCompact(d.ganancia, esUSD)}
               </td>
-              <td className={`text-right font-mono py-2 px-2 tabular-nums ${d.rendimiento === null ? 'text-app-text-dim' : d.rendimiento >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
+              <td className={`text-right font-mono py-2 px-2 tabular-nums ${d.rendimiento === null ? 'text-app-text-dim' : d.rendimiento >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
                 {formatPctRatio(d.rendimiento)}
               </td>
             </tr>

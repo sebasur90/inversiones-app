@@ -14,11 +14,11 @@ import { Icon } from '../icons/Icons'
 
 /** Colores para distinguir varios overlays del mismo tipo sobre el precio (p.ej. las dos medias
  * del cruce de medias, que en `indicadoresConfig` comparten color). */
-const PALETA_OVERLAY = ['#d8b14a', '#5b8ba0', '#9c7aa0', '#4fd1ae', '#e2a13a']
-const COLOR_ESTRATEGIA = '#d8b14a'
-const COLOR_BUYHOLD = '#8ca39b'
-const COLOR_GRID = '#223028'
-const COLOR_EJE = '#8ca39b'
+const PALETA_OVERLAY = ['#3b82f6', '#f59e0b', '#8b5cf6', '#10b981', '#fbbf24']
+const COLOR_ESTRATEGIA = '#3b82f6'
+const COLOR_BUYHOLD = '#94a3b8'
+const COLOR_GRID = '#1c1f2a'
+const COLOR_EJE = '#94a3b8'
 
 const ALTOS = {
   normal: { precio: 240, oscilador: 90, equity: 110, volumen: 70 },
@@ -146,11 +146,11 @@ export default function GraficoBacktest({
           </span>
         ))}
         {senales.length > 0 && (
-          <span className="inline-flex items-center gap-1"><span style={{ color: '#4fd1ae' }}>▲</span> compra</span>
+          <span className="inline-flex items-center gap-1"><span style={{ color: '#10b981' }}>▲</span> compra</span>
         )}
         {motivosPresentes.map(m => (
           <span key={m} className="inline-flex items-center gap-1">
-            <span className="font-mono font-bold" style={{ color: COLOR_MOTIVO[m] ?? '#e2665a' }}>{GLIFO_MOTIVO[m] ?? '▼'}</span>
+            <span className="font-mono font-bold" style={{ color: COLOR_MOTIVO[m] ?? '#ef4444' }}>{GLIFO_MOTIVO[m] ?? '▼'}</span>
             {ETIQUETA_MOTIVO[m] ?? m}
           </span>
         ))}

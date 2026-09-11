@@ -102,19 +102,19 @@ export default function PerformanceRelativa() {
             <div className="flex items-start justify-between mb-3">
               <div>
                 <div className="text-label text-app-text-faint uppercase tracking-wide mb-0.5">Cartera</div>
-                <div className={`font-mono font-bold text-heading tabular-nums ${getTone(perfRelativa.retorno_cartera_pct) === 'pos' ? 'text-app-teal' : getTone(perfRelativa.retorno_cartera_pct) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
+                <div className={`font-mono font-bold text-heading tabular-nums ${getTone(perfRelativa.retorno_cartera_pct) === 'pos' ? 'text-app-pos' : getTone(perfRelativa.retorno_cartera_pct) === 'neg' ? 'text-app-neg' : 'text-app-text'}`}>
                   {formatPctRatio(perfRelativa.retorno_cartera_pct)}
                 </div>
               </div>
               <div>
                 <div className="text-label text-app-text-faint uppercase tracking-wide mb-0.5">Benchmark</div>
-                <div className={`font-mono font-bold text-heading tabular-nums ${getTone(perfRelativa.retorno_benchmark_pct) === 'pos' ? 'text-app-teal' : getTone(perfRelativa.retorno_benchmark_pct) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
+                <div className={`font-mono font-bold text-heading tabular-nums ${getTone(perfRelativa.retorno_benchmark_pct) === 'pos' ? 'text-app-pos' : getTone(perfRelativa.retorno_benchmark_pct) === 'neg' ? 'text-app-neg' : 'text-app-text'}`}>
                   {formatPctRatio(perfRelativa.retorno_benchmark_pct)}
                 </div>
               </div>
               <div>
                 <div className="text-label text-app-text-faint uppercase tracking-wide mb-0.5">Diferencia</div>
-                <div className={`font-mono font-bold text-title tabular-nums ${getTone(perfRelativa.delta_pp) === 'pos' ? 'text-app-teal' : getTone(perfRelativa.delta_pp) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
+                <div className={`font-mono font-bold text-title tabular-nums ${getTone(perfRelativa.delta_pp) === 'pos' ? 'text-app-pos' : getTone(perfRelativa.delta_pp) === 'neg' ? 'text-app-neg' : 'text-app-text'}`}>
                   {(perfRelativa.delta_pp ?? 0) >= 0 ? '+' : ''}{perfRelativa.delta_pp?.toFixed(1)} pp
                 </div>
               </div>
@@ -132,7 +132,7 @@ export default function PerformanceRelativa() {
                 <span>Costo de oportunidad vs {perfRelativa.benchmark_usado}</span>
                 <InfoTooltip term="costoOportunidad" />
               </div>
-              <div className={`font-mono font-bold text-title tabular-nums ${getTone(perfRelativa.costo_oportunidad_pp) === 'pos' ? 'text-app-teal' : getTone(perfRelativa.costo_oportunidad_pp) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
+              <div className={`font-mono font-bold text-title tabular-nums ${getTone(perfRelativa.costo_oportunidad_pp) === 'pos' ? 'text-app-pos' : getTone(perfRelativa.costo_oportunidad_pp) === 'neg' ? 'text-app-neg' : 'text-app-text'}`}>
                 {(perfRelativa.costo_oportunidad_pp ?? 0) >= 0 ? '+' : ''}{perfRelativa.costo_oportunidad_pp?.toFixed(1)} pp
               </div>
             </div>

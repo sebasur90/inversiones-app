@@ -338,7 +338,7 @@ export default function Simulador() {
         {/* Escenarios guardados */}
         {escenariosSaved.length > 0 && (
           <Card className="p-3 border border-app-border">
-            <div className="text-xs font-medium text-app-text-secondary mb-2">
+            <div className="text-xs font-medium text-app-text-dim mb-2">
               Escenarios guardados ({escenariosSaved.length})
             </div>
             <div className="space-y-1">
@@ -349,18 +349,18 @@ export default function Simulador() {
                 >
                   <div className="flex-1 min-w-0 truncate">
                     {esc.nombre}
-                    <span className="text-app-text-secondary ml-2">({esc.tipo_preset})</span>
+                    <span className="text-app-text-dim ml-2">({esc.tipo_preset})</span>
                   </div>
                   <button
                     onClick={() => handleCargarGuardado(esc)}
                     disabled={escenarios.length >= 6}
-                    className="text-label font-semibold text-app-gold disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="text-label font-semibold text-app-accent disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Cargar
                   </button>
                   <button
                     onClick={() => handleDuplicarGuardado(esc)}
-                    className="text-label font-semibold text-app-text-secondary hover:text-app-text"
+                    className="text-label font-semibold text-app-text-dim hover:text-app-text"
                   >
                     Duplicar
                   </button>
@@ -368,8 +368,8 @@ export default function Simulador() {
                     onClick={() => handleEliminarGuardado(esc)}
                     className={`text-label font-semibold ${
                       confirmandoEliminar === esc.id
-                        ? 'text-app-coral'
-                        : 'text-app-text-secondary hover:text-app-coral'
+                        ? 'text-app-neg'
+                        : 'text-app-text-dim hover:text-app-neg'
                     }`}
                   >
                     {confirmandoEliminar === esc.id ? '¿Eliminar?' : 'Eliminar'}

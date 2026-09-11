@@ -170,7 +170,7 @@ export default function SimuladorInverso({
               min={0}
               value={form.objetivo}
               onChange={e => handleFormChange('objetivo', parseFloat(e.target.value) || 0)}
-              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-caption text-app-text outline-none focus:border-app-gold/60 tabular-nums"
+              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-caption text-app-text outline-none focus:border-app-accent/60 tabular-nums"
             />
           </div>
 
@@ -181,7 +181,7 @@ export default function SimuladorInverso({
               type="date"
               value={form.fechaObjetivo}
               onChange={e => handleFormChange('fechaObjetivo', e.target.value)}
-              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-caption text-app-text outline-none focus:border-app-gold/60"
+              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-caption text-app-text outline-none focus:border-app-accent/60"
             />
           </div>
 
@@ -193,7 +193,7 @@ export default function SimuladorInverso({
               min={0}
               value={form.patrimonioInicial}
               onChange={e => handleFormChange('patrimonioInicial', parseFloat(e.target.value) || 0)}
-              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-caption text-app-text outline-none focus:border-app-gold/60 tabular-nums"
+              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-caption text-app-text outline-none focus:border-app-accent/60 tabular-nums"
             />
           </div>
 
@@ -207,7 +207,7 @@ export default function SimuladorInverso({
               value={form.aporteMensual}
               onChange={e => handleFormChange('aporteMensual', parseFloat(e.target.value) || 0)}
               disabled={mode === 'aporte'}
-              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-caption text-app-text outline-none focus:border-app-gold/60 tabular-nums disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-caption text-app-text outline-none focus:border-app-accent/60 tabular-nums disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </div>
 
@@ -222,7 +222,7 @@ export default function SimuladorInverso({
               step={0.5}
               value={form.crecimientoAporteAnual}
               onChange={e => handleFormChange('crecimientoAporteAnual', parseFloat(e.target.value) || 0)}
-              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-caption text-app-text outline-none focus:border-app-gold/60 tabular-nums"
+              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-caption text-app-text outline-none focus:border-app-accent/60 tabular-nums"
             />
           </div>
 
@@ -236,7 +236,7 @@ export default function SimuladorInverso({
               value={form.rentabilidadAnual}
               onChange={e => handleFormChange('rentabilidadAnual', parseFloat(e.target.value) || 0)}
               disabled={mode === 'tasa'}
-              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-caption text-app-text outline-none focus:border-app-gold/60 tabular-nums disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-caption text-app-text outline-none focus:border-app-accent/60 tabular-nums disabled:opacity-50 disabled:cursor-not-allowed"
             />
             {mode !== 'tasa' && (
               <div className="text-label text-app-text-faint mt-0.5">
@@ -263,7 +263,7 @@ export default function SimuladorInverso({
                   </div>
                 </div>
               ) : (
-                <div className={`font-mono text-strong font-semibold tabular-nums ${resultado.aporte.motivo ? 'text-app-coral' : 'text-app-text'}`}>
+                <div className={`font-mono text-strong font-semibold tabular-nums ${resultado.aporte.motivo ? 'text-app-neg' : 'text-app-text'}`}>
                   {resultado.aporte.motivo ? mensajeMotivo(resultado.aporte.motivo) : '—'}
                 </div>
               )}
@@ -283,7 +283,7 @@ export default function SimuladorInverso({
                   </div>
                 </div>
               ) : (
-                <div className={`font-mono text-strong font-semibold tabular-nums ${resultado.fecha.motivo ? 'text-app-coral' : 'text-app-text'}`}>
+                <div className={`font-mono text-strong font-semibold tabular-nums ${resultado.fecha.motivo ? 'text-app-neg' : 'text-app-text'}`}>
                   {resultado.fecha.motivo ? mensajeMotivo(resultado.fecha.motivo) : '—'}
                 </div>
               )}
@@ -303,7 +303,7 @@ export default function SimuladorInverso({
                   </div>
                 </div>
               ) : (
-                <div className={`font-mono text-strong font-semibold tabular-nums ${resultado.tasa.motivo ? 'text-app-coral' : 'text-app-text'}`}>
+                <div className={`font-mono text-strong font-semibold tabular-nums ${resultado.tasa.motivo ? 'text-app-neg' : 'text-app-text'}`}>
                   {resultado.tasa.motivo ? mensajeMotivo(resultado.tasa.motivo) : '—'}
                 </div>
               )}

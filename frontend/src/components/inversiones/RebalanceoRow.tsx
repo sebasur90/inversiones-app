@@ -23,7 +23,7 @@ export default function RebalanceoRow({
       </div>
       <div className="relative h-1.5 rounded-full bg-app-surface-2">
         <div
-          className="h-full rounded-full bg-app-gold"
+          className="h-full rounded-full bg-app-accent"
           style={{ width: `${Math.min(item.porcentaje_actual, 100)}%` }}
         />
         <div
@@ -34,7 +34,7 @@ export default function RebalanceoRow({
       </div>
       <div className="flex justify-between items-center text-label text-app-text-dim mt-1">
         <span>Objetivo {item.porcentaje_objetivo.toFixed(1)}%</span>
-        <span className={`font-mono font-bold tabular-nums ${dentroDeTolerancia ? 'text-app-teal' : 'text-app-coral'}`}>
+        <span className={`font-mono font-bold tabular-nums ${dentroDeTolerancia ? 'text-app-pos' : 'text-app-neg'}`}>
           {formatPct(item.delta_pp)} pp
         </span>
       </div>

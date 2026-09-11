@@ -25,32 +25,32 @@ export default function PerformanceRelativaChart({ serie }: PerformanceRelativaC
   return (
     <ResponsiveContainer width="100%" height={280}>
       <LineChart data={serie} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#223028" />
+        <CartesianGrid strokeDasharray="3 3" stroke="#1c1f2a" />
         <XAxis
           dataKey="fecha"
-          stroke="#8ca39b"
-          tick={{ fontSize: 10, fill: '#8ca39b' }}
+          stroke="#94a3b8"
+          tick={{ fontSize: 10, fill: '#94a3b8' }}
           tickFormatter={formatFechaLabel}
           interval="preserveStartEnd"
         />
         <YAxis
-          stroke="#8ca39b"
-          tick={{ fontSize: 10, fill: '#8ca39b' }}
+          stroke="#94a3b8"
+          tick={{ fontSize: 10, fill: '#94a3b8' }}
           width={62}
           tickFormatter={v => v.toFixed(0)}
         />
         <Tooltip
-          contentStyle={{ background: '#17221e', border: '1px solid #223028', borderRadius: 10, fontSize: 12 }}
-          labelStyle={{ color: '#edf2ef' }}
+          contentStyle={{ background: '#171b26', border: '1px solid #1c1f2a', borderRadius: 10, fontSize: 12 }}
+          labelStyle={{ color: '#f8fafc' }}
           formatter={(v: number) => v.toFixed(1)}
           labelFormatter={formatFechaTooltip}
         />
-        <Legend wrapperStyle={{ fontSize: 11, color: '#8ca39b' }} />
+        <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
         <Line
           type="monotone"
           dataKey="indice_cartera"
           name="Cartera"
-          stroke="#d8b14a"
+          stroke="#3b82f6"
           strokeWidth={2}
           dot={false}
           connectNulls
@@ -59,7 +59,7 @@ export default function PerformanceRelativaChart({ serie }: PerformanceRelativaC
           type="monotone"
           dataKey="indice_benchmark"
           name="Benchmark"
-          stroke="#4fd1ae"
+          stroke="#10b981"
           strokeWidth={2}
           dot={false}
           connectNulls

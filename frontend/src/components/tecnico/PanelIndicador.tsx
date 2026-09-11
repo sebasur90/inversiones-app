@@ -4,11 +4,11 @@ import { manejadoresPuntero } from './crosshair'
 import { trazoDeSerie, valoresVisibles } from './trazo'
 
 const PALETA_SUBSERIE: Record<string, string> = {
-  valor: '#9c7aa0', k: '#5b8ba0', d: '#d8b14a',
-  macd: '#4fd1ae', senal: '#e2665a',
+  valor: '#8b5cf6', k: '#f59e0b', d: '#3b82f6',
+  macd: '#10b981', senal: '#ef4444',
 }
-const COLOR_GRID = '#223028'
-const COLOR_EJE = '#8ca39b'
+const COLOR_GRID = '#1c1f2a'
+const COLOR_EJE = '#94a3b8'
 
 /** Panel oscilador genérico (RSI, MACD, Estocástico, ATR): una escala propia, no la de precio.
  * RSI/Estocástico usan dominio fijo [0,100] con líneas de referencia de sobrecompra/sobreventa;
@@ -63,7 +63,7 @@ export default function PanelIndicador({
             <rect
               key={i} x={x - anchoBarra / 2} y={Math.min(y, yZero)}
               width={anchoBarra} height={Math.max(1, Math.abs(y - yZero))}
-              fill={v >= 0 ? '#4fd1ae' : '#e2665a'} opacity={0.55}
+              fill={v >= 0 ? '#10b981' : '#ef4444'} opacity={0.55}
             />
           )
         })}
@@ -71,7 +71,7 @@ export default function PanelIndicador({
         {Object.entries(series).filter(([salida]) => salida !== 'histograma').map(([salida, vals]) => (
           <path
             key={salida} d={trazoDeSerie(vals, escalaX, yDeValor)}
-            fill="none" stroke={PALETA_SUBSERIE[salida] ?? '#d8b14a'} strokeWidth={1.5}
+            fill="none" stroke={PALETA_SUBSERIE[salida] ?? '#3b82f6'} strokeWidth={1.5}
           />
         ))}
 

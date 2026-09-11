@@ -10,9 +10,9 @@ import { calcularFrescura, type NivelFrescura } from '../../utils/frescura'
 
 const COLOR_FRESCURA: Record<NivelFrescura, string> = {
   fresco: 'text-app-text-dim',
-  tibio: 'text-app-gold',
-  viejo: 'text-app-coral',
-  desconocido: 'text-app-coral',
+  tibio: 'text-app-accent',
+  viejo: 'text-app-neg',
+  desconocido: 'text-app-neg',
 }
 
 export default function ScreenHeader({ title, onBack }: { title: string; onBack?: () => void }) {
@@ -55,7 +55,7 @@ export default function ScreenHeader({ title, onBack }: { title: string; onBack?
                 onClick={() => setMonedaSeleccionada(m)}
                 aria-pressed={monedaSeleccionada === m}
                 className={`px-2.5 py-1.5 rounded-lg text-caption font-bold ${
-                  monedaSeleccionada === m ? 'bg-app-gold-soft text-app-gold' : 'text-app-text-dim'
+                  monedaSeleccionada === m ? 'bg-app-accent-soft text-app-accent' : 'text-app-text-dim'
                 }`}
               >
                 {m}
@@ -102,7 +102,7 @@ export default function ScreenHeader({ title, onBack }: { title: string; onBack?
               setCarteraModalOpen(false)
             }}
             className={`text-left px-3.5 py-3 rounded-xl text-body font-semibold ${
-              carteraSeleccionada === null ? 'bg-app-gold-soft text-app-gold' : 'text-app-text bg-app-surface-2'
+              carteraSeleccionada === null ? 'bg-app-accent-soft text-app-accent' : 'text-app-text bg-app-surface-2'
             }`}
           >
             Consolidado
@@ -115,7 +115,7 @@ export default function ScreenHeader({ title, onBack }: { title: string; onBack?
                 setCarteraModalOpen(false)
               }}
               className={`text-left px-3.5 py-3 rounded-xl text-body font-semibold ${
-                carteraSeleccionada === c.nombre ? 'bg-app-gold-soft text-app-gold' : 'text-app-text bg-app-surface-2'
+                carteraSeleccionada === c.nombre ? 'bg-app-accent-soft text-app-accent' : 'text-app-text bg-app-surface-2'
               }`}
             >
               {c.nombre}

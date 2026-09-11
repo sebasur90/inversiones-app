@@ -23,12 +23,12 @@ function formatMoneda(valor: number, moneda: string): string {
 }
 
 const AVATAR_ALERTA: Record<EstadoAlerta, string> = {
-  stop_loss_disparado: 'border-app-coral/40 text-app-coral',
-  stop_loss_cerca: 'border-app-gold/40 text-app-gold',
-  objetivo_alcanzado: 'border-app-teal/40 text-app-teal',
-  objetivo_cerca: 'border-app-gold/40 text-app-gold',
-  compra_en_zona: 'border-app-gold/40 text-app-gold',
-  compra_cerca: 'border-app-teal/40 text-app-teal',
+  stop_loss_disparado: 'border-app-neg/40 text-app-neg',
+  stop_loss_cerca: 'border-app-accent/40 text-app-accent',
+  objetivo_alcanzado: 'border-app-pos/40 text-app-pos',
+  objetivo_cerca: 'border-app-accent/40 text-app-accent',
+  compra_en_zona: 'border-app-accent/40 text-app-accent',
+  compra_cerca: 'border-app-pos/40 text-app-pos',
 }
 
 export default function Watchlist() {
@@ -125,8 +125,8 @@ export default function Watchlist() {
                           title={`${senal.estrategia_nombre} · ${senal.motivo} · ${senal.fecha} · ${senal.moneda || ''} ${senal.precio.toFixed(2)}${senal.variante === 'subyacente' ? ' (subyacente)' : ''}`}
                           className={`shrink-0 rounded-md px-1.5 py-0.5 text-label font-bold border ${
                             senal.tipo === 'compra'
-                              ? 'border-app-teal/40 text-app-teal bg-app-teal-soft'
-                              : 'border-app-coral/40 text-app-coral bg-app-coral-soft'
+                              ? 'border-app-pos/40 text-app-pos bg-app-pos-soft'
+                              : 'border-app-neg/40 text-app-neg bg-app-neg-soft'
                           }`}
                         >
                           {senal.tipo === 'compra' ? '▲' : '▼'} {senal.tipo}

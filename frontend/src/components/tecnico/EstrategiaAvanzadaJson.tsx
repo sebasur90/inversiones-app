@@ -40,7 +40,7 @@ export default function EstrategiaAvanzadaJson({
   return (
     <div className="flex flex-col gap-3">
       {erroresValidacion && erroresValidacion.length > 0 && (
-        <div className="bg-app-coral-soft border border-app-coral/40 rounded-xl px-3 py-2 text-caption text-app-coral">
+        <div className="bg-app-neg-soft border border-app-neg/40 rounded-xl px-3 py-2 text-caption text-app-neg">
           {erroresValidacion.map((e, i) => <div key={i}>{e}</div>)}
         </div>
       )}
@@ -64,7 +64,7 @@ export default function EstrategiaAvanzadaJson({
                 onEditarIgual()
               }
             }}
-            className="mt-2 text-label font-semibold text-app-coral"
+            className="mt-2 text-label font-semibold text-app-neg"
           >
             Editar igual (se pierden las condiciones avanzadas)
           </button>

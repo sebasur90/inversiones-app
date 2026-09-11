@@ -12,11 +12,11 @@ const TIPO_LABELS: Record<string, string> = {
 }
 
 const TIPO_BADGE_CLASSES: Record<string, string> = {
-  compra: 'bg-app-steel/15 text-app-steel',
-  venta: 'bg-app-plum/15 text-app-plum',
-  dividendo: 'bg-app-teal-soft text-app-teal',
-  cupon: 'bg-app-teal-soft text-app-teal',
-  amortizacion: 'bg-app-plum/15 text-app-plum',
+  compra: 'bg-app-warn/15 text-app-warn',
+  venta: 'bg-app-violet/15 text-app-violet',
+  dividendo: 'bg-app-pos-soft text-app-pos',
+  cupon: 'bg-app-pos-soft text-app-pos',
+  amortizacion: 'bg-app-violet/15 text-app-violet',
 }
 
 const TIPO_HELP_KEY: Record<string, MovimientosHelpKey | undefined> = {
@@ -62,7 +62,7 @@ export default function MovimientoRow({ mov }: { mov: MovimientoInversion }) {
           </div>
         )}
       </div>
-      <div className={`font-mono text-caption font-bold tabular-nums shrink-0 ${esIngreso ? 'text-app-teal' : 'text-app-text'}`}>{formatMonto(mov)}</div>
+      <div className={`font-mono text-caption font-bold tabular-nums shrink-0 ${esIngreso ? 'text-app-pos' : 'text-app-text'}`}>{formatMonto(mov)}</div>
     </div>
   )
 }

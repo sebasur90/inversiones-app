@@ -169,7 +169,7 @@ export default function Comparador() {
               disabled={!activo && tickersSel.length >= MAX_TICKERS}
               className={`shrink-0 font-semibold text-caption px-3 py-1.5 rounded-[10px] border transition-colors disabled:opacity-40 ${
                 activo
-                  ? 'bg-app-gold-soft border-app-gold text-app-gold'
+                  ? 'bg-app-accent-soft border-app-accent text-app-accent'
                   : 'bg-app-surface border-app-border text-app-text-dim'
               }`}
             >
@@ -208,7 +208,7 @@ export default function Comparador() {
               <button
                 onClick={() => setNormalizado(v => !v)}
                 className={`shrink-0 font-semibold text-label px-2.5 py-1.5 rounded-lg border ${
-                  normalizado ? 'bg-app-gold-soft border-app-gold text-app-gold' : 'bg-app-surface border-app-border text-app-text-dim'
+                  normalizado ? 'bg-app-accent-soft border-app-accent text-app-accent' : 'bg-app-surface border-app-border text-app-text-dim'
                 }`}
               >
                 Base 100
@@ -225,27 +225,27 @@ export default function Comparador() {
             ) : (
               <ResponsiveContainer width="100%" height={280}>
                 <LineChart data={datosGrafico} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#223028" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1c1f2a" />
                   <XAxis
                     dataKey="fecha"
-                    stroke="#8ca39b"
-                    tick={{ fontSize: 10, fill: '#8ca39b' }}
+                    stroke="#94a3b8"
+                    tick={{ fontSize: 10, fill: '#94a3b8' }}
                     tickFormatter={formatFechaLabel}
                     interval="preserveStartEnd"
                   />
                   <YAxis
-                    stroke="#8ca39b"
-                    tick={{ fontSize: 10, fill: '#8ca39b' }}
+                    stroke="#94a3b8"
+                    tick={{ fontSize: 10, fill: '#94a3b8' }}
                     width={62}
                     tickFormatter={v => formatValor(v, vista, normalizado)}
                   />
                   <Tooltip
-                    contentStyle={{ background: '#17221e', border: '1px solid #223028', borderRadius: 10, fontSize: 12 }}
-                    labelStyle={{ color: '#edf2ef' }}
+                    contentStyle={{ background: '#171b26', border: '1px solid #1c1f2a', borderRadius: 10, fontSize: 12 }}
+                    labelStyle={{ color: '#f8fafc' }}
                     formatter={(v: number) => formatValor(v, vista, normalizado)}
                     labelFormatter={formatFechaTooltip}
                   />
-                  <Legend wrapperStyle={{ fontSize: 11, color: '#8ca39b' }} />
+                  <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
                   {tickersSel.map((ticker, i) => (
                     <Line
                       key={ticker}

@@ -9,8 +9,8 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const TONE_CLASSES: Record<Tone, string> = {
   default: 'bg-app-surface border-app-border text-app-text',
-  accent: 'bg-app-gold-soft border-transparent text-app-gold',
-  danger: 'bg-app-coral-soft border-transparent text-app-coral',
+  accent: 'bg-app-accent-soft border-transparent text-app-accent',
+  danger: 'bg-app-neg-soft border-transparent text-app-neg',
 }
 
 export default function IconButton({ accent, tone, className = '', children, ...rest }: Props) {

@@ -73,7 +73,7 @@ export function InfoTooltipLink({ term, title }: { term: HelpKey; title: string 
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-xs px-2 py-1 rounded-md bg-app-surface border border-app-border text-app-text-secondary hover:text-app-text hover:bg-app-surface-2 transition-colors"
+        className="text-xs px-2 py-1 rounded-md bg-app-surface border border-app-border text-app-text-dim hover:text-app-text hover:bg-app-surface-2 transition-colors"
       >
         {title}
       </button>

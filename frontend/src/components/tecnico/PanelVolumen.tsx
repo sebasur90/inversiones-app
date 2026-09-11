@@ -4,9 +4,9 @@ import type { EscalaX } from './useEscalaX'
 import { manejadoresPuntero } from './crosshair'
 import { trazoDeSerie, valoresVisibles } from './trazo'
 
-const COLOR_ALCISTA = '#4fd1ae'
-const COLOR_BAJISTA = '#e2665a'
-const COLOR_EJE = '#8ca39b'
+const COLOR_ALCISTA = '#10b981'
+const COLOR_BAJISTA = '#ef4444'
+const COLOR_EJE = '#94a3b8'
 
 /** Barras de volumen (coloreadas según si la rueda subió o bajó) + overlays de OBV/volumen
  * promedio, en su propia escala. */

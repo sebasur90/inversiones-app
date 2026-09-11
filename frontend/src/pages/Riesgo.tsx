@@ -43,7 +43,7 @@ function formatRatio(v: number | null | undefined): string {
 
 function toneClass(v: number | null | undefined): string {
   if (v == null) return 'text-app-text'
-  return v >= 0 ? 'text-app-teal' : 'text-app-coral'
+  return v >= 0 ? 'text-app-pos' : 'text-app-neg'
 }
 
 function tonoDeValor(v: number | null | undefined): 'pos' | 'neg' | undefined {
@@ -128,32 +128,32 @@ export default function Riesgo() {
                 <AreaChart data={serieDrawdown} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
                   <defs>
                     <linearGradient id="ddFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#e2665a" stopOpacity={0} />
-                      <stop offset="95%" stopColor="#e2665a" stopOpacity={0.35} />
+                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0} />
+                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0.35} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#223028" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1c1f2a" />
                   <XAxis
                     dataKey="fecha"
-                    stroke="#8ca39b"
-                    tick={{ fontSize: 10, fill: '#8ca39b' }}
+                    stroke="#94a3b8"
+                    tick={{ fontSize: 10, fill: '#94a3b8' }}
                     tickFormatter={formatFechaEje}
                     interval="preserveStartEnd"
                   />
                   <YAxis
-                    stroke="#8ca39b"
-                    tick={{ fontSize: 10, fill: '#8ca39b' }}
+                    stroke="#94a3b8"
+                    tick={{ fontSize: 10, fill: '#94a3b8' }}
                     width={44}
                     tickFormatter={v => `${(v * 100).toFixed(0)}%`}
                   />
                   <Tooltip
-                    cursor={{ stroke: '#e2665a', strokeWidth: 1 }}
+                    cursor={{ stroke: '#ef4444', strokeWidth: 1 }}
                     content={({ active, label, payload }) => {
                       if (!active || !payload || payload.length === 0) return null
                       return (
-                        <div style={{ background: '#17221e', border: '1px solid #223028', borderRadius: 10, fontSize: 12, padding: '8px 10px' }}>
-                          <div style={{ color: '#edf2ef', marginBottom: 4 }}>{formatFechaEje(String(label))}</div>
-                          <div style={{ color: '#e2665a' }}>Drawdown: {formatPctRatio(Number(payload[0].value))}</div>
+                        <div style={{ background: '#171b26', border: '1px solid #1c1f2a', borderRadius: 10, fontSize: 12, padding: '8px 10px' }}>
+                          <div style={{ color: '#f8fafc', marginBottom: 4 }}>{formatFechaEje(String(label))}</div>
+                          <div style={{ color: '#ef4444' }}>Drawdown: {formatPctRatio(Number(payload[0].value))}</div>
                         </div>
                       )
                     }}
@@ -161,19 +161,19 @@ export default function Riesgo() {
                   <Area
                     type="monotone"
                     dataKey="drawdown"
-                    stroke="#e2665a"
+                    stroke="#ef4444"
                     strokeWidth={2}
                     fill="url(#ddFill)"
                     dot={false}
-                    activeDot={{ r: 4, fill: '#e2665a' }}
+                    activeDot={{ r: 4, fill: '#ef4444' }}
                   />
                   {riesgo.drawdown.fecha_valle && riesgo.drawdown.maximo != null && (
                     <ReferenceDot
                       x={riesgo.drawdown.fecha_valle}
                       y={riesgo.drawdown.maximo}
                       r={5}
-                      fill="#e2665a"
-                      stroke="#0b1210"
+                      fill="#ef4444"
+                      stroke="#0a0e18"
                       strokeWidth={2}
                     />
                   )}
@@ -241,8 +241,8 @@ export default function Riesgo() {
             <Card className="mb-4">
               <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">Meses positivos / negativos</div>
               <div className="text-body text-app-text">
-                <span className="text-app-teal font-bold">{formatPctRatio(riesgo.frecuencia_positivos_negativos.pct_positivos)}</span> positivos ·{' '}
-                <span className="text-app-coral font-bold">{formatPctRatio(riesgo.frecuencia_positivos_negativos.pct_negativos)}</span> negativos
+                <span className="text-app-pos font-bold">{formatPctRatio(riesgo.frecuencia_positivos_negativos.pct_positivos)}</span> positivos ·{' '}
+                <span className="text-app-neg font-bold">{formatPctRatio(riesgo.frecuencia_positivos_negativos.pct_negativos)}</span> negativos
                 <span className="text-app-text-dim"> ({riesgo.frecuencia_positivos_negativos.n_obs} meses)</span>
               </div>
             </Card>

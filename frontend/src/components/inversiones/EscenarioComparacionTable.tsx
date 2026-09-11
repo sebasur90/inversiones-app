@@ -9,10 +9,10 @@ function heatmapIntensity(ratio: number): string {
   // Negativo (rojo), cero (gris), positivo (verde/teal)
   if (ratio < 0) {
     const intensity = Math.min(Math.abs(ratio) * 0.2, 1)
-    return `rgba(229, 102, 90, ${intensity * 0.4})`
+    return `rgba(239, 68, 68, ${intensity * 0.4})`
   } else if (ratio > 0) {
     const intensity = Math.min(ratio * 0.2, 1)
-    return `rgba(79, 209, 174, ${intensity * 0.4})`
+    return `rgba(16, 185, 129, ${intensity * 0.4})`
   }
   return 'transparent'
 }
@@ -39,14 +39,14 @@ export default function EscenarioComparacionTable({ resultado }: EscenarioCompar
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b border-app-border">
-            <th className="text-left py-2 px-2 text-app-text-secondary font-medium">Métrica</th>
+            <th className="text-left py-2 px-2 text-app-text-dim font-medium">Métrica</th>
             {resultado.resultados.map((esc, idx) => (
               <th
                 key={idx}
                 className="text-right py-2 px-2 font-medium text-app-text tabular-nums"
               >
                 <div className="text-xs font-semibold">{esc.nombre}</div>
-                <div className="text-label text-app-text-secondary">({esc.tipo_preset})</div>
+                <div className="text-label text-app-text-dim">({esc.tipo_preset})</div>
               </th>
             ))}
           </tr>
@@ -54,7 +54,7 @@ export default function EscenarioComparacionTable({ resultado }: EscenarioCompar
         <tbody>
           {metricas.map((metrica) => (
             <tr key={metrica.key} className="border-b border-app-border hover:bg-app-surface-2">
-              <td className="text-left py-2 px-2 text-app-text-secondary">
+              <td className="text-left py-2 px-2 text-app-text-dim">
                 {metrica.label}
               </td>
               {resultado.resultados.map((esc, idx) => {

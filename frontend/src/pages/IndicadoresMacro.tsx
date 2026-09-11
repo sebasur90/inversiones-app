@@ -45,10 +45,10 @@ const OPCIONES: { value: Vista; label: string }[] = [
 ]
 
 const META: Record<Vista, { titulo: string; sub: string; color: string; formato: (v: number) => string; unidad: string }> = {
-  cer: { titulo: 'CER', sub: 'Índice de inflación (Sheet + API)', color: '#9c7aa0', formato: formatIndice, unidad: '' },
-  mep: { titulo: 'MEP', sub: 'Dólar bolsa (Sheet + API)', color: '#4fd1ae', formato: formatIndice, unidad: '$' },
-  riesgo_pais: { titulo: 'Riesgo país', sub: 'EMBI+ Argentina (ArgentinaDatos)', color: '#e0a15f', formato: formatEntero, unidad: 'pb' },
-  inflacion: { titulo: 'Inflación mensual', sub: 'Variación % mes a mes (INDEC)', color: '#d97b6c', formato: (v: number) => formatPct(v), unidad: '%' },
+  cer: { titulo: 'CER', sub: 'Índice de inflación (Sheet + API)', color: '#8b5cf6', formato: formatIndice, unidad: '' },
+  mep: { titulo: 'MEP', sub: 'Dólar bolsa (Sheet + API)', color: '#10b981', formato: formatIndice, unidad: '$' },
+  riesgo_pais: { titulo: 'Riesgo país', sub: 'EMBI+ Argentina (ArgentinaDatos)', color: '#f59e0b', formato: formatEntero, unidad: 'pb' },
+  inflacion: { titulo: 'Inflación mensual', sub: 'Variación % mes a mes (INDEC)', color: '#ef4444', formato: (v: number) => formatPct(v), unidad: '%' },
 }
 
 export default function IndicadoresMacro() {
@@ -130,7 +130,7 @@ export default function IndicadoresMacro() {
               {meta.formato(ultimoPunto.valor)}{meta.unidad && !esInflacion ? ` ${meta.unidad}` : ''}
             </div>
             {!esInflacion && variacion != null && (
-              <div className={`inline-flex items-center gap-0.5 font-mono text-label font-bold mt-0.5 tabular-nums ${positivo ? 'text-app-teal' : 'text-app-coral'}`}>
+              <div className={`inline-flex items-center gap-0.5 font-mono text-label font-bold mt-0.5 tabular-nums ${positivo ? 'text-app-pos' : 'text-app-neg'}`}>
                 <Icon name={positivo ? 'up' : 'down'} className="w-2.5 h-2.5" />
                 {formatPct(variacion)}
                 <div className="ml-0.5">
@@ -175,12 +175,12 @@ export default function IndicadoresMacro() {
         <ResponsiveContainer width="100%" height={220}>
           {esInflacion ? (
             <BarChart data={datosGrafico} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#223028" />
-              <XAxis dataKey="fecha" stroke="#8ca39b" tick={{ fontSize: 10, fill: '#8ca39b' }} tickFormatter={formatFechaLabel} interval="preserveStartEnd" />
-              <YAxis stroke="#8ca39b" tick={{ fontSize: 10, fill: '#8ca39b' }} width={44} tickFormatter={(v: number) => `${v}%`} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#1c1f2a" />
+              <XAxis dataKey="fecha" stroke="#94a3b8" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={formatFechaLabel} interval="preserveStartEnd" />
+              <YAxis stroke="#94a3b8" tick={{ fontSize: 10, fill: '#94a3b8' }} width={44} tickFormatter={(v: number) => `${v}%`} />
               <Tooltip
-                contentStyle={{ background: '#17221e', border: '1px solid #223028', borderRadius: 10, fontSize: 12 }}
-                labelStyle={{ color: '#edf2ef' }}
+                contentStyle={{ background: '#171b26', border: '1px solid #1c1f2a', borderRadius: 10, fontSize: 12 }}
+                labelStyle={{ color: '#f8fafc' }}
                 formatter={(v: number) => [formatPct(v), 'Inflación']}
                 labelFormatter={formatFechaTooltip}
                 cursor={{ fill: 'rgba(255,255,255,0.04)' }}
@@ -189,12 +189,12 @@ export default function IndicadoresMacro() {
             </BarChart>
           ) : (
             <LineChart data={datosGrafico} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#223028" />
-              <XAxis dataKey="fecha" stroke="#8ca39b" tick={{ fontSize: 10, fill: '#8ca39b' }} tickFormatter={formatFechaLabel} interval="preserveStartEnd" />
-              <YAxis stroke="#8ca39b" tick={{ fontSize: 10, fill: '#8ca39b' }} width={62} tickFormatter={vista === 'riesgo_pais' ? formatEntero : formatIndice} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#1c1f2a" />
+              <XAxis dataKey="fecha" stroke="#94a3b8" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={formatFechaLabel} interval="preserveStartEnd" />
+              <YAxis stroke="#94a3b8" tick={{ fontSize: 10, fill: '#94a3b8' }} width={62} tickFormatter={vista === 'riesgo_pais' ? formatEntero : formatIndice} />
               <Tooltip
-                contentStyle={{ background: '#17221e', border: '1px solid #223028', borderRadius: 10, fontSize: 12 }}
-                labelStyle={{ color: '#edf2ef' }}
+                contentStyle={{ background: '#171b26', border: '1px solid #1c1f2a', borderRadius: 10, fontSize: 12 }}
+                labelStyle={{ color: '#f8fafc' }}
                 formatter={(v: number) => [meta.formato(v), meta.titulo]}
                 labelFormatter={formatFechaTooltip}
                 cursor={{ stroke: meta.color, strokeWidth: 1 }}

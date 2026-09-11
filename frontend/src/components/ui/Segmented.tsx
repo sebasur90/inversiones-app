@@ -14,7 +14,7 @@ export default function Segmented<T extends string>({
           key={opt.value}
           onClick={() => onChange(opt.value)}
           className={`font-semibold text-caption px-2.5 py-1.5 rounded-lg whitespace-nowrap transition-colors ${
-            opt.value === value ? 'bg-app-gold-soft text-app-gold' : 'text-app-text-dim'
+            opt.value === value ? 'bg-app-accent-soft text-app-accent' : 'text-app-text-dim'
           }`}
         >
           {opt.label}

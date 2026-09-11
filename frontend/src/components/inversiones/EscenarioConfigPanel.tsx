@@ -75,7 +75,7 @@ function VariacionPorInstrumento({
     <div>
       <button
         onClick={() => setAbierto(v => !v)}
-        className="text-xs text-app-text-secondary hover:text-app-text"
+        className="text-xs text-app-text-dim hover:text-app-text"
       >
         {abierto ? '▼' : '▶'} Variación por instrumento{nOverrides > 0 ? ` (${nOverrides})` : ''}
       </button>
@@ -96,14 +96,14 @@ function VariacionPorInstrumento({
                 placeholder={String(porDefecto)}
                 onChange={e => onInputTicker(t.ticker, e.target.value)}
                 onBlur={() => onBlurTicker(t.ticker)}
-                className="w-24 h-8 rounded-lg bg-app-surface-2 border border-app-border px-2 text-xs focus:border-app-gold/60 tabular-nums"
+                className="w-24 h-8 rounded-lg bg-app-surface-2 border border-app-border px-2 text-xs focus:border-app-accent/60 tabular-nums"
               />
             </div>
           ))}
           {nOverrides > 0 && (
             <button
               onClick={limpiar}
-              className="text-label text-app-text-secondary hover:text-app-coral"
+              className="text-label text-app-text-dim hover:text-app-neg"
             >
               Limpiar overrides
             </button>
@@ -157,7 +157,7 @@ export default function EscenarioConfigPanel({
             onChange={handleNameChange}
             className="text-sm font-medium bg-transparent border-0 px-0 py-0 focus:outline-none text-app-text"
           />
-          <span className="text-xs text-app-text-secondary">#{index + 1}</span>
+          <span className="text-xs text-app-text-dim">#{index + 1}</span>
         </div>
 
         {/* Selector de preset */}
@@ -185,7 +185,7 @@ export default function EscenarioConfigPanel({
             min={ESCENARIO_PARAM_LIMITS.horizonte_meses.min}
             max={ESCENARIO_PARAM_LIMITS.horizonte_meses.max}
             onChange={(e) => onChangeParam('horizonte_meses', parseInt(e.target.value) || 0)}
-            className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
+            className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-accent/60 tabular-nums"
           />
         </div>
 
@@ -199,7 +199,7 @@ export default function EscenarioConfigPanel({
             max={ESCENARIO_PARAM_LIMITS.variacion_dolar_pct.max}
             value={params.variacion_dolar_pct}
             onChange={(e) => onChangeParam('variacion_dolar_pct', parseFloat(e.target.value) || 0)}
-            className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
+            className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-accent/60 tabular-nums"
           />
         </div>
 
@@ -213,7 +213,7 @@ export default function EscenarioConfigPanel({
             max={ESCENARIO_PARAM_LIMITS.variacion_por_defecto_pct.max}
             value={params.variacion_por_defecto_pct}
             onChange={(e) => onChangeParam('variacion_por_defecto_pct', parseFloat(e.target.value) || 0)}
-            className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
+            className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-accent/60 tabular-nums"
           />
         </div>
 
@@ -226,7 +226,7 @@ export default function EscenarioConfigPanel({
             min={ESCENARIO_PARAM_LIMITS.aporte_mensual_usd.min}
             value={params.aporte_mensual_usd}
             onChange={(e) => onChangeParam('aporte_mensual_usd', parseFloat(e.target.value) || 0)}
-            className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
+            className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-accent/60 tabular-nums"
           />
         </div>
 
@@ -240,7 +240,7 @@ export default function EscenarioConfigPanel({
             max={ESCENARIO_PARAM_LIMITS.dividend_yield_anual_pct.max}
             value={params.dividend_yield_anual_pct}
             onChange={(e) => onChangeParam('dividend_yield_anual_pct', parseFloat(e.target.value) || 0)}
-            className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
+            className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-accent/60 tabular-nums"
           />
         </div>
 
@@ -250,7 +250,7 @@ export default function EscenarioConfigPanel({
           <select
             value={params.modo_dividendos}
             onChange={(e) => onChangeParam('modo_dividendos', e.target.value)}
-            className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60"
+            className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-accent/60"
           >
             {MODOS_DIVIDENDOS.map(modo => (
               <option key={modo} value={modo}>{modo}</option>
@@ -263,7 +263,7 @@ export default function EscenarioConfigPanel({
       <div className="mt-3">
         <button
           onClick={() => setMostrarAvanzado(!mostrarAvanzado)}
-          className="text-xs text-app-text-secondary hover:text-app-text"
+          className="text-xs text-app-text-dim hover:text-app-text"
         >
           {mostrarAvanzado ? '▼ Menos' : '▶ Más opciones'}
         </button>
@@ -280,7 +280,7 @@ export default function EscenarioConfigPanel({
                   min={ESCENARIO_PARAM_LIMITS.retiro_mensual_usd.min}
                   value={params.retiro_mensual_usd}
                   onChange={(e) => onChangeParam('retiro_mensual_usd', parseFloat(e.target.value) || 0)}
-                  className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
+                  className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-accent/60 tabular-nums"
                       />
               </div>
 
@@ -294,7 +294,7 @@ export default function EscenarioConfigPanel({
                   max={ESCENARIO_PARAM_LIMITS.crecimiento_aporte_anual_pct.max}
                   value={params.crecimiento_aporte_anual_pct}
                   onChange={(e) => onChangeParam('crecimiento_aporte_anual_pct', parseFloat(e.target.value) || 0)}
-                  className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
+                  className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-accent/60 tabular-nums"
                       />
               </div>
 
@@ -308,7 +308,7 @@ export default function EscenarioConfigPanel({
                   max={ESCENARIO_PARAM_LIMITS.comision_pct.max}
                   value={params.comision_pct}
                   onChange={(e) => onChangeParam('comision_pct', parseFloat(e.target.value) || 0)}
-                  className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
+                  className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-accent/60 tabular-nums"
                       />
               </div>
 
@@ -322,7 +322,7 @@ export default function EscenarioConfigPanel({
                   max={ESCENARIO_PARAM_LIMITS.inflacion_anual_pct.max}
                   value={params.inflacion_anual_pct || ''}
                   onChange={(e) => onChangeParam('inflacion_anual_pct', e.target.value ? parseFloat(e.target.value) : null)}
-                  className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
+                  className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-accent/60 tabular-nums"
                         placeholder="Opcional"
                 />
               </div>
@@ -347,7 +347,7 @@ export default function EscenarioConfigPanel({
                   max={ESCENARIO_PARAM_LIMITS.pct_dividendo_reinvertido.max}
                   value={params.pct_dividendo_reinvertido ?? ''}
                   onChange={(e) => onChangeParam('pct_dividendo_reinvertido', e.target.value ? parseFloat(e.target.value) : null)}
-                  className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-gold/60 tabular-nums"
+                  className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-accent/60 tabular-nums"
                       />
               </div>
             )}

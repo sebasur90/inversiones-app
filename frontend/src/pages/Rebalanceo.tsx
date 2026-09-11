@@ -159,7 +159,7 @@ export default function Rebalanceo() {
                             placeholder="0"
                             value={aporteInput}
                             onChange={e => setAporteInput(e.target.value)}
-                            className="w-full h-11 rounded-xl bg-app-surface-2 border border-app-border px-3.5 text-body text-app-text outline-none focus:border-app-gold/60 tabular-nums"
+                            className="w-full h-11 rounded-xl bg-app-surface-2 border border-app-border px-3.5 text-body text-app-text outline-none focus:border-app-accent/60 tabular-nums"
                           />
                         </div>
                       )}
@@ -175,7 +175,7 @@ export default function Rebalanceo() {
                           placeholder="0"
                           value={tasaInput}
                           onChange={e => setTasaInput(e.target.value)}
-                          className="w-full h-11 rounded-xl bg-app-surface-2 border border-app-border px-3.5 text-body text-app-text outline-none focus:border-app-gold/60 tabular-nums"
+                          className="w-full h-11 rounded-xl bg-app-surface-2 border border-app-border px-3.5 text-body text-app-text outline-none focus:border-app-accent/60 tabular-nums"
                         />
                         <div className="text-label text-app-text-faint mt-1">
                           Se precarga con el promedio histórico de esta cartera; podés editarla.
@@ -190,20 +190,20 @@ export default function Rebalanceo() {
                         Esto es una simulación: no se registran movimientos reales.
                       </div>
 
-                      {simError && <div className="text-caption text-app-coral mt-3">{simError}</div>}
+                      {simError && <div className="text-caption text-app-neg mt-3">{simError}</div>}
 
                       {simResultado && (
                         <div className="mt-4">
                           <div className="grid grid-cols-3 gap-2 mb-4">
                             <div className="bg-app-surface-2 rounded-[13px] p-2.5">
                               <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">Comprar</div>
-                              <div className="font-mono text-body font-bold text-app-teal tabular-nums">
+                              <div className="font-mono text-body font-bold text-app-pos tabular-nums">
                                 {formatUSD(simResultado.total_a_comprar_usd)}
                               </div>
                             </div>
                             <div className="bg-app-surface-2 rounded-[13px] p-2.5">
                               <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">Vender</div>
-                              <div className="font-mono text-body font-bold text-app-coral tabular-nums">
+                              <div className="font-mono text-body font-bold text-app-neg tabular-nums">
                                 {formatUSD(simResultado.total_a_vender_usd)}
                               </div>
                             </div>

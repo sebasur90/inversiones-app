@@ -16,12 +16,12 @@ interface EscenarioProyeccionChartProps {
 }
 
 const COLORES = {
-  actual: '#8ca39b',
-  base: '#d8b14a',
-  alcista: '#4fd1ae',
-  bajista: '#e2665a',
-  crisis: '#a94a4a',
-  personalizado: '#5b8ba0',
+  actual: '#94a3b8',
+  base: '#3b82f6',
+  alcista: '#10b981',
+  bajista: '#ef4444',
+  crisis: '#b91c1c',
+  personalizado: '#f59e0b',
 }
 
 export default function EscenarioProyeccionChart({ resultado }: EscenarioProyeccionChartProps) {
@@ -45,11 +45,11 @@ export default function EscenarioProyeccionChart({ resultado }: EscenarioProyecc
   return (
     <ResponsiveContainer width="100%" height={300}>
       <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
-        <CartesianGrid stroke="#223028" strokeDasharray="3 3" />
+        <CartesianGrid stroke="#1c1f2a" strokeDasharray="3 3" />
         <XAxis
           dataKey="fecha"
           tick={{ fontSize: 10 }}
-          stroke="#8ca39b"
+          stroke="#94a3b8"
           tickFormatter={(date: string) => {
             const d = new Date(date)
             return `${d.getMonth() + 1}/${d.getFullYear().toString().slice(-2)}`
@@ -58,13 +58,13 @@ export default function EscenarioProyeccionChart({ resultado }: EscenarioProyecc
         />
         <YAxis
           tick={{ fontSize: 10 }}
-          stroke="#8ca39b"
+          stroke="#94a3b8"
           tickFormatter={(val) => `$${(val / 1000).toFixed(0)}k`}
         />
         <Tooltip
           contentStyle={{
-            background: '#17221e',
-            border: '1px solid #223028',
+            background: '#171b26',
+            border: '1px solid #1c1f2a',
             borderRadius: 10,
             fontSize: 12,
           }}
@@ -82,14 +82,14 @@ export default function EscenarioProyeccionChart({ resultado }: EscenarioProyecc
         {/* Línea actual de referencia (punteada) */}
         <ReferenceLine
           y={resultado.actual_valor_usd}
-          stroke="#8ca39b"
+          stroke="#94a3b8"
           strokeDasharray="5 5"
           label={{
             value: 'Actual',
             position: 'insideTopLeft',
             offset: 10,
             fontSize: 10,
-            fill: '#8ca39b',
+            fill: '#94a3b8',
           }}
         />
 

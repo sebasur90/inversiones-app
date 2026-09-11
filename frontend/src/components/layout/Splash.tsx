@@ -3,10 +3,10 @@ import { Icon } from '../icons/Icons'
 import Button from '../ui/Button'
 
 const BARS = [
-  { x: 24, h: 26, color: '#5b8ba0', delay: '0s' },
-  { x: 35, h: 36, color: '#7e9c90', delay: '0.18s' },
-  { x: 46, h: 46, color: '#4fd1ae', delay: '0.36s' },
-  { x: 57, h: 54, color: '#d8b14a', delay: '0.54s' },
+  { x: 24, h: 26, color: '#6b7280', delay: '0s' },
+  { x: 35, h: 36, color: '#06b6d4', delay: '0.18s' },
+  { x: 46, h: 46, color: '#10b981', delay: '0.36s' },
+  { x: 57, h: 54, color: '#3b82f6', delay: '0.54s' },
 ]
 
 export default function Splash() {
@@ -16,7 +16,7 @@ export default function Splash() {
     <div className="h-screen flex flex-col items-center justify-center gap-0 px-8 text-center bg-app-bg relative overflow-hidden">
       <div
         className="pointer-events-none absolute inset-0"
-        style={{ background: 'radial-gradient(120% 60% at 50% -10%, rgba(216,177,74,0.14), transparent 60%)' }}
+        style={{ background: 'radial-gradient(120% 60% at 50% -10%, rgba(59,130,246,0.14), transparent 60%)' }}
       />
 
       <div className="relative w-[92px] h-[92px] mb-7">
@@ -27,7 +27,7 @@ export default function Splash() {
             cy="44"
             r="40"
             fill="none"
-            stroke="#223028"
+            stroke="#1c1f2a"
             strokeWidth={1.5}
             strokeDasharray="3 7"
           />
@@ -56,7 +56,7 @@ export default function Splash() {
         {syncing ? 'Sincronizando…' : 'Sincronizar Google Sheet'}
       </Button>
 
-      {error && <p className="mt-3 text-caption text-app-coral max-w-[280px]">{error}</p>}
+      {error && <p className="mt-3 text-caption text-app-neg max-w-[280px]">{error}</p>}
 
       <div className="mt-4 flex items-center gap-1.5 text-label text-app-text-faint">
         <Icon name="lock" className="w-3 h-3" />

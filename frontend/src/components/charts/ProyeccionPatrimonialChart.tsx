@@ -66,7 +66,7 @@ export default function ProyeccionPatrimonialChart({
   )
 
   const ultimoPuntoReal = evolucionReal.puntos[evolucionReal.puntos.length - 1]
-  const colorProyeccion = esProyeccionAlcanzable ? '#4fd1ae' : '#e2665a' // teal / coral
+  const colorProyeccion = esProyeccionAlcanzable ? '#10b981' : '#ef4444' // teal / coral
 
   return (
     <div>
@@ -74,27 +74,27 @@ export default function ProyeccionPatrimonialChart({
         <ComposedChart data={datosGrafico} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
           <defs>
             <linearGradient id="realFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#d8b14a" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#d8b14a" stopOpacity={0} />
+              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#223028" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#1c1f2a" />
           <XAxis
             dataKey="fecha"
-            stroke="#8ca39b"
-            tick={{ fontSize: 10, fill: '#8ca39b' }}
+            stroke="#94a3b8"
+            tick={{ fontSize: 10, fill: '#94a3b8' }}
             tickFormatter={v => dayjs(v).format('MMM YY')}
             interval="preserveStartEnd"
           />
           <YAxis
-            stroke="#8ca39b"
-            tick={{ fontSize: 10, fill: '#8ca39b' }}
+            stroke="#94a3b8"
+            tick={{ fontSize: 10, fill: '#94a3b8' }}
             width={62}
             tickFormatter={v => `$${((v as number) / 1000).toFixed(0)}k`}
           />
           <Tooltip
-            contentStyle={{ background: '#17221e', border: '1px solid #223028', borderRadius: 10, fontSize: 12 }}
-            labelStyle={{ color: '#edf2ef' }}
+            contentStyle={{ background: '#171b26', border: '1px solid #1c1f2a', borderRadius: 10, fontSize: 12 }}
+            labelStyle={{ color: '#f8fafc' }}
             labelFormatter={v => dayjs(v).format('MMM DD, YYYY')}
             formatter={(value: any, name: string) => {
               if (name === 'valorReal') return [formatUSD(value), 'Valor real']
@@ -107,11 +107,11 @@ export default function ProyeccionPatrimonialChart({
           {/* Meta (línea horizontal) */}
           <ReferenceLine
             y={montoObjetivo}
-            stroke="#4fd1ae"
+            stroke="#10b981"
             strokeDasharray="6 3"
             label={{
               value: 'Meta',
-              fill: '#4fd1ae',
+              fill: '#10b981',
               fontSize: 11,
               position: 'right',
             }}
@@ -120,11 +120,11 @@ export default function ProyeccionPatrimonialChart({
           {/* Fecha límite (línea vertical) */}
           <ReferenceLine
             x={fechaLimite}
-            stroke="#5b8ba0"
+            stroke="#f59e0b"
             strokeDasharray="6 3"
             label={{
               value: 'Límite',
-              fill: '#5b8ba0',
+              fill: '#f59e0b',
               fontSize: 11,
               position: 'top',
             }}
@@ -134,7 +134,7 @@ export default function ProyeccionPatrimonialChart({
           <Line
             type="monotone"
             dataKey="valorReal"
-            stroke="#d8b14a"
+            stroke="#3b82f6"
             strokeWidth={2.5}
             dot={false}
             fill="url(#realFill)"
@@ -145,7 +145,7 @@ export default function ProyeccionPatrimonialChart({
           <Line
             type="monotone"
             dataKey="valorPlan"
-            stroke="#5b8ba0"
+            stroke="#f59e0b"
             strokeWidth={1.5}
             strokeDasharray="4 3"
             dot={false}
@@ -168,11 +168,11 @@ export default function ProyeccionPatrimonialChart({
       {/* Leyenda */}
       <div className="mt-3 flex items-center gap-4 text-label text-app-text-dim">
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: '#d8b14a' }} />
+          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: '#3b82f6' }} />
           Valor real
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-0.5 rounded-full shrink-0" style={{ backgroundColor: '#5b8ba0' }} />
+          <span className="w-2.5 h-0.5 rounded-full shrink-0" style={{ backgroundColor: '#f59e0b' }} />
           Plan original
         </div>
         <div className="flex items-center gap-1.5">

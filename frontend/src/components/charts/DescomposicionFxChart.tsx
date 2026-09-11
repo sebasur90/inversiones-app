@@ -23,17 +23,17 @@ export default function DescomposicionFxChart({
     {
       name: 'Retorno total',
       valor: retornoTotalArs,
-      fill: '#4fd1ae',
+      fill: '#10b981',
     },
     {
       name: 'Efecto FX',
       valor: efectoFx,
-      fill: '#e2665a',
+      fill: '#ef4444',
     },
     {
       name: 'Retorno activos',
       valor: retornoActivo,
-      fill: '#4fd1ae',
+      fill: '#10b981',
     },
   ]
 
@@ -46,7 +46,7 @@ export default function DescomposicionFxChart({
       <text
         x={x + width / 2}
         y={yPos}
-        fill="#a8a8a8"
+        fill="#94a3b8"
         textAnchor="middle"
         fontSize={12}
         fontWeight="bold"
@@ -61,24 +61,24 @@ export default function DescomposicionFxChart({
       <BarChart data={data}>
         <XAxis
           dataKey="name"
-          tick={{ fill: '#8ca39b', fontSize: 12 }}
-          axisLine={{ stroke: '#223028' }}
-          tickLine={{ stroke: '#223028' }}
+          tick={{ fill: '#94a3b8', fontSize: 12 }}
+          axisLine={{ stroke: '#1c1f2a' }}
+          tickLine={{ stroke: '#1c1f2a' }}
         />
         <YAxis
-          tick={{ fill: '#8ca39b', fontSize: 12 }}
-          axisLine={{ stroke: '#223028' }}
-          tickLine={{ stroke: '#223028' }}
+          tick={{ fill: '#94a3b8', fontSize: 12 }}
+          axisLine={{ stroke: '#1c1f2a' }}
+          tickLine={{ stroke: '#1c1f2a' }}
           tickFormatter={formatPctRatio}
         />
         <Tooltip
           contentStyle={{
-            backgroundColor: '#17221e',
-            border: '1px solid #223028',
+            backgroundColor: '#171b26',
+            border: '1px solid #1c1f2a',
             borderRadius: '4px',
-            color: '#a8a8a8',
+            color: '#94a3b8',
           }}
-          labelStyle={{ color: '#a8a8a8' }}
+          labelStyle={{ color: '#94a3b8' }}
           formatter={(value: number) => formatPctRatio(value)}
         />
         <Bar dataKey="valor" radius={4} label={renderCustomLabel}>

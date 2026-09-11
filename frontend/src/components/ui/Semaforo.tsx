@@ -1,15 +1,15 @@
 import type { Nivel } from '../../utils/niveles'
 
 const COLOR_PUNTO: Record<Nivel, string> = {
-  bien: 'bg-app-teal',
-  atencion: 'bg-app-gold',
-  riesgo: 'bg-app-coral',
+  bien: 'bg-app-pos',
+  atencion: 'bg-app-accent',
+  riesgo: 'bg-app-neg',
 }
 
 const COLOR_TEXTO: Record<Nivel, string> = {
-  bien: 'text-app-teal',
-  atencion: 'text-app-gold',
-  riesgo: 'text-app-coral',
+  bien: 'text-app-pos',
+  atencion: 'text-app-accent',
+  riesgo: 'text-app-neg',
 }
 
 /** Punto de color + texto: nunca sólo color, para que la alerta no dependa de distinguir

@@ -24,11 +24,11 @@ export const GLIFO_MOTIVO: Record<string, string> = {
 }
 
 export const COLOR_MOTIVO: Record<string, string> = {
-  regla_salida: '#e2665a',
-  stop_loss: '#e2665a',
-  take_profit: '#4fd1ae',
-  trailing_stop: '#e2a13a',
-  max_barras: '#8ca39b',
+  regla_salida: '#ef4444',
+  stop_loss: '#ef4444',
+  take_profit: '#10b981',
+  trailing_stop: '#fbbf24',
+  max_barras: '#94a3b8',
 }
 
 export const DESCRIPCION_MOTIVO: Record<string, string> = {

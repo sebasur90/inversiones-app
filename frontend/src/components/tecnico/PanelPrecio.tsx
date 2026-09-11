@@ -12,14 +12,14 @@ export interface OverlayPrecio {
   series: Record<string, (number | null)[]>
 }
 
-const COLOR_ALCISTA = '#4fd1ae'
-const COLOR_BAJISTA = '#e2665a'
-const COLOR_PRECIO = '#d8b14a'
-const COLOR_GRID = '#223028'
-const COLOR_EJE = '#8ca39b'
-const COLOR_STOP = '#e2665a'
-const COLOR_TAKE = '#4fd1ae'
-const COLOR_TRAILING = '#e2a13a'
+const COLOR_ALCISTA = '#10b981'
+const COLOR_BAJISTA = '#ef4444'
+const COLOR_PRECIO = '#3b82f6'
+const COLOR_GRID = '#1c1f2a'
+const COLOR_EJE = '#94a3b8'
+const COLOR_STOP = '#ef4444'
+const COLOR_TAKE = '#10b981'
+const COLOR_TRAILING = '#fbbf24'
 
 /** Salidas de un indicador de precio que NO están en la escala del precio (p.ej. Bollinger trae
  * `ancho_pct`/`pctb`, que son porcentajes u oscilan 0-1, junto con `media`/`superior`/`inferior`

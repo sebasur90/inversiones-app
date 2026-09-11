@@ -51,20 +51,20 @@ export function heatmapIntensity(ratio: number | null | undefined, capPct: numbe
   const pct = ratio * 100
   const magnitud = Math.min(Math.abs(pct) / capPct, 1)
   const alpha = (magnitud * HEATMAP_MAX_ALPHA).toFixed(3)
-  const rgb = pct >= 0 ? '79, 209, 174' : '226, 102, 90' // app-teal / app-coral
+  const rgb = pct >= 0 ? '16, 185, 129' : '239, 68, 68' // app-pos / app-neg
   return { backgroundColor: `rgba(${rgb}, ${alpha})` }
 }
 
 export const TIPO_COLORS: Record<string, string> = {
-  ingreso: '#4fd1ae',
-  egreso: '#e2665a',
-  neutro: '#8ca39b',
+  ingreso: '#10b981',
+  egreso: '#ef4444',
+  neutro: '#94a3b8',
 }
 
-// Paleta categórica de la app ("ledger"): oro, verde azulado, acero, ciruela, salvia, coral.
+// Paleta categórica de la app ("Apex Wealth"): azul, esmeralda, ámbar, gris, cian, violeta.
 export const CHART_COLORS = [
-  '#d8b14a', '#4fd1ae', '#5b8ba0', '#9c7aa0', '#7e9c90', '#e2665a',
-  '#c9a53a', '#3fb599', '#4a7688', '#856787', '#6a877c', '#c9544a',
+  '#3b82f6', '#10b981', '#f59e0b', '#6b7280', '#06b6d4', '#8b5cf6',
+  '#60a5fa', '#34d399', '#fbbf24', '#9ca3af', '#22d3ee', '#a78bfa',
 ]
 
 export type PeriodoEvolucion = '1M' | '3M' | '6M' | '1Y' | '3Y' | 'YTD' | 'ALL'

@@ -79,11 +79,11 @@ export default function SensibilidadGrid({
         <div className="mb-1">Celda = meses para alcanzar la meta</div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded" style={{ backgroundColor: 'rgba(79, 209, 174, 0.45)' }} />
+            <span className="w-3 h-3 rounded" style={{ backgroundColor: 'rgba(16, 185, 129, 0.45)' }} />
             Antes del límite
           </div>
           <div className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded" style={{ backgroundColor: 'rgba(226, 102, 90, 0.45)' }} />
+            <span className="w-3 h-3 rounded" style={{ backgroundColor: 'rgba(239, 68, 68, 0.45)' }} />
             Después / Nunca
           </div>
         </div>

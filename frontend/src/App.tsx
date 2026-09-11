@@ -88,7 +88,7 @@ function SyncResultModal() {
                 closeSyncSheet()
                 navigate('/calidad-datos')
               }}
-              className="mt-2 text-caption text-app-link hover:underline"
+              className="mt-2 text-caption text-app-accent hover:underline"
             >
               Ver detalle completo ({syncIssues.length - 8} más) →
             </button>

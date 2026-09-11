@@ -1,28 +1,35 @@
 @import "tailwindcss";
 
 @theme {
-  --color-app-bg: #0b1210;
-  --color-app-surface: #121c19;
-  --color-app-surface-2: #17221e;
-  --color-app-border: #223028;
-  --color-app-border-soft: #1a2521;
-  --color-app-text: #edf2ef;
-  --color-app-text-dim: #8ca39b;
-  /* 4,9:1 mínimo sobre los tres fondos (AA). El tono anterior (#5e736a) daba 3,2-3,7:1. */
-  --color-app-text-faint: #7d918a;
-  --color-app-gold: #d8b14a;
-  --color-app-gold-soft: rgba(216, 177, 74, 0.14);
-  --color-app-teal: #4fd1ae;
-  --color-app-teal-soft: rgba(79, 209, 174, 0.12);
-  --color-app-coral: #e2665a;
-  --color-app-coral-soft: rgba(226, 102, 90, 0.12);
-  --color-app-steel: #5b8ba0;
-  --color-app-plum: #9c7aa0;
-  --color-app-sage: #7e9c90;
+  --color-app-bg: #0a0e18;
+  --color-app-surface: #171b26;
+  --color-app-surface-2: #1c1f2a;
+  --color-app-border: rgba(255, 255, 255, 0.07);
+  --color-app-border-soft: rgba(255, 255, 255, 0.04);
+  --color-app-text: #f8fafc;
+  --color-app-text-dim: #94a3b8;
+  /* 4,5:1 mínimo (AA) sobre los tres fondos. */
+  --color-app-text-faint: #7c8798;
+  --color-app-accent: #3b82f6;
+  --color-app-accent-soft: rgba(59, 130, 246, 0.15);
+  --color-app-cyan: #06b6d4;
+  --color-app-pos: #10b981;
+  --color-app-pos-soft: rgba(16, 185, 129, 0.12);
+  --color-app-neg: #ef4444;
+  --color-app-neg-soft: rgba(239, 68, 68, 0.12);
+  --color-app-warn: #f59e0b;
+  --color-app-violet: #8b5cf6;
+  --color-app-slate: #6b7280;
 
-  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  --radius-sm: 0.25rem;
+  --radius-DEFAULT: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+
+  --font-display: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-ui: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
 
   --animate-rise: rise 2.6s ease-in-out infinite;
   --animate-spin-slow: spin 7s linear infinite;
@@ -63,6 +70,7 @@ body {
   background: var(--color-app-bg);
   color: var(--color-app-text);
   font-family: var(--font-ui);
+  font-feature-settings: "tnum" 1, "cv11" 1;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: contain;
 }
@@ -70,7 +78,7 @@ body {
 /* Foco visible en cualquier control: antes sólo se veía el outline por defecto del
    navegador, que el reset de Tailwind quita. */
 :focus-visible {
-  outline: 2px solid var(--color-app-gold);
+  outline: 2px solid var(--color-app-accent);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -105,7 +113,7 @@ body {
 }
 
 .salud-score {
-  font-size: 56px;
+  font-size: var(--text-display);
   font-weight: 600;
   color: var(--color-app-text);
   line-height: 1;
@@ -113,26 +121,26 @@ body {
 }
 
 .salud-score-divider {
-  font-size: 22px;
+  font-size: var(--text-metric);
   color: var(--color-app-text-dim);
   margin-left: 0.25rem;
 }
 
 .dimension-name {
-  font-size: 13px;
+  font-size: var(--text-body);
   font-weight: 600;
   color: var(--color-app-text);
 }
 
 .dimension-score {
-  font-size: 13px;
-  font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  font-size: var(--text-body);
+  font-family: var(--font-mono);
   font-weight: 600;
   color: var(--color-app-text-dim);
 }
 
 .dimension-detail {
-  font-size: 11px;
+  font-size: var(--text-label);
   color: var(--color-app-text-faint);
   line-height: 1.4;
   margin-top: 0.25rem;

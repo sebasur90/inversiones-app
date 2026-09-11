@@ -8,8 +8,8 @@ const ACCION_LABELS: Record<string, string> = {
 }
 
 const ACCION_CLASSES: Record<string, string> = {
-  comprar: 'bg-app-teal-soft text-app-teal',
-  vender: 'bg-app-coral-soft text-app-coral',
+  comprar: 'bg-app-pos-soft text-app-pos',
+  vender: 'bg-app-neg-soft text-app-neg',
   mantener: 'bg-app-surface-2 text-app-text-dim',
 }
 

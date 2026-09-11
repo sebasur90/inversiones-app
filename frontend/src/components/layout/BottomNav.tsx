@@ -18,9 +18,9 @@ const ITEMS: { to: string; label: string; icon: IconName }[] = [
 /** El color lo fija la alerta más grave, no la más numerosa: un stop-loss disparado entre
  *  cinco avisos de proximidad sigue siendo lo urgente. */
 function claseContador(conteo: ConteoAlertas): string {
-  if (conteo.criticas > 0) return 'bg-app-coral text-app-bg'
-  if (conteo.advertencias > 0) return 'bg-app-gold text-app-bg'
-  return 'bg-app-teal text-app-bg'
+  if (conteo.criticas > 0) return 'bg-app-neg text-app-bg'
+  if (conteo.advertencias > 0) return 'bg-app-accent text-app-bg'
+  return 'bg-app-pos text-app-bg'
 }
 
 export default function BottomNav() {
@@ -44,7 +44,7 @@ export default function BottomNav() {
             aria-label={alertas > 0 ? `${item.label}, ${alertas} alerta${alertas !== 1 ? 's' : ''} de precio` : undefined}
             className={({ isActive }) =>
               `flex-1 flex flex-col items-center justify-center gap-1 min-h-[44px] pb-2 text-label font-semibold ${
-                isActive ? 'text-app-gold' : 'text-app-text-dim'
+                isActive ? 'text-app-accent' : 'text-app-text-dim'
               }`
             }
           >

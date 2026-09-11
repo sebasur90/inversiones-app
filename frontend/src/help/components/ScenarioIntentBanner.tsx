@@ -9,8 +9,8 @@ export default function ScenarioIntentBanner({ variant, children }: ScenarioInte
   const isBefore = variant === 'antes'
   const icon = isBefore ? '🧪' : '✓'
   const title = isBefore ? '¿Qué estás haciendo?' : '¿Qué vas a obtener?'
-  const bgClass = isBefore ? 'bg-app-sky/10 border-app-sky/30' : 'bg-app-teal/10 border-app-teal/30'
-  const textColor = isBefore ? 'text-app-sky' : 'text-app-teal'
+  const bgClass = isBefore ? 'bg-app-sky/10 border-app-sky/30' : 'bg-app-pos/10 border-app-pos/30'
+  const textColor = isBefore ? 'text-app-sky' : 'text-app-pos'
 
   const defaultContent = isBefore
     ? 'Esto es una simulación de escenario. No es una predicción y no modifica tus inversiones reales.'

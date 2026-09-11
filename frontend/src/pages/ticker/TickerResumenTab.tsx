@@ -41,7 +41,7 @@ export default function TickerResumenTab({ position, cartera, monedaSeleccionada
       <div className="mt-3">
         <div className="font-mono text-metric-lg font-bold text-app-text tabular-nums">{position.precio_actual != null ? formatPrecio(position.precio_actual) : '—'}</div>
         {rendimiento != null && (
-          <span className={`inline-flex items-center gap-0.5 font-mono font-bold text-caption mt-1 tabular-nums ${positivo ? 'text-app-teal' : 'text-app-coral'}`}>
+          <span className={`inline-flex items-center gap-0.5 font-mono font-bold text-caption mt-1 tabular-nums ${positivo ? 'text-app-pos' : 'text-app-neg'}`}>
             <Icon name={positivo ? 'up' : 'down'} className="w-3 h-3" />
             {formatPctRatio(rendimiento)} desde promedio
           </span>
@@ -54,7 +54,7 @@ export default function TickerResumenTab({ position, cartera, monedaSeleccionada
         {precios.length > 0 && (
           <Sparkline
             data={precios.map(p => p.precio)}
-            color={positivo ? '#4fd1ae' : '#e2665a'}
+            color={positivo ? '#10b981' : '#ef4444'}
             className="w-full h-14 mt-2.5"
           />
         )}

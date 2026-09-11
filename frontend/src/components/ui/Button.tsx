@@ -10,10 +10,10 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANT_CLASSES: Record<Variant, string> = {
-  primary: 'bg-app-gold text-[#1a1406] font-bold',
+  primary: 'bg-app-accent text-white font-bold',
   outline: 'bg-app-surface border border-app-border text-app-text font-bold',
   ghost: 'bg-transparent text-app-text-dim font-semibold',
-  danger: 'bg-app-coral-soft text-app-coral font-bold',
+  danger: 'bg-app-neg-soft text-app-neg font-bold',
 }
 
 export default function Button({ variant = 'primary', icon, loading, children, className = '', disabled, ...rest }: Props) {

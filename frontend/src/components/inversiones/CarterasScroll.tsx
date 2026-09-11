@@ -37,7 +37,7 @@ export default function CarterasScroll({
             key={c.nombre}
             onClick={() => onSelect(c.nombre)}
             className={`shrink-0 w-[132px] text-left rounded-[14px] p-3 border transition-colors snap-center ${
-              seleccionada === c.nombre ? 'bg-app-gold-soft border-app-gold/40' : 'bg-app-surface border-app-border'
+              seleccionada === c.nombre ? 'bg-app-accent-soft border-app-accent/40' : 'bg-app-surface border-app-border'
             }`}
           >
             <div className="text-caption font-bold text-app-text-dim mb-1.5 truncate">{c.nombre}</div>
@@ -53,7 +53,7 @@ export default function CarterasScroll({
             <span
               key={c.nombre}
               className={`h-1.5 rounded-full transition-all ${
-                i === activeIndex ? 'w-4 bg-app-gold' : 'w-1.5 bg-app-border'
+                i === activeIndex ? 'w-4 bg-app-accent' : 'w-1.5 bg-app-border'
               }`}
             />
           ))}

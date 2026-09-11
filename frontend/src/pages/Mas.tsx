@@ -8,9 +8,9 @@ import { contarAlertasCompra } from '../utils/alertasPrecio'
 
 // Mismo criterio que `claseContador` de BottomNav: el color lo fija la alerta más grave.
 function claseContador(criticas: number, advertencias: number): string {
-  if (criticas > 0) return 'bg-app-coral text-app-bg'
-  if (advertencias > 0) return 'bg-app-gold text-app-bg'
-  return 'bg-app-teal text-app-bg'
+  if (criticas > 0) return 'bg-app-neg text-app-bg'
+  if (advertencias > 0) return 'bg-app-accent text-app-bg'
+  return 'bg-app-pos text-app-bg'
 }
 
 export default function Mas() {
@@ -39,9 +39,9 @@ export default function Mas() {
                   <button
                     key={item.to}
                     onClick={() => navigate(item.to)}
-                    className="flex items-center gap-3 text-left px-3.5 py-3 rounded-xl bg-app-surface-2 border border-app-border hover:border-app-gold/40 transition-colors"
+                    className="flex items-center gap-3 text-left px-3.5 py-3 rounded-xl bg-app-surface-2 border border-app-border hover:border-app-accent/40 transition-colors"
                   >
-                    <div className="w-9 h-9 rounded-lg bg-app-gold-soft text-app-gold flex items-center justify-center shrink-0">
+                    <div className="w-9 h-9 rounded-lg bg-app-accent-soft text-app-accent flex items-center justify-center shrink-0">
                       <Icon name={item.icon} className="w-[18px] h-[18px]" />
                     </div>
                     <div className="min-w-0 flex-1">

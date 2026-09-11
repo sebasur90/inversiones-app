@@ -19,7 +19,7 @@ export default function TickerHistoricoTab({ historico, monedaSeleccionada }: { 
           <h3 className="text-caption font-bold text-app-text mb-3">Precio histórico</h3>
           <Sparkline
             data={precios}
-            color={esCreciente ? '#4fd1ae' : '#e2665a'}
+            color={esCreciente ? '#10b981' : '#ef4444'}
             className="w-full h-20"
           />
         </Card>

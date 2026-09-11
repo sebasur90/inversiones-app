@@ -140,7 +140,7 @@ export default function ResultadoBacktest({ resultado, dsl }: { resultado: Backt
                 <tr key={i} className="border-t border-app-border-soft">
                   <td className="py-1.5 pr-2 font-mono whitespace-nowrap">{o.fecha_entrada}</td>
                   <td className="py-1.5 pr-2 font-mono whitespace-nowrap">{o.fecha_salida ?? (o.abierta ? 'Abierta' : '—')}</td>
-                  <td className={`py-1.5 pr-2 text-right font-mono tabular-nums ${o.retorno_neto_pct >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
+                  <td className={`py-1.5 pr-2 text-right font-mono tabular-nums ${o.retorno_neto_pct >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
                     {formatPctSigned(o.retorno_neto_pct)}
                   </td>
                   <td className="py-1.5 pr-2 text-app-text-dim">{etiquetaMotivo(o.motivo_salida)}</td>

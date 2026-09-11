@@ -27,7 +27,7 @@ export default function TourBienvenida() {
           {TOUR_BIENVENIDA.map((_, i) => (
             <span
               key={i}
-              className={`h-1.5 rounded-full transition-all ${i === paso ? 'w-5 bg-app-gold' : 'w-1.5 bg-app-border'}`}
+              className={`h-1.5 rounded-full transition-all ${i === paso ? 'w-5 bg-app-accent' : 'w-1.5 bg-app-border'}`}
             />
           ))}
         </div>

@@ -53,7 +53,7 @@ export default function TickerRiesgoTab({ riesgo }: { riesgo: TickerRiesgoOut })
             {riesgo.mejores_periodos.slice(0, 3).map((p, i) => (
               <div key={i} className="flex justify-between items-center py-2 px-2 bg-app-surface/50 rounded-[7px]">
                 <span className="text-label text-app-text-dim">{p.anio}-{String(p.mes).padStart(2, '0')}</span>
-                <span className={`font-mono font-bold text-label tabular-nums ${p.retorno >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
+                <span className={`font-mono font-bold text-label tabular-nums ${p.retorno >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
                   {formatPctRatio(p.retorno)}
                 </span>
               </div>
@@ -69,7 +69,7 @@ export default function TickerRiesgoTab({ riesgo }: { riesgo: TickerRiesgoOut })
             {riesgo.peores_periodos.slice(0, 3).map((p, i) => (
               <div key={i} className="flex justify-between items-center py-2 px-2 bg-app-surface/50 rounded-[7px]">
                 <span className="text-label text-app-text-dim">{p.anio}-{String(p.mes).padStart(2, '0')}</span>
-                <span className={`font-mono font-bold text-label tabular-nums ${p.retorno >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
+                <span className={`font-mono font-bold text-label tabular-nums ${p.retorno >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
                   {formatPctRatio(p.retorno)}
                 </span>
               </div>

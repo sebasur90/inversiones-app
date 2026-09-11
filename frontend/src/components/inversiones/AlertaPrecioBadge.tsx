@@ -5,9 +5,9 @@ import type { Severidad } from './SeverityBadge'
 // severidad "advertencia" hay que poder distinguir un stop-loss cercano de un objetivo
 // cercano, y "ATENCIÓN" a secas no lo dice.
 const SEVERIDAD_CLASSES: Record<Severidad, string> = {
-  critico: 'bg-app-coral-soft text-app-coral',
-  advertencia: 'bg-app-gold-soft text-app-gold',
-  info: 'bg-app-teal-soft text-app-teal',
+  critico: 'bg-app-neg-soft text-app-neg',
+  advertencia: 'bg-app-accent-soft text-app-accent',
+  info: 'bg-app-pos-soft text-app-pos',
 }
 
 const COMPACTO: Record<EstadoAlerta, string> = {

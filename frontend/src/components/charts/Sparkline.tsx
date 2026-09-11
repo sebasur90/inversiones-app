@@ -5,7 +5,7 @@ const H = 56
 
 export default function Sparkline({
   data,
-  color = '#d8b14a',
+  color = '#3b82f6',
   className = 'w-full h-14',
 }: {
   data: number[]

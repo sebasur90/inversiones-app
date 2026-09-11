@@ -9,7 +9,7 @@ function EstadoBadge({ estado }: { estado: string }) {
   const baseClasses = 'inline-block px-2 py-1 rounded text-label font-semibold'
   switch (estado) {
     case 'ok':
-      return <span className={`${baseClasses} bg-app-teal text-app-bg`}>OK</span>
+      return <span className={`${baseClasses} bg-app-pos text-app-bg`}>OK</span>
     case 'datos_insuficientes':
       return <span className={`${baseClasses} bg-app-text-faint text-app-bg`}>Insuficientes</span>
     case 'sin_benchmark':
@@ -50,7 +50,7 @@ export default function BenchmarkComparisonTable({ filas }: BenchmarkComparisonT
               </td>
               <td className="py-2.5 px-3 text-right font-mono">
                 {fila.estado === 'ok' && fila.delta_pp !== null ? (
-                  <span className={fila.delta_pp > 0 ? 'text-app-teal' : 'text-app-coral'}>
+                  <span className={fila.delta_pp > 0 ? 'text-app-pos' : 'text-app-neg'}>
                     {fila.delta_pp > 0 ? '+' : ''}{fila.delta_pp.toFixed(2)}pp
                   </span>
                 ) : (

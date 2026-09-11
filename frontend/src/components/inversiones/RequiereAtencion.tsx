@@ -19,9 +19,9 @@ function iconoDeEstado(estado: EstadoAlerta): IconName {
 }
 
 const FONDO_SEVERIDAD: Record<Severidad, string> = {
-  critico: 'bg-app-coral-soft text-app-coral',
-  advertencia: 'bg-app-gold-soft text-app-gold',
-  info: 'bg-app-teal-soft text-app-teal',
+  critico: 'bg-app-neg-soft text-app-neg',
+  advertencia: 'bg-app-accent-soft text-app-accent',
+  info: 'bg-app-pos-soft text-app-pos',
 }
 
 /**

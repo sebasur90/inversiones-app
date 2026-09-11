@@ -17,8 +17,8 @@ import InfoTooltip from '../help/components/InfoTooltip'
 import SkeletonPantalla from '../components/ui/Skeleton'
 import QueryBoundary from '../components/ui/QueryBoundary'
 
-const COLOR_CUPON = '#d8b14a'
-const COLOR_AMORT = '#5b8ba0'
+const COLOR_CUPON = '#3b82f6'
+const COLOR_AMORT = '#f59e0b'
 
 type Horizonte = '12' | '24' | '36'
 
@@ -29,9 +29,9 @@ const CONFIANZA_LABEL: Record<string, string> = {
 }
 
 const CONFIANZA_CLASE: Record<string, string> = {
-  alta: 'bg-app-teal/15 text-app-teal',
-  media: 'bg-app-gold-soft text-app-gold',
-  baja: 'bg-app-coral/15 text-app-coral',
+  alta: 'bg-app-pos/15 text-app-pos',
+  media: 'bg-app-accent-soft text-app-accent',
+  baja: 'bg-app-neg/15 text-app-neg',
 }
 
 const METODO_LABEL: Record<string, string> = {
@@ -132,30 +132,30 @@ export default function FlujoCaja() {
               <div className="text-caption font-semibold text-app-text mb-2">Cobros por mes</div>
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={chartData} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#223028" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1c1f2a" />
                   <XAxis
                     dataKey="periodo"
-                    stroke="#8ca39b"
-                    tick={{ fontSize: 9, fill: '#8ca39b' }}
+                    stroke="#94a3b8"
+                    tick={{ fontSize: 9, fill: '#94a3b8' }}
                     tickFormatter={mesLabel}
                     interval="preserveStartEnd"
                     minTickGap={12}
                   />
                   <YAxis
-                    stroke="#8ca39b"
-                    tick={{ fontSize: 10, fill: '#8ca39b' }}
+                    stroke="#94a3b8"
+                    tick={{ fontSize: 10, fill: '#94a3b8' }}
                     width={54}
                     tickFormatter={v => (esARS ? `$${(v / 1000).toFixed(0)}k` : `U$S ${v}`)}
                   />
                   <Tooltip
-                    contentStyle={{ background: '#17221e', border: '1px solid #223028', borderRadius: 10, fontSize: 12 }}
-                    labelStyle={{ color: '#edf2ef' }}
+                    contentStyle={{ background: '#171b26', border: '1px solid #1c1f2a', borderRadius: 10, fontSize: 12 }}
+                    labelStyle={{ color: '#f8fafc' }}
                     cursor={{ fill: 'rgba(255,255,255,0.04)' }}
                     labelFormatter={(v: string) => dayjs(`${v}-01`).format('MMMM YYYY')}
                     formatter={(value: number, name: string) => [fmt(value), name === 'cupones' ? 'Cupones' : 'Amortizaciones']}
                   />
                   <Legend
-                    wrapperStyle={{ fontSize: 11, color: '#8ca39b', paddingTop: 8 }}
+                    wrapperStyle={{ fontSize: 11, color: '#94a3b8', paddingTop: 8 }}
                     formatter={(v: string) => (v === 'cupones' ? 'Cupones' : 'Amortizaciones')}
                   />
                   <Bar dataKey="cupones" stackId="a" fill={COLOR_CUPON} />

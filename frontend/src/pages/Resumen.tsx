@@ -126,12 +126,12 @@ export default function Resumen() {
           {/* Simulador de escenarios */}
           <button
             onClick={() => navigate('/simulador')}
-            className="w-full text-left bg-app-surface border border-app-border rounded-2xl p-3.5 mb-4 mt-5 hover:border-app-gold/50 transition-colors"
+            className="w-full text-left bg-app-surface border border-app-border rounded-2xl p-3.5 mb-4 mt-5 hover:border-app-accent/50 transition-colors"
           >
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-caption font-semibold text-app-text">¿Qué pasaría si...?</div>
-                <div className="text-label text-app-text-secondary mt-0.5">Simula escenarios sin tocar la cartera</div>
+                <div className="text-label text-app-text-dim mt-0.5">Simula escenarios sin tocar la cartera</div>
               </div>
               <Icon name="chevron" className="w-4 h-4 text-app-text-dim" />
             </div>

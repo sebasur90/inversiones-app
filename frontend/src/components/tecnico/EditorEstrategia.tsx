@@ -194,7 +194,7 @@ function BloqueCondiciones({
       </div>
       <button
         onClick={() => onCambiarFilas([...filas, filaVacia()])}
-        className="mt-2 inline-flex items-center gap-1 text-label font-semibold text-app-gold"
+        className="mt-2 inline-flex items-center gap-1 text-label font-semibold text-app-accent"
       >
         <Icon name="plus" className="w-3 h-3" /> Agregar condición
       </button>
@@ -250,7 +250,7 @@ export default function EditorEstrategia({
   return (
     <div className="flex flex-col gap-3">
       {erroresValidacion && erroresValidacion.length > 0 && (
-        <div className="bg-app-coral-soft border border-app-coral/40 rounded-xl px-3 py-2 text-caption text-app-coral">
+        <div className="bg-app-neg-soft border border-app-neg/40 rounded-xl px-3 py-2 text-caption text-app-neg">
           {erroresValidacion.map((e, i) => <div key={i}>{e}</div>)}
         </div>
       )}

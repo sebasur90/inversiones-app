@@ -67,25 +67,25 @@ export default function TickerRendimientoTab({ performance, position, monedaSele
             <tbody>
               <tr className="border-b border-app-border/50">
                 <td className="py-2 px-2 text-app-text font-semibold">USD</td>
-                <td className={`text-right py-2 px-2 font-mono font-bold tabular-nums ${performance.realizado_usd >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
+                <td className={`text-right py-2 px-2 font-mono font-bold tabular-nums ${performance.realizado_usd >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
                   {formatUSD(performance.realizado_usd)}
                 </td>
-                <td className={`text-right py-2 px-2 font-mono font-bold tabular-nums ${toneFor(performance.no_realizado_usd) === 'pos' ? 'text-app-teal' : toneFor(performance.no_realizado_usd) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
+                <td className={`text-right py-2 px-2 font-mono font-bold tabular-nums ${toneFor(performance.no_realizado_usd) === 'pos' ? 'text-app-pos' : toneFor(performance.no_realizado_usd) === 'neg' ? 'text-app-neg' : 'text-app-text'}`}>
                   {performance.no_realizado_usd != null ? formatUSD(performance.no_realizado_usd) : '—'}
                 </td>
-                <td className={`text-right py-2 px-2 font-mono font-bold tabular-nums ${toneFor(performance.total_usd) === 'pos' ? 'text-app-teal' : toneFor(performance.total_usd) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
+                <td className={`text-right py-2 px-2 font-mono font-bold tabular-nums ${toneFor(performance.total_usd) === 'pos' ? 'text-app-pos' : toneFor(performance.total_usd) === 'neg' ? 'text-app-neg' : 'text-app-text'}`}>
                   {formatUSD(performance.total_usd)}
                 </td>
               </tr>
               <tr className="border-b border-app-border/50">
                 <td className="py-2 px-2 text-app-text font-semibold">ARS</td>
-                <td className={`text-right py-2 px-2 font-mono font-bold tabular-nums ${performance.realizado_ars >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
+                <td className={`text-right py-2 px-2 font-mono font-bold tabular-nums ${performance.realizado_ars >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
                   {formatARS(performance.realizado_ars)}
                 </td>
-                <td className={`text-right py-2 px-2 font-mono font-bold tabular-nums ${toneFor(performance.no_realizado_ars) === 'pos' ? 'text-app-teal' : toneFor(performance.no_realizado_ars) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
+                <td className={`text-right py-2 px-2 font-mono font-bold tabular-nums ${toneFor(performance.no_realizado_ars) === 'pos' ? 'text-app-pos' : toneFor(performance.no_realizado_ars) === 'neg' ? 'text-app-neg' : 'text-app-text'}`}>
                   {performance.no_realizado_ars != null ? formatARS(performance.no_realizado_ars) : '—'}
                 </td>
-                <td className={`text-right py-2 px-2 font-mono font-bold tabular-nums ${toneFor(performance.total_ars) === 'pos' ? 'text-app-teal' : toneFor(performance.total_ars) === 'neg' ? 'text-app-coral' : 'text-app-text'}`}>
+                <td className={`text-right py-2 px-2 font-mono font-bold tabular-nums ${toneFor(performance.total_ars) === 'pos' ? 'text-app-pos' : toneFor(performance.total_ars) === 'neg' ? 'text-app-neg' : 'text-app-text'}`}>
                   {performance.total_ars != null ? formatARS(performance.total_ars) : '—'}
                 </td>
               </tr>
@@ -94,7 +94,7 @@ export default function TickerRendimientoTab({ performance, position, monedaSele
                   <td className="py-2 px-2 text-app-text font-semibold">ARS Real</td>
                   <td className="text-right py-2 px-2 text-app-text-dim">—</td>
                   <td className="text-right py-2 px-2 text-app-text-dim">—</td>
-                  <td className={`text-right py-2 px-2 font-mono font-bold tabular-nums ${position.rendimiento_simple_ars_real >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
+                  <td className={`text-right py-2 px-2 font-mono font-bold tabular-nums ${position.rendimiento_simple_ars_real >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
                     {formatPctRatio(position.rendimiento_simple_ars_real)}
                   </td>
                 </tr>

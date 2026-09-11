@@ -14,8 +14,8 @@ interface PerformanceCompareChartProps {
 }
 
 const COLORS = [
-  '#4fd1ae', '#d8b14a', '#e2665a', '#5b8ba0', '#9c7aa0', '#7e9c90',
-  '#3fb599', '#c9a53a', '#c9544a', '#4a7688',
+  '#10b981', '#3b82f6', '#ef4444', '#f59e0b', '#8b5cf6', '#6b7280',
+  '#34d399', '#60a5fa', '#f87171', '#fbbf24',
 ]
 
 export default function PerformanceCompareChart({ serie }: PerformanceCompareChartProps) {
@@ -37,21 +37,21 @@ export default function PerformanceCompareChart({ serie }: PerformanceCompareCha
         data={serie}
         margin={{ top: 5, right: 30, left: 0, bottom: 5 }}
       >
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(139, 153, 166, 0.2)" />
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.2)" />
         <XAxis
           dataKey="fecha"
-          tick={{ fontSize: 11, fill: 'rgba(139, 153, 166, 0.6)' }}
+          tick={{ fontSize: 11, fill: 'rgba(148, 163, 184, 0.6)' }}
         />
         <YAxis
-          tick={{ fontSize: 11, fill: 'rgba(139, 153, 166, 0.6)' }}
+          tick={{ fontSize: 11, fill: 'rgba(148, 163, 184, 0.6)' }}
         />
         <Tooltip
           contentStyle={{
-            backgroundColor: 'rgba(28, 38, 51, 0.95)',
-            border: '1px solid rgba(139, 153, 166, 0.3)',
+            backgroundColor: 'rgba(23, 27, 38, 0.95)',
+            border: '1px solid rgba(148, 163, 184, 0.3)',
             borderRadius: '8px',
           }}
-          labelStyle={{ color: 'rgba(139, 153, 166, 0.8)' }}
+          labelStyle={{ color: 'rgba(148, 163, 184, 0.8)' }}
           formatter={(value: any) => typeof value === 'number' ? value.toFixed(2) : String(value ?? '—')}
         />
         <Legend wrapperStyle={{ paddingTop: '16px' }} />

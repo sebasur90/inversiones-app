@@ -139,7 +139,7 @@ export default function AnalisisTecnico() {
           <button
             key={t.ticker} onClick={() => setTickerSel(t.ticker)}
             className={`shrink-0 font-semibold text-caption px-3 py-1.5 rounded-[10px] border transition-colors ${
-              t.ticker === ticker ? 'bg-app-gold-soft border-app-gold text-app-gold' : 'bg-app-surface border-app-border text-app-text-dim'
+              t.ticker === ticker ? 'bg-app-accent-soft border-app-accent text-app-accent' : 'bg-app-surface border-app-border text-app-text-dim'
             }`}
           >
             {t.ticker}
@@ -499,7 +499,7 @@ function SeccionEstrategias({
                         : undefined}
                       className={`font-semibold text-caption px-2.5 py-1.5 rounded-[10px] border transition-colors ${
                         presetActual === p.nombre && estrategiaActualId === null
-                          ? 'border-app-gold text-app-gold bg-app-gold-soft'
+                          ? 'border-app-accent text-app-accent bg-app-accent-soft'
                           : 'border-app-border text-app-text-dim bg-app-surface'
                       }`}
                     >
@@ -528,10 +528,10 @@ function SeccionEstrategias({
                 <div
                   key={e.id}
                   className={`flex items-center gap-1.5 rounded-[10px] border px-2.5 py-1.5 ${
-                    estrategiaActualId === e.id ? 'border-app-gold bg-app-gold-soft' : 'border-app-border bg-app-surface'
+                    estrategiaActualId === e.id ? 'border-app-accent bg-app-accent-soft' : 'border-app-border bg-app-surface'
                   }`}
                 >
-                  <button onClick={() => cargarGuardada(e)} className={`font-semibold text-caption ${estrategiaActualId === e.id ? 'text-app-gold' : 'text-app-text-dim'}`}>
+                  <button onClick={() => cargarGuardada(e)} className={`font-semibold text-caption ${estrategiaActualId === e.id ? 'text-app-accent' : 'text-app-text-dim'}`}>
                     {e.nombre}
                     {e.variante === 'subyacente' && <span className="ml-1 text-label text-app-text-faint">· USD</span>}
                   </button>
@@ -546,7 +546,7 @@ function SeccionEstrategias({
       </div>
 
       {avisoImport && (
-        <div className="bg-app-gold-soft border border-app-gold/40 rounded-xl px-3 py-2 text-caption text-app-text-dim">
+        <div className="bg-app-accent-soft border border-app-accent/40 rounded-xl px-3 py-2 text-caption text-app-text-dim">
           {avisoImport}
         </div>
       )}

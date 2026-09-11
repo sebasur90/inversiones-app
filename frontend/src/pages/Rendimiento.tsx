@@ -19,7 +19,7 @@ import QueryBoundary from '../components/ui/QueryBoundary'
 
 function toneClass(v: number | null | undefined): string {
   if (v == null) return 'text-app-text'
-  return v >= 0 ? 'text-app-teal' : 'text-app-coral'
+  return v >= 0 ? 'text-app-pos' : 'text-app-neg'
 }
 
 function toneFor(v: number | null | undefined): 'pos' | 'neg' | undefined {
@@ -145,7 +145,7 @@ export default function Rendimiento() {
                   <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">
                     Efecto dólar
                   </div>
-                  <div className={`font-mono text-strong font-bold tabular-nums mb-2 ${toneFor(descomposicionFx.efecto_fx_pct) === 'pos' ? 'text-app-teal' : 'text-app-coral'}`}>
+                  <div className={`font-mono text-strong font-bold tabular-nums mb-2 ${toneFor(descomposicionFx.efecto_fx_pct) === 'pos' ? 'text-app-pos' : 'text-app-neg'}`}>
                     {descomposicionFx.efecto_fx_pct !== null ? (descomposicionFx.efecto_fx_pct >= 0 ? '+' : '') + formatPctRatio(descomposicionFx.efecto_fx_pct) : 'N/A'}
                   </div>
                   <div className="text-label text-app-text-dim">
@@ -250,7 +250,7 @@ export default function Rendimiento() {
                 </div>
                 <div className="text-right">
                   <div className="text-label text-app-text-faint uppercase tracking-wide mb-0.5">Cartera vs Benchmark</div>
-                  <div className={`font-mono font-bold text-strong tabular-nums ${(perfRelativa.delta_pp ?? 0) >= 0 ? 'text-app-teal' : 'text-app-coral'}`}>
+                  <div className={`font-mono font-bold text-strong tabular-nums ${(perfRelativa.delta_pp ?? 0) >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
                     {(perfRelativa.delta_pp ?? 0) >= 0 ? '+' : ''}{perfRelativa.delta_pp?.toFixed(1)}%
                   </div>
                 </div>
