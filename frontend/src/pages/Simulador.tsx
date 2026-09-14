@@ -112,7 +112,7 @@ export default function Simulador() {
   // Cargar un escenario guardado como panel editable
   const handleCargarGuardado = (esc: Escenario) => {
     setEscenarios(prev => {
-      if (prev.length >= 6) return prev
+      if (prev.length >= 5) return prev
       return [...prev, { tipo_preset: 'personalizado', nombre: esc.nombre, parametros: esc.parametros }]
     })
   }
@@ -281,6 +281,11 @@ export default function Simulador() {
                   setEscenarios(updated)
                 }}
                 onChangeParam={(campo, valor) => handleChangeEscenario(idx, campo, valor)}
+                onChangeName={(nombre) => {
+                  const updated = [...escenarios]
+                  updated[idx] = { ...esc, nombre }
+                  setEscenarios(updated)
+                }}
                 onSave={() => handleGuardarEscenario(idx)}
                 tickersDisponibles={tickersDisponibles}
               />
@@ -353,7 +358,7 @@ export default function Simulador() {
                   </div>
                   <button
                     onClick={() => handleCargarGuardado(esc)}
-                    disabled={escenarios.length >= 6}
+                    disabled={escenarios.length >= 5}
                     className="text-label font-semibold text-app-accent disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Cargar
@@ -377,9 +382,9 @@ export default function Simulador() {
                 </div>
               ))}
             </div>
-            {escenarios.length >= 6 && (
+            {escenarios.length >= 5 && (
               <div className="text-label text-app-text-faint mt-2">
-                Máximo de 6 paneles de escenario. Quitá alguno para cargar otro.
+                Máximo de 5 paneles de escenario. Quitá alguno para cargar otro.
               </div>
             )}
           </Card>

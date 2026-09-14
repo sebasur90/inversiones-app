@@ -11,6 +11,7 @@ interface EscenarioConfigPanelProps {
   index: number
   onChangePreset: (tipo: string) => void
   onChangeParam: (campo: string, valor: any) => void
+  onChangeName: (nombre: string) => void
   onSave: () => void
   /** Tickers en cartera, para los overrides de variación por instrumento. */
   tickersDisponibles?: { ticker: string; nombre: string }[]
@@ -114,7 +115,6 @@ function VariacionPorInstrumento({
   )
 }
 
-const PRESETS = ['base', 'alcista', 'bajista', 'crisis', 'personalizado']
 const MODOS_DIVIDENDOS = ['reinvertir_total', 'reinvertir_parcial', 'retirar']
 
 export default function EscenarioConfigPanel({
@@ -122,6 +122,7 @@ export default function EscenarioConfigPanel({
   index,
   onChangePreset,
   onChangeParam,
+  onChangeName,
   onSave,
   tickersDisponibles = [],
 }: EscenarioConfigPanelProps) {
@@ -142,7 +143,7 @@ export default function EscenarioConfigPanel({
   } as EscenarioParamsIn
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // TBD: update nombre en escenario
+    onChangeName(e.target.value)
   }
 
   return (
@@ -164,7 +165,6 @@ export default function EscenarioConfigPanel({
         <Segmented
           value={escenario.tipo_preset}
           options={[
-            { label: 'Base', value: 'base' },
             { label: 'Alcista', value: 'alcista' },
             { label: 'Bajista', value: 'bajista' },
             { label: 'Crisis', value: 'crisis' },
@@ -184,7 +184,7 @@ export default function EscenarioConfigPanel({
             value={params.horizonte_meses}
             min={ESCENARIO_PARAM_LIMITS.horizonte_meses.min}
             max={ESCENARIO_PARAM_LIMITS.horizonte_meses.max}
-            onChange={(e) => onChangeParam('horizonte_meses', parseInt(e.target.value) || 0)}
+            onChange={(e) => onChangeParam('horizonte_meses', parseInt(e.target.value) || 1)}
             className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-accent/60 tabular-nums"
           />
         </div>
