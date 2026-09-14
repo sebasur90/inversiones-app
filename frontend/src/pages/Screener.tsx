@@ -16,25 +16,13 @@ import QueryBoundary from '../components/ui/QueryBoundary'
 import BotonExportarCsv from '../components/ui/BotonExportarCsv'
 import InfoTooltip from '../help/components/InfoTooltip'
 import { Icon } from '../components/icons/Icons'
-import { formatARS, formatUSD, formatPrecio, formatPct } from '../utils'
+import { formatPct } from '../utils'
+import GraficoFullscreen from '../components/tecnico/GraficoFullscreen'
+import DetalleDisparo, { MOTIVO_LABEL, ListaCondiciones, formatMoneda } from '../components/tecnico/DetalleDisparo'
 
 const CLAVE_UMBRAL = 'inversiones-screener-umbral-pct'
 const CLAVE_ESTRATEGIAS = 'inversiones-screener-estrategia-ids'
 const UMBRALES_PCT = [1, 2, 3, 5, 10] as const
-
-function formatMoneda(valor: number, moneda: string): string {
-  if (moneda === 'ARS') return formatARS(valor)
-  if (moneda === 'USD') return formatUSD(valor)
-  return formatPrecio(valor)
-}
-
-const MOTIVO_LABEL: Record<string, string> = {
-  entrada: 'Entrada',
-  regla_salida: 'Regla de salida',
-  stop_loss: 'Stop loss',
-  take_profit: 'Take profit',
-  trailing_stop: 'Trailing stop',
-}
 
 function claveFila(f: ScreenerFilaOut): string {
   return `${f.ticker}-${f.estrategia_id}-${f.motivo}`
@@ -69,6 +57,7 @@ export default function Screener() {
 
   const [expandida, setExpandida] = useState<string | null>(null)
   const [haEscaneado, setHaEscaneado] = useState(false)
+  const [detalle, setDetalle] = useState<ScreenerFilaOut | null>(null)
 
   const estrategiasQuery = useQuery({ queryKey: qk.de('estrategias'), queryFn: () => listarEstrategias() })
   const estrategias = estrategiasQuery.data ?? []
@@ -288,25 +277,14 @@ export default function Screener() {
                                 Posición abierta desde la entrada: <span className="font-mono font-bold text-app-text">{formatPct(f.retorno_abierta_pct)}</span>
                               </div>
                             )}
-                            {f.condiciones.length > 0 && (
-                              <div className="flex flex-col gap-1">
-                                <div className="text-label text-app-text-dim">
-                                  <InfoTooltip term="screener_condiciones" label="Condiciones" />
-                                </div>
-                                {f.condiciones.map((c, i) => (
-                                  <div key={i} className="flex items-center gap-1.5 text-label">
-                                    <Icon
-                                      name={c.cumple ? 'check' : 'close'}
-                                      className={`w-3 h-3 shrink-0 ${c.cumple ? 'text-app-pos' : 'text-app-text-faint'}`}
-                                    />
-                                    <span className="font-mono text-app-text-dim truncate">
-                                      {c.izq_etiqueta} {c.izq_valor != null && `(${formatPrecio(c.izq_valor)})`} {c.op} {c.der_etiqueta}
-                                      {c.der_valor != null && ` (${formatPrecio(c.der_valor)})`}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
+                            <ListaCondiciones condiciones={f.condiciones} />
+                            <Button
+                              variant="outline" onClick={() => setDetalle(f)}
+                              icon={<Icon name="trend" className="w-4 h-4" />}
+                              className="self-start"
+                            >
+                              Ver gráfico
+                            </Button>
                           </div>
                         )}
                       </div>
@@ -318,6 +296,18 @@ export default function Screener() {
           )}
         </QueryBoundary>
       )}
+
+      <GraficoFullscreen
+        open={detalle !== null} onClose={() => setDetalle(null)}
+        title={detalle ? `${detalle.ticker} · ${detalle.estrategia_nombre}` : ''}
+      >
+        {detalle && (
+          <DetalleDisparo
+            fila={detalle}
+            estrategia={estrategias.find(e => e.id === detalle.estrategia_id)}
+          />
+        )}
+      </GraficoFullscreen>
     </div>
   )
 }

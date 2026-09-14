@@ -17,6 +17,7 @@ export type AnalisisTecnicoHelpKey =
   | 'screener_dispara_ahora'
   | 'screener_motivo'
   | 'screener_condiciones'
+  | 'screener_grafico_gatillo'
 
 export const ANALISISTECNICO_HELP: Record<AnalisisTecnicoHelpKey, HelpContent> = {
   analisis_tecnico_titulo: {
@@ -117,5 +118,12 @@ export const ANALISISTECNICO_HELP: Record<AnalisisTecnicoHelpKey, HelpContent> =
     title: 'Desglose de condiciones',
     shortDescription: 'Cada línea es una condición de la regla que está por dispararse, con su valor actual: el tilde marca las que ya se cumplen y la cruz las que faltan.',
     howToInterpret: 'La distancia al disparo es el movimiento de precio que hace que se cumplan todas a la vez. Si ya están casi todas tildadas, suele bastar un movimiento chico.',
+  },
+  screener_grafico_gatillo: {
+    title: 'Gráfico del disparo',
+    shortDescription: 'La línea punteada horizontal es el precio gatillo: el nivel al que la estrategia dispararía. El conector vertical va del cierre de hoy a ese nivel.',
+    whyItMatters: 'Ver el gatillo apoyado en una media, un canal o un soporte da mucho más contexto que el número solo: no es lo mismo que el nivel esté a un tick de un cruce de medias que en el aire.',
+    limitations: 'El gráfico corre un backtest sobre una ventana de tiempo distinta a la que usó el screener para calcular la distancia: los indicadores recursivos (EMA, RSI, MACD, ATR) pueden diferir en decimales. La distancia, el precio gatillo y las condiciones que se muestran son siempre los del escaneo, no los recalculados acá.',
+    relatedTerms: ['screener_precio_gatillo', 'screener_distancia'],
   },
 }

@@ -5,7 +5,7 @@ import { useVentanaVisible } from './useVentanaVisible'
 import { useAnchoContenedor } from './useAnchoContenedor'
 import { manejadoresPuntero } from './crosshair'
 import { trazoDeSerie, valoresVisibles } from './trazo'
-import PanelPrecio, { type OverlayPrecio } from './PanelPrecio'
+import PanelPrecio, { type GatilloPrecio, type OverlayPrecio } from './PanelPrecio'
 import PanelIndicador from './PanelIndicador'
 import PanelVolumen from './PanelVolumen'
 import { ESPEC_POR_TIPO, claveIndicador } from './indicadoresConfig'
@@ -39,7 +39,8 @@ export default function GraficoBacktest({
   barras: barrasRaw, indicadoresSeries: indicadoresRaw, dslIndicadores, senales: senalesRaw,
   operaciones: operacionesRaw = [], primeraBarraEvaluable,
   curvaEquity: curvaEquityRaw, curvaBuyHold: curvaBuyHoldRaw,
-  indiceDesde = 0, moneda, tieneVelas, tieneVolumen, fullscreen = false, onToggleFullscreen,
+  indiceDesde = 0, moneda, tieneVelas, tieneVolumen, gatillo, mostrarEquity = true,
+  fullscreen = false, onToggleFullscreen,
 }: {
   barras: BarraOut[]
   indicadoresSeries: Record<string, Record<string, (number | null)[]>>
@@ -53,6 +54,12 @@ export default function GraficoBacktest({
   moneda?: string
   tieneVelas: boolean
   tieneVolumen: boolean
+  /** Nivel de disparo del screener a marcar sobre la última barra: ver `GatilloPrecio`. No se
+   * reindexa por `off` (no son índices de barra, son precios y la última barra). */
+  gatillo?: GatilloPrecio
+  /** Oculta la curva de rendimiento vs. buy & hold: el panel de "por qué puede disparar" del
+   * screener no corre un backtest para evaluar la estrategia, sólo para dibujar el gráfico. */
+  mostrarEquity?: boolean
   fullscreen?: boolean
   onToggleFullscreen?: () => void
 }) {
@@ -154,6 +161,12 @@ export default function GraficoBacktest({
             {ETIQUETA_MOTIVO[m] ?? m}
           </span>
         ))}
+        {gatillo && (
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block w-3 h-0.5 rounded border-t border-dashed" style={{ borderColor: COLOR_MOTIVO[gatillo.motivo] ?? (gatillo.tipo === 'compra' ? '#10b981' : '#ef4444') }} />
+            gatillo
+          </span>
+        )}
       </div>
 
       <div
@@ -163,6 +176,7 @@ export default function GraficoBacktest({
         <PanelPrecio
           barras={barras} escalaX={escalaX} alto={alto.precio} tieneVelas={tieneVelas} moneda={moneda}
           overlays={overlaysPrecio} senales={senales} operaciones={operaciones} primeraBarraEvaluable={pbe}
+          gatillo={gatillo}
           hoverIndex={hoverIndex} onHover={setHoverIndex}
         />
 
@@ -175,20 +189,22 @@ export default function GraficoBacktest({
           </div>
         ))}
 
-        <div className="mt-2">
-          <div className="flex items-center justify-between text-label text-app-text-faint px-1 mb-0.5">
-            <span>Rendimiento vs. buy &amp; hold (base 100)</span>
-            <span className="font-mono tabular-nums">
-              {equityHover != null
-                ? `Estrategia ${equityHover.toFixed(1)} · B&H ${buyHoldHover?.toFixed(1) ?? '—'}`
-                : ''}
-            </span>
+        {mostrarEquity && (
+          <div className="mt-2">
+            <div className="flex items-center justify-between text-label text-app-text-faint px-1 mb-0.5">
+              <span>Rendimiento vs. buy &amp; hold (base 100)</span>
+              <span className="font-mono tabular-nums">
+                {equityHover != null
+                  ? `Estrategia ${equityHover.toFixed(1)} · B&H ${buyHoldHover?.toFixed(1) ?? '—'}`
+                  : ''}
+              </span>
+            </div>
+            <PanelEquity
+              curvaEquity={curvaEquity} curvaBuyHold={curvaBuyHold} escalaX={escalaX} alto={alto.equity}
+              hoverIndex={hoverIndex} onHover={setHoverIndex}
+            />
           </div>
-          <PanelEquity
-            curvaEquity={curvaEquity} curvaBuyHold={curvaBuyHold} escalaX={escalaX} alto={alto.equity}
-            hoverIndex={hoverIndex} onHover={setHoverIndex}
-          />
-        </div>
+        )}
 
         {tieneVolumen && (
           <div className="mt-2">
