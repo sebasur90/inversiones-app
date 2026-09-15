@@ -48,7 +48,11 @@ export default function AportesChart({
           {montoObjetivo && (
             <ReferenceLine y={montoObjetivo} stroke="#10b981" strokeDasharray="6 3" label={{ value: 'Meta', fill: '#10b981', fontSize: 11 }} />
           )}
-          <Area type="monotone" dataKey="aportes_netos_acumulados" stroke="#3b82f6" strokeWidth={2} fill="url(#aportesFill)" dot={false} />
+          {/* dot={{ r: 0 }} en vez de `false`: con un solo punto en la curva (un único mes con
+              movimientos) Recharts ignora `dot={false}` y fuerza igual un punto visible
+              (Area.renderDots se llama si `dot || hasSinglePoint`), que queda superpuesto con el
+              Scatter de "valor actual". Forzar un dot invisible evita ese punto fantasma. */}
+          <Area type="monotone" dataKey="aportes_netos_acumulados" stroke="#3b82f6" strokeWidth={2} fill="url(#aportesFill)" dot={{ r: 0, fillOpacity: 0, strokeOpacity: 0 }} />
           <Scatter
             name="Valor actual (hoy)"
             dataKey="__valor_actual"

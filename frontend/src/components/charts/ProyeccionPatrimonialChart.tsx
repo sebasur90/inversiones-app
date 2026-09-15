@@ -138,6 +138,7 @@ export default function ProyeccionPatrimonialChart({
             strokeWidth={2.5}
             dot={false}
             fill="url(#realFill)"
+            connectNulls
             isAnimationActive={false}
           />
 
@@ -149,6 +150,7 @@ export default function ProyeccionPatrimonialChart({
             strokeWidth={1.5}
             strokeDasharray="4 3"
             dot={false}
+            connectNulls
             isAnimationActive={false}
           />
 
@@ -160,6 +162,7 @@ export default function ProyeccionPatrimonialChart({
             strokeWidth={2}
             strokeDasharray="4 3"
             dot={false}
+            connectNulls
             isAnimationActive={false}
           />
         </ComposedChart>
