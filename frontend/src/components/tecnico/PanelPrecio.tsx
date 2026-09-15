@@ -12,6 +12,17 @@ export interface OverlayPrecio {
   series: Record<string, (number | null)[]>
 }
 
+/** Nivel al que el screener calculó que una estrategia dispara, para marcarlo sobre el precio de
+ * la última barra. `precioActual`/`distanciaPct` vienen de la misma fila del screener (no se
+ * re-derivan del backtest, que puede correr sobre una ventana distinta): ver `DetalleDisparo`. */
+export interface GatilloPrecio {
+  precio: number
+  precioActual: number
+  distanciaPct: number
+  tipo: 'compra' | 'venta'
+  motivo: string
+}
+
 const COLOR_ALCISTA = '#10b981'
 const COLOR_BAJISTA = '#ef4444'
 const COLOR_PRECIO = '#3b82f6'
@@ -20,6 +31,8 @@ const COLOR_EJE = '#94a3b8'
 const COLOR_STOP = '#ef4444'
 const COLOR_TAKE = '#10b981'
 const COLOR_TRAILING = '#fbbf24'
+const COLOR_GATILLO_COMPRA = '#10b981'
+const COLOR_GATILLO_VENTA = '#ef4444'
 
 /** Salidas de un indicador de precio que NO están en la escala del precio (p.ej. Bollinger trae
  * `ancho_pct`/`pctb`, que son porcentajes u oscilan 0-1, junto con `media`/`superior`/`inferior`
@@ -42,7 +55,7 @@ function salidasGraficables(o: OverlayPrecio): [string, (number | null)[]][] {
  * motor de backtest y viajan en la respuesta: dibujarlos re-derivándolos acá daría una línea que
  * no es la que efectivamente disparó la salida. */
 export default function PanelPrecio({
-  barras, escalaX, alto, tieneVelas, overlays, senales, operaciones, primeraBarraEvaluable, moneda, hoverIndex, onHover,
+  barras, escalaX, alto, tieneVelas, overlays, senales, operaciones, primeraBarraEvaluable, moneda, gatillo, hoverIndex, onHover,
 }: {
   barras: BarraOut[]
   escalaX: EscalaX
@@ -53,6 +66,8 @@ export default function PanelPrecio({
   operaciones?: OperacionOut[]
   primeraBarraEvaluable?: number | null
   moneda?: string
+  /** Nivel de disparo del screener a marcar sobre la última barra (ver `GatilloPrecio`). */
+  gatillo?: GatilloPrecio
   hoverIndex: number | null
   onHover: (i: number | null) => void
 }) {
@@ -68,7 +83,9 @@ export default function PanelPrecio({
     : valoresVisibles(cierres, escalaX)
   const valoresOverlay = overlays.flatMap(o => salidasGraficables(o).flatMap(([, s]) => valoresVisibles(s, escalaX)))
   const valoresSenales = (senales ?? []).filter(s => escalaX.visible(s.indice)).map(s => s.precio)
-  const todos = [...valoresBase, ...valoresOverlay, ...valoresSenales]
+  const ultimaBarraVisible = escalaX.visible(barras.length - 1)
+  const valoresGatillo = gatillo && ultimaBarraVisible ? [gatillo.precio, gatillo.precioActual] : []
+  const todos = [...valoresBase, ...valoresOverlay, ...valoresSenales, ...valoresGatillo]
   const minV = todos.length ? Math.min(...todos) : 0
   const maxV = todos.length ? Math.max(...todos) : 1
   const pad = (maxV - minV) * 0.08 || Math.abs(maxV) * 0.05 || 1
@@ -190,6 +207,41 @@ export default function PanelPrecio({
           </g>
         )
       })}
+
+      {/* Nivel de gatillo del screener: línea horizontal en el precio que hace disparar la
+          estrategia, conector desde el cierre de hoy y marcador del "hoy". Sólo si la última
+          barra está en la ventana visible: con zoom sobre un tramo viejo, meterlo en el dominio Y
+          aplastaría las velas contra el borde por un nivel que ni siquiera se ve. */}
+      {gatillo && ultimaBarraVisible && (() => {
+        const xHoy = escalaX.xDeIndice(ultimoIndice)
+        const yGatillo = yDeValor(gatillo.precio)
+        const yHoy = yDeValor(gatillo.precioActual)
+        const colorGatillo = COLOR_MOTIVO[gatillo.motivo] ?? (gatillo.tipo === 'compra' ? COLOR_GATILLO_COMPRA : COLOR_GATILLO_VENTA)
+        const etiqueta = `Gatillo ${gatillo.precio.toFixed(2)} (${gatillo.distanciaPct > 0 ? '+' : ''}${gatillo.distanciaPct.toFixed(1)}%)`
+        return (
+          <g>
+            <line
+              x1={0} x2={escalaX.ancho} y1={yGatillo} y2={yGatillo}
+              stroke={colorGatillo} strokeWidth={1.5} strokeDasharray="6 3" opacity={0.9}
+            >
+              <title>{etiqueta}</title>
+            </line>
+            <text
+              x={escalaX.ancho - 4} y={yGatillo - 4} fontSize={10} textAnchor="end"
+              fill={colorGatillo} className="font-mono font-bold"
+            >
+              {etiqueta}
+            </text>
+            <line
+              x1={xHoy} x2={xHoy} y1={yHoy} y2={yGatillo}
+              stroke={colorGatillo} strokeWidth={1.25} opacity={0.7}
+            />
+            <circle cx={xHoy} cy={yHoy} r={3.5} fill={colorGatillo}>
+              <title>{`Hoy: ${gatillo.precioActual.toFixed(2)}`}</title>
+            </circle>
+          </g>
+        )
+      })()}
 
       {(senales ?? []).filter(s => escalaX.visible(s.indice)).map((s, i) => {
         const x = escalaX.xDeIndice(s.indice)

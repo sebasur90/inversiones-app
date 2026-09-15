@@ -107,7 +107,7 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
       '"Dispara ahora" significa que la condición ya se cumple hoy, no que esté por cumplirse.',
     ],
     queHacer: ['Necesitás al menos una estrategia guardada en Análisis técnico antes de poder escanear.'],
-    terminos: ['screener_umbral', 'screener_dispara_ahora'],
+    terminos: ['screener_umbral', 'screener_dispara_ahora', 'screener_grafico_gatillo'],
   },
 
   '/movimientos': {
