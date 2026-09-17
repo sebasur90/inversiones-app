@@ -48,8 +48,9 @@ inversiones-app/
 │       ├── Rebalanceo            # Opcional: % objetivo de asignación
 │       ├── Benchmarks            # Opcional: series de benchmarks (además de los automáticos)
 │       ├── Configuracion         # Opcional: benchmark/pesos objetivo por cartera
-│       ├── Tipos de Cambio       # Opcional: CER/MEP dedicados (Fecha, Tipo, Valor)
-│       └── Watchlist             # Opcional: instrumentos a seguir, ver "Watchlist" más abajo
+│       └── Tipos de Cambio       # Opcional: CER/MEP dedicados (Fecha, Tipo, Valor)
+├── catalogos/
+│   └── iol_catalogo.json         # Catálogo de símbolos de IOL, para la Watchlist (ver más abajo)
 ├── credentials/
 │   ├── google-service-account.json  # Para modo Google Sheets
 │   └── iol.json                     # Opcional: API de IOL (ver "Precios: IOL" más abajo)
@@ -125,9 +126,10 @@ iol > sheet > api
 
 **Cupo mensual**: la API de IOL bonifica 25.000 llamadas por mes calendario; pasado eso cobra por
 bloque adicional. Como los paneles traen docenas de símbolos por llamada, un sync típico gasta
-~8 llamadas (1 token + ~7 paneles) en régimen normal; mientras hay historia pendiente de bajar
-suma hasta 15 llamadas de backfill de valuación (`fetch_backfill_iol`) más 8 de backfill OHLCV de
-watchlist (`fetch_backfill_ohlcv_watchlist`) — pico de ~31 por corrida. El contador (tabla
+~10 llamadas (1 token + ~9 paneles) en régimen normal; mientras hay historia pendiente de bajar
+suma hasta 15 llamadas de backfill de valuación (`fetch_backfill_iol`), 8 de backfill OHLCV de
+watchlist (`fetch_backfill_ohlcv_watchlist`) y hasta 20 de cotización suelta de símbolos de la
+watchlist que los paneles no cubren (`fetch_precios_watchlist_catalogo`) — pico de ~53 por corrida. El contador (tabla
 `estado_api_iol`, persistido en el volumen `backend_data`) corta las llamadas a IOL al llegar a
 `IOL_LIMITE_MENSUAL` (default 22.000, ~12% de colchón bajo el límite real) y cae a data912 por el
 resto del mes. `IOL_ENABLED=false` apaga sólo IOL sin tocar data912/analisistecnico.
@@ -198,38 +200,73 @@ cada ticker en la app, junto con el % que falta para alcanzarlos.
 
 ## Watchlist
 
-La pestaña opcional `Watchlist` sirve para seguir instrumentos que **todavía no están en
-cartera** (no tienen movimientos) y que se avise cuando el precio se acerca a un precio de
-compra. Debe coincidir exactamente en el Google Sheet y en `sheet_local/sheet_inversiones.xlsx`:
+Sirve para seguir instrumentos que **todavía no están en cartera** (no tienen movimientos) y que la
+app avise cuando el precio se acerca a un precio de compra.
 
-| Columna | Valores | Significado |
-|---|---|---|
-| `Ticker` | texto, requerido | El único campo obligatorio junto con `Objetivo`. |
-| `Nombre` | texto | Nombre a mostrar; si falta, se usa el Ticker. |
-| `Tipo Instrumento` | texto libre (`Acción`, `CEDEAR`, `Bono`, `ON`, etc.) | Determina si se le busca precio automático (IOL/data912) y en qué familia. |
-| `Mercado` | texto | Sólo descriptivo. |
-| `Moneda` | `ARS` o `USD` | En qué unidad se muestra el precio; si falta o es inválida, se asume `ARS`. |
-| `País` / `Sector` | texto | Sólo descriptivos. |
-| `Objetivo` | número | El precio al que se quiere comprar. |
+**No sale del Sheet.** Se gestiona desde la propia pantalla ("Más" → "Watchlist"): se toca
+"Agregar", se busca el instrumento en el catálogo de IOL —con filtro por familia: acción, CEDEAR,
+bono, ON, letra o FCI—, la app le baja el último precio en el acto y se le fija el precio objetivo
+de compra. Tocando una fila se edita el objetivo, se anota una nota, se refresca el precio o se deja
+de seguir. Si existía una pestaña `Watchlist` en el Sheet, se ignora.
 
-A diferencia de `Objetivo Modo/Valor` de `Instrumentos` (que es un precio de **venta**, se
-cruza hacia arriba), el `Objetivo` de la Watchlist es un precio de **compra**: la alerta se
-dispara cuando el precio de mercado baja hasta ese nivel o por debajo (misma mecánica que el
-stop-loss). El margen de aviso ("cerca") es el umbral global de Ajustes → Alertas de precio,
-el mismo que usan las posiciones — la Watchlist no tiene una columna propia para eso.
+### El catálogo de instrumentos
 
-Los precios automáticos de la Watchlist reusan el mismo motor que los de cartera (IOL primero,
-data912 como respaldo), con una diferencia: como estos tickers no tienen precios manuales
-previos en `Precios` para calibrar la escala (lámina de 100 VN vs. 1 VN), se usa el propio
-`Objetivo` como referencia. Si el objetivo está muy lejos del precio real de mercado (más de
-~2.5x en cualquier sentido), el factor de escala no se puede deducir y el precio no se carga
-(queda como issue `escala_desconocida` en Calidad de datos); se destraba cargando un precio
-manual de ese ticker en la pestaña `Precios`. Un ticker que sí está en cartera toma su precio
-de la serie normal (`precios_instrumento`), no de este mecanismo.
+El universo de tickers elegibles sale de `catalogos/iol_catalogo.json` (2.289 símbolos, versionado
+en el repo, montado read-only en `/app/catalogos`). Lo genera
+`docker compose exec backend python -m scripts.iol_catalogo` (~42 llamadas a IOL, ver su docstring),
+que escribe en `/app/data/iol_catalogo.json`; `services/catalogo_instrumentos.py` prefiere esa copia
+si existe, así que regenerarlo actualiza la app sin rebuildear. La ruta se puede forzar con
+`IOL_CATALOGO_FILE`.
 
-Si la pestaña no existe todavía, la sincronización no falla — simplemente no hay watchlist
-cargada. Se ve en "Más" → "Watchlist", con badge de alertas ahí y un bloque "Oportunidades de
-compra" en Resumen.
+El catálogo no trae un campo de tipo: el tipo se deriva del prefijo de `paneles`
+(`Acciones/CEDEARs` → `CEDEAR`, `ObligacionesNegociables/Todas` → `ON`, ...), con los strings que
+los clasificadores de `market_data/precios.py` ya reconocen. La `moneda` que declara **no es
+confiable** (hay ONs en dólares listadas como `AR$`): es sólo un default de display, y la moneda
+real la manda la fuente al cotizar.
+
+### Precios, sin calibración de escala
+
+`fetch_precios_watchlist_catalogo` toma la cotización de IOL **tal cual**, con factor 1.0: el
+símbolo viene del catálogo de IOL, así que ya está en la unidad correcta y no hay ninguna serie del
+Sheet contra la cual reconciliarlo. Tres intentos, del más barato al más caro: los paneles de IOL
+(memo compartido con la ruta de cartera, gratis), `Titulos/{simbolo}/Cotizacion` para lo que los
+paneles no traen (1 llamada, con tope de 20 por corrida) y data912 como respaldo público.
+
+Esto reemplaza al mecanismo anterior, que calibraba la escala contra el `Objetivo` del Sheet: un
+objetivo a más de ~2.5x del mercado dejaba al instrumento sin precio, y sin objetivo no se cotizaba
+nada.
+
+El backfill de **velas** sí sigue calibrando, porque no sale de IOL sino de `analisistecnico`, que
+para un CEDEAR puede devolver la acción del NASDAQ en USD (~11x). Su referencia es el último precio
+observado en `precios_watchlist` — un precio real, no una intención.
+
+Un ticker que además está en cartera toma su precio de la serie normal (`precios_instrumento`), no
+de este mecanismo.
+
+### Objetivo de compra
+
+A diferencia de `Objetivo Modo/Valor` de `Instrumentos` (que es un precio de **venta**, se cruza
+hacia arriba), el objetivo de la Watchlist es un precio de **compra**: la alerta se dispara cuando
+el precio de mercado baja hasta ese nivel o por debajo (misma mecánica que el stop-loss). Siempre es
+un valor fijo, nunca un porcentaje: acá no hay precio de compra previo del que partir. El margen de
+aviso ("cerca") es el umbral global de Ajustes → Alertas de precio, el mismo que usan las
+posiciones.
+
+Se ve en "Más" → "Watchlist", con badge de alertas ahí y un bloque "Oportunidades de compra" en
+Resumen. Sus tickers entran además al universo de Análisis técnico y del Screener (`origen:
+"watchlist"`).
+
+### Endpoints
+
+```
+GET    /api/inversiones/catalogo?q=&tipo=&limite=
+GET    /api/inversiones/watchlist
+POST   /api/inversiones/watchlist                  {ticker, objetivo?, notas?}   201 / 404 / 409
+PUT    /api/inversiones/watchlist/{ticker}         {objetivo?, notas?}
+DELETE /api/inversiones/watchlist/{ticker}
+POST   /api/inversiones/watchlist/{ticker}/precio  refresca uno
+POST   /api/inversiones/watchlist/precios          refresca todos
+```
 
 ## Rebalanceo de Cartera
 

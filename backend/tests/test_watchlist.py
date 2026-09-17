@@ -1,4 +1,7 @@
-"""Watchlist: parser de la pestaña, precios automáticos y cálculo de zona de compra."""
+"""Watchlist: precios automáticos sin calibración, sync desacoplado del Sheet y zona de compra.
+
+El CRUD (alta desde el catálogo, edición, baja) está en `test_watchlist_crud.py`.
+"""
 from datetime import date, timedelta
 
 from sqlalchemy import create_engine
@@ -11,10 +14,7 @@ from backend.app.database import (
 from backend.app.services.inversiones_sync import sync_from_sheet
 from backend.app.services.market_data import precios as market_data_precios
 from backend.app.services.sheets_client import TabRaw
-from backend.app.services.validation.reglas_watchlist import validar_watchlist
 from backend.app.services.watchlist_analytics import get_watchlist
-
-HEADER_WL = ["Ticker", "Nombre", "Tipo Instrumento", "Mercado", "Moneda", "País", "Sector", "Objetivo"]
 
 
 def _db():
@@ -23,67 +23,17 @@ def _db():
     return sessionmaker(bind=engine)()
 
 
-def _fila(ticker="AAPL", **extra):
-    fila = {
-        "Ticker": ticker, "Nombre": "Aple", "Tipo Instrumento": "CEDEAR", "Mercado": "Global",
-        "Moneda": "ARS", "País": "AR", "Sector": "Tecnologia", "Objetivo": "4900",
-    }
-    fila.update(extra)
-    return fila
+def _item(db, ticker="AAPL", objetivo=4900.0, tipo="CEDEAR"):
+    db.add(WatchlistItem(ticker=ticker, nombre="Aple", tipo_instrumento=tipo,
+                         mercado="BCBA", moneda="ARS", pais="argentina",
+                         objetivo=objetivo, agregado_en=date.today()))
+    db.commit()
 
 
-# ── Parser ────────────────────────────────────────────────────────────────────
+# ── Sync: la watchlist ya no sale del Sheet ───────────────────────────────────
 
-def test_validar_watchlist_fila_completa():
-    validos, issues = validar_watchlist([(2, _fila())])
-    assert issues == []
-    assert validos == [{
-        "ticker": "AAPL", "nombre": "Aple", "tipo_instrumento": "CEDEAR", "mercado": "Global",
-        "moneda": "ARS", "pais": "AR", "sector": "Tecnologia", "objetivo": 4900.0,
-    }]
-
-
-def test_validar_watchlist_objetivo_desde_excel_y_notacion_ars():
-    """Las pestañas opcionales se leen sin dtype=str: un 4900 del Excel llega como '4900.0'."""
-    validos, issues = validar_watchlist([
-        (2, _fila("AAPL", Objetivo="4900.0")),
-        (3, _fila("AMZN", Objetivo="2.900,50")),
-    ])
-    assert issues == []
-    assert [v["objetivo"] for v in validos] == [4900.0, 2900.5]
-
-
-def test_validar_watchlist_objetivo_invalido_es_salvage():
-    validos, issues = validar_watchlist([
-        (2, _fila("AAPL", Objetivo="")),
-        (3, _fila("AMZN", Objetivo="-10")),
-    ])
-    assert [i.regla for i in issues] == ["objetivo_watchlist_invalido"] * 2
-    assert all(i.severidad.value == "advertencia" for i in issues)
-    # La fila sobrevive, sin objetivo: se lista pero no genera alerta.
-    assert [(v["ticker"], v["objetivo"]) for v in validos] == [("AAPL", None), ("AMZN", None)]
-
-
-def test_validar_watchlist_moneda_invalida_cae_a_ars():
-    validos, issues = validar_watchlist([(2, _fila(Moneda="EUR"))])
-    assert [i.regla for i in issues] == ["moneda_invalida"]
-    assert validos[0]["moneda"] == "ARS"
-
-
-def test_validar_watchlist_ticker_vacio_o_duplicado_se_descarta():
-    validos, issues = validar_watchlist([
-        (2, _fila("")),
-        (3, _fila("AAPL")),
-        (4, _fila("AAPL")),
-    ])
-    assert [i.regla for i in issues] == ["ticker_vacio", "ticker_duplicado"]
-    assert all(i.severidad.value == "critico" for i in issues)
-    assert [v["ticker"] for v in validos] == ["AAPL"]
-
-
-# ── Sync ──────────────────────────────────────────────────────────────────────
-
-def _raw(watchlist_tab):
+def _raw():
+    """El Sheet sin pestaña `Watchlist`: ya no se lee, ni siquiera se pide."""
     return {
         "Instrumentos": TabRaw(presente=True, header=["Ticker", "Nombre", "Tipo Instrumento", "Mercado", "Moneda"], rows=[
             (2, {"Ticker": "AL30", "Nombre": "Bonar 30", "Tipo Instrumento": "Bono", "Mercado": "BYMA", "Moneda": "USD"}),
@@ -99,63 +49,45 @@ def _raw(watchlist_tab):
         "Benchmarks": TabRaw(presente=False, header=[], rows=[]),
         "Configuracion": TabRaw(presente=False, header=[], rows=[]),
         "Tipos de Cambio": TabRaw(presente=False, header=[], rows=[]),
-        "Watchlist": watchlist_tab,
     }
 
 
-def _sync_con(monkeypatch, db, watchlist_tab):
+def _sync(monkeypatch, db):
     import backend.app.services.inversiones_sync as sync_module
-    monkeypatch.setattr(sync_module, "fetch_sheet_data", lambda: _raw(watchlist_tab))
+    monkeypatch.setattr(sync_module, "fetch_sheet_data", lambda: _raw())
     return sync_from_sheet(db)
 
 
-def test_sync_persiste_watchlist(monkeypatch):
+def test_sync_no_borra_lo_que_cargo_el_usuario(monkeypatch):
+    """El DELETE+INSERT de la pestaña desapareció: el sync no puede tocar la lista."""
     db = _db()
-    _sync_con(monkeypatch, db, TabRaw(presente=True, header=HEADER_WL, rows=[
-        (2, _fila("AAPL")),
-        (3, _fila("AMZN", Nombre="Amazon", Objetivo="2900")),
-    ]))
-    guardados = {w.ticker: float(w.objetivo) for w in db.query(WatchlistItem).all()}
-    assert guardados == {"AAPL": 4900.0, "AMZN": 2900.0}
+    _item(db, "AAPL")
+    _sync(monkeypatch, db)
+    assert [w.ticker for w in db.query(WatchlistItem).all()] == ["AAPL"]
 
 
-def test_sync_watchlist_ausente_no_rompe(monkeypatch):
+def test_sync_no_reporta_issues_de_la_pestana_watchlist(monkeypatch):
+    """La pestaña dejó de existir para el sync: no puede faltar ni bloquearse."""
     db = _db()
-    result = _sync_con(monkeypatch, db, TabRaw(presente=False, header=[], rows=[]))
-    assert db.query(WatchlistItem).count() == 0
+    result = _sync(monkeypatch, db)
     assert not [i for i in result["issues"] if i["tab"] == "Watchlist"]
 
 
-def test_sync_watchlist_bloqueada_preserva_datos(monkeypatch):
-    """Con error de lectura, la tabla conserva lo anterior (aislamiento por pestaña)."""
+def test_sync_purga_precios_de_tickers_que_ya_no_se_siguen(monkeypatch):
     db = _db()
-    db.add(WatchlistItem(ticker="PREV", nombre="Previo", tipo_instrumento="CEDEAR",
-                         mercado="Global", moneda="ARS", objetivo=100))
-    db.add(PrecioWatchlist(ticker="PREV", fecha=date(2024, 1, 1), precio=120,
-                           moneda="ARS", fuente="api"))
-    db.commit()
-
-    result = _sync_con(monkeypatch, db, TabRaw(presente=True, header=HEADER_WL, rows=[],
-                                               error_lectura="boom"))
-    assert [w.ticker for w in db.query(WatchlistItem).all()] == ["PREV"]
-    assert db.query(PrecioWatchlist).count() == 1, "la purga no debe correr con la pestaña bloqueada"
-    assert any(i["regla"] == "lectura_fallo" and i["tab"] == "Watchlist" for i in result["issues"])
-
-
-def test_sync_purga_precios_de_tickers_que_salieron(monkeypatch):
-    db = _db()
+    _item(db, "AAPL")
     db.add(PrecioWatchlist(ticker="VIEJO", fecha=date(2024, 1, 1), precio=120,
                            moneda="ARS", fuente="api"))
     db.commit()
-    _sync_con(monkeypatch, db, TabRaw(presente=True, header=HEADER_WL, rows=[(2, _fila("AAPL"))]))
-    assert db.query(PrecioWatchlist).count() == 0
+    _sync(monkeypatch, db)
+    assert [p.ticker for p in db.query(PrecioWatchlist).all()] != ["VIEJO"]
 
 
-# ── Precios automáticos ───────────────────────────────────────────────────────
+# ── Precios automáticos: sin calibración de escala ────────────────────────────
 
-def _watchlist_dicts(objetivo=4900.0, ticker="AAPL"):
-    return [{"ticker": ticker, "nombre": "Aple", "tipo_instrumento": "CEDEAR", "mercado": "Global",
-             "moneda": "ARS", "pais": "AR", "sector": "Tecnologia", "objetivo": objetivo}]
+def _watchlist_dicts(objetivo=4900.0, ticker="AAPL", tipo="CEDEAR"):
+    return [{"ticker": ticker, "nombre": "Aple", "tipo_instrumento": tipo, "mercado": "BCBA",
+             "moneda": "ARS", "pais": "argentina", "sector": None, "objetivo": objetivo}]
 
 
 def _sin_iol(monkeypatch):
@@ -164,60 +96,169 @@ def _sin_iol(monkeypatch):
     monkeypatch.setattr(market_data_precios.iol_client, "fetch_precios_fci", lambda db: None)
 
 
-def test_precios_watchlist_calibra_contra_el_objetivo(monkeypatch):
-    """Sin precio manual en la pestaña Precios, la referencia de escala es el propio Objetivo."""
-    _sin_iol(monkeypatch)
-    monkeypatch.setattr(market_data_precios.data912, "fetch_precios_renta_variable",
-                        lambda: {"AAPL": 5300.0})
+def test_precios_watchlist_toma_el_precio_de_los_paneles_de_iol(monkeypatch):
+    """El camino barato: el símbolo está en la tanda de paneles que el sync ya pidió."""
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precios_paneles",
+                        lambda db: {"AAPL": (5300.0, "ARS")})
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precios_fci", lambda db: None)
     hoy = date(2026, 9, 3)
-    filas, issues = market_data_precios.fetch_precios_watchlist(
-        _watchlist_dicts(), [], db=None, hoy=hoy)
+    filas, issues = market_data_precios.fetch_precios_watchlist_catalogo(
+        _watchlist_dicts(), db=None, hoy=hoy)
 
-    assert filas == [{"fecha": hoy, "ticker": "AAPL", "precio": 5300.0, "moneda": "ARS", "fuente": "api"}]
-    assert not [i for i in issues if i.severidad.value != "info"]
+    assert filas == [{"fecha": hoy, "ticker": "AAPL", "precio": 5300.0, "moneda": "ARS", "fuente": "iol"}]
+    assert issues == []
 
 
-def test_precios_watchlist_prefiere_el_precio_manual_del_sheet(monkeypatch):
-    """Un precio real observado gana sobre el Objetivo, que es una intención."""
-    _sin_iol(monkeypatch)
-    # data912 cotiza por lámina de 100: el precio manual del Sheet fija el factor 1/100.
-    monkeypatch.setattr(market_data_precios.data912, "fetch_precios_renta_variable",
-                        lambda: {"AAPL": 530000.0})
-    hoy = date(2026, 9, 3)
-    precios_sheet = [{"ticker": "AAPL", "fecha": date(2026, 9, 1), "precio": 5100.0, "moneda": "ARS"}]
-    filas, _ = market_data_precios.fetch_precios_watchlist(
-        _watchlist_dicts(), precios_sheet, db=None, hoy=hoy)
+def test_precios_watchlist_no_calibra_contra_el_objetivo(monkeypatch):
+    """La regresión que motivó el cambio: un objetivo lejísimos del mercado ya no anula el precio.
+
+    Antes, un objetivo a 1/10 del mercado dejaba el ratio fuera de las ventanas de `_factor_escala`
+    y el instrumento quedaba sin precio (`escala_desconocida`). El símbolo ahora sale del catálogo
+    de IOL, así que la cotización se toma tal cual y el objetivo no interviene.
+    """
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precios_paneles",
+                        lambda db: {"AAPL": (49000.0, "ARS")})
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precios_fci", lambda db: None)
+    filas, issues = market_data_precios.fetch_precios_watchlist_catalogo(
+        _watchlist_dicts(objetivo=4900.0), db=None, hoy=date(2026, 9, 3))
+
+    assert filas[0]["precio"] == 49000.0
+    assert not [i for i in issues if i.regla == "escala_desconocida"]
+
+
+def test_precios_watchlist_sin_objetivo_igual_se_cotiza(monkeypatch):
+    """Agregar un instrumento y decidir el objetivo después es el flujo normal de la pantalla."""
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precios_paneles",
+                        lambda db: {"AAPL": (5300.0, "ARS")})
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precios_fci", lambda db: None)
+    filas, _ = market_data_precios.fetch_precios_watchlist_catalogo(
+        _watchlist_dicts(objetivo=None), db=None, hoy=date(2026, 9, 3))
 
     assert filas[0]["precio"] == 5300.0
 
 
-def test_precios_watchlist_objetivo_muy_lejos_no_carga(monkeypatch):
-    """Objetivo a 1/10 del mercado: el ratio no cae cerca de 1 ni de 100, no se adivina."""
-    _sin_iol(monkeypatch)
-    monkeypatch.setattr(market_data_precios.data912, "fetch_precios_renta_variable",
-                        lambda: {"AAPL": 49000.0})
-    filas, issues = market_data_precios.fetch_precios_watchlist(
-        _watchlist_dicts(objetivo=4900.0), [], db=None, hoy=date(2026, 9, 3))
+def test_precios_watchlist_cae_a_simbolo_suelto_si_los_paneles_no_lo_traen(monkeypatch):
+    """Las ONs y las letras no siempre están en los paneles: 1 llamada por símbolo, con tope."""
+    pedidos = []
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precios_paneles",
+                        lambda db: {"OTRO": (1.0, "ARS")})
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precios_fci", lambda db: None)
 
-    assert filas == []
-    escala = [i for i in issues if i.regla == "escala_desconocida"]
-    assert len(escala) == 1
-    assert escala[0].tab == "Watchlist (API)"
-    assert "pestaña Precios" in escala[0].impacto
+    def _suelto(db, simbolo):
+        pedidos.append(simbolo)
+        return (98.5, "USD")
+
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precio_simbolo", _suelto)
+    filas, _ = market_data_precios.fetch_precios_watchlist_catalogo(
+        _watchlist_dicts(ticker="MR36O", tipo="ON"), db=None, hoy=date(2026, 9, 3))
+
+    assert pedidos == ["MR36O"]
+    assert filas[0]["precio"] == 98.5
+    assert filas[0]["moneda"] == "USD", "la moneda la manda la fuente, no el catálogo"
 
 
-def test_precios_watchlist_sin_objetivo_no_se_cotiza(monkeypatch):
-    """Sin objetivo no hay referencia de escala; se reporta, no se inventa un factor."""
+def test_precios_watchlist_respeta_el_tope_de_simbolos_sueltos(monkeypatch):
+    """Lo que pasa el tope no se pide: se reintenta en la corrida siguiente."""
+    pedidos = []
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precios_paneles", lambda db: {})
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precios_fci", lambda db: None)
+    monkeypatch.setattr(market_data_precios.data912, "fetch_precios_renta_variable", lambda: None)
+
+    def _suelto(db, simbolo):
+        pedidos.append(simbolo)
+        return (10.0, "ARS")
+
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precio_simbolo", _suelto)
+    items = _watchlist_dicts(ticker="A") + _watchlist_dicts(ticker="B") + _watchlist_dicts(ticker="C")
+    filas, issues = market_data_precios.fetch_precios_watchlist_catalogo(
+        items, db=None, hoy=date(2026, 9, 3), max_simbolos_sueltos=2)
+
+    assert pedidos == ["A", "B"]
+    assert len(filas) == 2
+    assert [i.campo for i in issues if i.regla == "ticker_no_cotizado"] == ["C"]
+
+
+def test_el_tope_de_simbolos_sueltos_rota_entre_corridas(monkeypatch):
+    """El tope corta una lista ordenada por antigüedad del precio guardado, no el mismo prefijo
+    alfabético siempre: si no, la cola de la watchlist nunca llegaría a pedirse a IOL."""
+    db = _db()
+    for ticker, dias in (("A", 0), ("B", 10), ("C", None)):
+        db.add(WatchlistItem(ticker=ticker, nombre=ticker, tipo_instrumento="ON",
+                             mercado="BCBA", moneda="ARS", agregado_en=date.today()))
+        if dias is not None:
+            db.add(PrecioWatchlist(ticker=ticker, fecha=date.today() - timedelta(days=dias),
+                                   precio=100, moneda="ARS", fuente="iol"))
+    db.commit()
+
+    pedidos = []
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precios_paneles", lambda db_: {})
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precios_fci", lambda db_: None)
+    monkeypatch.setattr(market_data_precios.data912, "fetch_precios_renta_fija", lambda: None)
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precio_simbolo",
+                        lambda db_, s: pedidos.append(s) or (10.0, "ARS"))
+
+    items = [{"ticker": t, "tipo_instrumento": "ON", "moneda": "ARS"} for t in ("A", "B", "C")]
+    market_data_precios.fetch_precios_watchlist_catalogo(
+        items, db, hoy=date.today(), max_simbolos_sueltos=2)
+
+    # C nunca se cotizó, B tiene el precio más viejo: van antes que A, que se cotizó hoy.
+    assert pedidos == ["C", "B"]
+
+
+def test_el_que_queda_fuera_del_tope_no_se_reporta_como_no_cotizado(monkeypatch):
+    """Decir "IOL no lo cotiza" de un ticker al que no se le preguntó sería engañoso."""
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precios_paneles", lambda db: {})
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precios_fci", lambda db: None)
+    monkeypatch.setattr(market_data_precios.data912, "fetch_precios_renta_variable", lambda: None)
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precio_simbolo",
+                        lambda db, s: (10.0, "ARS"))
+
+    items = _watchlist_dicts(ticker="A") + _watchlist_dicts(ticker="B")
+    _, issues = market_data_precios.fetch_precios_watchlist_catalogo(
+        items, db=None, hoy=date(2026, 9, 3), max_simbolos_sueltos=1)
+
+    fuera = [i for i in issues if i.campo == "B"]
+    assert len(fuera) == 1
+    assert "fuera del cupo" in fuera[0].mensaje
+    assert "no lo cotiza" not in fuera[0].mensaje
+
+
+def test_solo_simbolo_suelto_no_baja_los_paneles(monkeypatch):
+    """El alta y el botón "Precio" cotizan uno solo: bajar los ~9 paneles costaría 9 llamadas."""
+    def _boom(db):
+        raise AssertionError("no debería pedir los paneles para un solo símbolo")
+
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precios_paneles", _boom)
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precios_fci", _boom)
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_precio_simbolo",
+                        lambda db, s: (5300.0, "ARS"))
+
+    filas, _ = market_data_precios.fetch_precios_watchlist_catalogo(
+        _watchlist_dicts(), db=None, hoy=date(2026, 9, 3), solo_simbolo_suelto=True)
+    assert filas[0]["precio"] == 5300.0
+
+
+def test_precios_watchlist_cae_a_data912_si_iol_no_responde(monkeypatch):
+    """Respaldo público: no gasta cupo y tampoco calibra."""
     _sin_iol(monkeypatch)
     monkeypatch.setattr(market_data_precios.data912, "fetch_precios_renta_variable",
                         lambda: {"AAPL": 5300.0})
-    filas, issues = market_data_precios.fetch_precios_watchlist(
-        _watchlist_dicts(objetivo=None), [], db=None, hoy=date(2026, 9, 3))
+    filas, _ = market_data_precios.fetch_precios_watchlist_catalogo(
+        _watchlist_dicts(), db=None, hoy=date(2026, 9, 3))
+
+    assert filas[0]["precio"] == 5300.0
+    assert filas[0]["fuente"] == "api"
+
+
+def test_precios_watchlist_reporta_el_que_nadie_cotiza(monkeypatch):
+    _sin_iol(monkeypatch)
+    monkeypatch.setattr(market_data_precios.data912, "fetch_precios_renta_variable", lambda: {})
+    filas, issues = market_data_precios.fetch_precios_watchlist_catalogo(
+        _watchlist_dicts(), db=None, hoy=date(2026, 9, 3))
 
     assert filas == []
-    # `iol_no_disponible` también sale porque `_sin_iol` apaga IOL (legítimo, no es lo que se
-    # está probando acá); lo que importa es que sin Objetivo no hay referencia de escala.
-    assert "sin_precio_para_calibrar" in [i.regla for i in issues]
+    assert [i.regla for i in issues] == ["ticker_no_cotizado"]
+    assert issues[0].tab == "Watchlist (API)"
 
 
 # ── Analytics ─────────────────────────────────────────────────────────────────

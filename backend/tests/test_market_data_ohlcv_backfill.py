@@ -18,8 +18,8 @@ def _px(ticker, precio, fecha=date(2026, 7, 27)):
     return {"ticker": ticker, "fecha": fecha, "precio": precio, "moneda": "ARS"}
 
 
-def _wl(ticker, objetivo=None, moneda="ARS"):
-    return {"ticker": ticker, "moneda": moneda, "objetivo": objetivo}
+def _wl(ticker, moneda="ARS"):
+    return {"ticker": ticker, "moneda": moneda, "objetivo": None}
 
 
 def _serie(*pares):
@@ -86,32 +86,31 @@ def test_precedencia_misma_fuente_close_only_nunca_pisa_velas():
 
 # ── fetch_backfill_ohlcv_watchlist ────────────────────────────────────────────
 
-def test_watchlist_ohlcv_referencia_sintetica_del_objetivo(monkeypatch):
+def test_watchlist_ohlcv_calibra_contra_el_precio_observado(monkeypatch):
+    """La referencia es el último precio de `PrecioWatchlist` (el que bajó la ruta live de IOL),
+    no el `Objetivo`: analisistecnico cotiza por lámina de 100 y hay que conciliar la unidad."""
     serie = _serie((date(2026, 1, 1), 270.0), (date(2026, 1, 2), 271.0))
     monkeypatch.setattr(analisistecnico, "fetch_historico_ohlcv", lambda t, d, h: serie)
 
     filas, issues = mdp.fetch_backfill_ohlcv_watchlist(
-        [_wl("GGAL", objetivo=2.70)], [], {}, object(), hoy=HOY,
+        [_wl("GGAL")], [_px("GGAL", 2.70)], {}, object(), hoy=HOY,
     )
     assert issues == []
     assert len(filas) == 2
     assert all(f["fuente"] == "api" for f in filas)
-    # factor ~0.01 (270 vs objetivo 2.70)
+    # factor ~0.01 (270 en la serie vs 2.70 observado)
     assert round(filas[0]["cierre"], 4) == 2.70
 
 
-def test_watchlist_ohlcv_precio_manual_gana_sobre_el_objetivo(monkeypatch):
+def test_watchlist_ohlcv_sin_precio_observado_no_carga_velas(monkeypatch):
+    """Sin una referencia observada no se adivina la escala: se espera a la próxima cotización."""
     serie = _serie((date(2026, 1, 1), 270.0))
     monkeypatch.setattr(analisistecnico, "fetch_historico_ohlcv", lambda t, d, h: serie)
 
-    # Objetivo mal cargado (escala rota) pero hay un precio manual real y consistente.
     filas, issues = mdp.fetch_backfill_ohlcv_watchlist(
-        [_wl("GGAL", objetivo=99999.0)],
-        [_px("GGAL", 2.70, fecha=date(2025, 12, 1))],
-        {}, object(), hoy=HOY,
+        [_wl("GGAL")], [], {}, object(), hoy=HOY,
     )
-    assert issues == []
-    assert round(filas[0]["cierre"], 4) == 2.70
+    assert filas == [] and issues == []
 
 
 def test_watchlist_ohlcv_escala_desconocida_advierte(monkeypatch):
@@ -119,7 +118,7 @@ def test_watchlist_ohlcv_escala_desconocida_advierte(monkeypatch):
     monkeypatch.setattr(analisistecnico, "fetch_historico_ohlcv", lambda t, d, h: serie)
 
     filas, issues = mdp.fetch_backfill_ohlcv_watchlist(
-        [_wl("GGAL", objetivo=7.0)], [], {}, object(), hoy=HOY,  # ratio ~38.6, fuera de ventana
+        [_wl("GGAL")], [_px("GGAL", 7.0)], {}, object(), hoy=HOY,  # ratio ~38.6, fuera de ventana
     )
     assert filas == []
     assert issues[0].regla == "escala_desconocida"
@@ -127,9 +126,8 @@ def test_watchlist_ohlcv_escala_desconocida_advierte(monkeypatch):
 
 
 def test_watchlist_ohlcv_reusa_factor_persistido_sin_recalibrar(monkeypatch):
-    """A1: con un factor ya persistido y una referencia manual más vieja que `factor_fecha`, se
-    reusa el factor guardado y NO se re-persiste la calibración (la referencia sintética del
-    Objetivo se fecha en `hoy`, así que recalibrar movería `factor_fecha` en cada sync)."""
+    """A1: con un factor ya persistido y una referencia observada más vieja que `factor_fecha`, se
+    reusa el factor guardado y NO se re-persiste la calibración."""
     serie = _serie((date(2026, 1, 1), 270.0))
     monkeypatch.setattr(analisistecnico, "fetch_historico_ohlcv", lambda t, d, h: serie)
     estado = {"GGAL": {"factor_escala": 0.01, "factor_fecha": date(2020, 1, 1)}}
@@ -146,7 +144,7 @@ def test_watchlist_ohlcv_reusa_factor_persistido_sin_recalibrar(monkeypatch):
 def test_watchlist_ohlcv_cota_de_cupo_iol(monkeypatch):
     """analisistecnico siempre falla (None): cada ticker consume una llamada a IOL, cotizada."""
     n = mdp._MAX_BACKFILL_OHLCV_POR_SYNC + 2
-    watchlist = [_wl(f"W{i}", objetivo=2.70) for i in range(n)]
+    watchlist = [_wl(f"W{i}") for i in range(n)]
     monkeypatch.setattr(analisistecnico, "fetch_historico_ohlcv", lambda t, d, h: None)
     llamadas_iol = []
 
@@ -157,7 +155,8 @@ def test_watchlist_ohlcv_cota_de_cupo_iol(monkeypatch):
     import backend.app.services.market_data.iol as iol_mod
     monkeypatch.setattr(iol_mod, "fetch_historico_ohlcv", _fake_iol)
 
-    filas, issues = mdp.fetch_backfill_ohlcv_watchlist(watchlist, [], {}, object(), hoy=HOY)
+    filas, issues = mdp.fetch_backfill_ohlcv_watchlist(
+        watchlist, [_px(w["ticker"], 2.70) for w in watchlist], {}, object(), hoy=HOY)
     assert len(llamadas_iol) == mdp._MAX_BACKFILL_OHLCV_POR_SYNC
 
 
@@ -168,7 +167,7 @@ def test_watchlist_ohlcv_sin_ninguna_fuente_marca_sin_serie_iol(monkeypatch):
 
     estado: dict = {}
     filas, issues = mdp.fetch_backfill_ohlcv_watchlist(
-        [_wl("GGAL", objetivo=2.70)], [], {}, object(), hoy=HOY, estado_por_ticker=estado,
+        [_wl("GGAL")], [_px("GGAL", 2.70)], {}, object(), hoy=HOY, estado_por_ticker=estado,
     )
     assert filas == []
     assert issues[0].regla == "sin_historico_ohlcv"
@@ -183,7 +182,7 @@ def test_watchlist_ohlcv_converge_no_vuelve_a_pedir(monkeypatch):
     monkeypatch.setattr(analisistecnico, "fetch_historico_ohlcv", _boom)
     piso = HOY - mdp._PISO_TECNICO
     filas, issues = mdp.fetch_backfill_ohlcv_watchlist(
-        [_wl("GGAL", objetivo=2.70)], [], {"GGAL": piso + timedelta(days=5)}, object(), hoy=HOY,
+        [_wl("GGAL")], [_px("GGAL", 2.70)], {"GGAL": piso + timedelta(days=5)}, object(), hoy=HOY,
     )
     assert filas == [] and issues == []
 
@@ -196,7 +195,7 @@ def test_watchlist_ohlcv_marca_completo_cuando_ya_no_baja_mas(monkeypatch):
 
     estado: dict = {}
     filas, issues = mdp.fetch_backfill_ohlcv_watchlist(
-        [_wl("GGAL", objetivo=2.70)], [], {"GGAL": ya}, object(),
+        [_wl("GGAL")], [_px("GGAL", 2.70)], {"GGAL": ya}, object(),
         hoy=HOY, estado_por_ticker=estado,
     )
     assert filas
@@ -279,7 +278,7 @@ def test_watchlist_ohlcv_factor_persistido_no_se_aplica_a_una_serie_en_otra_unid
     estado = {"AMZN": {"factor_escala": 1.0, "factor_fecha": HOY}}
 
     filas, issues = mdp.fetch_backfill_ohlcv_watchlist(
-        [_wl("AMZN", objetivo=2900.0)], [], {}, object(), hoy=HOY, estado_por_ticker=estado,
+        [_wl("AMZN")], [_px("AMZN", 2900.0)], {}, object(), hoy=HOY, estado_por_ticker=estado,
     )
     assert filas == []
     assert issues[0].regla == "escala_desconocida"
@@ -287,9 +286,9 @@ def test_watchlist_ohlcv_factor_persistido_no_se_aplica_a_una_serie_en_otra_unid
 
 
 def test_watchlist_cedear_pide_simbolo_cedear_y_carga_velas(monkeypatch):
-    """Regresión: un CEDEAR con `Objetivo` en ARS. Pedir el ticker pelado a analisistecnico trae
-    la acción del NASDAQ en USD (~500) y el ratio contra el Objetivo en ARS (~26000) cae fuera de
-    las ventanas -> `escala_desconocida` y todas las velas descartadas. Con `TICKER:CEDEAR` la
+    """Regresión: un CEDEAR cotizado en ARS. Pedir el ticker pelado a analisistecnico trae la
+    acción del NASDAQ en USD (~500) y el ratio contra el precio observado en ARS (~26000) cae fuera
+    de las ventanas -> `escala_desconocida` y todas las velas descartadas. Con `TICKER:CEDEAR` la
     serie viene en ARS (~26000), el ratio vuelve a ~1 y carga sin tocar la calibración."""
     simbolos_pedidos = []
 
@@ -301,10 +300,10 @@ def test_watchlist_cedear_pide_simbolo_cedear_y_carga_velas(monkeypatch):
 
     monkeypatch.setattr(analisistecnico, "fetch_historico_ohlcv", _fake)
 
-    wl = [{"ticker": "MSFT", "moneda": "ARS", "objetivo": 26000.0, "tipo_instrumento": "CEDEAR"}]
+    wl = [{"ticker": "MSFT", "moneda": "ARS", "objetivo": None, "tipo_instrumento": "CEDEAR"}]
     estado: dict = {}
     filas, issues = mdp.fetch_backfill_ohlcv_watchlist(
-        wl, [], {}, object(), hoy=HOY, estado_por_ticker=estado,
+        wl, [_px("MSFT", 26000.0)], {}, object(), hoy=HOY, estado_por_ticker=estado,
     )
     assert "MSFT:CEDEAR" in simbolos_pedidos
     assert [i.regla for i in issues] == []
@@ -322,8 +321,8 @@ def test_watchlist_no_cedear_sigue_pidiendo_el_ticker_pelado(monkeypatch):
 
     monkeypatch.setattr(analisistecnico, "fetch_historico_ohlcv", _fake)
     mdp.fetch_backfill_ohlcv_watchlist(
-        [{"ticker": "GGAL", "moneda": "ARS", "objetivo": 2.70, "tipo_instrumento": "Accion"}],
-        [], {}, object(), hoy=HOY, estado_por_ticker={},
+        [{"ticker": "GGAL", "moneda": "ARS", "objetivo": None, "tipo_instrumento": "Accion"}],
+        [_px("GGAL", 2.70)], {}, object(), hoy=HOY, estado_por_ticker={},
     )
     assert simbolos_pedidos == ["GGAL"]
 
@@ -336,7 +335,7 @@ def test_watchlist_ohlcv_factor_persistido_se_aplica_si_la_serie_concuerda(monke
     estado = {"AMZN": {"factor_escala": 1.0, "factor_fecha": HOY}}
 
     filas, issues = mdp.fetch_backfill_ohlcv_watchlist(
-        [_wl("AMZN", objetivo=2900.0)], [], {}, object(), hoy=HOY, estado_por_ticker=estado,
+        [_wl("AMZN")], [_px("AMZN", 2900.0)], {}, object(), hoy=HOY, estado_por_ticker=estado,
     )
     assert issues == []
     assert round(filas[0]["cierre"], 2) == 2850.0

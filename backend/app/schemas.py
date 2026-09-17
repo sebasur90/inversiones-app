@@ -458,6 +458,46 @@ class WatchlistItemOut(BaseModel):
     pct_a_objetivo: Optional[float] = None
     en_zona: Optional[bool] = None
     en_cartera: bool = False
+    notas: Optional[str] = None
+    agregado_en: Optional[date] = None
+
+
+class WatchlistItemIn(BaseModel):
+    """Alta: `ticker` tiene que ser un símbolo del catálogo de IOL (404 si no está)."""
+    ticker: str
+    objetivo: Optional[float] = Field(default=None, gt=0)
+    notas: Optional[str] = Field(default=None, max_length=500)
+
+
+class WatchlistItemUpdate(BaseModel):
+    """Edición: sólo lo que controla el usuario. El resto lo define el catálogo."""
+    objetivo: Optional[float] = Field(default=None, gt=0)
+    notas: Optional[str] = Field(default=None, max_length=500)
+
+
+class RefrescoPreciosOut(BaseModel):
+    actualizados: int
+    issues: list[str] = []
+
+
+# --- Catálogo de instrumentos (IOL) ---
+
+class CatalogoInstrumentoOut(BaseModel):
+    simbolo: str
+    descripcion: str
+    tipo: str  # "Acción" | "CEDEAR" | "Bono" | "ON" | "Letra" | "FCI" | ""
+    moneda: str
+    mercado: str
+    paneles: list[str] = []
+
+
+class CatalogoBusquedaOut(BaseModel):
+    """`total` y `conteos_por_tipo` se calculan sobre todo lo que matchea la búsqueda, sin aplicar
+    el filtro de tipo ni el límite: son lo que los chips del frontend muestran como conteo."""
+    total: int
+    conteos_por_tipo: dict[str, int]
+    items: list[CatalogoInstrumentoOut]
+
 
 # --- Objetivos de Inversión ---
 

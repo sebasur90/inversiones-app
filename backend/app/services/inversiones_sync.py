@@ -8,16 +8,17 @@ from sqlalchemy.orm import Session
 from ..database import (
     InstrumentoInversion, MovimientoInversion, PrecioInstrumento, IndiceMercado,
     ObjetivoInversion, RebalanceoObjetivo, BenchmarkValor, ConfiguracionCartera,
-    SyncRun, SyncIssue, EstadoMarketDataTicker, WatchlistItem, PrecioWatchlist, BarraOHLCV
+    SyncRun, SyncIssue, EstadoMarketDataTicker, PrecioWatchlist, BarraOHLCV
 )
 from .sheets_client import fetch_sheet_data
 from .inversiones_analytics import get_carteras
 from .validation.types import ValidationIssue, Severity
 from .validation.reglas_estructura import validar_estructura_tab
-from .validation import reglas_instrumentos, reglas_movimientos, reglas_precios, reglas_objetivos, reglas_rebalanceo, reglas_benchmarks, reglas_configuracion, reglas_tipos_cambio, reglas_watchlist, reglas_cer
+from .validation import reglas_instrumentos, reglas_movimientos, reglas_precios, reglas_objetivos, reglas_rebalanceo, reglas_benchmarks, reglas_configuracion, reglas_tipos_cambio, reglas_cer
 from .validation.health_score import calcular_health_score
 from . import market_data
 from . import ohlcv_analytics
+from . import watchlist_analytics
 from .market_data import indices as market_data_indices
 from .market_data import precios as market_data_precios
 from .market_data import iol_auth
@@ -45,7 +46,6 @@ def _tab_actualmente_no_vacia(db: Session, tabla_name: str) -> bool:
         "Rebalanceo": RebalanceoObjetivo,
         "Benchmarks": BenchmarkValor,
         "Configuracion": ConfiguracionCartera,
-        "Watchlist": WatchlistItem,
     }
     tabla = tabla_map.get(tabla_name)
     if not tabla:
@@ -92,7 +92,6 @@ def sync_from_sheet(db: Session) -> dict:
         rebalanceo_validos = []
         benchmarks_validos = []
         configuracion_validos = []
-        watchlist_validos = []
 
         # Validar Instrumentos (obligatoria)
         raw_inst = raw_data.get("Instrumentos")
@@ -302,27 +301,8 @@ def sync_from_sheet(db: Session) -> dict:
                 configuracion_validos, issues_cfg = reglas_configuracion.validar_configuracion(raw_cfg.rows)
                 issues.extend(issues_cfg)
 
-        # Validar Watchlist (opcional): instrumentos a seguir que todavía no están en cartera.
-        raw_wl = raw_data.get("Watchlist")
-        if raw_wl and raw_wl.error_lectura:
-            issues.append(ValidationIssue(
-                tab="Watchlist", regla="lectura_fallo",
-                mensaje=f"Error leyendo Watchlist: {raw_wl.error_lectura}",
-                impacto="Pestaña bloqueada, datos anteriores preservados",
-                severidad=Severity.ADVERTENCIA
-            ))
-            tabs_bloqueadas.add("Watchlist")
-        elif raw_wl and raw_wl.presente:
-            bloqueada_est, issues_est = validar_estructura_tab(
-                "Watchlist", raw_wl.header, raw_wl.rows,
-                tab_requerida=False, tab_actual_no_vacia=_tab_actualmente_no_vacia(db, "Watchlist")
-            )
-            issues.extend(issues_est)
-            if bloqueada_est:
-                tabs_bloqueadas.add("Watchlist")
-            else:
-                watchlist_validos, issues_wl = reglas_watchlist.validar_watchlist(raw_wl.rows)
-                issues.extend(issues_wl)
+        # La watchlist NO se lee del Sheet: la gestiona el usuario desde la app (alta eligiendo un
+        # símbolo del catálogo de IOL). Acá sólo se le refresca el precio, más abajo.
 
         # Validar Tipos de Cambio (opcional): fuente dedicada de CER/MEP, tiene prioridad sobre las
         # columnas CER/MEP embebidas en Movimientos/Precios (que sólo traen valor en fechas con
@@ -572,34 +552,31 @@ def sync_from_sheet(db: Session) -> dict:
                     PrecioInstrumento.fuente.in_(("iol", "api"))
                 ).count()
 
-        # Precios de la watchlist. Mismo motor que los de cartera, pero contra `precios_watchlist`:
+        # Precios de la watchlist. La lista la gestiona el usuario desde la app, así que sale de la
+        # DB y no del Sheet; el precio va a `precios_watchlist` y no a `precios_instrumento` porque
         # esos tickers no están en `instrumentos_inversion` y no deben entrar en la serie que leen
         # patrimonio/exposición/riesgo (ver la docstring de `PrecioWatchlist`).
-        if usa_apis and watchlist_validos:
+        watchlist_items = watchlist_analytics.items_para_market_data(db)
+        if usa_apis and watchlist_items:
             # Los que también están en cartera ya los resolvió el pipeline de arriba, con serie
             # histórica completa: `watchlist_analytics` lee de ahí para ellos.
             tickers_en_cartera = {i["ticker"] for i in instrumentos_validos}
-            wl_a_cotizar = [w for w in watchlist_validos if w["ticker"] not in tickers_en_cartera]
-            filas_wl, issues_wl_api = market_data_precios.fetch_precios_watchlist(
-                wl_a_cotizar, precios_validos, db,
-                estado_por_ticker=estado_por_ticker, paneles_fn=paneles_fn, fci_fn=fci_fn,
+            wl_a_cotizar = [w for w in watchlist_items if w["ticker"] not in tickers_en_cartera]
+            _, issues_wl_api = watchlist_analytics.refrescar_precios(
+                db, [w["ticker"] for w in wl_a_cotizar], paneles_fn=paneles_fn, fci_fn=fci_fn,
+                tickers_en_cartera=tickers_en_cartera,
             )
             issues.extend(issues_wl_api)
-            for fila in filas_wl:
-                existente = db.get(PrecioWatchlist, fila["ticker"])
-                if existente is None:
-                    db.add(PrecioWatchlist(**fila))
-                else:
-                    existente.fecha = fila["fecha"]
-                    existente.precio = fila["precio"]
-                    existente.moneda = fila["moneda"]
-                    existente.fuente = fila["fuente"]
-            db.flush()
 
-            # Backfill de velas propio de la watchlist: sin movimientos ni precios_instrumento, la
-            # referencia de escala es sintética (ver docstring de la función).
+            # Backfill de velas propio de la watchlist. La referencia de escala son los precios que
+            # se acaban de guardar arriba (ver la docstring de la función).
+            precios_wl_actuales = [
+                {"ticker": p.ticker, "fecha": p.fecha, "precio": float(p.precio), "moneda": p.moneda}
+                for p in db.query(PrecioWatchlist).all()
+            ]
             backfill_ohlcv_wl, issues_ohlcv_wl = market_data_precios.fetch_backfill_ohlcv_watchlist(
-                wl_a_cotizar, precios_validos, ohlcv_existentes, db, estado_por_ticker=estado_por_ticker,
+                wl_a_cotizar, precios_wl_actuales, ohlcv_existentes, db,
+                estado_por_ticker=estado_por_ticker,
             )
             issues.extend(issues_ohlcv_wl)
             barras_ohlcv_out.extend(backfill_ohlcv_wl)
@@ -610,7 +587,7 @@ def sync_from_sheet(db: Session) -> dict:
         # foto de arranque de la corrida (claves `@SUB` incluidas); el upsert final opera por
         # (clave, fecha), así que las filas nuevas se resuelven ahí.
         if usa_apis:
-            activos_rv = instrumentos_validos + watchlist_validos
+            activos_rv = instrumentos_validos + watchlist_items
             issues.extend(market_data_precios.resolver_subyacente(activos_rv, estado_por_ticker))
             filas_sub, issues_sub = market_data_precios.fetch_backfill_ohlcv_subyacente(
                 activos_rv, ohlcv_existentes, ohlcv_maximos, estado_por_ticker,
@@ -618,15 +595,15 @@ def sync_from_sheet(db: Session) -> dict:
             issues.extend(issues_sub)
             barras_ohlcv_out.extend(filas_sub)
 
-        # Precios huérfanos de tickers que salieron de la watchlist. Sólo con la pestaña sin bloquear:
-        # bloqueada, `watchlist_validos` está vacía y el DELETE se llevaría todo.
-        if "Watchlist" not in tabs_bloqueadas:
-            tickers_wl = {w["ticker"] for w in watchlist_validos}
-            query_huerfanos = db.query(PrecioWatchlist)
-            if tickers_wl:
-                query_huerfanos = query_huerfanos.filter(PrecioWatchlist.ticker.notin_(tickers_wl))
-            query_huerfanos.delete(synchronize_session=False)
-            db.flush()
+        # Precios huérfanos de tickers que salieron de la watchlist. `watchlist_analytics.eliminar`
+        # ya los borra en el momento de la baja; esto es red de seguridad para lo que haya quedado
+        # colgado de una versión anterior.
+        tickers_wl = {w["ticker"] for w in watchlist_items}
+        query_huerfanos = db.query(PrecioWatchlist)
+        if tickers_wl:
+            query_huerfanos = query_huerfanos.filter(PrecioWatchlist.ticker.notin_(tickers_wl))
+        query_huerfanos.delete(synchronize_session=False)
+        db.flush()
 
         # Upsert de `serie_ohlcv` con las barras acumuladas (cartera + watchlist), con precedencia
         # `debe_reemplazar_barra` (iol > api; velas > close-only, a igual fuente).
@@ -667,10 +644,11 @@ def sync_from_sheet(db: Session) -> dict:
                     db.add(nueva)
             db.flush()
 
-        # Velas huérfanas: mismo guard del set vacío que la purga de PrecioWatchlist — con cualquiera
-        # de las dos pestañas bloqueada el conjunto de tickers válidos no es confiable.
-        if usa_apis and "Instrumentos" not in tabs_bloqueadas and "Watchlist" not in tabs_bloqueadas:
-            tickers_base = {i["ticker"] for i in instrumentos_validos} | {w["ticker"] for w in watchlist_validos}
+        # Velas huérfanas. Guard sobre `Instrumentos`: bloqueada, `instrumentos_validos` está vacía y
+        # la purga se llevaría las velas de toda la cartera. La watchlist ya no es una pestaña, así
+        # que su lado del conjunto siempre es confiable (sale de la DB).
+        if usa_apis and "Instrumentos" not in tabs_bloqueadas:
+            tickers_base = {i["ticker"] for i in instrumentos_validos} | {w["ticker"] for w in watchlist_items}
             # Whitelistear también las claves derivadas de la serie del subyacente (`TICKER@SUB`): sin
             # esto la purga se llevaría la serie USD entera en cada sync (no está entre los tickers base).
             tickers_ohlcv_validos = tickers_base | {
@@ -821,12 +799,8 @@ def sync_from_sheet(db: Session) -> dict:
             for configuracion in configuracion_validos:
                 db.add(ConfiguracionCartera(**configuracion))
 
-        if "Watchlist" not in tabs_bloqueadas:
-            db.query(WatchlistItem).delete()
-            db.flush()
-            for item in watchlist_validos:
-                db.add(WatchlistItem(**item))
-            db.flush()
+        # La watchlist no se reescribe: la gestiona el usuario desde la app y el sync sólo le
+        # refrescó el precio más arriba.
 
         # Calcular health score
         score_result = calcular_health_score(issues)

@@ -23,7 +23,7 @@ export const FAQ: FaqItem[] = [
   {
     pregunta: '¿Qué hace exactamente "Sincronizar"?',
     respuesta:
-      'Vuelve a leer tu Google Sheet completo (movimientos, instrumentos, precios, objetivos, watchlist, rebalanceo) y recalcula todo en la app con esos datos. Es de solo lectura: nunca escribe nada de vuelta en el Sheet.',
+      'Vuelve a leer tu Google Sheet completo (movimientos, instrumentos, precios, objetivos, rebalanceo) y recalcula todo en la app con esos datos. De paso refresca el precio de los instrumentos de tu Watchlist, que no salen del Sheet. Es de solo lectura: nunca escribe nada de vuelta en el Sheet.',
   },
   {
     pregunta: 'Sincronicé y aparecieron errores o advertencias, ¿qué hago?',

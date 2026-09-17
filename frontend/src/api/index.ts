@@ -97,6 +97,26 @@ export interface WatchlistItemOut {
   pct_a_objetivo: number | null
   en_zona: boolean | null
   en_cartera: boolean
+  notas: string | null
+  agregado_en: string | null
+}
+
+/** Un instrumento del catálogo de IOL: el universo que se puede agregar a la watchlist. */
+export interface CatalogoInstrumentoOut {
+  simbolo: string
+  descripcion: string
+  tipo: string
+  moneda: string
+  mercado: string
+  paneles: string[]
+}
+
+export interface CatalogoBusquedaOut {
+  /** Cuántos matchean la búsqueda + el tipo, antes del límite. */
+  total: number
+  /** Conteo por familia sobre la búsqueda SIN el filtro de tipo: es lo que muestran los chips. */
+  conteos_por_tipo: Record<string, number>
+  items: CatalogoInstrumentoOut[]
 }
 
 export interface InversionesResumen {
@@ -273,6 +293,23 @@ export const getCalidadDatos = () =>
 
 export const getWatchlist = () =>
   api.get<WatchlistItemOut[]>('/inversiones/watchlist').then(r => r.data)
+
+export const buscarCatalogo = (q: string, tipo: string, limite = 100) =>
+  api.get<CatalogoBusquedaOut>('/inversiones/catalogo', { params: { q, tipo, limite } })
+    .then(r => r.data)
+
+export const agregarAWatchlist = (body: { ticker: string; objetivo?: number | null; notas?: string | null }) =>
+  api.post<WatchlistItemOut>('/inversiones/watchlist', body).then(r => r.data)
+
+export const actualizarWatchlist = (ticker: string, body: { objetivo?: number | null; notas?: string | null }) =>
+  api.put<WatchlistItemOut>(`/inversiones/watchlist/${encodeURIComponent(ticker)}`, body).then(r => r.data)
+
+export const eliminarDeWatchlist = (ticker: string) =>
+  api.delete<void>(`/inversiones/watchlist/${encodeURIComponent(ticker)}`).then(r => r.data)
+
+export const refrescarPrecioWatchlist = (ticker: string) =>
+  api.post<WatchlistItemOut>(`/inversiones/watchlist/${encodeURIComponent(ticker)}/precio`)
+    .then(r => r.data)
 
 export const getCarterasInversion = () =>
   api.get<CarteraInfo[]>('/inversiones/carteras').then(r => r.data)

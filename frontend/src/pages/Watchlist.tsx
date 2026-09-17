@@ -1,15 +1,30 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { getWatchlist, getSenalesTecnicas, type SenalTickerOut } from '../api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  actualizarWatchlist,
+  agregarAWatchlist,
+  eliminarDeWatchlist,
+  getSenalesTecnicas,
+  getWatchlist,
+  refrescarPrecioWatchlist,
+  type CatalogoInstrumentoOut,
+  type SenalTickerOut,
+  type WatchlistItemOut,
+} from '../api'
 import { qk } from '../api/queryClient'
 import { useInversionesContext } from '../context/InversionesContext'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import EmptyState from '../components/ui/EmptyState'
 import Segmented from '../components/ui/Segmented'
 import QueryBoundary from '../components/ui/QueryBoundary'
+import Modal from '../components/ui/Modal'
+import Button from '../components/ui/Button'
+import Toast from '../components/ui/Toast'
 import InfoTooltip from '../help/components/InfoTooltip'
 import AlertaPrecioBadge from '../components/inversiones/AlertaPrecioBadge'
+import SelectorInstrumento from '../components/inversiones/SelectorInstrumento'
+import DetalleWatchlist from '../components/inversiones/DetalleWatchlist'
 import { Icon } from '../components/icons/Icons'
 import { formatARS, formatUSD, formatPrecio } from '../utils'
 import { estadoWatchlist, type EstadoAlerta } from '../utils/alertasPrecio'
@@ -33,15 +48,20 @@ const AVATAR_ALERTA: Record<EstadoAlerta, string> = {
 
 export default function Watchlist() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { umbralProximidad } = useInversionesContext()
   const [searchParams, setSearchParams] = useSearchParams()
   const filtro: Filtro = searchParams.get('alerta') === 'con_alerta' ? 'con_alerta' : 'todas'
+
+  const [agregarAbierto, setAgregarAbierto] = useState(false)
+  const [tickerAbierto, setTickerAbierto] = useState<string | null>(null)
+  const [aviso, setAviso] = useState<{ texto: string; tono: 'success' | 'error' } | null>(null)
 
   const watchlistQuery = useQuery({
     queryKey: qk.watchlist,
     queryFn: () => getWatchlist(),
   })
-  const items = watchlistQuery.data ?? []
+  const items = useMemo(() => watchlistQuery.data ?? [], [watchlistQuery.data])
 
   // Señales de las estrategias técnicas guardadas para estos tickers. Es información extra: si
   // el pedido falla, la watchlist se muestra igual (sin badges).
@@ -57,6 +77,60 @@ export default function Watchlist() {
     return mapa
   }, [senalesQuery.data])
 
+  // Sólo se invalida la watchlist: la lista no alimenta ningún otro cálculo de la app.
+  const refrescarLista = () => queryClient.invalidateQueries({ queryKey: qk.watchlist })
+
+  const agregarMut = useMutation({
+    mutationFn: (instrumento: CatalogoInstrumentoOut) =>
+      agregarAWatchlist({ ticker: instrumento.simbolo }),
+    onSuccess: async (item) => {
+      await refrescarLista()
+      setAgregarAbierto(false)
+      // Se abre el detalle en el acto: agregar sin fijar el objetivo deja el instrumento sin alerta.
+      setTickerAbierto(item.ticker)
+      setAviso(
+        item.precio_actual == null
+          ? { texto: `${item.ticker} agregado, pero no se pudo cotizar`, tono: 'error' }
+          : { texto: `${item.ticker} agregado`, tono: 'success' },
+      )
+    },
+    onError: () => setAviso({ texto: 'No se pudo agregar el instrumento', tono: 'error' }),
+  })
+
+  const guardarMut = useMutation({
+    mutationFn: ({ ticker, ...cambios }: { ticker: string; objetivo: number | null; notas: string | null }) =>
+      actualizarWatchlist(ticker, cambios),
+    onSuccess: async () => {
+      await refrescarLista()
+      setTickerAbierto(null)
+      setAviso({ texto: 'Cambios guardados', tono: 'success' })
+    },
+    onError: () => setAviso({ texto: 'No se pudieron guardar los cambios', tono: 'error' }),
+  })
+
+  const refrescarMut = useMutation({
+    mutationFn: (ticker: string) => refrescarPrecioWatchlist(ticker),
+    onSuccess: async (item) => {
+      await refrescarLista()
+      setAviso(
+        item.precio_actual == null
+          ? { texto: 'Todavía sin cotización', tono: 'error' }
+          : { texto: `Precio actualizado: ${formatMoneda(item.precio_actual, item.moneda_precio ?? item.moneda)}`, tono: 'success' },
+      )
+    },
+    onError: () => setAviso({ texto: 'No se pudo actualizar el precio', tono: 'error' }),
+  })
+
+  const eliminarMut = useMutation({
+    mutationFn: (ticker: string) => eliminarDeWatchlist(ticker),
+    onSuccess: async (_data, ticker) => {
+      await refrescarLista()
+      setTickerAbierto(null)
+      setAviso({ texto: `${ticker} ya no se sigue`, tono: 'success' })
+    },
+    onError: () => setAviso({ texto: 'No se pudo dar de baja el instrumento', tono: 'error' }),
+  })
+
   const conEstado = useMemo(
     () => items.map(item => ({ item, estado: estadoWatchlist(item, umbralProximidad) })),
     [items, umbralProximidad],
@@ -65,6 +139,10 @@ export default function Watchlist() {
   const conteoConAlerta = conEstado.filter(({ estado }) => estado !== null).length
 
   const filtrados = filtro === 'con_alerta' ? conEstado.filter(({ estado }) => estado !== null) : conEstado
+
+  const yaSeguidos = useMemo(() => new Set(items.map(i => i.ticker)), [items])
+  const itemAbierto: WatchlistItemOut | null =
+    items.find(i => i.ticker === tickerAbierto) ?? null
 
   function cambiarFiltro(nuevo: Filtro) {
     setSearchParams(nuevo === 'todas' ? {} : { alerta: nuevo }, { replace: true })
@@ -84,6 +162,13 @@ export default function Watchlist() {
           <Segmented options={opciones} value={filtro} onChange={cambiarFiltro} />
         </div>
         <InfoTooltip term="watchlist_zona_compra" />
+        <Button
+          className="h-9 px-3 shrink-0"
+          onClick={() => setAgregarAbierto(true)}
+          icon={<Icon name="plus" className="w-4 h-4" />}
+        >
+          Agregar
+        </Button>
       </div>
 
       <QueryBoundary
@@ -93,21 +178,20 @@ export default function Watchlist() {
       >
         {items.length === 0 ? (
           <EmptyState
-            title="No hay watchlist cargada"
-            description='Agregá una pestaña "Watchlist" al Sheet con las columnas Ticker, Nombre, Tipo Instrumento, Mercado, Moneda, País, Sector y Objetivo, y sincronizá.'
+            title="Todavía no seguís ningún instrumento"
+            description='Tocá "Agregar" y elegí del catálogo de instrumentos: la app baja el último precio y vos fijás a qué precio querrías comprarlo.'
           />
         ) : filtrados.length === 0 ? (
           <EmptyState title="Ningún instrumento cerca de su zona de compra" />
         ) : (
           <div>
             {filtrados.map(({ item, estado }) => {
-              const irADetalle = item.en_cartera
               const senal = senalPorTicker.get(item.ticker)
               return (
                 <button
                   key={item.ticker}
-                  onClick={() => irADetalle && navigate(`/ticker/${encodeURIComponent(item.ticker)}`)}
-                  className={`w-full flex items-center gap-2.5 py-2.5 border-b border-app-border-soft last:border-b-0 text-left ${irADetalle ? '' : 'cursor-default'}`}
+                  onClick={() => setTickerAbierto(item.ticker)}
+                  className="w-full flex items-center gap-2.5 py-2.5 border-b border-app-border-soft last:border-b-0 text-left"
                 >
                   <div
                     className={`w-9 h-9 rounded-[11px] bg-app-surface-2 border flex items-center justify-center font-mono text-label font-bold shrink-0 ${
@@ -150,13 +234,43 @@ export default function Watchlist() {
                       </span>
                     </div>
                   </div>
-                  {irADetalle && <Icon name="chevron" className="w-3.5 h-3.5 text-app-text-dim -rotate-90 shrink-0" />}
+                  <Icon name="chevron" className="w-3.5 h-3.5 text-app-text-dim -rotate-90 shrink-0" />
                 </button>
               )
             })}
           </div>
         )}
       </QueryBoundary>
+
+      <Modal open={agregarAbierto} onClose={() => setAgregarAbierto(false)} title="Agregar instrumento">
+        <SelectorInstrumento
+          yaSeguidos={yaSeguidos}
+          deshabilitado={agregarMut.isPending}
+          onElegir={instrumento => agregarMut.mutate(instrumento)}
+        />
+      </Modal>
+
+      <Modal
+        open={itemAbierto !== null}
+        onClose={() => setTickerAbierto(null)}
+        title={itemAbierto?.ticker ?? ''}
+      >
+        {itemAbierto && (
+          <DetalleWatchlist
+            item={itemAbierto}
+            formatMoneda={formatMoneda}
+            guardando={guardarMut.isPending}
+            refrescando={refrescarMut.isPending}
+            eliminando={eliminarMut.isPending}
+            onGuardar={cambios => guardarMut.mutate({ ticker: itemAbierto.ticker, ...cambios })}
+            onRefrescar={() => refrescarMut.mutate(itemAbierto.ticker)}
+            onEliminar={() => eliminarMut.mutate(itemAbierto.ticker)}
+            onVerTecnico={() => navigate(`/ticker/${encodeURIComponent(itemAbierto.ticker)}`)}
+          />
+        )}
+      </Modal>
+
+      <Toast message={aviso?.texto ?? null} tone={aviso?.tono} onDone={() => setAviso(null)} />
     </div>
   )
 }

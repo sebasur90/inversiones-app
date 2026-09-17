@@ -125,7 +125,10 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
       '"Zona de compra" es el rango de precio que vos definiste como atractivo para entrar.',
       'El filtro "Con alerta" muestra sólo los que ya están cerca o dentro de esa zona.',
     ],
-    queHacer: ['Se carga desde la pestaña Watchlist del Sheet: agregá filas ahí y sincronizá para verlas acá.'],
+    queHacer: [
+      'Tocá "Agregar" y buscá el instrumento en el catálogo (podés filtrar por acción, CEDEAR, bono, ON, letra o FCI): la app le baja el último precio al elegirlo.',
+      'Tocá cualquier fila para fijar o cambiar su precio objetivo, anotarte por qué lo seguís, refrescar el precio o dejar de seguirlo.',
+    ],
     terminos: ['watchlist_zona_compra', 'watchlist_distancia'],
   },
 

@@ -31,6 +31,8 @@ export const qk = {
   diagnostico: (cartera: string | null) => ['diagnostico', cartera] as const,
   calidadDatos: ['calidad-datos'] as const,
   watchlist: ['watchlist'] as const,
+  /** Catálogo de IOL: un archivo estático, no depende del sync. */
+  catalogo: (q: string, tipo: string) => ['catalogo', q, tipo] as const,
   /**
    * Clave genérica para las pantallas: `qk.de('vencimientos', cartera)`. Todas las queries
    * cuelgan de un nombre + sus parámetros, así que invalidar todo tras un sync alcanza y

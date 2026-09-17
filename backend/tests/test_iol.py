@@ -106,3 +106,61 @@ def test_fetch_historico_ordena_y_filtra(monkeypatch):
 def test_fetch_historico_caida_devuelve_none(monkeypatch):
     monkeypatch.setattr(iol.iol_auth, "get_autenticado", lambda db, url: None)
     assert iol.fetch_historico(_DB, "TZXD7", date(2026, 6, 1), date(2026, 6, 5)) is None
+
+
+# ── Normalización de moneda y escapado de símbolos ────────────────────────────
+
+def test_monedas_de_iol_se_traducen_a_ars_usd(monkeypatch):
+    """IOL habla `AR$`/`US$` (y `peso_Argentino`/`dolar_Estadounidense` en FCI). El resto de la app
+    habla ARS/USD: si esto no se traduce acá, `AR$` llega a `PrecioWatchlist.moneda` y el frontend
+    no sabe formatearlo."""
+    p0 = iol._PANELES[0]
+    url0 = f"{iol.iol_auth.BASE_URL}/Cotizaciones/{p0[0]}/{p0[1]}/{p0[2]}"
+    monkeypatch.setattr(iol.iol_auth, "get_autenticado", lambda db, url: (
+        {"titulos": [
+            {"simbolo": "ALUA", "ultimoPrecio": 848.5, "moneda": "AR$"},
+            {"simbolo": "AL30D", "ultimoPrecio": 70.1, "moneda": "US$"},
+            {"simbolo": "RARO", "ultimoPrecio": 1.0, "moneda": "vaya a saber"},
+        ]} if url == url0 else None
+    ))
+
+    out = iol.fetch_precios_paneles(_DB)
+    assert out["ALUA"] == (848.5, "ARS")
+    assert out["AL30D"] == (70.1, "USD")
+    assert out["RARO"] == (1.0, "ARS"), "moneda desconocida cae al default, no se propaga cruda"
+
+
+def test_moneda_de_fci_con_nomenclatura_larga(monkeypatch):
+    monkeypatch.setattr(iol.iol_auth, "get_autenticado", lambda db, url: [
+        {"simbolo": "PREMIER", "valorCuotaparte": 12.5, "moneda": "peso_Argentino"},
+        {"simbolo": "USFONDO", "valorCuotaparte": 3.1, "moneda": "dolar_Estadounidense"},
+    ])
+    out = iol.fetch_precios_fci(_DB)
+    assert out == {"PREMIER": (12.5, "ARS"), "USFONDO": (3.1, "USD")}
+
+
+def test_fetch_precio_simbolo_escapa_el_simbolo(monkeypatch):
+    """68 símbolos del catálogo arrancan con `#` (pagarés `#MAV...`) y otros traen espacios y `/`.
+    Sin escapar, `#` corta la URL como fragmento y la petición va a `.../Titulos/`."""
+    urls = []
+
+    def _fake(db, url):
+        urls.append(url)
+        return {"ultimoPrecio": 101.0, "moneda": "AR$"}
+
+    monkeypatch.setattr(iol.iol_auth, "get_autenticado", _fake)
+
+    assert iol.fetch_precio_simbolo(_DB, "#MAV010960074") == (101.0, "ARS")
+    assert urls[-1].endswith("/Titulos/%23MAV010960074/Cotizacion")
+
+    iol.fetch_precio_simbolo(_DB, "CER VINC. 29/01/27")
+    assert "%20" in urls[-1] and "%2F" in urls[-1]
+    assert urls[-1].endswith("/Cotizacion")
+
+
+def test_fetch_historico_ohlcv_escapa_el_ticker(monkeypatch):
+    urls = []
+    monkeypatch.setattr(iol.iol_auth, "get_autenticado",
+                        lambda db, url: urls.append(url) or [])
+    iol.fetch_historico_ohlcv(_DB, "#MAV010960074", date(2026, 1, 1), date(2026, 1, 31))
+    assert "%23MAV010960074" in urls[-1]

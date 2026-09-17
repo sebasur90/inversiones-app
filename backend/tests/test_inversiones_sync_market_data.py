@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from backend.app.database import (
     Base, IndiceMercado, BenchmarkValor, PrecioInstrumento, SyncIssue, BarraOHLCV,
-    EstadoMarketDataTicker,
+    EstadoMarketDataTicker, PrecioWatchlist, WatchlistItem,
 )
 from backend.app.services.inversiones_sync import sync_from_sheet
 from backend.app.services.sheets_client import TabRaw
@@ -36,6 +36,17 @@ def _make_db():
 def _mock_fetch(overrides: dict):
     tabs = dict(TABS_BASE, **overrides)
     return lambda: tabs
+
+
+def _sembrar_watchlist(db, ticker, tipo, precio_observado, moneda="ARS"):
+    """La watchlist ya no sale del Sheet: se carga en la DB desde la app. `precio_observado` es la
+    fila de `PrecioWatchlist` que el backfill de velas usa como referencia de escala."""
+    db.add(WatchlistItem(ticker=ticker, nombre=ticker, tipo_instrumento=tipo,
+                         mercado="BCBA", moneda=moneda, pais="argentina",
+                         agregado_en=date(2026, 8, 1)))
+    db.add(PrecioWatchlist(ticker=ticker, fecha=date(2026, 8, 1), precio=precio_observado,
+                           moneda=moneda, fuente="iol"))
+    db.commit()
 
 
 def test_tipos_cambio_tab_alimenta_indices_mercado(monkeypatch):
@@ -592,16 +603,9 @@ def test_purga_orfanos_incluye_fuente_iol(monkeypatch):
 # --- OHLCV (serie_ohlcv): velas de cartera y watchlist dentro del sync ----------------------
 
 def _tabs_con_bono_y_watchlist():
-    """Cartera con un bono (con movimiento, para que tenga piso de backfill) + un ticker que sólo
-    se sigue en la watchlist (sin movimientos ni precios manuales: su referencia es el Objetivo)."""
-    tabs = _tabs_con_bono_y_movimiento()
-    tabs["Watchlist"] = TabRaw(
-        presente=True,
-        header=["Ticker", "Nombre", "Tipo Instrumento", "Mercado", "Moneda", "Objetivo"],
-        rows=[(2, {"Ticker": "GGAL", "Nombre": "Galicia", "Tipo Instrumento": "Accion",
-                   "Mercado": "BCBA", "Moneda": "ARS", "Objetivo": "50"})],
-    )
-    return tabs
+    """El Sheet sólo trae la cartera (un bono con movimiento, para que tenga piso de backfill). El
+    ticker que sólo se sigue se siembra aparte con `_sembrar_watchlist`."""
+    return _tabs_con_bono_y_movimiento()
 
 
 def _barra(fecha, cierre, con_velas=True):
@@ -627,15 +631,16 @@ def _mockear_apis_ohlcv(monkeypatch, series_por_ticker):
 
 def test_sync_puebla_serie_ohlcv_de_cartera_y_watchlist(monkeypatch):
     """Un sync puebla `serie_ohlcv` con velas de la cartera (gratis, en la misma respuesta del
-    backfill de valuación) y de la watchlist (backfill propio, referencia = Objetivo)."""
+    backfill de valuación) y de la watchlist (backfill propio, referencia = precio observado)."""
     db = _make_db()
+    _sembrar_watchlist(db, "GGAL", "Accion", 50.0)
     original_fetch = sync_module.fetch_sheet_data
     sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_bono_y_watchlist())
 
     series = {
         # TZXD7 cotiza por lámina de 100 (2.7135 en el Sheet -> factor 0.01)
         "TZXD7": [_barra(date(2026, 6, 2), 265.0), _barra(date(2026, 6, 3), 270.0)],
-        # GGAL: Objetivo 50 -> la fuente cotiza ~5000, factor 0.01
+        # GGAL: precio observado 50 -> la fuente cotiza ~5000, factor 0.01
         "GGAL": [_barra(date(2026, 6, 2), 5000.0), _barra(date(2026, 6, 3), 5100.0)],
     }
     _mockear_apis_ohlcv(monkeypatch, series)
@@ -668,6 +673,7 @@ def test_segundo_sync_no_duplica_ni_degrada_las_velas(monkeypatch):
     """El segundo sync no duplica filas (UNIQUE ticker+fecha) ni pisa una vela real con una
     barra close-only (precedencia de `debe_reemplazar_barra`)."""
     db = _make_db()
+    _sembrar_watchlist(db, "GGAL", "Accion", 50.0)
     original_fetch = sync_module.fetch_sheet_data
     sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_bono_y_watchlist())
 
@@ -723,15 +729,8 @@ def test_purga_de_velas_con_set_vacio_no_borra_nada(monkeypatch):
 # --- Serie del subyacente en USD (yfinance) dentro del sync --------------------------------------
 
 def _tabs_con_cedear_watchlist():
-    """Cartera con el bono TZXD7 (+ movimiento) y un CEDEAR (MSFT) sólo en la watchlist."""
-    tabs = _tabs_con_bono_y_movimiento()
-    tabs["Watchlist"] = TabRaw(
-        presente=True,
-        header=["Ticker", "Nombre", "Tipo Instrumento", "Mercado", "Moneda", "Objetivo"],
-        rows=[(2, {"Ticker": "MSFT", "Nombre": "Microsoft", "Tipo Instrumento": "CEDEAR",
-                   "Mercado": "BCBA", "Moneda": "ARS", "Objetivo": "26000"})],
-    )
-    return tabs
+    """El Sheet sólo trae el bono TZXD7 (+ movimiento); el CEDEAR va en la watchlist, en la DB."""
+    return _tabs_con_bono_y_movimiento()
 
 
 def _mockear_yahoo(monkeypatch, contador=None):
@@ -756,6 +755,7 @@ def _mockear_yahoo(monkeypatch, contador=None):
 
 def test_sync_baja_serie_del_subyacente_y_no_toca_precios_instrumento(monkeypatch):
     db = _make_db()
+    _sembrar_watchlist(db, "MSFT", "CEDEAR", 26000.0)
     original_fetch = sync_module.fetch_sheet_data
     sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_cedear_watchlist())
     _mockear_apis_ohlcv(monkeypatch, {})
@@ -783,6 +783,7 @@ def test_sync_baja_serie_del_subyacente_y_no_toca_precios_instrumento(monkeypatc
 
 def test_purga_no_borra_sub_mientras_el_ticker_este_y_si_cuando_sale(monkeypatch):
     db = _make_db()
+    _sembrar_watchlist(db, "MSFT", "CEDEAR", 26000.0)
     original_fetch = sync_module.fetch_sheet_data
     sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_cedear_watchlist())
     _mockear_apis_ohlcv(monkeypatch, {})
@@ -792,16 +793,12 @@ def test_purga_no_borra_sub_mientras_el_ticker_este_y_si_cuando_sale(monkeypatch
         sync_from_sheet(db)
         assert db.query(BarraOHLCV).filter(BarraOHLCV.ticker == "MSFT@SUB").count() == 2
 
-        # Segundo sync: MSFT sale de la watchlist (la reemplaza otro ticker, para que la pestaña
-        # siga no-vacía y válida) -> la purga se lleva MSFT@SUB.
-        tabs_sin_msft = _tabs_con_bono_y_movimiento()
-        tabs_sin_msft["Watchlist"] = TabRaw(
-            presente=True,
-            header=["Ticker", "Nombre", "Tipo Instrumento", "Mercado", "Moneda", "Objetivo"],
-            rows=[(2, {"Ticker": "GGAL", "Nombre": "Galicia", "Tipo Instrumento": "Accion",
-                       "Mercado": "BCBA", "Moneda": "ARS", "Objetivo": "50"})],
-        )
-        sync_module.fetch_sheet_data = _mock_fetch(tabs_sin_msft)
+        # Segundo sync: MSFT sale de la watchlist (lo reemplaza otro ticker) -> la purga se lleva
+        # MSFT@SUB. Es la baja tal como la hace el endpoint DELETE, pero sin las limpiezas que ese
+        # ya aplica, para ejercitar la red de seguridad del sync.
+        db.query(WatchlistItem).filter(WatchlistItem.ticker == "MSFT").delete()
+        db.commit()
+        _sembrar_watchlist(db, "GGAL", "Accion", 50.0)
         sync_from_sheet(db)
 
         assert db.query(BarraOHLCV).filter(BarraOHLCV.ticker == "MSFT@SUB").count() == 0
@@ -812,6 +809,7 @@ def test_purga_no_borra_sub_mientras_el_ticker_este_y_si_cuando_sale(monkeypatch
 
 def test_estado_de_resolucion_sobrevive_dos_syncs(monkeypatch):
     db = _make_db()
+    _sembrar_watchlist(db, "MSFT", "CEDEAR", 26000.0)
     original_fetch = sync_module.fetch_sheet_data
     sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_cedear_watchlist())
     _mockear_apis_ohlcv(monkeypatch, {})

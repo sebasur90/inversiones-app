@@ -30,7 +30,7 @@ export const TUTORIALES: Tutorial[] = [
       {
         titulo: 'La app no guarda nada por su cuenta',
         detalle:
-          'Todo lo que ves sale de tu Google Sheet: movimientos, instrumentos, objetivos, watchlist. La app lo lee, lo calcula y te lo muestra. Nunca opera ni modifica el Sheet.',
+          'Casi todo lo que ves sale de tu Google Sheet: movimientos, instrumentos, objetivos. La app lo lee, lo calcula y te lo muestra. Nunca opera ni modifica el Sheet. La Watchlist es la excepción: esa la armás desde la app.',
       },
       {
         titulo: 'Sincronizar trae los datos nuevos',
@@ -120,7 +120,7 @@ export const TUTORIALES: Tutorial[] = [
       {
         titulo: 'Objetivo y stop-loss se cargan en el Sheet',
         detalle:
-          'Por cada ticker (en Posiciones o en Watchlist) podés definir un precio objetivo (dónde te gustaría vender o comprar) y un stop-loss (dónde cortarías la pérdida). Se cargan en la pestaña Instrumentos o Watchlist del Sheet.',
+          'Por cada ticker podés definir un precio objetivo (dónde te gustaría vender o comprar) y un stop-loss (dónde cortarías la pérdida). Los de Posiciones se cargan en la pestaña Instrumentos del Sheet; los de la Watchlist, desde la propia pantalla.',
         termino: 'objetivo',
       },
       {

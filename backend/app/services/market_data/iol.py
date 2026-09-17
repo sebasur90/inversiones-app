@@ -18,6 +18,7 @@ símbolos (degrada, no rompe): `fetch_precios_paneles` sólo devuelve `None` si 
 respondió, y `precios.py` completa con data912/analisistecnico lo que los paneles no cubran.
 """
 from datetime import date, datetime
+from urllib.parse import quote
 
 from sqlalchemy.orm import Session
 
@@ -34,9 +35,27 @@ _PANELES = (
     ("bonos", "Soberanos en pesos", "argentina"),
     ("bonos", "Corporativos", "argentina"),
     ("letras", "Todas", "argentina"),
+    # Los dos que siguen NO salen del descubrimiento de IOL, pero `scripts/iol_catalogo.py` los
+    # confirmó contra la cuenta real (ver su `_PANELES_EXTRA`): entre los dos son ~1.100 símbolos,
+    # la mitad del catálogo, y sin ellos las ONs y la mayoría de los bonos no cotizan por IOL.
+    ("ObligacionesNegociables", "Todas", "argentina"),
+    ("Bonos", "Todos", "argentina"),
 )
 
 _MERCADO_DEFAULT = "bCBA"
+
+# IOL nombra las monedas con su vocabulario propio (`AR$`, `US$`, y `peso_Argentino` /
+# `dolar_Estadounidense` en el endpoint de FCI). Se traduce acá, en el borde del cliente, para que
+# nada aguas abajo tenga que conocerlo: el resto de la app habla ARS/USD. Ver también
+# `catalogo_instrumentos._normalizar_moneda`, que hace lo mismo con el archivo del catálogo.
+_MONEDAS = {
+    "AR$": "ARS", "ARS": "ARS", "PESO_ARGENTINO": "ARS",
+    "US$": "USD", "USD": "USD", "DOLAR_ESTADOUNIDENSE": "USD",
+}
+
+
+def _moneda(v) -> str:
+    return _MONEDAS.get((v or "").strip().upper().replace(" ", "_"), "ARS")
 
 
 def _num(v) -> float | None:
@@ -60,9 +79,8 @@ def _fetch_panel(db: Session, instrumento: str, panel: str, pais: str) -> dict[s
             continue
         simbolo = (fila.get("simbolo") or "").strip().upper()
         precio = _num(fila.get("ultimoPrecio"))
-        moneda = (fila.get("moneda") or "").strip().upper() or "ARS"
         if simbolo and precio is not None and precio > 0:
-            out[simbolo] = (precio, moneda)
+            out[simbolo] = (precio, _moneda(fila.get("moneda")))
     return out
 
 
@@ -96,26 +114,25 @@ def fetch_precios_fci(db: Session) -> dict[str, tuple[float, str]] | None:
             continue
         simbolo = (fila.get("simbolo") or "").strip().upper()
         precio = _num(fila.get("ultimoPrecio") or fila.get("valorCuotaparte"))
-        moneda = (fila.get("moneda") or "").strip().upper() or "ARS"
         if simbolo and precio is not None and precio > 0:
-            out[simbolo] = (precio, moneda)
+            out[simbolo] = (precio, _moneda(fila.get("moneda")))
     return out
 
 
 def fetch_precio_simbolo(db: Session, simbolo: str, mercado: str = _MERCADO_DEFAULT) -> tuple[float, str] | None:
-    """Cotización de un símbolo suelto (1 llamada). Hoy `precios.py` NO la usa —lo que los paneles
-    no cubren se completa con data912, que no gasta cupo—; queda para diagnóstico manual
-    (`scripts/iol_probe.py`) y como pieza lista si algún día conviene cerrar el hueco con IOL. Si
-    se cablea, la cota de cuántos símbolos se piden por sync la tiene que aplicar el llamador."""
-    url = f"{iol_auth.BASE_URL}/{mercado}/Titulos/{simbolo}/Cotizacion"
+    """Cotización de un símbolo suelto (1 llamada).
+
+    La usa la watchlist (`precios.fetch_precios_watchlist_catalogo`) para los símbolos que los
+    paneles no cubren — ONs y letras, sobre todo — y para cotizar un alta sin bajar los paneles
+    enteros. La cota de cuántos símbolos se piden por corrida la aplica el llamador."""
+    url = f"{iol_auth.BASE_URL}/{mercado}/Titulos/{quote(simbolo, safe='')}/Cotizacion"
     data = iol_auth.get_autenticado(db, url)
     if not isinstance(data, dict):
         return None
     precio = _num(data.get("ultimoPrecio"))
     if precio is None or precio <= 0:
         return None
-    moneda = (data.get("moneda") or "").strip().upper() or "ARS"
-    return precio, moneda
+    return precio, _moneda(data.get("moneda"))
 
 
 _ALIAS_APERTURA = ("apertura", "precioApertura", "open")
@@ -150,7 +167,7 @@ def fetch_historico_ohlcv(
     Nunca lanza.
     """
     f_desde, f_hasta = desde.strftime("%Y-%m-%d"), hasta.strftime("%Y-%m-%d")
-    url = (f"{iol_auth.BASE_URL}/{mercado}/Titulos/{ticker}/Cotizacion/seriehistorica/"
+    url = (f"{iol_auth.BASE_URL}/{mercado}/Titulos/{quote(ticker, safe='')}/Cotizacion/seriehistorica/"
            f"{f_desde}/{f_hasta}/sinAjustar")
     data = iol_auth.get_autenticado(db, url)
     if not isinstance(data, list):

@@ -226,14 +226,17 @@ class EstadoMarketDataTicker(Base):
 
 
 class WatchlistItem(Base):
-    """Espejo de la pestaña `Watchlist` del Sheet: instrumentos a seguir que no están en cartera.
+    """Instrumentos a seguir que no están en cartera. **La gestiona el usuario desde la app**, no
+    el Sheet: se da de alta eligiendo un símbolo del catálogo de IOL
+    (`services/catalogo_instrumentos.py`) y el sync sólo le refresca el precio.
+
+    Que el ticker salga del catálogo y no de texto libre es lo que permite cotizarlo sin calibrar
+    la escala: el símbolo es el de IOL por construcción (ver
+    `market_data/precios.fetch_precios_watchlist_catalogo`).
 
     `objetivo` es el precio al que el usuario quiere comprar. La alerta se dispara "hacia abajo"
     (precio de mercado acercándose al objetivo), a diferencia del `objetivo_valor` de
     `InstrumentoInversion`, que es un precio de venta y se cruza hacia arriba.
-
-    Se reescribe entera en cada sync, como todas las pestañas -- por eso el precio observado vive
-    aparte, en `PrecioWatchlist`.
     """
     __tablename__ = "watchlist"
     ticker = Column(String, primary_key=True)
@@ -244,6 +247,8 @@ class WatchlistItem(Base):
     pais = Column(String, nullable=True)
     sector = Column(String, nullable=True)
     objetivo = Column(Numeric(18, 6), nullable=True)
+    notas = Column(String, nullable=True)
+    agregado_en = Column(Date, nullable=True)
 
 
 class PrecioWatchlist(Base):
@@ -253,10 +258,12 @@ class PrecioWatchlist(Base):
     `instrumentos_inversion` (la FK del ticker), y la serie de precios la leen patrimonio,
     exposición y riesgo -- meter ahí instrumentos que no se poseen falsearía esos números.
 
-    Tabla aparte de `watchlist` (y no columnas de esa tabla) para que el precio sobreviva al
-    DELETE+INSERT de cada sync y a una caída transitoria de la API, igual que
-    `EstadoMarketDataTicker`. Sólo se guarda el último precio: la watchlist no necesita serie
-    histórica.
+    Tabla aparte de `watchlist` (y no columnas de esa tabla) para que el precio sobreviva a una
+    caída transitoria de la API, igual que `EstadoMarketDataTicker`. Sólo se guarda el último
+    precio: la watchlist no necesita serie histórica.
+
+    Además es la **referencia de escala** del backfill de velas de la watchlist (ver
+    `market_data/precios.fetch_backfill_ohlcv_watchlist`): un precio observado en la unidad de IOL.
     """
     __tablename__ = "precios_watchlist"
     ticker = Column(String, primary_key=True)
@@ -425,6 +432,21 @@ def init_db():
         cols = [row[1] for row in result.fetchall()]
         if 'variante' not in cols:
             conn.execute(text("ALTER TABLE estrategias_tecnicas ADD COLUMN variante TEXT NOT NULL DEFAULT 'local'"))
+            conn.commit()
+
+        # La watchlist dejó de ser espejo de la pestaña `Watchlist` del Sheet y pasó a gestionarse
+        # desde la app (alta eligiendo del catálogo de IOL). La ausencia de `agregado_en` identifica
+        # una DB anterior a ese cambio: sus filas las escribió el sync a partir del Sheet y sus
+        # tickers son texto libre, no símbolos del catálogo, así que se descartan una única vez en
+        # vez de quedar como ítems que no se pueden cotizar ni re-resolver. El Sheet conserva las
+        # filas; se vuelven a cargar desde la pantalla.
+        result = conn.execute(text("PRAGMA table_info(watchlist)"))
+        cols = [row[1] for row in result.fetchall()]
+        if 'agregado_en' not in cols:
+            conn.execute(text("ALTER TABLE watchlist ADD COLUMN notas TEXT"))
+            conn.execute(text("ALTER TABLE watchlist ADD COLUMN agregado_en DATE"))
+            conn.execute(text("DELETE FROM watchlist"))
+            conn.execute(text("DELETE FROM precios_watchlist"))
             conn.commit()
 
     # El nombre identifica a una estrategia (ver `estrategias_analytics.normalizar_nombre`): las

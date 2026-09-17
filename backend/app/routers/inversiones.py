@@ -1,7 +1,7 @@
 import threading
 from datetime import date
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
 from ..database import get_db, MovimientoInversion, InstrumentoInversion
@@ -10,6 +10,10 @@ from ..schemas import (
     IolEstadoOut,
     CalidadDatosOut,
     WatchlistItemOut,
+    WatchlistItemIn,
+    WatchlistItemUpdate,
+    RefrescoPreciosOut,
+    CatalogoBusquedaOut,
     CarteraInfo,
     InversionesResumen,
     ExposicionOut,
@@ -49,6 +53,7 @@ from ..schemas import (
 from ..services.sheets_client import SheetsClientError
 from ..services.inversiones_sync import sync_from_sheet
 from ..services.calidad_datos import get_calidad_datos
+from ..services import catalogo_instrumentos, watchlist_analytics
 from ..services.watchlist_analytics import get_watchlist
 from ..services.inversiones_analytics import (
     get_carteras,
@@ -563,13 +568,96 @@ def calidad_datos(db: Session = Depends(get_db)):
     return get_calidad_datos(db)
 
 
+@router.get("/catalogo", response_model=CatalogoBusquedaOut)
+def catalogo(
+    q: str = Query(default="", max_length=100),
+    tipo: str = Query(default=""),
+    limite: int = Query(default=100, ge=1, le=500),
+):
+    """Busca en el catálogo de instrumentos de IOL: el universo que se puede agregar a la watchlist.
+
+    Es un archivo estático (ver `services/catalogo_instrumentos.py`), así que no toca la DB ni la
+    red y se puede pedir en cada tecla.
+    """
+    return catalogo_instrumentos.buscar(q=q, tipo=tipo, limite=limite)
+
+
 @router.get("/watchlist", response_model=list[WatchlistItemOut])
 def watchlist(db: Session = Depends(get_db)):
     """Instrumentos seguidos y su distancia al precio objetivo de compra.
 
-    Es global, no por cartera: la pestaña `Watchlist` del Sheet no tiene columna Cartera.
+    Es global, no por cartera: un instrumento se sigue o no se sigue, independientemente de en qué
+    cartera se termine comprando.
     """
     return get_watchlist(db)
+
+
+@router.post("/watchlist", response_model=WatchlistItemOut, status_code=201)
+def agregar_a_watchlist(body: WatchlistItemIn, db: Session = Depends(get_db)):
+    """Agrega un instrumento del catálogo a la watchlist y le baja el precio en el acto.
+
+    404 si el símbolo no está en el catálogo, 409 si ya se está siguiendo. Si la cotización falla
+    (IOL caída, sin cupo, símbolo sin precio del día) el ítem se crea igual, sin precio: el alta no
+    depende de que una API de terceros esté arriba.
+    """
+    item, error, _issues = watchlist_analytics.agregar(
+        db, body.ticker, objetivo=body.objetivo, notas=body.notas,
+    )
+    if error == "no_encontrado":
+        raise HTTPException(
+            status_code=404,
+            detail=f"'{body.ticker}' no está en el catálogo de instrumentos de IOL",
+        )
+    if error == "duplicado":
+        raise HTTPException(status_code=409, detail=f"'{body.ticker}' ya está en la watchlist")
+
+    db.commit()
+    return watchlist_analytics.get_watchlist_item(db, item.ticker)
+
+
+@router.put("/watchlist/{ticker}", response_model=WatchlistItemOut)
+def actualizar_watchlist(ticker: str, body: WatchlistItemUpdate, db: Session = Depends(get_db)):
+    """Edita el precio objetivo de compra y las notas.
+
+    `exclude_unset`: un PUT que sólo manda `objetivo` no borra las notas guardadas. Para limpiar un
+    campo hay que mandarlo explícitamente en `null`.
+    """
+    item = watchlist_analytics.actualizar(db, ticker, body.model_dump(exclude_unset=True))
+    if item is None:
+        raise HTTPException(status_code=404, detail=f"'{ticker}' no está en la watchlist")
+    db.commit()
+    return watchlist_analytics.get_watchlist_item(db, ticker)
+
+
+@router.delete("/watchlist/{ticker}", status_code=204)
+def eliminar_de_watchlist(ticker: str, db: Session = Depends(get_db)):
+    """Deja de seguir el instrumento y limpia su precio y sus velas (si no está en cartera)."""
+    if not watchlist_analytics.eliminar(db, ticker):
+        raise HTTPException(status_code=404, detail=f"'{ticker}' no está en la watchlist")
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.post("/watchlist/{ticker}/precio", response_model=WatchlistItemOut)
+def refrescar_precio_watchlist(ticker: str, db: Session = Depends(get_db)):
+    """Vuelve a cotizar un instrumento sin esperar al próximo sync."""
+    fila = watchlist_analytics.get_watchlist_item(db, ticker)
+    if fila is None:
+        raise HTTPException(status_code=404, detail=f"'{ticker}' no está en la watchlist")
+    watchlist_analytics.refrescar_precios(
+        db, [ticker], max_simbolos_sueltos=1, solo_simbolo_suelto=True,
+    )
+    db.commit()
+    return watchlist_analytics.get_watchlist_item(db, ticker)
+
+
+@router.post("/watchlist/precios", response_model=RefrescoPreciosOut)
+def refrescar_precios_watchlist(db: Session = Depends(get_db)):
+    """Re-cotiza la watchlist entera. Los paneles de IOL traen docenas de símbolos por llamada, así
+    que esto cuesta lo mismo para 3 instrumentos que para 30."""
+    actualizados, issues = watchlist_analytics.refrescar_precios(db)
+    db.commit()
+    return {"actualizados": actualizados, "issues": [i.mensaje for i in issues]}
 
 
 # ── Análisis profundo por ticker ──────────────────────────────────────────────

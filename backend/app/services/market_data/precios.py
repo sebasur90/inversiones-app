@@ -30,7 +30,7 @@ para lo que analisistecnico no cubre (ONs, renta variable) — ver `fetch_backfi
 from datetime import date, timedelta
 from unicodedata import combining, normalize
 
-from ...database import BarraOHLCV
+from ...database import BarraOHLCV, PrecioWatchlist
 from ..ohlcv_analytics import clave_serie
 from ..validation.types import Severity, ValidationIssue
 from . import analisistecnico, data912, yahoo
@@ -65,6 +65,11 @@ _REINTENTO_SIN_SERIE_DIAS = 90            # A3: un ticker sin serie histórica s
 # ya se pide para valuación).
 _PISO_TECNICO = timedelta(days=366 * 2)
 _MAX_BACKFILL_OHLCV_POR_SYNC = 8
+
+# Watchlist: cuántos símbolos que los paneles NO cubren se piden de a uno a IOL por corrida
+# (`Titulos/{simbolo}/Cotizacion`, 1 llamada cada uno). Lo que queda afuera del tope se reintenta
+# en la corrida siguiente; el alta manual de un instrumento pasa por la misma función con tope 1.
+_MAX_SIMBOLOS_SUELTOS = 20
 
 
 def _aplicar_factor_ohlcv(barra: BarraCruda, factor: float) -> BarraCruda:
@@ -682,27 +687,61 @@ def fetch_precios_api(
     return filas, issues
 
 
-def fetch_precios_watchlist(
+def _orden_por_precio_mas_viejo(db, pendientes: list[dict]):
+    """Clave de orden: primero los que no tienen precio guardado, después por fecha ascendente.
+
+    Hace que el tope de cotizaciones sueltas rote entre corridas en vez de cortar siempre el mismo
+    prefijo alfabético, que dejaría a la cola de la lista sin pedirse nunca. Con `db` ausente (los
+    tests unitarios de esta función) cae al orden en el que vinieron, que ahí es el determinista
+    que los tests esperan.
+    """
+    if db is None or not pendientes:
+        return lambda _w: (0, "")
+
+    tickers = [w["ticker"] for w in pendientes]
+    fechas = {
+        row.ticker: row.fecha
+        for row in db.query(PrecioWatchlist).filter(PrecioWatchlist.ticker.in_(tickers)).all()
+    }
+
+    def _clave(w: dict):
+        fecha = fechas.get(w["ticker"])
+        # (0, ...) para los que nunca se cotizaron: son los que más necesitan la llamada.
+        return (0, "") if fecha is None else (1, fecha.isoformat())
+
+    return _clave
+
+
+def fetch_precios_watchlist_catalogo(
     watchlist: list[dict],
-    precios_sheet: list[dict],
     db,
     hoy: date | None = None,
-    estado_por_ticker: dict[str, dict] | None = None,
     paneles_fn=None,
     fci_fn=None,
+    max_simbolos_sueltos: int = _MAX_SIMBOLOS_SUELTOS,
+    solo_simbolo_suelto: bool = False,
 ) -> tuple[list[dict], list[ValidationIssue]]:
-    """Precio del día para los tickers de la pestaña `Watchlist` (los que NO están en cartera).
+    """Precio del día para los tickers de la watchlist (los que NO están en cartera).
 
-    Reusa `fetch_precios_api` entero -- las tres familias, el encadenado IOL -> data912 y la
-    calibración de escala son los mismos. Lo único propio es de dónde sale la **referencia de
-    escala**: un ticker de watchlist no tiene precios manuales en la pestaña `Precios`, así que se
-    le arma una referencia sintética con su propio `Objetivo`, que está expresado en la misma
-    unidad en la que el usuario piensa el precio. Si además cargó precios reales de ese ticker en
-    `Precios`, esos ganan (son una referencia observada, no una intención).
+    **Sin calibración de escala**, a diferencia de la ruta de cartera: el ticker de un ítem de
+    watchlist sale del catálogo de IOL (`services/catalogo_instrumentos.py`), así que el símbolo es
+    el de IOL por construcción y su cotización ya viene en la unidad correcta. No hay ninguna serie
+    del Sheet contra la cual reconciliarlo, y tampoco hace falta: el factor es 1.0.
 
-    Consecuencia a tener presente: si el objetivo está a más de ~2.5x del precio de mercado, el
-    ratio cae fuera de las ventanas de `_factor_escala` y el precio no se carga (issue
-    `escala_desconocida`). Se destraba cargando un precio manual del ticker en la pestaña `Precios`.
+    Esto reemplaza a la vieja `fetch_precios_watchlist`, que calibraba contra el `Objetivo` de la
+    pestaña `Watchlist`. Aquella referencia era una *intención* de compra, no un precio observado:
+    un objetivo a más de ~2.5x del mercado caía fuera de `_factor_escala` y dejaba al instrumento
+    sin precio, y sin objetivo directamente no se cotizaba.
+
+    Tres intentos por ticker, del más barato al más caro:
+
+      1. Los paneles de IOL (`paneles_fn`) y `Titulos/FCI` (`fci_fn`) -- memos compartidos con la
+         ruta de cartera en la misma corrida, así que para lo que cubren esto no gasta ni una
+         llamada extra.
+      2. `iol.fetch_precio_simbolo` para lo que los paneles no traen: 1 llamada por símbolo, con
+         `max_simbolos_sueltos` de tope por corrida para no comerse el cupo mensual. Lo que queda
+         afuera del tope se reintenta en la corrida siguiente.
+      3. data912 (público, sin auth ni cupo) como respaldo si IOL no respondió.
 
     Devuelve (filas, issues); las filas tienen la forma `{ticker, fecha, precio, moneda, fuente}`,
     lista para `PrecioWatchlist`.
@@ -711,35 +750,113 @@ def fetch_precios_watchlist(
     if not watchlist:
         return [], []
 
-    tickers_wl = {w["ticker"] for w in watchlist}
-    precios_ref = [p for p in precios_sheet if p["ticker"] in tickers_wl]
-    con_referencia_real = {p["ticker"] for p in precios_ref}
+    issues: list[ValidationIssue] = []
+
+    filas: list[dict] = []
+    pendientes: list[dict] = []
+    iol_disponible = True
+
+    if solo_simbolo_suelto:
+        # Un alta o un refresco de a uno: bajar los ~9 paneles para un solo símbolo costaría 9
+        # llamadas del cupo en vez de 1. Se va derecho al endpoint por símbolo.
+        pendientes = list(watchlist)
+    else:
+        _paneles = paneles_fn or memo_paneles(db)
+        _fci = fci_fn or memo_fci(db)
+
+        # `simbolo -> (precio, moneda)` uniendo paneles y FCI. `None` en ambos = IOL no está
+        # disponible (sin credenciales, sin cupo o caída), distinto de "respondió pero no tiene el
+        # símbolo". `Titulos/FCI` sólo se pide si hay algún fondo: es una llamada aparte.
+        paneles = _paneles()
+        fci = _fci() if any(_es_fci(w.get("tipo_instrumento", "")) for w in watchlist) else None
+        iol_disponible = paneles is not None or fci is not None
+        cotizaciones_iol: dict[str, tuple[float, str]] = {}
+        for fuente_dict in (paneles, fci):
+            if fuente_dict:
+                for simbolo, valor in fuente_dict.items():
+                    cotizaciones_iol.setdefault(simbolo.upper().strip(), valor)
+
+        for w in watchlist:
+            encontrado = cotizaciones_iol.get(w["ticker"].upper().strip())
+            if encontrado is None:
+                pendientes.append(w)
+                continue
+            precio, moneda = encontrado
+            filas.append({
+                "fecha": hoy, "ticker": w["ticker"], "precio": round(float(precio), 6),
+                "moneda": (moneda or w.get("moneda") or "ARS").strip().upper(), "fuente": "iol",
+            })
+
+    # (2) Símbolo suelto por IOL, sólo si IOL está respondiendo (si no, se ahorra el intento y se
+    # va derecho al respaldo público). Los que tienen el precio guardado más viejo van primero: el
+    # tope corta una lista ordenada por antigüedad, así que en corridas sucesivas rota y a todos
+    # les toca -- si cortara siempre el mismo prefijo, la cola nunca llegaría a pedirse.
+    sin_resolver: list[dict] = []
+    # Se lleva aparte de `sin_resolver`, que además junta a los que quedaron fuera del tope: sólo
+    # de éstos se puede afirmar que IOL no los cotiza, y eso cambia el issue que se reporta.
+    preguntados_a_iol: set[str] = set()
+    if iol_disponible:
+        por_antiguedad = sorted(pendientes, key=_orden_por_precio_mas_viejo(db, pendientes))
+        for w in por_antiguedad[:max_simbolos_sueltos]:
+            ticker = w["ticker"]
+            preguntados_a_iol.add(ticker)
+            # Sin pasar `mercado`: se deja el default de `iol.py` (`bCBA`, la grafía que espera esa
+            # API). El `mercado` del catálogo es para mostrar, no para armar la URL.
+            cotizacion = iol_client.fetch_precio_simbolo(db, ticker)
+            if cotizacion is None:
+                sin_resolver.append(w)
+                continue
+            precio, moneda = cotizacion
+            filas.append({
+                "fecha": hoy, "ticker": ticker, "precio": round(float(precio), 6),
+                "moneda": (moneda or w.get("moneda") or "ARS").strip().upper(), "fuente": "iol",
+            })
+        sin_resolver.extend(por_antiguedad[max_simbolos_sueltos:])
+    else:
+        sin_resolver = list(pendientes)
+
+    # (3) Respaldo público: data912, por familia. No gasta cupo ni requiere credenciales.
+    if sin_resolver:
+        for predicate, fetch_fn in (
+            (_es_renta_fija, data912.fetch_precios_renta_fija),
+            (_es_renta_variable, data912.fetch_precios_renta_variable),
+        ):
+            objetivo = [w for w in sin_resolver if predicate(w.get("tipo_instrumento", ""))]
+            if not objetivo:
+                continue
+            por_symbol = fetch_fn()
+            if por_symbol is None:
+                continue
+            por_symbol = {s.upper().strip(): px for s, px in por_symbol.items()}
+            for w in objetivo:
+                px = por_symbol.get(w["ticker"].upper().strip())
+                if px is None or px <= 0:
+                    continue
+                filas.append({
+                    "fecha": hoy, "ticker": w["ticker"], "precio": round(float(px), 6),
+                    "moneda": (w.get("moneda") or "ARS").strip().upper(), "fuente": "api",
+                })
+
+    resueltos = {f["ticker"] for f in filas}
     for w in watchlist:
-        if w["ticker"] in con_referencia_real or w.get("objetivo") is None:
+        ticker = w["ticker"]
+        if ticker in resueltos:
             continue
-        precios_ref.append({
-            "ticker": w["ticker"],
-            "fecha": hoy,
-            "precio": float(w["objetivo"]),
-            "moneda": w.get("moneda") or "ARS",
-        })
-
-    filas, issues = fetch_precios_api(
-        watchlist, precios_ref, set(), db, hoy=hoy, estado_por_ticker=estado_por_ticker,
-        paneles_fn=paneles_fn, fci_fn=fci_fn,
-    )
-
-    # Los issues salen rotulados como si vinieran de la cartera: se re-rotulan para que en Calidad
-    # de datos se vea de qué pestaña salió cada uno, y las dos reglas de calibración explican el
-    # remedio propio de la watchlist (la referencia acá es el Objetivo, no un precio manual).
-    for issue in issues:
-        issue.tab = "Watchlist (API)"
-        if issue.regla in ("sin_precio_para_calibrar", "escala_desconocida"):
-            issue.impacto = (
-                "No se carga el precio de este instrumento de la watchlist. Cargá un precio "
-                "manual del ticker en la pestaña Precios, o revisá que el Objetivo esté en la "
-                "misma unidad que la cotización"
-            )
+        if iol_disponible and ticker not in preguntados_a_iol:
+            # Quedó afuera del tope por corrida: se reintenta en la próxima (y el orden por
+            # antigüedad garantiza que le toque). Decir "IOL no lo cotiza" sería mentira: no se le
+            # preguntó.
+            mensaje = (f"{ticker}: quedó fuera del cupo de cotizaciones sueltas de esta corrida; "
+                       "se reintenta en la próxima")
+        elif iol_disponible:
+            mensaje = f"{ticker}: sin cotización del día en IOL ni en data912"
+        else:
+            mensaje = f"{ticker}: IOL no está disponible y data912 no lo cotiza"
+        issues.append(ValidationIssue(
+            tab="Watchlist (API)", campo=ticker, regla="ticker_no_cotizado", mensaje=mensaje,
+            impacto="Se mantiene el último precio guardado de este instrumento, si había",
+            severidad=Severity.INFO,
+        ))
 
     return filas, issues
 
@@ -927,7 +1044,7 @@ def fetch_backfill_iol(
 
 def fetch_backfill_ohlcv_watchlist(
     watchlist: list[dict],
-    precios_sheet: list[dict],
+    precios_observados: list[dict],
     ohlcv_existentes: dict[str, date],
     db,
     hoy: date | None = None,
@@ -935,15 +1052,22 @@ def fetch_backfill_ohlcv_watchlist(
 ) -> tuple[list[dict], list[ValidationIssue]]:
     """Backfill de velas para tickers de la watchlist — función propia, a diferencia del backfill
     de cartera: esos tickers no tienen movimientos (sin piso de valuación) ni filas en
-    `precios_instrumento`, y su referencia de escala es sintética.
+    `precios_instrumento`.
 
     Piso `hoy - _PISO_TECNICO` (2 años, alcanza para una MM200 y el backtest, cuesta la mitad que
-    el piso de cartera). Referencia de escala: **exactamente** la misma construcción que
-    `fetch_precios_watchlist` — precio manual de `Precios` si existe, si no una fila sintética con
-    el `Objetivo`. El factor sale de `_resolver_factor`, que normalmente reusa el `factor_escala`
-    ya persistido por la ruta live: el gráfico y la tarjeta de watchlist no pueden divergir de
-    escala. Fuera de las ventanas de ratio conocidas -> issue `escala_desconocida` con el mismo
-    texto de remedio que ya usa la watchlist.
+    el piso de cartera).
+
+    **Acá la calibración de escala sí hace falta**, aunque la ruta *live*
+    (`fetch_precios_watchlist_catalogo`) ya no la necesite: las velas no salen de IOL sino de
+    `analisistecnico`, que es otra fuente y para un CEDEAR puede resolver el símbolo a la acción del
+    NASDAQ en USD (~11x de diferencia). Sin conciliar, el gráfico quedaría en otra unidad que el
+    precio de la tarjeta.
+
+    `precios_observados`: las filas de `PrecioWatchlist` (`{ticker, fecha, precio, moneda}`), que es
+    la referencia contra la que se calibra. Antes se usaba el `Objetivo` del Sheet, que era una
+    *intención* de compra; el precio recién bajado de IOL es un precio **observado** en la unidad
+    correcta, así que es una referencia estrictamente mejor. El factor sale de `_resolver_factor` y
+    fuera de las ventanas de ratio conocidas -> issue `escala_desconocida`.
 
     analisistecnico primero (gratis); IOL sólo si el primero devuelve `None`. El loop se corta a
     `_MAX_BACKFILL_OHLCV_POR_SYNC` tickers por corrida: analisistecnico no tiene cupo mensual, pero
@@ -966,18 +1090,16 @@ def fetch_backfill_ohlcv_watchlist(
         return [], issues
 
     tickers_wl = {w["ticker"] for w in watchlist}
-    precios_ref = [p for p in precios_sheet if p["ticker"] in tickers_wl]
-    con_referencia_real = {p["ticker"] for p in precios_ref}
 
-    ultimo_sheet: dict[str, tuple[date, float, str]] = {}
-    for p in precios_ref:
-        t, f, px = p["ticker"], p["fecha"], float(p["precio"])
-        if t not in ultimo_sheet or f > ultimo_sheet[t][0]:
-            ultimo_sheet[t] = (f, px, p.get("moneda") or "")
-    for w in watchlist:
-        if w["ticker"] in con_referencia_real or w.get("objetivo") is None:
+    # Referencia de escala: el último precio observado de cada ticker (`PrecioWatchlist`).
+    referencia: dict[str, tuple[date, float, str]] = {}
+    for p in precios_observados:
+        t = p["ticker"]
+        if t not in tickers_wl:
             continue
-        ultimo_sheet.setdefault(w["ticker"], (hoy, float(w["objetivo"]), w.get("moneda") or "ARS"))
+        f, px = p["fecha"], float(p["precio"])
+        if t not in referencia or f > referencia[t][0]:
+            referencia[t] = (f, px, p.get("moneda") or "")
 
     piso_global = hoy - _PISO_TECNICO
 
@@ -1060,15 +1182,15 @@ def fetch_backfill_ohlcv_watchlist(
         if not serie:
             continue
 
-        prev = ultimo_sheet.get(ticker)
+        prev = referencia.get(ticker)
         if prev is None:
-            continue  # sin precio manual ni Objetivo: no hay referencia de escala posible
+            continue  # sin precio observado todavía: no hay referencia de escala posible
 
-        f_ref, px_ref_sheet, moneda_sheet = prev
-        if px_ref_sheet <= 0:
+        f_ref, px_ref_obs, moneda_obs = prev
+        if px_ref_obs <= 0:
             continue
         px_ref = min(serie, key=lambda b: abs((b.fecha - f_ref).days)).cierre
-        factor, _ = _resolver_factor(ticker, px_ref, px_ref_sheet, f_ref, estado_por_ticker)
+        factor, _ = _resolver_factor(ticker, px_ref, px_ref_obs, f_ref, estado_por_ticker)
 
         # El factor persistido se calibró contra la fuente de la ruta *live* (IOL/data912), que no
         # es necesariamente la misma que la de las velas: para un CEDEAR, IOL cotiza el CEDEAR en
@@ -1076,24 +1198,22 @@ def fetch_backfill_ohlcv_watchlist(
         # diferencia). Reusar el factor a ciegas cargaría velas en otra unidad que la tarjeta de
         # la watchlist — justo lo que el reuso quería evitar. Por eso el factor reusado igual se
         # valida contra ESTA serie: si no concuerda, no se cargan velas y se reporta.
-        factor_observado = _factor_escala(px_ref, px_ref_sheet)
+        factor_observado = _factor_escala(px_ref, px_ref_obs)
         if factor is None or factor_observado != factor:
             issues.append(ValidationIssue(
                 tab="Watchlist (OHLCV)", campo=ticker, regla="escala_desconocida",
-                mensaje=(f"{ticker}: la fuente de velas cotiza {px_ref:g} y la referencia "
-                         f"({'precio manual' if ticker in con_referencia_real else 'Objetivo'}) "
-                         f"es {px_ref_sheet:g} (factor {px_ref / px_ref_sheet:.2f}, "
+                mensaje=(f"{ticker}: la fuente de velas cotiza {px_ref:g} y el precio observado "
+                         f"es {px_ref_obs:g} (factor {px_ref / px_ref_obs:.2f}, "
                          f"incompatible con la escala {factor if factor is not None else '~1 o ~100'} "
                          "de la cotización)"),
                 impacto=("No se cargan velas de este ticker de la watchlist: el gráfico quedaría "
-                         "en otra unidad que el precio de la tarjeta. Cargá un precio manual del "
-                         "ticker en la pestaña Precios, o revisá que el Objetivo esté en la misma "
-                         "unidad que la cotización"),
+                         "en otra unidad que el precio de la tarjeta. Probá refrescar el precio, "
+                         "o quitá y volvé a agregar el instrumento eligiéndolo del catálogo"),
                 severidad=Severity.ADVERTENCIA,
             ))
             continue
 
-        moneda = (moneda_sheet or w.get("moneda") or "ARS").strip().upper()
+        moneda = (moneda_obs or w.get("moneda") or "ARS").strip().upper()
         for b in serie:
             if b.fecha >= hoy:
                 continue

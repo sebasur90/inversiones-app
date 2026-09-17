@@ -30,6 +30,9 @@ services:
       - ./credentials/iol.json:/app/data/iol.json:ro
       # Local Excel file for development environment (read-only)
       - ./sheet_local:/app/sheet_local:ro
+      # Catálogo de instrumentos de IOL — ver docker-compose.yml. Este archivo sobreescribe la
+      # lista de volúmenes entera, así que el montaje tiene que repetirse acá.
+      - ./catalogos:/app/catalogos:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]

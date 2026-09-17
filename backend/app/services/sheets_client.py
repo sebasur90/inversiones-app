@@ -36,7 +36,8 @@ CONFIGURACION_TAB = "Configuracion"
 
 TIPOS_CAMBIO_TAB = "Tipos de Cambio"
 
-WATCHLIST_TAB = "Watchlist"
+# La pestaña `Watchlist` ya no se lee: la watchlist la gestiona el usuario desde la app (alta desde
+# el catálogo de IOL, ver `services/catalogo_instrumentos.py`). Si existe en el Sheet, se ignora.
 
 
 class SheetsClientError(Exception):
@@ -122,7 +123,7 @@ def _fetch_from_excel() -> dict[str, TabRaw]:
 
         # Agregar pestañas opcionales
         for opt_tab in [OBJETIVOS_TAB, REBALANCEO_TAB, BENCHMARKS_TAB, CONFIGURACION_TAB,
-                        TIPOS_CAMBIO_TAB, WATCHLIST_TAB]:
+                        TIPOS_CAMBIO_TAB]:
             if opt_tab not in excel_file.sheet_names:
                 result[opt_tab] = TabRaw(presente=False, header=[], rows=[])
             else:
@@ -178,7 +179,7 @@ def fetch_sheet_data() -> dict[str, TabRaw]:
 
         # Agregar pestañas opcionales
         for opt_tab in [OBJETIVOS_TAB, REBALANCEO_TAB, BENCHMARKS_TAB, CONFIGURACION_TAB,
-                        TIPOS_CAMBIO_TAB, WATCHLIST_TAB]:
+                        TIPOS_CAMBIO_TAB]:
             try:
                 resp = (
                     service.spreadsheets()
