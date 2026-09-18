@@ -669,6 +669,193 @@ export interface ComisionesOut {
 export const getComisiones = (cartera: string | null) =>
   api.get<ComisionesOut>(`${carteraPath(cartera)}/comisiones`).then(r => r.data)
 
+// --- Ritmo de aportes (espejo de schemas.RitmoAportesOut) ---
+
+export interface AporteMesItem {
+  mes: string // "YYYY-MM"
+  neto_usd: number
+  compras_usd: number
+  salidas_usd: number
+  en_curso: boolean
+  futuro: boolean
+  con_aporte: boolean
+  promedio_movil_3_usd: number | null
+}
+
+export interface AporteComparacion {
+  referencia_usd: number
+  delta_usd: number
+  delta_pct: number | null
+  delta_proyectado_usd: number | null
+  delta_proyectado_pct: number | null
+}
+
+export interface AporteEsteMes {
+  mes: string
+  neto_usd: number
+  compras_usd: number
+  salidas_usd: number
+  dia: number
+  dias_mes: number
+  dias_restantes: number
+  proyeccion_usd: number
+  proyeccion_fiable: boolean
+  es_record_parcial: boolean
+  vs_mes_anterior: AporteComparacion | null
+  vs_promedio_3: AporteComparacion | null
+  vs_promedio_6: AporteComparacion | null
+  vs_promedio_12: AporteComparacion | null
+  vs_mismo_mes_anio_anterior: AporteComparacion | null
+}
+
+export type AporteProyeccionClave = 'este_mes' | 'promedio_3' | 'promedio_ytd'
+
+export interface AporteProyeccionAnual {
+  clave: AporteProyeccionClave
+  etiqueta: string
+  ritmo_mensual_usd: number | null
+  total_fin_anio_usd: number | null
+}
+
+export interface AporteAnioEnCurso {
+  anio: number
+  ytd_usd: number
+  meses_cerrados: number
+  meses_restantes: number
+  promedio_mensual_ytd_usd: number | null
+  anio_anterior_total_usd: number | null
+  vs_mismo_periodo_anio_anterior: AporteComparacion | null
+  proyecciones: AporteProyeccionAnual[]
+}
+
+export interface AporteRacha {
+  meses: number
+  desde: string | null
+  hasta: string | null
+  incluye_mes_en_curso: boolean
+}
+
+export interface AporteRachas {
+  aportando_actual: AporteRacha
+  aportando_record: AporteRacha
+  sin_aportar_actual: number
+  sobre_promedio_12_actual: number | null
+  direccion: 'subiendo' | 'bajando' | 'ninguna'
+  direccion_meses: number
+  meses_sin_aportar_ultimos_12: number
+  meses_considerados_ultimos_12: number
+}
+
+export interface AporteMesRef {
+  mes: string
+  neto_usd: number
+}
+
+export interface AporteNivel {
+  nivel: 'bien' | 'atencion' | 'riesgo'
+  etiqueta: string
+}
+
+export interface AporteEstadisticas {
+  meses_historia: number
+  meses_con_aporte: number
+  meses_con_retiro: number
+  total_neto_usd: number
+  total_compras_usd: number
+  total_salidas_usd: number
+  promedio_usd: number | null
+  mediana_usd: number | null
+  desvio_usd: number | null
+  coef_variacion: number | null
+  constancia: AporteNivel | null
+  promedio_3_usd: number | null
+  promedio_6_usd: number | null
+  promedio_12_usd: number | null
+  mejor_mes: AporteMesRef | null
+  peor_mes: AporteMesRef | null
+  mejor_mes_anio: AporteMesRef | null
+  peor_mes_anio: AporteMesRef | null
+}
+
+export type AporteEstado = 'arrancando' | 'acelerando' | 'sostenido' | 'frenando' | 'parado'
+
+export interface AporteEstadoRitmo {
+  estado: AporteEstado
+  etiqueta: string
+  nivel: 'bien' | 'atencion' | 'riesgo'
+  detalle: string
+  tendencia_3v3_pct: number | null
+  tendencia_6v6_pct: number | null
+  promedio_3_usd: number | null
+  promedio_3_anterior_usd: number | null
+  promedio_6_usd: number | null
+  promedio_6_anterior_usd: number | null
+}
+
+export interface AporteAnioItem {
+  anio: number
+  total_usd: number
+  compras_usd: number
+  salidas_usd: number
+  promedio_mensual_usd: number | null
+  meses_con_aporte: number
+  meses_en_rango: number
+  var_vs_anio_anterior_pct: number | null
+  en_curso: boolean
+  mejor_mes: AporteMesRef | null
+}
+
+export interface AporteAnioRef {
+  anio: number
+  total_usd: number
+}
+
+export interface AporteHito {
+  clave: string
+  titulo: string
+  descripcion: string
+  fecha: string
+  reciente: boolean
+}
+
+export interface AporteProximoHito {
+  clave: string
+  titulo: string
+  unidad: 'usd' | 'meses'
+  valor_objetivo: number
+  valor_actual: number
+  falta: number
+  progreso_pct: number
+}
+
+export interface AporteMensaje {
+  clave: string
+  tono: 'positivo' | 'neutro' | 'negativo'
+  titulo: string
+  detalle: string
+}
+
+export interface RitmoAportesOut {
+  estado: 'ok' | 'sin_datos'
+  hoy: string
+  primer_mes: string | null
+  movimientos_omitidos_sin_mep: number
+  serie_mensual: AporteMesItem[]
+  por_anio: AporteAnioItem[]
+  mejor_anio: AporteAnioRef | null
+  este_mes: AporteEsteMes | null
+  anio_en_curso: AporteAnioEnCurso | null
+  rachas: AporteRachas | null
+  estadisticas: AporteEstadisticas | null
+  estado_ritmo: AporteEstadoRitmo | null
+  hitos_alcanzados: AporteHito[]
+  proximos_hitos: AporteProximoHito[]
+  mensajes: AporteMensaje[]
+}
+
+export const getRitmoAportes = (cartera: string | null) =>
+  api.get<RitmoAportesOut>(`${carteraPath(cartera)}/aportes/ritmo`).then(r => r.data)
+
 // --- P&L Realizado vs No Realizado ---
 
 export interface PnlConsolidado {

@@ -43,6 +43,18 @@ export const FAQ: FaqItem[] = [
       'Varias métricas (volatilidad, Sharpe, Sortino, drawdown, entre otras) necesitan un mínimo de meses de historial mensual para calcularse de forma confiable. Con una cartera nueva o un ticker recién agregado, es esperable verlo hasta que se acumule más historia.',
   },
   {
+    pregunta: '¿Por qué en Ritmo de aportes un mes aparece negativo o en cero?',
+    respuesta:
+      'El aporte de un mes es lo que compraste menos lo que vendiste o amortizaste. Si ese mes vendiste más de lo que compraste, es un retiro neto y queda en rojo. Si no hiciste compras ni ventas, queda en cero y cuenta como mes sin aportar (los dividendos y cupones cobrados no son aporte). Una rotación —vender un instrumento para comprar otro— se cancela y no suma ni resta.',
+    termino: 'aportes_neto_criterio',
+  },
+  {
+    pregunta: '¿Por qué Ritmo de aportes está sólo en dólares?',
+    respuesta:
+      'Porque compararte contra vos mismo en pesos nominales entre distintos años mediría inflación, no cuánto esfuerzo de ahorro hiciste. Cada movimiento se convierte al dólar MEP del día en que lo hiciste, y todas las comparaciones y proyecciones se hacen en esa unidad.',
+    termino: 'aportes_moneda',
+  },
+  {
     pregunta: '¿La app puede comprar o vender algo por mí?',
     respuesta:
       'No. La app es de solo lectura: lee tu Google Sheet, calcula métricas y te las muestra. Cualquier operación (comprar, vender, rebalancear) la hacés vos en tu broker, y después la cargás como movimiento en el Sheet.',

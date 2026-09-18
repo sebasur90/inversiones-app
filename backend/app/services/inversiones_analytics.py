@@ -2359,6 +2359,46 @@ def get_comisiones(cartera: str | None, db: Session) -> dict:
 
 # ── Objetivos de inversión ──────────────────────────────────────────────────
 
+def serie_mensual_aportes(
+    movs: list[MovimientoInversion], db: Session, mep_cache: dict
+) -> tuple[dict[str, dict], int]:
+    """Aportes netos por mes en USD: {"YYYY-MM": {"neto", "compras", "salidas"}}, sólo los meses
+    con movimientos, más la cantidad de movimientos omitidos por no tener MEP para convertir.
+
+    Es la única definición de "aporte" del proyecto (la usan Objetivo y Ritmo de aportes; la de
+    Patrimonio en `patrimonio_analytics` sigue el mismo criterio): sólo el capital que entra o
+    sale de la cartera cuenta. Las compras suman, ventas y amortizaciones (TIPOS_RETIRO) restan,
+    siempre con la comisión incluida (`_monto_usd`). Los dividendos y cupones son rendimiento,
+    no capital propio: contarlos infla el aporte, y si se reinvierten la compra correspondiente
+    ya los registra (doble conteo). `salidas` va en valor absoluto.
+
+    Un mes que sólo tuvo dividendos/cupones igual aparece (en cero): la curva acumulada de
+    Objetivo siempre tuvo un punto plano ahí, y para el ritmo de aportes un cero es un cero.
+    """
+    serie: dict[str, dict] = {}
+    omitidos = 0
+    for mov in movs:
+        if mov.tipo_movimiento == "compra":
+            signo = 1.0
+        elif mov.tipo_movimiento in TIPOS_RETIRO:
+            signo = -1.0
+        else:
+            signo = 0.0
+        monto_usd = _monto_usd(mov, db, mep_cache)
+        if monto_usd is None:
+            if signo != 0.0:
+                omitidos += 1
+            continue
+        mes = serie.setdefault(mov.fecha.strftime("%Y-%m"), {"neto": 0.0, "compras": 0.0, "salidas": 0.0})
+        if signo > 0:
+            mes["neto"] += monto_usd
+            mes["compras"] += monto_usd
+        elif signo < 0:
+            mes["neto"] -= monto_usd
+            mes["salidas"] += monto_usd
+    return serie, omitidos
+
+
 def get_aportes_historicos(cartera: str, db: Session, resumen: dict | None = None) -> dict:
     """Histórico de aportes netos acumulados mes a mes, con valor actual de mercado hoy.
 
@@ -2374,25 +2414,7 @@ def get_aportes_historicos(cartera: str, db: Session, resumen: dict | None = Non
         # Sin movimientos, devolver estructura vacía pero con valor_actual_usd
         return {"curva": [], "valor_actual_usd": valor_actual_usd}
 
-    mep_cache: dict = {}
-    aportes_por_mes: dict[str, float] = {}
-
-    for mov in movs:
-        monto_usd = _monto_usd(mov, db, mep_cache)
-        if monto_usd is None:
-            continue
-
-        mes_key = mov.fecha.strftime("%Y-%m")
-        # Sólo el capital que entra o sale de la cartera cuenta como aporte. Los dividendos y
-        # cupones son rendimiento, no capital propio: contarlos infla el aporte promedio, y si
-        # se reinvierten la compra correspondiente ya los registra (doble conteo).
-        aporte_neto = 0.0
-        if mov.tipo_movimiento == "compra":
-            aporte_neto = monto_usd
-        elif mov.tipo_movimiento in ("venta", "amortizacion"):
-            aporte_neto = -monto_usd
-
-        aportes_por_mes[mes_key] = aportes_por_mes.get(mes_key, 0.0) + aporte_neto
+    aportes_por_mes, _ = serie_mensual_aportes(movs, db, {})
 
     # Construir curva acumulada mes a mes, manteniendo acumulado plano en meses sin movimiento
     if not aportes_por_mes:
@@ -2402,7 +2424,7 @@ def get_aportes_historicos(cartera: str, db: Session, resumen: dict | None = Non
     acumulado = 0.0
 
     for mes in sorted(aportes_por_mes.keys()):
-        acumulado += aportes_por_mes[mes]
+        acumulado += aportes_por_mes[mes]["neto"]
         curva.append({
             "mes": mes,
             "aportes_netos_acumulados": round(acumulado, 2),

@@ -21,6 +21,7 @@ La app lee de Google Sheets (pestañas `Movimientos`, `Instrumentos`, `Precios`,
 - **Movimientos** — historial de compras, ventas, dividendos, cupones, amortizaciones.
 - **Precios** — evolución histórica por ticker (nominal / USD / ajustado por CER).
 - **Objetivo** — por cartera: progreso hacia meta en USD, aporte mensual necesario vs. promedio, simulador de interés compuesto, gráfico de aportes.
+- **Ritmo de aportes** — cuánto capital nuevo entra mes a mes (compras − ventas − amortizaciones, en USD MEP): este mes proyectado al ritmo diario vs. mes anterior / promedio / mismo mes del año pasado, estado del ritmo (acelerando / sostenido / frenando / parado), rachas y récords, hitos, mensajes de motivación, gráfico mensual, calendario año×mes, tabla por año y proyección a fin de año con tres ritmos. Sin metas: todo se compara contra el propio historial.
 - **Indicadores Macro** — evolución de CER y MEP.
 - **Vencimientos** — calendario de vencimientos de bonos/instrumentos.
 - **Comparador** — hasta 5 tickers, series normalizadas a base 100.
@@ -28,4 +29,4 @@ La app lee de Google Sheets (pestañas `Movimientos`, `Instrumentos`, `Precios`,
 
 ## Extras
 
-Glosario financiero integrado (tooltips), modal de resultados de sincronización con Sheets, app instalable como PWA. Exportación a CSV en Movimientos, Posiciones y Comisiones (separador `;` y BOM, para que Excel en español lo abra bien). La cartera y la moneda elegidas se recuerdan entre sesiones. No tiene exportación a PDF ni alertas push.
+Glosario financiero integrado (tooltips), modal de resultados de sincronización con Sheets, app instalable como PWA. Exportación a CSV en Movimientos, Posiciones, Comisiones y Ritmo de aportes (separador `;` y BOM, para que Excel en español lo abra bien). La cartera y la moneda elegidas se recuerdan entre sesiones. No tiene exportación a PDF ni alertas push.

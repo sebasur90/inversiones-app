@@ -153,6 +153,22 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
     terminos: ['objetivo_monto', 'objetivo_fecha_limite', 'objetivo_aporte_mensual'],
   },
 
+  '/aportes': {
+    queEs: 'Cuánta plata nueva ponés en tus inversiones cada mes, y si ese ritmo mejora o empeora contra tu propio historial.',
+    comoLeerla: [
+      'La tarjeta de arriba es este mes: lo aportado hasta hoy, cómo terminaría al ritmo actual, y cómo se compara con el mes pasado y con tu promedio.',
+      'El estado (acelerando / sostenido / frenando / parado) compara tus últimos 3 meses cerrados con los 3 anteriores.',
+      'Las barras son tu aporte neto mes a mes; en rojo los meses en que retiraste más de lo que pusiste. La línea es el promedio móvil de 3 meses.',
+      'La proyección a fin de año muestra tres escenarios según qué ritmo mantengas; el calendario y la tabla por año dejan ver los meses buenos y malos.',
+    ],
+    queHacer: [
+      'Si el estado es "frenando", mirá en el calendario qué meses bajaron y decidí si fue algo puntual o una tendencia.',
+      'Usá las rachas y los logros como referencia de constancia: sostener un aporte chico todos los meses vale más que uno grande cada tanto.',
+    ],
+    ojo: 'Acá no hay metas: todo se compara contra vos mismo, y siempre en USD. Para fijar una meta en dólares y ver el aporte necesario, está la pantalla Objetivo.',
+    terminos: ['aportes_neto_criterio', 'aportes_estado_ritmo', 'aportes_racha', 'aportes_proyeccion_fin_anio'],
+  },
+
   '/precios': {
     queEs: 'La evolución histórica del precio de un ticker, en las tres monedas/vistas disponibles.',
     comoLeerla: [

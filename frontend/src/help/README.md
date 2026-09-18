@@ -14,7 +14,7 @@ ser una pantalla y no un componente reutilizable).
     `diagnostico.ts`, `movimientos.ts`, `posiciones.ts`, `exposicion.ts`, `vencimientos.ts`,
     `precios.ts`, `indicadoresmacro.ts`, `comparador.ts`, `performancerelativa.ts`,
     `tickerdetalle.ts`, `comisiones.ts`, `rebalanceo.ts`, `flujocaja.ts`, `watchlist.ts`,
-    `analisisTecnico.ts`, `estrategias.ts` — keys por pantalla, cada una con su propio archivo
+    `analisisTecnico.ts`, `estrategias.ts`, `aportes.ts` — keys por pantalla, cada una con su propio archivo
   - `index.ts` — Combina todo en un Record único (`HELP`) y expone el alias `HelpKey`
   - `guias.ts` — `GUIAS_PANTALLA`: una guía "Cómo leer esta pantalla" por ruta, resuelta por
     `useLocation().pathname` (no se toca cada página para agregar/editar una)
@@ -140,6 +140,7 @@ try {
 | TickerDetalle (Resumen/Rendimiento/Riesgo) | ✅ | ✓ | 2 términos nuevos + conexión cer (Batch 5 Sprint 2) |
 | TickerDetalle (Histórico) | ✅ | ✓ | 2 términos nuevos + tooltips en headers tabla (Batch 5 Sprint 3) |
 | Comisiones | ✅ | ✓ | 3 términos nuevos (Batch 6 Sprint 1) |
+| Ritmo de aportes | ✅ | ✓ | 12 términos + guía + 2 FAQ |
 | Rebalanceo | ✅ | ✓ | 4 términos nuevos + migración InfoTerm→InfoTooltip (Batch 6 Sprint 2) |
 
 ## Notas para mantainers

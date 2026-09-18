@@ -23,6 +23,7 @@ const Vencimientos = lazy(() => import('./pages/Vencimientos'))
 const FlujoCaja = lazy(() => import('./pages/FlujoCaja'))
 const Comparador = lazy(() => import('./pages/Comparador'))
 const Comisiones = lazy(() => import('./pages/Comisiones'))
+const Aportes = lazy(() => import('./pages/Aportes'))
 const VistaFiscal = lazy(() => import('./pages/VistaFiscal'))
 const Patrimonio = lazy(() => import('./pages/Patrimonio'))
 const Rendimiento = lazy(() => import('./pages/Rendimiento'))
@@ -145,6 +146,7 @@ function Root() {
             <Route path="watchlist" element={<Watchlist />} />
             <Route path="ticker/:ticker" element={<TickerDetalle />} />
             <Route path="objetivo" element={<Objetivo />} />
+            <Route path="aportes" element={<Aportes />} />
             <Route path="precios" element={<Precios />} />
             <Route path="indicadores" element={<IndicadoresMacro />} />
             <Route path="vencimientos" element={<Vencimientos />} />

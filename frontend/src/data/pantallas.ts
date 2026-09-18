@@ -21,6 +21,7 @@ export const GRUPOS_PANTALLAS: GrupoPantallas[] = [
       { to: '/exposicion', label: 'Exposición', desc: 'Composición por ticker, tipo, sector y mercado', icon: 'pie' },
       { to: '/rebalanceo', label: 'Balance de cartera', desc: 'Peso actual vs. objetivo por eje', icon: 'scale' },
       { to: '/objetivo', label: 'Objetivo', desc: 'Progreso hacia la meta y aporte mensual necesario', icon: 'target' },
+      { to: '/aportes', label: 'Ritmo de aportes', desc: 'Cuánto aportás mes a mes, rachas, récords y proyección a fin de año', icon: 'up' },
       { to: '/precios', label: 'Precios', desc: 'Evolución histórica por ticker', icon: 'trend' },
       { to: '/vencimientos', label: 'Vencimientos', desc: 'Calendario de vencimientos de bonos', icon: 'alert' },
       { to: '/flujo-caja', label: 'Flujo de caja proyectado', desc: 'Cupones y amortizaciones a cobrar mes a mes', icon: 'trend' },

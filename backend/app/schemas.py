@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Any
+from typing import Optional, Any, Literal
 from datetime import date, datetime
 
 # --- Inversiones: Sincronización ---
@@ -720,6 +720,186 @@ class ComisionesOut(BaseModel):
     por_ticker: list[ComisionPorTickerItem]
     por_mes: list[ComisionPeriodoItem]
     por_anio: list[ComisionPeriodoItem]
+
+
+# --- Ritmo de aportes (services/aportes_engine.py) ---
+
+class AporteMesItem(BaseModel):
+    mes: str  # "YYYY-MM"
+    neto_usd: float
+    compras_usd: float
+    salidas_usd: float
+    en_curso: bool
+    futuro: bool = False
+    con_aporte: bool
+    promedio_movil_3_usd: Optional[float] = None
+
+
+class AporteComparacion(BaseModel):
+    referencia_usd: float
+    delta_usd: float
+    delta_pct: Optional[float] = None
+    delta_proyectado_usd: Optional[float] = None
+    delta_proyectado_pct: Optional[float] = None
+
+
+class AporteEsteMes(BaseModel):
+    mes: str
+    neto_usd: float
+    compras_usd: float
+    salidas_usd: float
+    dia: int
+    dias_mes: int
+    dias_restantes: int
+    proyeccion_usd: float
+    proyeccion_fiable: bool
+    es_record_parcial: bool
+    vs_mes_anterior: Optional[AporteComparacion] = None
+    vs_promedio_3: Optional[AporteComparacion] = None
+    vs_promedio_6: Optional[AporteComparacion] = None
+    vs_promedio_12: Optional[AporteComparacion] = None
+    vs_mismo_mes_anio_anterior: Optional[AporteComparacion] = None
+
+
+class AporteProyeccionAnual(BaseModel):
+    clave: Literal["este_mes", "promedio_3", "promedio_ytd"]
+    etiqueta: str
+    ritmo_mensual_usd: Optional[float] = None
+    total_fin_anio_usd: Optional[float] = None
+
+
+class AporteAnioEnCurso(BaseModel):
+    anio: int
+    ytd_usd: float
+    meses_cerrados: int
+    meses_restantes: int
+    promedio_mensual_ytd_usd: Optional[float] = None
+    anio_anterior_total_usd: Optional[float] = None
+    vs_mismo_periodo_anio_anterior: Optional[AporteComparacion] = None
+    proyecciones: list[AporteProyeccionAnual]
+
+
+class AporteRacha(BaseModel):
+    meses: int
+    desde: Optional[str] = None
+    hasta: Optional[str] = None
+    incluye_mes_en_curso: bool = False
+
+
+class AporteRachas(BaseModel):
+    aportando_actual: AporteRacha
+    aportando_record: AporteRacha
+    sin_aportar_actual: int
+    sobre_promedio_12_actual: Optional[int] = None
+    direccion: Literal["subiendo", "bajando", "ninguna"]
+    direccion_meses: int
+    meses_sin_aportar_ultimos_12: int
+    meses_considerados_ultimos_12: int
+
+
+class AporteMesRef(BaseModel):
+    mes: str
+    neto_usd: float
+
+
+class AporteNivel(BaseModel):
+    nivel: Literal["bien", "atencion", "riesgo"]
+    etiqueta: str
+
+
+class AporteEstadisticas(BaseModel):
+    meses_historia: int
+    meses_con_aporte: int
+    meses_con_retiro: int
+    total_neto_usd: float
+    total_compras_usd: float
+    total_salidas_usd: float
+    promedio_usd: Optional[float] = None
+    mediana_usd: Optional[float] = None
+    desvio_usd: Optional[float] = None
+    coef_variacion: Optional[float] = None
+    constancia: Optional[AporteNivel] = None
+    promedio_3_usd: Optional[float] = None
+    promedio_6_usd: Optional[float] = None
+    promedio_12_usd: Optional[float] = None
+    mejor_mes: Optional[AporteMesRef] = None
+    peor_mes: Optional[AporteMesRef] = None
+    mejor_mes_anio: Optional[AporteMesRef] = None
+    peor_mes_anio: Optional[AporteMesRef] = None
+
+
+class AporteEstadoRitmo(BaseModel):
+    estado: Literal["arrancando", "acelerando", "sostenido", "frenando", "parado"]
+    etiqueta: str
+    nivel: Literal["bien", "atencion", "riesgo"]
+    detalle: str
+    tendencia_3v3_pct: Optional[float] = None
+    tendencia_6v6_pct: Optional[float] = None
+    promedio_3_usd: Optional[float] = None
+    promedio_3_anterior_usd: Optional[float] = None
+    promedio_6_usd: Optional[float] = None
+    promedio_6_anterior_usd: Optional[float] = None
+
+
+class AporteAnioItem(BaseModel):
+    anio: int
+    total_usd: float
+    compras_usd: float
+    salidas_usd: float
+    promedio_mensual_usd: Optional[float] = None
+    meses_con_aporte: int
+    meses_en_rango: int
+    var_vs_anio_anterior_pct: Optional[float] = None
+    en_curso: bool
+    mejor_mes: Optional[AporteMesRef] = None
+
+
+class AporteAnioRef(BaseModel):
+    anio: int
+    total_usd: float
+
+
+class AporteHito(BaseModel):
+    clave: str
+    titulo: str
+    descripcion: str
+    fecha: str  # "YYYY-MM"
+    reciente: bool
+
+
+class AporteProximoHito(BaseModel):
+    clave: str
+    titulo: str
+    unidad: Literal["usd", "meses"]
+    valor_objetivo: float
+    valor_actual: float
+    falta: float
+    progreso_pct: float
+
+
+class AporteMensaje(BaseModel):
+    clave: str
+    tono: Literal["positivo", "neutro", "negativo"]
+    titulo: str
+    detalle: str
+
+
+class RitmoAportesOut(BaseModel):
+    estado: Literal["ok", "sin_datos"]
+    hoy: date
+    primer_mes: Optional[str] = None
+    movimientos_omitidos_sin_mep: int = 0
+    serie_mensual: list[AporteMesItem]
+    por_anio: list[AporteAnioItem]
+    mejor_anio: Optional[AporteAnioRef] = None
+    este_mes: Optional[AporteEsteMes] = None
+    anio_en_curso: Optional[AporteAnioEnCurso] = None
+    rachas: Optional[AporteRachas] = None
+    estadisticas: Optional[AporteEstadisticas] = None
+    estado_ritmo: Optional[AporteEstadoRitmo] = None
+    hitos_alcanzados: list[AporteHito]
+    proximos_hitos: list[AporteProximoHito]
+    mensajes: list[AporteMensaje]
 
 
 # --- P&L Realizado vs No Realizado ---
