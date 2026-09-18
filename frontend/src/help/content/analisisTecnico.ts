@@ -28,7 +28,7 @@ export const ANALISISTECNICO_HELP: Record<AnalisisTecnicoHelpKey, HelpContent> =
   analisis_tecnico_indicadores: {
     title: 'Indicadores',
     shortDescription: 'Medias móviles, RSI, MACD, Bandas de Bollinger, ATR, Estocástico, OBV y volumen promedio, calculados sobre la serie de precios de este ticker.',
-    whyItMatters: 'Cada indicador resume un aspecto distinto del precio (tendencia, momentum, volatilidad, volumen); combinarlos da más contexto que mirar el precio solo.',
+    whyItMatters: 'Cada indicador resume un aspecto distinto del precio (tendencia, momentum, volatilidad, volumen); combinarlos da más contexto que mirar el precio solo. Con "+ otra" podés sumar el mismo indicador con otros parámetros (una SMA de 50 y otra de 200, por ejemplo): cada instancia lleva su color, y la leyenda del gráfico dice cuál es cuál.',
     limitations: 'Necesitan un warm-up (p. ej. una media de 200 ruedas recién está definida desde la rueda 200): la zona sombreada del gráfico marca dónde todavía no hay dato.',
   },
   analisis_tecnico_estrategias: {

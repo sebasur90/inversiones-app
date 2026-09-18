@@ -5,7 +5,7 @@ import { useAnchoContenedor } from './useAnchoContenedor'
 import PanelPrecio, { type OverlayPrecio } from './PanelPrecio'
 import PanelIndicador from './PanelIndicador'
 import PanelVolumen from './PanelVolumen'
-import { ESPEC_POR_TIPO, claveIndicador } from './indicadoresConfig'
+import { ESPEC_POR_TIPO, claveIndicador, colorIndicador, type IndicadorActivo } from './indicadoresConfig'
 import { Icon } from '../icons/Icons'
 
 /** Orquesta precio + paneles de osciladores + volumen sobre una escala X compartida
@@ -18,7 +18,7 @@ export default function GraficoTecnico({
 }: {
   barras: BarraOut[]
   indicadores: Record<string, Record<string, (number | null)[]>>
-  activos: Record<string, Record<string, number>>
+  activos: IndicadorActivo[]
   tieneVelas: boolean
   tieneVolumen: boolean
   senales?: SenalOut[]
@@ -39,16 +39,22 @@ export default function GraficoTecnico({
   const overlaysVolumen: { clave: string; color: string; series: Record<string, (number | null)[]> }[] = []
   const panelesOsciladores: { tipo: string; clave: string; series: Record<string, (number | null)[]> }[] = []
 
-  for (const tipo of Object.keys(activos)) {
-    const espec = ESPEC_POR_TIPO[tipo]
+  // Dos instancias con los mismos parámetros (SMA(50) dos veces) piden la misma serie: se dibuja
+  // una sola, si no habría paths con la misma key encimados.
+  const clavesDibujadas = new Set<string>()
+  for (const a of activos) {
+    const espec = ESPEC_POR_TIPO[a.tipo]
     if (!espec) continue
-    const clave = claveIndicador(tipo, activos[tipo])
+    const clave = claveIndicador(a.tipo, a.params)
     const series = indicadores[clave]
-    if (!series) continue
-    if (espec.destino === 'precio') overlaysPrecio.push({ clave, tipo, color: espec.color, series })
-    else if (espec.destino === 'volumen') overlaysVolumen.push({ clave, color: espec.color, series })
-    else panelesOsciladores.push({ tipo, clave, series })
+    if (!series || clavesDibujadas.has(clave)) continue
+    clavesDibujadas.add(clave)
+    const color = colorIndicador(activos, a)
+    if (espec.destino === 'precio') overlaysPrecio.push({ clave, tipo: a.tipo, color, series })
+    else if (espec.destino === 'volumen') overlaysVolumen.push({ clave, color, series })
+    else panelesOsciladores.push({ tipo: a.tipo, clave, series })
   }
+  const leyenda = [...overlaysPrecio, ...overlaysVolumen]
 
   const altoPrecio = fullscreen ? 380 : 240
   const altoOscilador = fullscreen ? 130 : 90
@@ -96,6 +102,19 @@ export default function GraficoTecnico({
           )}
         </div>
       </div>
+
+      {/* Leyenda de los overlays sobre precio/volumen: con dos medias del mismo tipo el color es
+          lo único que las distingue. Los osciladores ya llevan su clave como título del panel. */}
+      {leyenda.length > 0 && (
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-1 text-label text-app-text-dim font-mono">
+          {leyenda.map(o => (
+            <span key={o.clave} className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: o.color }} />
+              {o.clave}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className={controles.arrastrando ? 'cursor-grabbing' : 'cursor-grab'} {...controles.handlers}>
 

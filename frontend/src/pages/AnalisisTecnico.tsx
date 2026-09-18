@@ -18,7 +18,9 @@ import Button from '../components/ui/Button'
 import { Icon } from '../components/icons/Icons'
 import InfoTooltip from '../help/components/InfoTooltip'
 import { calcularDesde, type PeriodoEvolucion } from '../utils'
-import { claveIndicador, paramsPorDefecto } from '../components/tecnico/indicadoresConfig'
+import {
+  MAX_INDICADORES, claveIndicador, paramsPorDefecto, type IndicadorActivo,
+} from '../components/tecnico/indicadoresConfig'
 import SelectorIndicadores from '../components/tecnico/SelectorIndicadores'
 import GraficoTecnico from '../components/tecnico/GraficoTecnico'
 import GraficoFullscreen from '../components/tecnico/GraficoFullscreen'
@@ -44,10 +46,16 @@ function erroresDesde(e: unknown): string[] {
 type Vista = 'grafico' | 'estrategias'
 const PERIODOS: PeriodoEvolucion[] = ['1M', '3M', '6M', '1Y', '3Y', 'YTD', 'ALL']
 
+// Ids de instancias de indicador: sólo tienen que ser únicos y crecientes dentro de la sesión
+// (`colorIndicador` ordena por id para asignar el color de las repetidas).
+let proximoIdIndicador = 1
+
 export default function AnalisisTecnico() {
   const [tickerSel, setTickerSel] = useState<string | null>(null)
   const [periodo, setPeriodo] = useState<PeriodoEvolucion>('1Y')
-  const [activos, setActivos] = useState<Record<string, Record<string, number>>>({})
+  // Lista y no mapa por tipo: se permiten varias instancias del mismo indicador con distintos
+  // parámetros (SMA 50 + SMA 200).
+  const [activos, setActivos] = useState<IndicadorActivo[]>([])
   const [fullscreen, setFullscreen] = useState(false)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const [vista, setVista] = useState<Vista>('grafico')
@@ -65,9 +73,10 @@ export default function AnalisisTecnico() {
   const monedaSerie =
     seriesDisponibles.find(s => s.variante === variante)?.moneda || tickerMeta?.moneda || ''
 
-  // Ordenada para que reordenar el mismo conjunto de indicadores no invalide la caché de react-query.
+  // Ordenada y sin repetidos para que reordenar el mismo conjunto de indicadores (o tener dos
+  // instancias iguales) no invalide la caché de react-query ni pida la misma serie dos veces.
   const claves = useMemo(
-    () => Object.entries(activos).map(([tipo, params]) => claveIndicador(tipo, params)).sort(),
+    () => [...new Set(activos.map(a => claveIndicador(a.tipo, a.params)))].sort(),
     [activos],
   )
   const desde = calcularDesde(periodo)
@@ -76,7 +85,7 @@ export default function AnalisisTecnico() {
   // serie disponible: si no, el "máximo histórico" sería el de las últimas 750 ruedas y la
   // etiqueta engañaría. Entra en la clave de react-query para que el cambio dispare refetch.
   const maxBarras = useMemo(
-    () => (Object.values(activos).some(p => p.ventana === 0) ? 3000 : undefined),
+    () => (activos.some(a => a.params.ventana === 0) ? 3000 : undefined),
     [activos],
   )
 
@@ -88,16 +97,21 @@ export default function AnalisisTecnico() {
   const serie = serieQuery.data
   const monedaMostrada = serie?.moneda || monedaSerie
 
-  function toggleIndicador(tipo: string) {
-    setActivos(prev => {
-      const next = { ...prev }
-      if (tipo in next) delete next[tipo]
-      else next[tipo] = paramsPorDefecto(tipo)
-      return next
-    })
+  function agregarIndicador(tipo: string) {
+    setActivos(prev => (
+      prev.length >= MAX_INDICADORES
+        ? prev
+        : [...prev, { id: proximoIdIndicador++, tipo, params: paramsPorDefecto(tipo) }]
+    ))
   }
-  function cambiarParamIndicador(tipo: string, nombre: string, valor: number) {
-    setActivos(prev => ({ ...prev, [tipo]: { ...prev[tipo], [nombre]: valor } }))
+  function quitarIndicador(id: number) {
+    setActivos(prev => prev.filter(a => a.id !== id))
+  }
+  function quitarTipoIndicador(tipo: string) {
+    setActivos(prev => prev.filter(a => a.tipo !== tipo))
+  }
+  function cambiarParamIndicador(id: number, nombre: string, valor: number) {
+    setActivos(prev => prev.map(a => (a.id === id ? { ...a, params: { ...a.params, [nombre]: valor } } : a)))
   }
 
   if (tickersQuery.isLoading || tickersQuery.error) {
@@ -173,7 +187,8 @@ export default function AnalisisTecnico() {
               <InfoTooltip term="analisis_tecnico_indicadores" />
             </div>
             <SelectorIndicadores
-              activos={activos} onToggle={toggleIndicador} onCambiarParam={cambiarParamIndicador}
+              activos={activos} onAgregar={agregarIndicador} onQuitar={quitarIndicador}
+              onQuitarTipo={quitarTipoIndicador} onCambiarParam={cambiarParamIndicador}
               tieneVolumen={serie?.tiene_volumen ?? true}
             />
           </div>

@@ -73,6 +73,29 @@ export const ESPEC_POR_TIPO: Record<string, EspecIndicadorUi> = Object.fromEntri
   INDICADORES_UI.map(e => [e.tipo, e]),
 )
 
+/** Tope de `_MAX_INDICADORES` en `routers/tecnico.py`: pasarse da 422 en vez de gráfico. */
+export const MAX_INDICADORES = 8
+
+/** Una instancia de indicador en el gráfico. Puede haber varias del mismo tipo con distintos
+ * parámetros (dos SMA de 50 y 200, por ejemplo); `id` las distingue aunque coincidan los params. */
+export interface IndicadorActivo {
+  id: number
+  tipo: string
+  params: Record<string, number>
+}
+
+/** Colores para la segunda, tercera... instancia del mismo tipo: la primera usa el color del
+ * indicador, las siguientes rotan por acá para que dos medias no se confundan en el gráfico. */
+const PALETA_REPETIDOS = ['#ec4899', '#22d3ee', '#a3e635', '#fb923c', '#e879f9']
+
+/** Color de una instancia según cuántas del mismo tipo la preceden en la lista. */
+export function colorIndicador(activos: IndicadorActivo[], a: IndicadorActivo): string {
+  const espec = ESPEC_POR_TIPO[a.tipo]
+  const previas = activos.filter(x => x.tipo === a.tipo && x.id < a.id).length
+  if (previas === 0) return espec?.color ?? '#3b82f6'
+  return PALETA_REPETIDOS[(previas - 1) % PALETA_REPETIDOS.length]
+}
+
 /** Espejo de `indicadores_engine.clave()`: "SMA(50)", "MACD(12,26,9)", "OBV" (sin params). */
 export function claveIndicador(tipo: string, params: Record<string, number>): string {
   const espec = ESPEC_POR_TIPO[tipo]
