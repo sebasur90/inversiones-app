@@ -3,7 +3,14 @@ import axios from 'axios'
 // Sin `timeout` una request colgada del backend (nginx permite hasta 300s de proxy_read_timeout)
 // nunca rechaza: el skeleton gira para siempre, `retry` no se dispara y QueryBoundary jamás
 // muestra el error. 30s cubre de sobra al endpoint legítimo más lento salvo el sync.
-const api = axios.create({ baseURL: '/api', timeout: 30_000 })
+//
+// `indexes: null`: axios serializa los arrays de query como `indicadores[]=SMA(50)` y FastAPI
+// sólo lee `indicadores=SMA(50)&indicadores=RSI(14)` (el `[]` lo convierte en otro parámetro que
+// nadie declara y la lista llega vacía). Sin esto el gráfico técnico pide indicadores y el backend
+// devuelve `indicadores: {}`, así que nunca se dibujan.
+const api = axios.create({
+  baseURL: '/api', timeout: 30_000, paramsSerializer: { indexes: null },
+})
 
 // El sync recolecta de Google Sheets + IOL + yfinance y puede tardar varios minutos por diseño
 // (ver DESARROLLO.md). Timeout propio y más holgado para no cortarlo antes de tiempo.
