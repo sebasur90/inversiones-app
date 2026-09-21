@@ -85,7 +85,11 @@ def get_contribucion(cartera: str | None, db: Session) -> dict:
     # Reusa get_pnl_realizado_no_realizado para que el P&L por ticker coincida exactamente
     # con lo que ya muestra la pantalla de PnL (realizado + no_realizado + ingresos).
     pnl_data = get_pnl_realizado_no_realizado(cartera, db)
-    pnl_por_ticker = {item["ticker"]: item["total_usd"] for item in pnl_data["por_ticker"]}
+    pnl_por_ticker = {
+        item["ticker"]: item["total_usd"]
+        for item in pnl_data["por_ticker"]
+        if item["total_usd"] is not None
+    }
 
     costo_total_por_ticker: dict[str, float] = {}
     for mov in movs:
