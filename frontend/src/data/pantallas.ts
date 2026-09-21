@@ -37,6 +37,7 @@ export const GRUPOS_PANTALLAS: GrupoPantallas[] = [
       { to: '/performance-relativa', label: 'Performance relativa', desc: 'Cartera vs. un benchmark: alpha, beta, tracking error', icon: 'up' },
       { to: '/benchmarks-comparacion', label: 'Comparar benchmarks', desc: 'Varios benchmarks y tickers a la vez', icon: 'pie' },
       { to: '/contribucion', label: 'Contribución', desc: 'Qué aportó cada posición, concentración y correlaciones', icon: 'pie' },
+      { to: '/explicacion-resultado', label: '¿Por qué ganó o perdió?', desc: 'Qué factores explican el resultado del período: precio, dividendos, comisiones y más', icon: 'trend' },
     ],
   },
   {

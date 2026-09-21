@@ -71,4 +71,10 @@ export const FAQ: FaqItem[] = [
       'Liquidez se deriva de cómo etiquetaste tus instrumentos: marcá como tipo "FCI" o sector "Liquidez" a lo que consideres efectivo o cuasi-efectivo (también cuenta cualquier instrumento que venza en menos de 1 año). Balance vs. objetivo necesita que cargues porcentajes objetivo en la pestaña Rebalanceo; sin eso, esa dimensión queda "sin datos".',
     termino: 'salud_dim_liquidez',
   },
+  {
+    pregunta: '¿"¿Por qué ganó o perdió mi cartera?" usa una fórmula distinta a Rendimiento o Contribución?',
+    respuesta:
+      'No: reutiliza exactamente los mismos cálculos (TWR, XIRR, P&L realizado/no realizado). Lo único nuevo es cómo se presenta: en vez de un porcentaje final, separa el resultado en sus causas (precio, dividendos, comisiones, efecto del dólar) para el período que elijas, sin mezclar nunca un aporte de capital con una ganancia.',
+    termino: 'explicacion_que_es',
+  },
 ]

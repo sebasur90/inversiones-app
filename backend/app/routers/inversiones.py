@@ -50,6 +50,7 @@ from ..schemas import (
     TickerHistoricoOut,
     TickerRiesgoOut,
     TickerPerformanceRelativaOut,
+    ExplicacionResultadoOut,
 )
 from ..services.sheets_client import SheetsClientError
 from ..services.inversiones_sync import sync_from_sheet
@@ -84,6 +85,10 @@ from ..services.salud_analytics import get_salud
 from ..services.fx_decomposition_analytics import (
     get_descomposicion_fx,
     get_descomposicion_fx_por_posicion,
+)
+from ..services.explicacion_resultado_analytics import (
+    get_explicacion_resultado,
+    MONEDAS_VALIDAS as MONEDAS_VALIDAS_EXPLICACION,
 )
 from ..services.ticker_analytics import (
     get_ticker_position,
@@ -573,6 +578,38 @@ def descomposicion_fx_por_posicion_consolidado(
     db: Session = Depends(get_db),
 ):
     return get_descomposicion_fx_por_posicion(None, db)
+
+
+def _validar_moneda_explicacion(moneda: str) -> None:
+    if moneda not in MONEDAS_VALIDAS_EXPLICACION:
+        raise HTTPException(
+            status_code=422,
+            detail=f"moneda inválida: {moneda}. Válidas: {MONEDAS_VALIDAS_EXPLICACION}",
+        )
+
+
+@router.get("/carteras/{nombre}/explicacion-resultado", response_model=ExplicacionResultadoOut)
+def explicacion_resultado_cartera(
+    nombre: str,
+    desde: Optional[date] = Query(None),
+    moneda: str = Query("usd"),
+    db: Session = Depends(get_db),
+):
+    """"¿Por qué ganó o perdió mi cartera?": descompone el P&L del período en variación de
+    precio, dividendos/cupones y comisiones, sin mezclarlo con aportes/retiros de capital."""
+    _validar_cartera(nombre, db)
+    _validar_moneda_explicacion(moneda)
+    return get_explicacion_resultado(nombre, desde, moneda, db)
+
+
+@router.get("/consolidado/explicacion-resultado", response_model=ExplicacionResultadoOut)
+def explicacion_resultado_consolidado(
+    desde: Optional[date] = Query(None),
+    moneda: str = Query("usd"),
+    db: Session = Depends(get_db),
+):
+    _validar_moneda_explicacion(moneda)
+    return get_explicacion_resultado(None, desde, moneda, db)
 
 
 @router.get("/calidad-datos", response_model=CalidadDatosOut)

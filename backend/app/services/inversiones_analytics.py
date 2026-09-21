@@ -695,6 +695,7 @@ def _calcular_twr_encadenado(
     valuar_fn,
     abortar_si_falta_monto: bool = False,
     comision_fn=None,
+    desde: date | None = None,
 ) -> tuple[float | None, bool, float | None]:
     """TWR encadenado sobre las fechas de cashflow, más hoy como cierre.
 
@@ -715,16 +716,26 @@ def _calcular_twr_encadenado(
             la **misma pasada** el TWR bruto (sin comisiones): el flujo bruto de cada fecha es
             el neto menos la comisión convertida (la relación vale para compras y ventas), y la
             valuación de cada boundary es idéntica. Evita un segundo encadenamiento (M10).
+        desde: si se pasa, el TWR se mide sobre la ventana `(desde, hoy]`: el primer borde es
+            `desde` (valuado con las tenencias que había al cierre de ese día) y sólo entran
+            los flujos posteriores. Es el mismo encadenamiento restringido a un tramo — la
+            pantalla "¿Por qué ganó o perdió?" lo usa para el rendimiento del período sin
+            duplicar la fórmula. Con `None` el comportamiento es exactamente el histórico.
 
     Returns:
         (twr, aproximado, twr_bruto) — twr_bruto es None si no se pasó `comision_fn`.
         (None, False, None) si no hay período medible.
     """
-    fechas_borde = sorted({m.fecha for m in movs if m.tipo_movimiento in TIPOS_QUE_CAMBIAN_TENENCIA})
-    if not fechas_borde:
-        return None, False, None
-
-    boundaries = list(fechas_borde)
+    fechas_borde = sorted({
+        m.fecha for m in movs
+        if m.tipo_movimiento in TIPOS_QUE_CAMBIAN_TENENCIA and (desde is None or m.fecha > desde)
+    })
+    if desde is None:
+        if not fechas_borde:
+            return None, False, None
+        boundaries = list(fechas_borde)
+    else:
+        boundaries = [desde] + fechas_borde
     if boundaries[-1] < hoy:
         boundaries.append(hoy)
     # Con un solo boundary no hay sub-período que medir. Antes se agregaba `hoy` incluso
@@ -737,6 +748,8 @@ def _calcular_twr_encadenado(
     com_por_fecha: dict[date, float] = {}
     for mov in movs:
         if mov.tipo_movimiento not in TIPOS_QUE_CAMBIAN_TENENCIA:
+            continue
+        if desde is not None and mov.fecha <= desde:
             continue
         monto = monto_fn(mov)
         if monto is None:
@@ -787,6 +800,7 @@ def _calcular_twr(
     mep_cache: dict,
     hoy: date,
     comision_fn=None,
+    desde: date | None = None,
 ) -> tuple[float | None, bool, float | None]:
     """TWR en USD. Con `comision_fn` devuelve además el TWR bruto en la misma pasada (M10)."""
     return _calcular_twr_encadenado(
@@ -794,6 +808,7 @@ def _calcular_twr(
         lambda mov: _monto_usd(mov, db, mep_cache),
         lambda holdings, f, costos: _valuar_holdings(holdings, f, precios_por_ticker, db, mep_cache, costos),
         comision_fn=comision_fn,
+        desde=desde,
     )
 
 
@@ -804,6 +819,7 @@ def _calcular_twr_ars(
     mep_cache: dict,
     hoy: date,
     comision_fn=None,
+    desde: date | None = None,
 ) -> tuple[float | None, bool, float | None]:
     """TWR en ARS nominal. Con `comision_fn` devuelve además el TWR bruto en la misma pasada."""
     return _calcular_twr_encadenado(
@@ -811,6 +827,7 @@ def _calcular_twr_ars(
         lambda mov: _monto_ars(mov, db, mep_cache),
         lambda holdings, f, costos: _valuar_holdings_ars(holdings, f, precios_por_ticker, db, mep_cache, costos),
         comision_fn=comision_fn,
+        desde=desde,
     )
 
 

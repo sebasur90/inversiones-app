@@ -263,6 +263,17 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
     terminos: ['contribucion', 'hhi', 'correlacion'],
   },
 
+  '/explicacion-resultado': {
+    queEs: 'Qué factores explican el resultado de tu cartera en el período elegido: no sólo el porcentaje final, sino de dónde vino.',
+    comoLeerla: [
+      'Reutiliza los mismos cálculos que Rendimiento y Contribución: no es una fórmula nueva.',
+      '"De dónde viene el resultado" separa movimiento de precio, dividendos/cupones y comisiones — y, en ARS, cuánto fue el activo y cuánto el dólar.',
+      'Los aportes y retiros de capital nunca se mezclan con la ganancia: comprar no es ganar, vender a precio de mercado no es perder.',
+    ],
+    ojo: 'Si un instrumento no tiene precio o tipo de cambio para el período, aparece como "No disponible" en vez de una estimación.',
+    terminos: ['explicacion_que_es', 'explicacion_no_disponible'],
+  },
+
   '/diagnostico': {
     queEs: 'Un chequeo general de salud de tu cartera, con un score y una lista de hallazgos a revisar.',
     comoLeerla: [

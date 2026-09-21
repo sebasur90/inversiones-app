@@ -27,6 +27,7 @@ La app lee de Google Sheets (pestañas `Movimientos`, `Instrumentos`, `Precios`,
 - **Vencimientos** — calendario de vencimientos de bonos/instrumentos.
 - **Comparador** — hasta 5 tickers, series normalizadas a base 100.
 - **Comisiones** — desglose por cartera/ticker/mes/año.
+- **¿Por qué ganó o perdió?** — descompone el rendimiento de un período (no sólo el porcentaje final) en movimiento de precio, dividendos/cupones, comisiones y, en vista ARS, efecto del dólar MEP; atribución por tipo de instrumento y por mercado; ranking de principales contribuyentes y detractores; explicación en texto llano. Nunca mezcla aportes/retiros de capital con ganancia, y muestra "No disponible" en vez de estimar cuando falta un precio o un tipo de cambio. Reutiliza los mismos cálculos que Rendimiento, P&L y Contribución (TWR, XIRR, P&L realizado/no realizado): no agrega ninguna fórmula financiera nueva.
 
 ## Extras
 

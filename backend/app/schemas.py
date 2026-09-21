@@ -1595,3 +1595,89 @@ class ScreenerOut(BaseModel):
     umbral_pct: float
     fecha: date
     advertencias: list[str] = Field(default_factory=list)
+
+
+# --- Explicación del resultado ("¿Por qué ganó o perdió mi cartera?", services/
+#     explicacion_resultado_engine.py + explicacion_resultado_analytics.py) ---
+# Todo lo que depende de un precio de mercado va Optional: un ticker sin cotización en el
+# período no se estima, se lista en `no_disponibles` y sus campos numéricos quedan en None
+# (ver docstring de `explicacion_resultado_engine.descomponer_ticker`).
+
+class ExplicacionPeriodoOut(BaseModel):
+    desde: Optional[date] = None
+    hasta: date
+
+
+class ExplicacionResultadoResumenOut(BaseModel):
+    v0: Optional[float] = None
+    v1: Optional[float] = None
+    pnl: Optional[float] = None
+    twr_pct: Optional[float] = None
+    xirr_pct: Optional[float] = None
+    rendimiento_simple_pct: Optional[float] = None
+    aportes: Optional[float] = None
+    retiros: Optional[float] = None
+    amortizaciones: Optional[float] = None
+    ingresos: Optional[float] = None
+
+
+class ExplicacionComponentesOut(BaseModel):
+    precio: Optional[float] = None
+    dividendos: Optional[float] = None
+    cupones: Optional[float] = None
+    comisiones: Optional[float] = None
+
+
+class ExplicacionItemOut(BaseModel):
+    """Descomposición del P&L de un ticker, o de un grupo (tipo/mercado) cuando `ticker` es None."""
+    ticker: Optional[str] = None
+    nombre: Optional[str] = None
+    etiqueta: Optional[str] = None
+    v0: Optional[float] = None
+    v1: Optional[float] = None
+    pnl: Optional[float] = None
+    precio: Optional[float] = None
+    dividendos: Optional[float] = None
+    cupones: Optional[float] = None
+    comisiones: Optional[float] = None
+    aportes: Optional[float] = None
+    retiros: Optional[float] = None
+    amortizaciones: Optional[float] = None
+    contribucion_pct: Optional[float] = None
+    disponible: Optional[bool] = None
+    n_no_disponibles: Optional[int] = None
+
+
+class ExplicacionNoDisponibleOut(BaseModel):
+    ticker: str
+    nombre: str
+    motivo: str
+
+
+class ExplicacionFxOut(BaseModel):
+    estado: str  # "ok" | "no_disponible" | "no_aplica"
+    resultado_activos_ars: Optional[float] = None
+    efecto_mep_ars: Optional[float] = None
+    efecto_fx_pct: Optional[float] = None
+    identidad_verificada: bool = True
+
+
+class ExplicacionTextoOut(BaseModel):
+    titulo: str
+    frases: list[str] = Field(default_factory=list)
+
+
+class ExplicacionResultadoOut(BaseModel):
+    estado: str  # "ok" | "parcial" | "sin_datos"
+    periodo: ExplicacionPeriodoOut
+    resultado: ExplicacionResultadoResumenOut
+    componentes: ExplicacionComponentesOut
+    por_tipo: list[ExplicacionItemOut] = Field(default_factory=list)
+    por_mercado: list[ExplicacionItemOut] = Field(default_factory=list)
+    por_ticker: list[ExplicacionItemOut] = Field(default_factory=list)
+    contribuyentes: list[ExplicacionItemOut] = Field(default_factory=list)
+    detractores: list[ExplicacionItemOut] = Field(default_factory=list)
+    no_disponibles: list[ExplicacionNoDisponibleOut] = Field(default_factory=list)
+    fx: ExplicacionFxOut
+    explicacion: ExplicacionTextoOut
+    advertencias: list[str] = Field(default_factory=list)

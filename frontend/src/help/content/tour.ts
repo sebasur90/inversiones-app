@@ -27,7 +27,7 @@ export const TOUR_BIENVENIDA: PasoTour[] = [
     emoji: '🧭',
     titulo: 'La barra de abajo y "Más"',
     texto:
-      'Las cuatro pantallas más usadas están siempre a mano. El resto —32 pantallas en total— vive agrupado por tema en "Más", y también se puede buscar con la lupa.',
+      'Las cuatro pantallas más usadas están siempre a mano. El resto —33 pantallas en total— vive agrupado por tema en "Más", y también se puede buscar con la lupa.',
   },
   {
     emoji: '🔄',

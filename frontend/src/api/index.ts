@@ -1333,6 +1333,96 @@ export interface SaludCarteraEstadoOut {
 export const getSaludCartera = (cartera: string | null) =>
   api.get<SaludCarteraEstadoOut>(`${carteraPath(cartera)}/salud`).then(r => r.data)
 
+// --- Explicación del resultado ("¿Por qué ganó o perdió mi cartera?") ---
+// Ver backend/app/services/explicacion_resultado_engine.py para la fórmula: pnl = precio +
+// dividendos + cupones + comisiones (comisiones ya viene negativo). Todo lo que dependa de un
+// precio de mercado es `| null`: un instrumento sin cotización no se estima, se lista en
+// `no_disponibles`.
+
+export interface ExplicacionPeriodo {
+  desde: string | null
+  hasta: string
+}
+
+export interface ExplicacionResultadoResumen {
+  v0: number | null
+  v1: number | null
+  pnl: number | null
+  twr_pct: number | null
+  xirr_pct: number | null
+  rendimiento_simple_pct: number | null
+  aportes: number | null
+  retiros: number | null
+  amortizaciones: number | null
+  ingresos: number | null
+}
+
+export interface ExplicacionComponentes {
+  precio: number | null
+  dividendos: number | null
+  cupones: number | null
+  comisiones: number | null
+}
+
+export interface ExplicacionItem {
+  ticker?: string | null
+  nombre?: string | null
+  etiqueta?: string | null
+  v0: number | null
+  v1: number | null
+  pnl: number | null
+  precio: number | null
+  dividendos: number | null
+  cupones: number | null
+  comisiones: number | null
+  aportes: number | null
+  retiros: number | null
+  amortizaciones: number | null
+  contribucion_pct: number | null
+  disponible?: boolean | null
+  n_no_disponibles?: number | null
+}
+
+export interface ExplicacionNoDisponible {
+  ticker: string
+  nombre: string
+  motivo: string
+}
+
+export interface ExplicacionFx {
+  estado: 'ok' | 'no_disponible' | 'no_aplica'
+  resultado_activos_ars: number | null
+  efecto_mep_ars: number | null
+  efecto_fx_pct: number | null
+  identidad_verificada: boolean
+}
+
+export interface ExplicacionTexto {
+  titulo: string
+  frases: string[]
+}
+
+export interface ExplicacionResultadoOut {
+  estado: 'ok' | 'parcial' | 'sin_datos'
+  periodo: ExplicacionPeriodo
+  resultado: ExplicacionResultadoResumen
+  componentes: ExplicacionComponentes
+  por_tipo: ExplicacionItem[]
+  por_mercado: ExplicacionItem[]
+  por_ticker: ExplicacionItem[]
+  contribuyentes: ExplicacionItem[]
+  detractores: ExplicacionItem[]
+  no_disponibles: ExplicacionNoDisponible[]
+  fx: ExplicacionFx
+  explicacion: ExplicacionTexto
+  advertencias: string[]
+}
+
+export const getExplicacionResultado = (cartera: string | null, desde: string | undefined, moneda: 'usd' | 'ars') =>
+  api
+    .get<ExplicacionResultadoOut>(`${carteraPath(cartera)}/explicacion-resultado`, { params: { desde, moneda } })
+    .then(r => r.data)
+
 // --- Descomposición FX ---
 
 export interface DescomposicionFxOut {
