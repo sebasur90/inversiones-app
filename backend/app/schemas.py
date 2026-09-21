@@ -1165,6 +1165,65 @@ class DiagnosticoOut(BaseModel):
     fecha_calculo: date
 
 
+# --- Salud de cartera (services/salud_engine.py) ---
+# A propósito no hay un score único acá (ver SaludCarteraOut arriba, que sí lo tiene): esta
+# pantalla muestra un estado explicable por dimensión, sin combinarlos en un solo número.
+
+class SaludIndicadorOut(BaseModel):
+    clave: str
+    nombre: str
+    texto: str
+    pantalla: str
+    ayuda: str
+    valor_usd: Optional[float] = None
+    valor_ars: Optional[float] = None
+    valor_pct: Optional[float] = None
+
+
+class SaludDimensionOut(BaseModel):
+    clave: str
+    nombre: str
+    estado: str
+    etiqueta: str
+    valor: str
+    regla: str
+    explicacion: str
+    fuente: str
+    pantalla: str
+    ayuda: str
+
+
+class SaludObservacionOut(BaseModel):
+    id: str
+    dimension: str
+    severidad: str
+    titulo: str
+    detecto: str
+    valor: str
+    umbral: str
+    fuente: str
+    pantalla: str
+    accion: str
+
+
+class SaludResumenOut(BaseModel):
+    n_revisar: int
+    n_atencion: int
+    n_normal: int
+    n_sin_datos: int
+
+
+class SaludCarteraEstadoOut(BaseModel):
+    cartera: Optional[str] = None
+    indicadores: list[SaludIndicadorOut]
+    dimensiones: list[SaludDimensionOut]
+    observaciones: list[SaludObservacionOut]
+    exposicion_moneda: list[ExposicionItem]
+    exposicion_tipo: list[ExposicionItem]
+    resumen: SaludResumenOut
+    fecha_calculo: date
+
+
 # --- Descomposición FX ---
 
 class DescomposicionFxOut(BaseModel):

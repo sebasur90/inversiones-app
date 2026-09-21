@@ -32,6 +32,7 @@ const Riesgo = lazy(() => import('./pages/Riesgo'))
 const PerformanceRelativa = lazy(() => import('./pages/PerformanceRelativa'))
 const Contribucion = lazy(() => import('./pages/Contribucion'))
 const Diagnostico = lazy(() => import('./pages/Diagnostico'))
+const SaludCartera = lazy(() => import('./pages/SaludCartera'))
 const CalidadDatos = lazy(() => import('./pages/CalidadDatos'))
 const Simulador = lazy(() => import('./pages/Simulador'))
 const BenchmarksComparacion = lazy(() => import('./pages/BenchmarksComparacion'))
@@ -161,6 +162,7 @@ function Root() {
             <Route path="performance-relativa" element={<PerformanceRelativa />} />
             <Route path="contribucion" element={<Contribucion />} />
             <Route path="diagnostico" element={<Diagnostico />} />
+            <Route path="salud" element={<SaludCartera />} />
             <Route path="calidad-datos" element={<CalidadDatos />} />
             <Route path="simulador" element={<Simulador />} />
             <Route path="benchmarks-comparacion" element={<BenchmarksComparacion />} />

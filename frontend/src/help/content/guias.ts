@@ -272,6 +272,17 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
     terminos: ['diagnostico_salud_cartera', 'diagnostico_hallazgos'],
   },
 
+  '/salud': {
+    queEs: 'Un chequeo de 8 aspectos de tu cartera (riesgo, concentración, liquidez, costos, vencimientos, entre otros), cada uno con su propio estado y su regla.',
+    comoLeerla: [
+      'Cada dimensión dice "Normal", "Atención" o "Revisar" — nunca un número único: tocá "¿Cómo se decide?" para ver la regla exacta.',
+      '"Cosas para revisar" lista observaciones concretas (ej. "AL30 representa 31% de la cartera") con un botón para ir directo a esa pantalla.',
+    ],
+    queHacer: ['Si algo aparece en "Revisar", andá a la pantalla que te sugiere el botón de esa observación para ver el detalle y decidir si hace falta actuar.'],
+    ojo: 'No es un puntaje: cada estado sale de una regla que podés leer, no de una fórmula que combina todo en un número.',
+    terminos: ['salud_que_es', 'salud_estados'],
+  },
+
   '/calidad-datos': {
     queEs: 'El estado del último sync con tu Google Sheet: qué se cargó bien y qué tuvo problemas.',
     comoLeerla: [

@@ -267,8 +267,14 @@ def _ultimos_n_meses(hoy: date, n: int) -> list[str]:
     return periodos
 
 
-def evaluar_comisiones(comisiones: dict, valor_actual_usd: float) -> dict | None:
-    """Evalúa si la comisión anualizada es elevada."""
+def calcular_ratio_comisiones(comisiones: dict, valor_actual_usd: float, hoy: date | None = None) -> dict | None:
+    """Comisiones de los últimos `MESES_TRAILING_COMISIONES` meses, anualizadas y como fracción
+    del valor actual. Es la fórmula que usa `evaluar_comisiones`; la comparte Salud de cartera,
+    que necesita el ratio aunque esté por debajo del umbral de hallazgo.
+
+    Devuelve `{"anualizado_usd", "ratio", "meses_cubiertos"}` o None si no hay valor de cartera
+    ni comisiones por mes.
+    """
     if valor_actual_usd <= 0:
         return None
     por_mes = comisiones.get("por_mes", [])
@@ -276,10 +282,22 @@ def evaluar_comisiones(comisiones: dict, valor_actual_usd: float) -> dict | None
         return None
     valores_por_periodo = {p.get("periodo"): p.get("total_usd", 0) for p in por_mes}
     meses_cubiertos = MESES_TRAILING_COMISIONES
-    periodos_ventana = _ultimos_n_meses(date.today(), meses_cubiertos)
+    periodos_ventana = _ultimos_n_meses(hoy or date.today(), meses_cubiertos)
     total_trailing = sum(valores_por_periodo.get(p, 0) for p in periodos_ventana)
     anualizado = total_trailing * (12 / meses_cubiertos)
-    ratio = anualizado / valor_actual_usd
+    return {
+        "anualizado_usd": anualizado,
+        "ratio": anualizado / valor_actual_usd,
+        "meses_cubiertos": meses_cubiertos,
+    }
+
+
+def evaluar_comisiones(comisiones: dict, valor_actual_usd: float) -> dict | None:
+    """Evalúa si la comisión anualizada es elevada."""
+    calculo = calcular_ratio_comisiones(comisiones, valor_actual_usd)
+    if calculo is None:
+        return None
+    anualizado, ratio, meses_cubiertos = calculo["anualizado_usd"], calculo["ratio"], calculo["meses_cubiertos"]
     if ratio < UMBRAL_COMISION_ADVERTENCIA_PCT:
         return None
     severidad = "critico" if ratio >= UMBRAL_COMISION_CRITICO_PCT else "advertencia"

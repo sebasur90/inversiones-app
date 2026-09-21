@@ -59,4 +59,16 @@ export const FAQ: FaqItem[] = [
     respuesta:
       'No. La app es de solo lectura: lee tu Google Sheet, calcula métricas y te las muestra. Cualquier operación (comprar, vender, rebalancear) la hacés vos en tu broker, y después la cargás como movimiento en el Sheet.',
   },
+  {
+    pregunta: '¿Por qué Salud de cartera no me da un número único como Diagnóstico?',
+    respuesta:
+      'Son dos formas distintas de mirar lo mismo. Diagnóstico combina varias métricas en un score de 0 a 100, que es fácil de seguir en el tiempo pero oculta el detalle. Salud de cartera muestra cada aspecto por separado (Normal / Atención / Revisar), con la regla exacta que produjo ese estado, para que puedas juzgar vos mismo qué tan grave es cada cosa.',
+    termino: 'salud_que_es',
+  },
+  {
+    pregunta: '¿Qué tengo que cargar en el Sheet para que Salud de cartera calcule Liquidez y Balance vs. objetivo?',
+    respuesta:
+      'Liquidez se deriva de cómo etiquetaste tus instrumentos: marcá como tipo "FCI" o sector "Liquidez" a lo que consideres efectivo o cuasi-efectivo (también cuenta cualquier instrumento que venza en menos de 1 año). Balance vs. objetivo necesita que cargues porcentajes objetivo en la pestaña Rebalanceo; sin eso, esa dimensión queda "sin datos".',
+    termino: 'salud_dim_liquidez',
+  },
 ]

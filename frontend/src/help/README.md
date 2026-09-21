@@ -142,11 +142,13 @@ try {
 | Comisiones | ✅ | ✓ | 3 términos nuevos (Batch 6 Sprint 1) |
 | Ritmo de aportes | ✅ | ✓ | 12 términos + guía + 2 FAQ |
 | Rebalanceo | ✅ | ✓ | 4 términos nuevos + migración InfoTerm→InfoTooltip (Batch 6 Sprint 2) |
+| Salud de cartera | ✅ | ✓ | Pantalla nueva `/salud`: 23 términos (dimensiones + indicadores) + guía + 2 FAQ; reutiliza umbrales de `diagnostico_engine.py` |
 
 ## Notas para mantainers
 
 - **Cambios en backend de validación**: actualizar `escenarioLimits.ts` línea que apunta a `backend/app/schemas.py:136-149`
 - **Cambios en umbrales de `diagnostico_engine.py`** (drawdown/volatilidad/concentración): actualizar también `utils/niveles.ts`, que los replica a propósito para no inventar un criterio nuevo
+- **Cambios en umbrales propios de `salud_engine.py`** (peso por ticker, liquidez, país dominante, N efectivo): sólo viven ahí y en `help/content/salud.ts`; no se duplican en `utils/niveles.ts` porque Salud de cartera arma su propio texto de regla en el backend, en vez de recalcular niveles en el frontend
 - **Agregar una guía de pantalla nueva**: una entrada más en `content/guias.ts` — no hace falta tocar la pantalla en sí, `ScreenHeader` ya renderiza `GuiaPantalla` en todas
 - **Agregar un tutorial o una FAQ**: una entrada más en `content/tutoriales.ts` o `content/faq.ts`; aparecen solas en el Centro de ayuda
 - **EmptyState.tsx**: no se toca salvo necesidad puntual — la mayoría ya explica qué falta y cómo resolverlo, no hace falta un texto genérico "Sin datos"

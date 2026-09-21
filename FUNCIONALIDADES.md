@@ -13,6 +13,7 @@ La app lee de Google Sheets (pestañas `Movimientos`, `Instrumentos`, `Precios`,
 ## Pantallas y qué ve el usuario
 
 - **Resumen** — valor total del patrimonio, KPIs (Invertido, XIRR, TWR), selector de carteras, gráfico cartera vs. benchmarks, top 5 posiciones.
+- **Salud de cartera** — 8 dimensiones (riesgo, concentración, diversificación, liquidez, costos, vencimientos, balance vs. objetivo, calidad de datos) con estado en palabras (Normal / Atención / Revisar) y la regla numérica exacta detrás de cada una, sin combinarlas en un score único. Lista de "cosas para revisar" (una posición muy concentrada, instrumentos sin sector, vencimientos próximos, precios desactualizados, etc.) con botón de ir directo a la pantalla correspondiente. Reutiliza los mismos cálculos que Riesgo, Contribución, Exposición, Rebalanceo, Vencimientos, Comisiones y Calidad de datos.
 - **Patrimonio** — evolución del valor de mercado vs. capital aportado, línea de máximo histórico (HWM), y eventos clickeables (aportes, retiros, dividendos/cupones) con detalle en modal. Filtros por período (1M–ALL) y vista (ARS nominal, ARS real por CER, USD MEP).
 - **Rendimiento** — P&L realizado/no realizado/ingresos; rentabilidad simple, TIR (XIRR) y TWRR en ARS y USD; mapa de calor de rendimiento mensual/anual coloreado por intensidad; comparación vs. benchmarks; P&L por ticker.
 - **Balance de Cartera / Rebalanceo** — peso actual vs. objetivo por eje (Cartera, Tipo, Sector), con barras de progreso.

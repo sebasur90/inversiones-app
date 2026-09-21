@@ -1268,6 +1268,71 @@ export interface DiagnosticoOut {
 export const getDiagnostico = (cartera: string | null) =>
   api.get<DiagnosticoOut>(`${carteraPath(cartera)}/diagnostico`).then(r => r.data)
 
+// --- Salud de cartera ---
+// A propósito no hay un score único acá (a diferencia de `SaludCarteraOut` de Diagnóstico, arriba):
+// esta pantalla muestra un estado explicable por dimensión ("normal" | "atencion" | "revisar"),
+// sin combinarlos en un solo número.
+
+export type EstadoSalud = 'normal' | 'atencion' | 'revisar' | 'sin_datos'
+
+export interface SaludIndicador {
+  clave: string
+  nombre: string
+  texto: string
+  pantalla: string
+  ayuda: string
+  valor_usd: number | null
+  valor_ars: number | null
+  valor_pct: number | null
+}
+
+export interface SaludDimension {
+  clave: string
+  nombre: string
+  estado: EstadoSalud
+  etiqueta: string
+  valor: string
+  regla: string
+  explicacion: string
+  fuente: string
+  pantalla: string
+  ayuda: string
+}
+
+export interface SaludObservacion {
+  id: string
+  dimension: string
+  severidad: 'revisar' | 'atencion' | 'info'
+  titulo: string
+  detecto: string
+  valor: string
+  umbral: string
+  fuente: string
+  pantalla: string
+  accion: string
+}
+
+export interface SaludResumen {
+  n_revisar: number
+  n_atencion: number
+  n_normal: number
+  n_sin_datos: number
+}
+
+export interface SaludCarteraEstadoOut {
+  cartera: string | null
+  indicadores: SaludIndicador[]
+  dimensiones: SaludDimension[]
+  observaciones: SaludObservacion[]
+  exposicion_moneda: ExposicionItem[]
+  exposicion_tipo: ExposicionItem[]
+  resumen: SaludResumen
+  fecha_calculo: string
+}
+
+export const getSaludCartera = (cartera: string | null) =>
+  api.get<SaludCarteraEstadoOut>(`${carteraPath(cartera)}/salud`).then(r => r.data)
+
 // --- Descomposición FX ---
 
 export interface DescomposicionFxOut {

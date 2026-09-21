@@ -22,8 +22,9 @@ import { WATCHLIST_HELP, type WatchlistHelpKey } from './watchlist'
 import { ANALISISTECNICO_HELP, type AnalisisTecnicoHelpKey } from './analisisTecnico'
 import { ESTRATEGIAS_HELP, type EstrategiasHelpKey } from './estrategias'
 import { APORTES_HELP, type AportesHelpKey } from './aportes'
+import { SALUD_HELP, type SaludHelpKey } from './salud'
 
-export type HelpKey = GlosarioKey | SimuladorHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey | ComisionesHelpKey | RebalanceoHelpKey | FlujoCajaHelpKey | WatchlistHelpKey | AnalisisTecnicoHelpKey | EstrategiasHelpKey | AportesHelpKey
+export type HelpKey = GlosarioKey | SimuladorHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey | ComisionesHelpKey | RebalanceoHelpKey | FlujoCajaHelpKey | WatchlistHelpKey | AnalisisTecnicoHelpKey | EstrategiasHelpKey | AportesHelpKey | SaludHelpKey
 
 export const HELP: Record<HelpKey, HelpContent> = {
   ...GLOSARIO_HELP,
@@ -49,6 +50,7 @@ export const HELP: Record<HelpKey, HelpContent> = {
   ...ANALISISTECNICO_HELP,
   ...ESTRATEGIAS_HELP,
   ...APORTES_HELP,
+  ...SALUD_HELP,
 }
 
 export {
@@ -75,4 +77,5 @@ export {
   ANALISISTECNICO_HELP,
   ESTRATEGIAS_HELP,
   APORTES_HELP,
+  SALUD_HELP,
 }
