@@ -9,9 +9,14 @@ from app.schemas import (
     EscenarioSimulacionOut,
     EscenarioOut,
     EscenarioGuardarRequest,
+    EscenarioVidaRequest,
+    EscenarioVidaOut,
+    DefaultsVidaOut,
 )
 from app.routers.inversiones import _validar_cartera
 from app.services import escenarios_analytics
+from app.services import vida_analytics
+from app.services import vida_engine
 
 
 router = APIRouter(prefix="/api/inversiones", tags=["inversiones"])
@@ -21,6 +26,8 @@ router = APIRouter(prefix="/api/inversiones", tags=["inversiones"])
 
 MODOS_DIVIDENDOS_VALIDOS = ("reinvertir_total", "reinvertir_parcial", "retirar")
 TIPOS_PRESET_VALIDOS = ("alcista", "bajista", "crisis", "personalizado")
+TIPOS_VIDA_VALIDOS = vida_engine.TIPOS_VIDA
+MONEDAS_VIDA_VALIDAS = vida_engine.MONEDAS_VALIDAS
 
 
 # ─── Endpoints ───────────────────────────────────────────────────────────────
@@ -65,6 +72,68 @@ def simular_escenarios(
 
     resultado = escenarios_analytics.simular_escenario_cartera(cartera, body, db)
     return EscenarioSimulacionOut(**resultado)
+
+
+@router.post("/scenarios/vida/simulate", response_model=EscenarioVidaOut)
+def simular_escenarios_vida(
+    body: EscenarioVidaRequest,
+    cartera: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Simula 'Escenarios de vida': capa sencilla que reutiliza el motor de escenarios.
+    No toca la cartera real: los supuestos vienen enteros en el body."""
+    if cartera is not None:
+        _validar_cartera(cartera, db)
+
+    if body.supuestos.moneda not in MONEDAS_VIDA_VALIDAS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"moneda inválida: {body.supuestos.moneda}. Válidas: {MONEDAS_VIDA_VALIDAS}",
+        )
+
+    for item in body.escenarios:
+        if item.tipo not in TIPOS_VIDA_VALIDOS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"tipo de escenario inválido: {item.tipo}. Válidos: {TIPOS_VIDA_VALIDOS}",
+            )
+        if item.tipo in vida_engine.TIPOS_CON_MONTO_O_PCT and item.monto is None and item.pct is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"'{item.tipo}' requiere 'monto' o 'pct'",
+            )
+        if item.tipo == "aumentar_aportes_anualmente" and item.pct is None:
+            raise HTTPException(
+                status_code=422,
+                detail="'aumentar_aportes_anualmente' requiere 'pct'",
+            )
+        if item.tipo in vida_engine.TIPOS_EXTRAORDINARIOS:
+            if item.monto is None:
+                raise HTTPException(status_code=422, detail=f"'{item.tipo}' requiere 'monto'")
+            if item.mes is None:
+                raise HTTPException(status_code=422, detail=f"'{item.tipo}' requiere 'mes'")
+            if not (1 <= item.mes <= body.supuestos.horizonte_meses):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"'mes' debe estar entre 1 y {body.supuestos.horizonte_meses} (horizonte_meses)",
+                )
+
+    resultado = vida_analytics.simular_vida_cartera(cartera, body, db)
+    return EscenarioVidaOut(**resultado)
+
+
+@router.get("/scenarios/vida/defaults", response_model=DefaultsVidaOut)
+def defaults_escenarios_vida(
+    cartera: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Precarga de patrimonio inicial y aporte mensual para 'Escenarios de vida',
+    a partir de datos que la app ya calcula (no introduce fuentes nuevas)."""
+    if cartera is not None:
+        _validar_cartera(cartera, db)
+
+    resultado = vida_analytics.get_defaults_vida(cartera, db)
+    return DefaultsVidaOut(**resultado)
 
 
 @router.get("/scenarios", response_model=list[EscenarioOut])

@@ -1622,6 +1622,99 @@ export const duplicarEscenario = (id: number, nuevoNombre?: string) =>
 export const eliminarEscenario = (id: number) =>
   api.delete(`/inversiones/scenarios/${id}`).then(() => undefined)
 
+// ── Escenarios de vida (Simulador sencillo) ──────────────────────────────
+
+export type TipoEscenarioVida =
+  | 'continuar_igual'
+  | 'aumentar_aporte'
+  | 'disminuir_aporte'
+  | 'dejar_de_aportar'
+  | 'aporte_extraordinario'
+  | 'retiro_extraordinario'
+  | 'aumentar_aportes_anualmente'
+
+export interface SupuestosVidaIn {
+  patrimonio_inicial: number
+  aporte_mensual: number
+  crecimiento_anual_pct: number
+  horizonte_meses: number
+  moneda: 'USD' | 'ARS'
+  inflacion_anual_pct?: number | null
+}
+
+export interface EscenarioVidaIn {
+  tipo: TipoEscenarioVida
+  monto?: number | null
+  pct?: number | null
+  mes?: number | null
+}
+
+export interface EscenarioVidaRequest {
+  supuestos: SupuestosVidaIn
+  escenarios: EscenarioVidaIn[]
+}
+
+export interface PuntoVida {
+  mes: number
+  fecha: string
+  valor: number
+  valor_real?: number | null
+  aportado_acum: number
+}
+
+export interface MetricasVida {
+  patrimonio_final: number
+  patrimonio_final_real?: number | null
+  aportes_periodo: number
+  crecimiento_estimado: number
+  diferencia_vs_base: number
+  diferencia_vs_base_pct?: number | null
+}
+
+export interface EscenarioVidaResultado {
+  tipo: TipoEscenarioVida
+  nombre: string
+  descripcion: string
+  es_base: boolean
+  aporte_mensual_efectivo: number
+  crecimiento_aporte_anual_pct: number
+  mes_flujo_extraordinario?: number | null
+  monto_flujo_extraordinario?: number | null
+  se_agota_en_mes?: number | null
+  puntos: PuntoVida[]
+  metricas: MetricasVida
+  advertencias: string[]
+  es_simulado: boolean
+}
+
+export interface EscenarioVidaOut {
+  cartera: string | null
+  fecha_simulacion: string
+  moneda: 'USD' | 'ARS'
+  supuestos: SupuestosVidaIn
+  resultados: EscenarioVidaResultado[]  // resultados[0] es siempre la base
+  disclaimer: string
+  advertencias: string[]
+}
+
+export interface DefaultsVida {
+  cartera: string | null
+  patrimonio_inicial_usd: number
+  aporte_mensual_usd: number | null
+  origen_aporte: 'promedio_12m' | 'promedio_historico' | 'sin_datos'
+  meses_historia: number
+  moneda_sugerida: 'USD' | 'ARS'
+  crecimiento_anual_pct_sugerido: number
+  horizonte_meses_sugerido: number
+  advertencias: string[]
+}
+
+export const simularVida = (cartera: string | null, body: EscenarioVidaRequest) =>
+  api.post<EscenarioVidaOut>(`/inversiones/scenarios/vida/simulate${cartera ? `?cartera=${encodeURIComponent(cartera)}` : ''}`, body).then(r => r.data)
+
+export const getDefaultsVida = (cartera: string | null) =>
+  api.get<DefaultsVida>('/inversiones/scenarios/vida/defaults', { params: cartera ? { cartera } : {} }).then(r => r.data)
+
 // ---- Análisis técnico ----
 
 export type VarianteSerie = 'local' | 'subyacente'

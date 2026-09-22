@@ -252,6 +252,84 @@ class EscenarioOut(BaseModel):
     fecha_actualizacion: datetime
 
 
+# ─── Escenarios de vida (Simulador sencillo) ──────────────────────────────
+
+class SupuestosVidaIn(BaseModel):
+    patrimonio_inicial: float = Field(..., ge=0.0, le=1e12)
+    aporte_mensual: float = Field(0.0, ge=0.0, le=1e9)
+    crecimiento_anual_pct: float = Field(0.0, ge=-95.0, le=100.0)
+    horizonte_meses: int = Field(120, ge=1, le=600)
+    moneda: str = Field("USD")
+    inflacion_anual_pct: Optional[float] = Field(None, ge=0.0, le=1000.0)
+
+
+class EscenarioVidaIn(BaseModel):
+    tipo: str
+    monto: Optional[float] = Field(None, ge=0.0, le=1e12)
+    pct: Optional[float] = Field(None, ge=0.0, le=500.0)
+    mes: Optional[int] = Field(None, ge=1, le=600)
+
+
+class EscenarioVidaRequest(BaseModel):
+    supuestos: SupuestosVidaIn
+    escenarios: list[EscenarioVidaIn] = Field(..., min_length=1, max_length=6)
+
+
+class PuntoVidaOut(BaseModel):
+    mes: int
+    fecha: date
+    valor: float
+    valor_real: Optional[float] = None
+    aportado_acum: float
+
+
+class MetricasVidaOut(BaseModel):
+    patrimonio_final: float
+    patrimonio_final_real: Optional[float] = None
+    aportes_periodo: float
+    crecimiento_estimado: float
+    diferencia_vs_base: float
+    diferencia_vs_base_pct: Optional[float] = None
+
+
+class EscenarioVidaResultadoOut(BaseModel):
+    tipo: str
+    nombre: str
+    descripcion: str
+    es_base: bool
+    aporte_mensual_efectivo: float
+    crecimiento_aporte_anual_pct: float
+    mes_flujo_extraordinario: Optional[int] = None
+    monto_flujo_extraordinario: Optional[float] = None
+    se_agota_en_mes: Optional[int] = None
+    puntos: list[PuntoVidaOut]
+    metricas: MetricasVidaOut
+    advertencias: list[str] = Field(default_factory=list)
+    es_simulado: bool = True
+
+
+class EscenarioVidaOut(BaseModel):
+    cartera: Optional[str]
+    fecha_simulacion: datetime
+    moneda: str
+    supuestos: SupuestosVidaIn
+    resultados: list[EscenarioVidaResultadoOut]  # resultados[0] es siempre la base
+    disclaimer: str
+    advertencias: list[str] = Field(default_factory=list)
+
+
+class DefaultsVidaOut(BaseModel):
+    cartera: Optional[str]
+    patrimonio_inicial_usd: float
+    aporte_mensual_usd: Optional[float]
+    origen_aporte: str  # "promedio_12m" | "promedio_historico" | "sin_datos"
+    meses_historia: int
+    moneda_sugerida: str = "USD"
+    crecimiento_anual_pct_sugerido: float = 0.0
+    horizonte_meses_sugerido: int = 120
+    advertencias: list[str] = Field(default_factory=list)
+
+
 class PropuestaRebalanceoItem(BaseModel):
     tipo: str  # "ticker" | "categoria_sin_instrumento"
     posicion: Optional[str] = None

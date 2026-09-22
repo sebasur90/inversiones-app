@@ -60,4 +60,12 @@ export const ESCENARIO_PARAM_LIMITS: Record<string, { min?: number; max?: number
     unit: '%',
     label: 'Inflación anual',
   },
+  // Escenarios de vida (backend/app/schemas.py SupuestosVidaIn). `horizonte_meses` e
+  // `inflacion_anual_pct` de arriba tienen el mismo rango y se reutilizan tal cual.
+  crecimiento_anual_pct: {
+    min: -95,
+    max: 100,
+    unit: '%',
+    label: 'Crecimiento esperado anual',
+  },
 }

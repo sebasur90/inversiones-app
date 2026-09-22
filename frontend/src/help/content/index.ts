@@ -1,6 +1,7 @@
 import { HelpContent } from '../types'
 import { GLOSARIO_HELP, type GlosarioKey } from './glosario'
 import { SIMULADOR_HELP, type SimuladorHelpKey } from './simulador'
+import { SIMULADOR_VIDA_HELP, type SimuladorVidaHelpKey } from './simuladorVida'
 import { OBJETIVO_HELP, type ObjetivoHelpKey } from './objetivo'
 import { BENCHMARKS_HELP, type BenchmarksHelpKey } from './benchmarks'
 import { PATRIMONIO_HELP, type PatrimonioHelpKey } from './patrimonio'
@@ -25,11 +26,12 @@ import { APORTES_HELP, type AportesHelpKey } from './aportes'
 import { SALUD_HELP, type SaludHelpKey } from './salud'
 import { EXPLICACIONRESULTADO_HELP, type ExplicacionResultadoHelpKey } from './explicacionResultado'
 
-export type HelpKey = GlosarioKey | SimuladorHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey | ComisionesHelpKey | RebalanceoHelpKey | FlujoCajaHelpKey | WatchlistHelpKey | AnalisisTecnicoHelpKey | EstrategiasHelpKey | AportesHelpKey | SaludHelpKey | ExplicacionResultadoHelpKey
+export type HelpKey = GlosarioKey | SimuladorHelpKey | SimuladorVidaHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey | ComisionesHelpKey | RebalanceoHelpKey | FlujoCajaHelpKey | WatchlistHelpKey | AnalisisTecnicoHelpKey | EstrategiasHelpKey | AportesHelpKey | SaludHelpKey | ExplicacionResultadoHelpKey
 
 export const HELP: Record<HelpKey, HelpContent> = {
   ...GLOSARIO_HELP,
   ...SIMULADOR_HELP,
+  ...SIMULADOR_VIDA_HELP,
   ...OBJETIVO_HELP,
   ...BENCHMARKS_HELP,
   ...PATRIMONIO_HELP,
@@ -58,6 +60,7 @@ export const HELP: Record<HelpKey, HelpContent> = {
 export {
   GLOSARIO_HELP,
   SIMULADOR_HELP,
+  SIMULADOR_VIDA_HELP,
   OBJETIVO_HELP,
   BENCHMARKS_HELP,
   PATRIMONIO_HELP,

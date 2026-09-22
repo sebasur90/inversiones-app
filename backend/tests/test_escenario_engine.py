@@ -5,6 +5,7 @@ from app.services.escenario_engine import (
     PosicionSnapshot,
     PortfolioSnapshot,
     EscenarioParams,
+    FlujoExtraordinario,
     simular_escenario,
     resolver_preset,
     PRESETS,
@@ -433,3 +434,106 @@ def test_override_por_ticker():
 
     # AAPL crece ~20%, MSFT sin cambio: patrimonio_final ≈ $500*1.2 + $500 = $1100
     assert abs(resultado.patrimonio_final_usd - 1100.0) < 2.0
+
+
+# ─── Tests: flujos extraordinarios ─────────────────────────────────────────
+
+def _params_base(**overrides) -> EscenarioParams:
+    """Params con todo en cero/neutro, para tests de flujos extraordinarios."""
+    base = dict(
+        horizonte_meses=12,
+        variacion_dolar_pct=0.0,
+        variacion_por_instrumento={},
+        variacion_por_defecto_pct=0.0,
+        aporte_mensual_usd=0.0,
+        crecimiento_aporte_anual_pct=0.0,
+        retiro_mensual_usd=0.0,
+        modo_dividendos="reinvertir_total",
+        dividend_yield_anual_pct=0.0,
+        pct_dividendo_reinvertido=None,
+        comision_pct=0.0,
+        inflacion_anual_pct=None,
+    )
+    base.update(overrides)
+    return EscenarioParams(**base)
+
+
+def test_flujo_extraordinario_default_no_cambia_resultados(snapshot_simple):
+    """flujos_extraordinarios sin especificar (default []) da el mismo resultado que []."""
+    params_default = _params_base(variacion_por_defecto_pct=8.0, aporte_mensual_usd=50.0)
+    params_explicito = _params_base(
+        variacion_por_defecto_pct=8.0, aporte_mensual_usd=50.0, flujos_extraordinarios=[]
+    )
+
+    resultado_default = simular_escenario(snapshot_simple, params_default)
+    resultado_explicito = simular_escenario(snapshot_simple, params_explicito)
+
+    assert resultado_default.patrimonio_final_usd == resultado_explicito.patrimonio_final_usd
+    assert resultado_default.capital_aportado_usd == resultado_explicito.capital_aportado_usd
+    assert resultado_default.flujo_extraordinario_aplicado_usd == 0.0
+
+
+def test_flujo_extraordinario_en_cartera_con_posiciones_se_prorratea():
+    """Un aporte extraordinario en cartera con posiciones se reparte por peso y sube el total exacto."""
+    snapshot = PortfolioSnapshot(
+        fecha=date(2024, 1, 1),
+        posiciones=[
+            PosicionSnapshot(ticker="AAPL", valor_usd=500.0, moneda="USD"),
+            PosicionSnapshot(ticker="MSFT", valor_usd=500.0, moneda="USD"),
+        ],
+        mep_actual=None,
+        valor_total_usd=1000.0,
+        total_invertido_usd=1000.0,
+    )
+    params = _params_base(
+        horizonte_meses=6,
+        flujos_extraordinarios=[FlujoExtraordinario(mes=3, monto_usd=1000.0)],
+    )
+
+    resultado = simular_escenario(snapshot, params)
+
+    punto_antes = next(p for p in resultado.puntos if p.mes == 2)
+    punto_despues = next(p for p in resultado.puntos if p.mes == 3)
+    assert abs((punto_despues.valor_usd - punto_antes.valor_usd) - 1000.0) < 1e-6
+    assert resultado.flujo_extraordinario_aplicado_usd == 1000.0
+    # Sin crecimiento ni aportes recurrentes: el capital aportado sube exactamente el flujo.
+    assert resultado.capital_aportado_usd == 2000.0
+
+
+def test_params_sin_fx_conserva_flujos_extraordinarios():
+    """La descomposición FX no debe 'perder' el flujo extraordinario en el baseline sin dólar."""
+    snapshot = PortfolioSnapshot(
+        fecha=date(2024, 1, 1),
+        posiciones=[PosicionSnapshot(ticker="GGAL", valor_usd=1000.0, moneda="ARS")],
+        mep_actual=1000.0,
+        valor_total_usd=1000.0,
+        total_invertido_usd=1000.0,
+    )
+    flujo = [FlujoExtraordinario(mes=4, monto_usd=300.0)]
+
+    con_shock = simular_escenario(
+        snapshot, _params_base(variacion_dolar_pct=20.0, flujos_extraordinarios=flujo)
+    )
+    # Replica manual de lo que params_sin_fx debería calcular: mismo flujo, sin shock de dólar.
+    sin_shock_mismo_flujo = simular_escenario(
+        snapshot, _params_base(variacion_dolar_pct=0.0, flujos_extraordinarios=flujo)
+    )
+
+    efecto_dolar_esperado = (
+        con_shock.patrimonio_final_usd - sin_shock_mismo_flujo.patrimonio_final_usd
+    )
+    assert abs(con_shock.efecto_dolar_usd - efecto_dolar_esperado) < 1e-6
+
+
+def test_clamp_retiro_extraordinario_no_deja_valor_negativo(snapshot_simple):
+    """Un retiro extraordinario mayor al patrimonio se clampea: no queda valor negativo."""
+    params = _params_base(
+        horizonte_meses=2,
+        flujos_extraordinarios=[FlujoExtraordinario(mes=1, monto_usd=-5000.0)],
+    )
+
+    resultado = simular_escenario(snapshot_simple, params)
+
+    punto_mes_1 = next(p for p in resultado.puntos if p.mes == 1)
+    assert punto_mes_1.valor_usd == 0.0
+    assert resultado.flujo_extraordinario_aplicado_usd == -1000.0  # sólo había 1000 disponibles

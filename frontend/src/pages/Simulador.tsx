@@ -3,6 +3,8 @@ import { useInversionesContext } from '../context/InversionesContext'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
+import Segmented from '../components/ui/Segmented'
+import SimuladorVida from '../components/inversiones/vida/SimuladorVida'
 import {
   simularEscenarios,
   listarEscenarios,
@@ -28,6 +30,11 @@ import type { ParsedApiError } from '../help/errors/apiErrors'
 
 export default function Simulador() {
   const { carteraSeleccionada, syncVersion } = useInversionesContext()
+
+  // "Sencillo" (Escenarios de vida) es el modo por defecto: pensado para quien no sabe
+  // responder cuánto va a variar el dólar o el dividend yield. "Avanzado" es este mismo
+  // simulador de siempre, intacto, con sus escenarios de mercado.
+  const [modo, setModo] = useState<'sencillo' | 'avanzado'>('sencillo')
 
   // Estado inicial con parámetros completos por defecto
   const defaultParams: EscenarioParamsIn = {
@@ -236,8 +243,26 @@ export default function Simulador() {
 
   return (
     <div className="pb-8">
-      <ScreenHeader title="Simulador de escenarios" onBack={() => history.back()} />
+      <ScreenHeader title="Simulador" onBack={() => history.back()} />
 
+      <div className="px-3 pt-1 pb-2">
+        <Segmented<'sencillo' | 'avanzado'>
+          options={[
+            { value: 'sencillo', label: 'Sencillo' },
+            { value: 'avanzado', label: 'Avanzado' },
+          ]}
+          value={modo}
+          onChange={setModo}
+        />
+      </div>
+
+      {modo === 'sencillo' && (
+        <div className="px-3">
+          <SimuladorVida cartera={carteraSeleccionada} syncVersion={syncVersion} />
+        </div>
+      )}
+
+      {modo === 'avanzado' && (
       <div className="px-3 space-y-4">
         {/* Advertencia: Simulado */}
         <ScenarioIntentBanner variant="antes">
@@ -390,6 +415,7 @@ export default function Simulador() {
           </Card>
         )}
       </div>
+      )}
     </div>
   )
 }

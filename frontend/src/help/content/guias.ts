@@ -79,13 +79,13 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
   '/simulador': {
     queEs: 'Un "qué pasaría si…?" para tu cartera: probás escenarios sin tocar nada real.',
     comoLeerla: [
-      'Cada escenario (Base, Alcista, Bajista, o uno que armes) es una combinación de supuestos: cuánto sube el dólar, cuánto aportás por mes, etc.',
-      'El gráfico proyecta la evolución de tu patrimonio mes a mes bajo cada escenario.',
-      'Podés comparar hasta 6 escenarios en la misma tabla.',
+      'Modo "Sencillo": preguntas cotidianas en lenguaje simple ("¿y si aporto más?", "¿y si dejo de aportar?"), con sólo 6 supuestos.',
+      'Modo "Avanzado": el simulador de siempre, con escenarios de mercado (dólar, dividendos, comisiones) para quien ya sabe esos números.',
+      'En ambos modos, el gráfico proyecta la evolución de tu patrimonio mes a mes y la tabla compara los escenarios entre sí.',
     ],
-    queHacer: ['Empezá por los presets antes de armar uno personalizado desde cero.'],
+    queHacer: ['Si no sabés qué poner en "variación del dólar" o "dividend yield", empezá por el modo Sencillo.'],
     ojo: 'Es una proyección con los supuestos que vos cargaste, no una predicción: cambiá los números y el resultado va a cambiar mucho.',
-    terminos: ['escenario_horizonte', 'escenario_variacion_dolar', 'escenario_aporte_mensual'],
+    terminos: ['vida_crecimiento_anual', 'vida_aporte_mensual', 'escenario_horizonte'],
   },
 
   '/analisis-tecnico': {

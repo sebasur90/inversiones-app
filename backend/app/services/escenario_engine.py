@@ -4,7 +4,7 @@ Este módulo contiene la lógica pura de proyección financiera.
 No tiene dependencias de base de datos ni estado implícito.
 Las funciones son deterministas: dados los mismos inputs, siempre producen el mismo output.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Optional
 import math
@@ -37,6 +37,17 @@ class PortfolioSnapshot:
 
 
 @dataclass
+class FlujoExtraordinario:
+    """Movimiento de una sola vez en un mes puntual del horizonte.
+
+    monto_usd > 0 es un aporte extraordinario, < 0 es un retiro extraordinario.
+    No paga comisión (la comisión sólo se calcula sobre el aporte mensual recurrente).
+    """
+    mes: int  # 1..horizonte_meses
+    monto_usd: float
+
+
+@dataclass
 class EscenarioParams:
     """Parámetros de un escenario de simulación."""
     horizonte_meses: int
@@ -51,6 +62,7 @@ class EscenarioParams:
     pct_dividendo_reinvertido: Optional[float]  # Solo si modo_dividendos == "reinvertir_parcial"
     comision_pct: float  # Comisión sobre aporte bruto
     inflacion_anual_pct: Optional[float]  # Si se provee, computa patrimonio real deflacionado
+    flujos_extraordinarios: list[FlujoExtraordinario] = field(default_factory=list)
 
 
 @dataclass
@@ -77,6 +89,7 @@ class ResultadoEscenario:
     dividendos_usd: float
     comisiones_usd: float
     patrimonio_final_real_usd: Optional[float] = None  # Si inflacion_anual_pct
+    flujo_extraordinario_aplicado_usd: float = 0.0  # Suma efectiva, tras el clamp por fondos
 
 
 # ─── Presets de escenarios ────────────────────────────────────────────────
@@ -217,6 +230,7 @@ def simular_escenario(
     capital_aportado_acum = snapshot.total_invertido_usd
     dividendos_acum = 0.0
     comisiones_acum = 0.0
+    extraordinario_acum = 0.0
     puntos = []
 
     # Punto 0 (mes=0, hoy)
@@ -289,6 +303,15 @@ def simular_escenario(
                                       params.crecimiento_aporte_anual_pct, mes)
         aporte_neto = aporte_mes - params.retiro_mensual_usd
 
+        # 7bis. Flujos extraordinarios del mes. El retiro se clampea a los fondos disponibles:
+        # sin esto, un patrimonio negativo capitalizaría como una deuda (paso 1) y la curva se
+        # iría a -∞. Sólo se ejecuta si hay flujos, así que ningún escenario existente cambia.
+        extraordinario_mes = sum(f.monto_usd for f in params.flujos_extraordinarios if f.mes == mes)
+        if extraordinario_mes < 0:
+            extraordinario_mes = -min(-extraordinario_mes, max(valor_total, 0.0))
+        extraordinario_acum += extraordinario_mes
+        aporte_neto += extraordinario_mes
+
         # 8. Comisión sobre aporte bruto
         comision_mes = aporte_mes * (params.comision_pct / 100)
         comisiones_acum += comision_mes
@@ -344,6 +367,7 @@ def simular_escenario(
             pct_dividendo_reinvertido=params.pct_dividendo_reinvertido,
             comision_pct=params.comision_pct,
             inflacion_anual_pct=None,
+            flujos_extraordinarios=params.flujos_extraordinarios,
         )
         resultado_sin_fx = simular_escenario(snapshot, params_sin_fx)
         efecto_dolar_usd = patrimonio_final - resultado_sin_fx.patrimonio_final_usd
@@ -374,4 +398,5 @@ def simular_escenario(
         dividendos_usd=dividendos_acum,
         comisiones_usd=comisiones_acum,
         patrimonio_final_real_usd=patrimonio_final_real,
+        flujo_extraordinario_aplicado_usd=extraordinario_acum,
     )
