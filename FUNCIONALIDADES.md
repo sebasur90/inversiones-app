@@ -18,6 +18,7 @@ La app lee de Google Sheets (pestañas `Movimientos`, `Instrumentos`, `Precios`,
 - **Rendimiento** — P&L realizado/no realizado/ingresos; rentabilidad simple, TIR (XIRR) y TWRR en ARS y USD; mapa de calor de rendimiento mensual/anual coloreado por intensidad; comparación vs. benchmarks; P&L por ticker.
 - **Balance de Cartera / Rebalanceo** — peso actual vs. objetivo por eje (Cartera, Tipo, Sector), con barras de progreso.
 - **Exposición** — composición de la cartera (donut/barras) por Ticker/Tipo/Sector/Mercado.
+- **Descomposición de cartera** — navegación jerárquica con drill-down (Familia → País → Sector → Ticker), donut + tabla por nivel, vista en %/ARS/USD. La familia (Renta fija/Renta variable/Fondos/Liquidez) se deriva del Tipo Instrumento y Sector del Sheet; lo que falta clasificar se muestra como "Sin clasificar", nunca inferido.
 - **Posiciones / Ticker (detalle)** — tenencias actuales, precio, sparkline histórico, precio objetivo y stop-loss configurados con % de distancia y alertas de "objetivo alcanzado" / "stop loss disparado".
 - **Movimientos** — historial de compras, ventas, dividendos, cupones, amortizaciones.
 - **Precios** — evolución histórica por ticker (nominal / USD / ajustado por CER).

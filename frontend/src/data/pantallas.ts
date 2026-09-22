@@ -20,6 +20,7 @@ export const GRUPOS_PANTALLAS: GrupoPantallas[] = [
       { to: '/watchlist', label: 'Watchlist', desc: 'Instrumentos a seguir y su distancia al precio de compra', icon: 'target' },
       { to: '/patrimonio', label: 'Patrimonio', desc: 'Evolución del valor vs. capital aportado, con aportes y retiros', icon: 'trend' },
       { to: '/exposicion', label: 'Exposición', desc: 'Composición por ticker, tipo, sector y mercado', icon: 'pie' },
+      { to: '/descomposicion', label: 'Descomposición de cartera', desc: 'De qué está compuesta, nivel por nivel: familia, país, sector y ticker', icon: 'pie' },
       { to: '/rebalanceo', label: 'Balance de cartera', desc: 'Peso actual vs. objetivo por eje', icon: 'scale' },
       { to: '/objetivo', label: 'Objetivo', desc: 'Progreso hacia la meta y aporte mensual necesario', icon: 'target' },
       { to: '/aportes', label: 'Ritmo de aportes', desc: 'Cuánto aportás mes a mes, rachas, récords y proyección a fin de año', icon: 'up' },

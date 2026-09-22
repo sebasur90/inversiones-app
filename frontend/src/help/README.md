@@ -143,6 +143,7 @@ try {
 | Ritmo de aportes | ✅ | ✓ | 12 términos + guía + 2 FAQ |
 | Rebalanceo | ✅ | ✓ | 4 términos nuevos + migración InfoTerm→InfoTooltip (Batch 6 Sprint 2) |
 | Salud de cartera | ✅ | ✓ | Pantalla nueva `/salud`: 23 términos (dimensiones + indicadores) + guía + 2 FAQ; reutiliza umbrales de `diagnostico_engine.py` |
+| Descomposición de cartera | ✅ | ✓ | Pantalla nueva `/descomposicion`: árbol Familia→País→Sector→Ticker, 5 términos + guía; familia derivada de `market_data/precios.py` y `salud_engine.SECTORES_LIQUIDOS` |
 
 ## Notas para mantainers
 

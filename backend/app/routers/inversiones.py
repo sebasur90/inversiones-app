@@ -44,6 +44,7 @@ from ..schemas import (
     CorrelacionesOut,
     DiagnosticoOut,
     SaludCarteraEstadoOut,
+    DescomposicionOut,
     DescomposicionFxOut,
     DescomposicionFxPosicionOut,
     TickerAnalysisOut,
@@ -82,6 +83,7 @@ from ..services.opportunity_cost_analytics import get_opportunity_cost
 from ..services.contribucion_analytics import get_contribucion, get_correlaciones, UNIVERSOS_VALIDOS
 from ..services.diagnostico_analytics import get_diagnostico
 from ..services.salud_analytics import get_salud
+from ..services.descomposicion_analytics import get_descomposicion
 from ..services.fx_decomposition_analytics import (
     get_descomposicion_fx,
     get_descomposicion_fx_por_posicion,
@@ -171,6 +173,17 @@ def exposicion_cartera(nombre: str, db: Session = Depends(get_db)):
 @router.get("/consolidado/exposicion", response_model=ExposicionOut)
 def exposicion_consolidado(db: Session = Depends(get_db)):
     return get_exposicion(None, db)
+
+
+@router.get("/carteras/{nombre}/descomposicion", response_model=DescomposicionOut)
+def descomposicion_cartera(nombre: str, db: Session = Depends(get_db)):
+    _validar_cartera(nombre, db)
+    return get_descomposicion(nombre, db)
+
+
+@router.get("/consolidado/descomposicion", response_model=DescomposicionOut)
+def descomposicion_consolidado(db: Session = Depends(get_db)):
+    return get_descomposicion(None, db)
 
 
 @router.get("/carteras/{nombre}/rebalanceo", response_model=RebalanceoOut)

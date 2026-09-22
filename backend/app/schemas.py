@@ -133,6 +133,32 @@ class ExposicionOut(BaseModel):
     ejes: list[ExposicionEje]
 
 
+# --- Descomposición de cartera (árbol Familia → País → Sector → Ticker) ---
+
+class DescomposicionNodo(BaseModel):
+    clave: str
+    etiqueta: str
+    nivel: str
+    valor_usd: float
+    valor_ars: float
+    porcentaje: float          # sobre el total de la cartera (estable al bajar de nivel)
+    porcentaje_padre: float    # sobre el nodo padre (suma 100% entre hermanos)
+    instrumentos: int
+    sin_clasificar: bool = False
+    tipo_instrumento: Optional[str] = None  # sólo en hojas (nivel Ticker)
+    nombre: Optional[str] = None            # sólo en hojas (nivel Ticker)
+    hijos: list["DescomposicionNodo"] = Field(default_factory=list)
+
+
+class DescomposicionOut(BaseModel):
+    niveles: list[str]
+    total_usd: float
+    total_ars: float
+    instrumentos: int
+    raiz: list[DescomposicionNodo]
+    posiciones_sin_precio: list[str] = Field(default_factory=list)
+
+
 class RebalanceoItem(BaseModel):
     etiqueta: str
     porcentaje_actual: float

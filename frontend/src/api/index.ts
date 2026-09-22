@@ -170,6 +170,30 @@ export interface ExposicionOut {
   ejes: ExposicionEje[]
 }
 
+export interface DescomposicionNodo {
+  clave: string
+  etiqueta: string
+  nivel: string
+  valor_usd: number
+  valor_ars: number
+  porcentaje: number
+  porcentaje_padre: number
+  instrumentos: number
+  sin_clasificar: boolean
+  tipo_instrumento: string | null
+  nombre: string | null
+  hijos: DescomposicionNodo[]
+}
+
+export interface DescomposicionOut {
+  niveles: string[]
+  total_usd: number
+  total_ars: number
+  instrumentos: number
+  raiz: DescomposicionNodo[]
+  posiciones_sin_precio: string[]
+}
+
 export interface RebalanceoItem {
   etiqueta: string
   porcentaje_actual: number
@@ -326,6 +350,9 @@ export const getResumenInversiones = (cartera: string | null) =>
 
 export const getExposicionInversiones = (cartera: string | null) =>
   api.get<ExposicionOut>(`${carteraPath(cartera)}/exposicion`).then(r => r.data)
+
+export const getDescomposicion = (cartera: string | null) =>
+  api.get<DescomposicionOut>(`${carteraPath(cartera)}/descomposicion`).then(r => r.data)
 
 export const getRebalanceoInversiones = (cartera: string | null) =>
   api.get<RebalanceoOut>(`${carteraPath(cartera)}/rebalanceo`).then(r => r.data)

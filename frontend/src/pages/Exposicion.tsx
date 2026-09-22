@@ -52,6 +52,11 @@ export default function Exposicion() {
 
       <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
         <div className="inline-flex items-center gap-1">
+          <button onClick={() => navigate('/descomposicion')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
+            <Icon name="pie" className="w-3.5 h-3.5" /> Ver descomposición jerárquica
+          </button>
+        </div>
+        <div className="inline-flex items-center gap-1">
           <button onClick={() => navigate('/vencimientos')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
             <Icon name="target" className="w-3.5 h-3.5" /> Ver calendario de vencimientos
           </button>

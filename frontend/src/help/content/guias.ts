@@ -263,6 +263,17 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
     terminos: ['contribucion', 'hhi', 'correlacion'],
   },
 
+  '/descomposicion': {
+    queEs: 'De qué está compuesta tu cartera, bajando de lo general a lo particular: Familia → País → Sector → Ticker.',
+    comoLeerla: [
+      'Tocá una categoría para entrar a su detalle; el camino de arriba ("Cartera › …") te deja volver a un nivel anterior.',
+      'El selector %/ARS/USD cambia cómo se ven los valores, no lo que se calcula.',
+      'La familia (Renta fija, Renta variable, Fondos, Liquidez) se deriva del Tipo Instrumento y el Sector que cargaste en el Sheet: no es un dato que se carga a mano.',
+    ],
+    ojo: 'Un ticker sin ficha en Instrumentos, o con País/Sector vacío, aparece como "Sin clasificar" — la app nunca inventa esa clasificación.',
+    terminos: ['descomposicion_familia', 'descomposicion_sin_clasificar'],
+  },
+
   '/explicacion-resultado': {
     queEs: 'Qué factores explican el resultado de tu cartera en el período elegido: no sólo el porcentaje final, sino de dónde vino.',
     comoLeerla: [
