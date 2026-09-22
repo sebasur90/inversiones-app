@@ -1472,6 +1472,48 @@ class OpportunityCostOut(BaseModel):
     por_posicion: list[OpportunityCostPosicionOut] = []
 
 
+# --- Costo de oportunidad ---
+# Comparación histórica de la cartera contra una referencia, en la misma moneda, en
+# porcentaje y en dinero. A diferencia de OpportunityCostOut (sólo el valor final) y de
+# PerformanceRelativaOut (no normaliza la moneda de la referencia), este schema es el de
+# `/costo-oportunidad`. Vocabulario deliberado: "referencia", "resultado_*" — nada de
+# "shadow" ni "hubieras", porque el vocabulario del payload termina filtrándose a la UI.
+
+class CostoOportunidadIndicePuntoOut(BaseModel):
+    fecha: date
+    indice_cartera: Optional[float] = None
+    indice_referencia: Optional[float] = None
+
+
+class CostoOportunidadValorPuntoOut(BaseModel):
+    fecha: date
+    valor_cartera: Optional[float] = None
+    valor_referencia: Optional[float] = None
+    diferencia: Optional[float] = None
+
+
+class CostoOportunidadOut(BaseModel):
+    estado: str  # "ok" | "sin_benchmark" | "sin_movimientos" | "datos_insuficientes"
+    moneda: str
+    referencia: Optional[str] = None
+    moneda_nativa_referencia: Optional[str] = None  # "ARS" | "USD" | "mixta"
+    periodo_pedido_desde: Optional[date] = None
+    periodo_desde: Optional[date] = None
+    periodo_hasta: Optional[date] = None
+    n_meses: int = 0
+    resultado_cartera_pct: Optional[float] = None
+    resultado_referencia_pct: Optional[float] = None
+    diferencia_pp: Optional[float] = None  # (cartera - referencia) * 100
+    valor_inicial: Optional[float] = None
+    aportes_netos_periodo: Optional[float] = None
+    valor_final_cartera: Optional[float] = None
+    valor_final_referencia: Optional[float] = None
+    diferencia_monetaria: Optional[float] = None  # cartera - referencia
+    serie_indices: list[CostoOportunidadIndicePuntoOut] = []
+    serie_valores: list[CostoOportunidadValorPuntoOut] = []
+    advertencias: list[str] = []
+
+
 # --- Análisis técnico ---
 
 class SerieVarianteOut(BaseModel):

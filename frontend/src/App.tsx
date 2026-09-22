@@ -31,6 +31,7 @@ const Rendimiento = lazy(() => import('./pages/Rendimiento'))
 const Rebalanceo = lazy(() => import('./pages/Rebalanceo'))
 const Riesgo = lazy(() => import('./pages/Riesgo'))
 const PerformanceRelativa = lazy(() => import('./pages/PerformanceRelativa'))
+const CostoOportunidad = lazy(() => import('./pages/CostoOportunidad'))
 const Contribucion = lazy(() => import('./pages/Contribucion'))
 const ExplicacionResultado = lazy(() => import('./pages/ExplicacionResultado'))
 const Diagnostico = lazy(() => import('./pages/Diagnostico'))
@@ -163,6 +164,7 @@ function Root() {
             <Route path="rebalanceo" element={<Rebalanceo />} />
             <Route path="riesgo" element={<Riesgo />} />
             <Route path="performance-relativa" element={<PerformanceRelativa />} />
+            <Route path="costo-oportunidad" element={<CostoOportunidad />} />
             <Route path="contribucion" element={<Contribucion />} />
             <Route path="explicacion-resultado" element={<ExplicacionResultado />} />
             <Route path="diagnostico" element={<Diagnostico />} />

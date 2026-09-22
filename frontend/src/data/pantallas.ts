@@ -37,6 +37,7 @@ export const GRUPOS_PANTALLAS: GrupoPantallas[] = [
       { to: '/riesgo', label: 'Riesgo', desc: 'Drawdown, volatilidad, Sharpe, Sortino, Calmar', icon: 'trend' },
       { to: '/performance-relativa', label: 'Performance relativa', desc: 'Cartera vs. un benchmark: alpha, beta, tracking error', icon: 'up' },
       { to: '/benchmarks-comparacion', label: 'Comparar benchmarks', desc: 'Varios benchmarks y tickers a la vez', icon: 'pie' },
+      { to: '/costo-oportunidad', label: 'Costo de oportunidad', desc: 'Comparación histórica de la cartera contra una referencia, en porcentaje y en dinero', icon: 'scale' },
       { to: '/contribucion', label: 'Contribución', desc: 'Qué aportó cada posición, concentración y correlaciones', icon: 'pie' },
       { to: '/explicacion-resultado', label: '¿Por qué ganó o perdió?', desc: 'Qué factores explican el resultado del período: precio, dividendos, comisiones y más', icon: 'trend' },
     ],

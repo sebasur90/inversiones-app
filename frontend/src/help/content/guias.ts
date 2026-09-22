@@ -320,6 +320,17 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
     comoLeerla: ['Elegí el período y los benchmarks/tickers a comparar; la tabla y el gráfico muestran el rendimiento de cada uno en ese lapso.'],
   },
 
+  '/costo-oportunidad': {
+    queEs: 'Cómo se comportó tu cartera durante un período, comparada con una referencia que elegís: en porcentaje y en dinero.',
+    comoLeerla: [
+      'Las dos líneas arrancan en el mismo punto y reciben los mismos aportes y retiros: lo único distinto es dónde estuvo invertido el dinero.',
+      'La diferencia en puntos porcentuales y la diferencia en dinero describen el mismo hecho: positivo significa que la cartera terminó por encima de la referencia.',
+      'El período que se compara se redondea a meses completos, y se muestra arriba: puede no coincidir exactamente con el botón que apretaste.',
+    ],
+    ojo: 'Es una descripción de lo que ya pasó, nunca una recomendación. La referencia se sigue de forma teórica, sin comisiones, impuestos ni mínimos de operación.',
+    terminos: ['costooportunidad_comparacion', 'costooportunidad_diferencia_monetaria', 'costooportunidad_homogeneidad'],
+  },
+
   '/mas': {
     queEs: 'El resto de las pantallas, agrupadas por tema: todo lo que no entra en la barra de abajo vive acá.',
     comoLeerla: ['Buscá por nombre o usá la lupa del encabezado para encontrar cualquier pantalla más rápido.'],

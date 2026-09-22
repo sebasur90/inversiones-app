@@ -26,8 +26,9 @@ import { APORTES_HELP, type AportesHelpKey } from './aportes'
 import { SALUD_HELP, type SaludHelpKey } from './salud'
 import { EXPLICACIONRESULTADO_HELP, type ExplicacionResultadoHelpKey } from './explicacionResultado'
 import { DESCOMPOSICION_HELP, type DescomposicionHelpKey } from './descomposicion'
+import { COSTOOPORTUNIDAD_HELP, type CostoOportunidadHelpKey } from './costooportunidad'
 
-export type HelpKey = GlosarioKey | SimuladorHelpKey | SimuladorVidaHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey | ComisionesHelpKey | RebalanceoHelpKey | FlujoCajaHelpKey | WatchlistHelpKey | AnalisisTecnicoHelpKey | EstrategiasHelpKey | AportesHelpKey | SaludHelpKey | ExplicacionResultadoHelpKey | DescomposicionHelpKey
+export type HelpKey = GlosarioKey | SimuladorHelpKey | SimuladorVidaHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey | ComisionesHelpKey | RebalanceoHelpKey | FlujoCajaHelpKey | WatchlistHelpKey | AnalisisTecnicoHelpKey | EstrategiasHelpKey | AportesHelpKey | SaludHelpKey | ExplicacionResultadoHelpKey | DescomposicionHelpKey | CostoOportunidadHelpKey
 
 export const HELP: Record<HelpKey, HelpContent> = {
   ...GLOSARIO_HELP,
@@ -57,6 +58,7 @@ export const HELP: Record<HelpKey, HelpContent> = {
   ...SALUD_HELP,
   ...EXPLICACIONRESULTADO_HELP,
   ...DESCOMPOSICION_HELP,
+  ...COSTOOPORTUNIDAD_HELP,
 }
 
 export {
@@ -87,4 +89,5 @@ export {
   SALUD_HELP,
   EXPLICACIONRESULTADO_HELP,
   DESCOMPOSICION_HELP,
+  COSTOOPORTUNIDAD_HELP,
 }

@@ -1204,6 +1204,58 @@ export const getOpportunityCost = (
     })
     .then(r => r.data)
 
+// --- Costo de oportunidad (comparación histórica cartera vs. referencia, en la misma moneda) ---
+// A diferencia de OpportunityCostOut (sólo el valor final, sin normalizar moneda) y de
+// PerformanceRelativaOut (no toca la moneda de la referencia), este endpoint normaliza la
+// referencia a `moneda` y da la evolución completa, en porcentaje y en dinero.
+
+export interface CostoOportunidadIndicePunto {
+  fecha: string
+  indice_cartera: number | null
+  indice_referencia: number | null
+}
+
+export interface CostoOportunidadValorPunto {
+  fecha: string
+  valor_cartera: number | null
+  valor_referencia: number | null
+  diferencia: number | null
+}
+
+export interface CostoOportunidadOut {
+  estado: 'ok' | 'sin_benchmark' | 'sin_movimientos' | 'datos_insuficientes'
+  moneda: MonedaRiesgo
+  referencia: string | null
+  moneda_nativa_referencia: string | null
+  periodo_pedido_desde: string | null
+  periodo_desde: string | null
+  periodo_hasta: string | null
+  n_meses: number
+  resultado_cartera_pct: number | null
+  resultado_referencia_pct: number | null
+  diferencia_pp: number | null
+  valor_inicial: number | null
+  aportes_netos_periodo: number | null
+  valor_final_cartera: number | null
+  valor_final_referencia: number | null
+  diferencia_monetaria: number | null
+  serie_indices: CostoOportunidadIndicePunto[]
+  serie_valores: CostoOportunidadValorPunto[]
+  advertencias: string[]
+}
+
+export const getCostoOportunidad = (
+  cartera: string | null,
+  moneda: MonedaRiesgo,
+  benchmark: string | null,
+  desde?: string
+) =>
+  api
+    .get<CostoOportunidadOut>(`${carteraPath(cartera)}/costo-oportunidad`, {
+      params: { moneda, benchmark: benchmark ?? undefined, desde: desde ?? undefined },
+    })
+    .then(r => r.data)
+
 // --- Contribución, concentración y correlaciones ---
 
 export interface ContribucionItem {

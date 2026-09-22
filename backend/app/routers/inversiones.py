@@ -40,6 +40,7 @@ from ..schemas import (
     PerformanceRelativaOut,
     PerformanceCompareOut,
     OpportunityCostOut,
+    CostoOportunidadOut,
     ContribucionOut,
     CorrelacionesOut,
     DiagnosticoOut,
@@ -80,6 +81,7 @@ from ..services.patrimonio_analytics import get_patrimonio_history, get_patrimon
 from ..services.riesgo_analytics import get_riesgo, get_benchmarks_disponibles, MONEDAS_VALIDAS
 from ..services.benchmarks_analytics import get_performance_relativa, get_performance_compare
 from ..services.opportunity_cost_analytics import get_opportunity_cost
+from ..services.costo_oportunidad_analytics import get_costo_oportunidad
 from ..services.contribucion_analytics import get_contribucion, get_correlaciones, UNIVERSOS_VALIDOS
 from ..services.diagnostico_analytics import get_diagnostico
 from ..services.salud_analytics import get_salud
@@ -557,6 +559,30 @@ def opportunity_cost_consolidado(
     db: Session = Depends(get_db),
 ):
     return get_opportunity_cost(None, benchmark, desde, db)
+
+
+@router.get("/carteras/{nombre}/costo-oportunidad", response_model=CostoOportunidadOut)
+def costo_oportunidad_cartera(
+    nombre: str,
+    moneda: str = Query("usd"),
+    benchmark: Optional[str] = Query(None),
+    desde: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+):
+    _validar_cartera(nombre, db)
+    _validar_moneda(moneda)
+    return get_costo_oportunidad(nombre, moneda, benchmark, desde, db)
+
+
+@router.get("/consolidado/costo-oportunidad", response_model=CostoOportunidadOut)
+def costo_oportunidad_consolidado(
+    moneda: str = Query("usd"),
+    benchmark: Optional[str] = Query(None),
+    desde: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+):
+    _validar_moneda(moneda)
+    return get_costo_oportunidad(None, moneda, benchmark, desde, db)
 
 
 @router.get("/carteras/{nombre}/descomposicion-fx", response_model=DescomposicionFxOut)

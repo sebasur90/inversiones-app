@@ -144,6 +144,7 @@ try {
 | Rebalanceo | ✅ | ✓ | 4 términos nuevos + migración InfoTerm→InfoTooltip (Batch 6 Sprint 2) |
 | Salud de cartera | ✅ | ✓ | Pantalla nueva `/salud`: 23 términos (dimensiones + indicadores) + guía + 2 FAQ; reutiliza umbrales de `diagnostico_engine.py` |
 | Descomposición de cartera | ✅ | ✓ | Pantalla nueva `/descomposicion`: árbol Familia→País→Sector→Ticker, 5 términos + guía; familia derivada de `market_data/precios.py` y `salud_engine.SECTORES_LIQUIDOS` |
+| Costo de oportunidad | ✅ | ✓ | Pantalla nueva `/costo-oportunidad`: cartera vs. referencia normalizada a la misma moneda, en % y en dinero; 7 términos + guía; reutiliza `_twr_mensual_por_moneda` y `opportunity_cost_engine.valor_shadow` |
 
 ## Notas para mantainers
 
