@@ -27,8 +27,9 @@ import { SALUD_HELP, type SaludHelpKey } from './salud'
 import { EXPLICACIONRESULTADO_HELP, type ExplicacionResultadoHelpKey } from './explicacionResultado'
 import { DESCOMPOSICION_HELP, type DescomposicionHelpKey } from './descomposicion'
 import { COSTOOPORTUNIDAD_HELP, type CostoOportunidadHelpKey } from './costooportunidad'
+import { MATRIZCORRELACIONES_HELP, type MatrizCorrelacionesHelpKey } from './matrizcorrelaciones'
 
-export type HelpKey = GlosarioKey | SimuladorHelpKey | SimuladorVidaHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey | ComisionesHelpKey | RebalanceoHelpKey | FlujoCajaHelpKey | WatchlistHelpKey | AnalisisTecnicoHelpKey | EstrategiasHelpKey | AportesHelpKey | SaludHelpKey | ExplicacionResultadoHelpKey | DescomposicionHelpKey | CostoOportunidadHelpKey
+export type HelpKey = GlosarioKey | SimuladorHelpKey | SimuladorVidaHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey | ComisionesHelpKey | RebalanceoHelpKey | FlujoCajaHelpKey | WatchlistHelpKey | AnalisisTecnicoHelpKey | EstrategiasHelpKey | AportesHelpKey | SaludHelpKey | ExplicacionResultadoHelpKey | DescomposicionHelpKey | CostoOportunidadHelpKey | MatrizCorrelacionesHelpKey
 
 export const HELP: Record<HelpKey, HelpContent> = {
   ...GLOSARIO_HELP,
@@ -59,6 +60,7 @@ export const HELP: Record<HelpKey, HelpContent> = {
   ...EXPLICACIONRESULTADO_HELP,
   ...DESCOMPOSICION_HELP,
   ...COSTOOPORTUNIDAD_HELP,
+  ...MATRIZCORRELACIONES_HELP,
 }
 
 export {
@@ -90,4 +92,5 @@ export {
   EXPLICACIONRESULTADO_HELP,
   DESCOMPOSICION_HELP,
   COSTOOPORTUNIDAD_HELP,
+  MATRIZCORRELACIONES_HELP,
 }

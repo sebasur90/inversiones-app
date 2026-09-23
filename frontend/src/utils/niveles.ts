@@ -62,3 +62,19 @@ export function nivelConcentracion(hhi: number | null | undefined): NivelInfo | 
   if (hhi >= UMBRAL_HHI_MODERADO) return { nivel: 'atencion', etiqueta: 'Moderadamente concentrado' }
   return { nivel: 'bien', etiqueta: 'Poco concentrado' }
 }
+
+// Cortes propios de la pantalla Matriz de correlaciones — no replican ningún umbral del backend
+// (a diferencia de drawdown/volatilidad/concentración, que sí espejan `diagnostico_engine.py`).
+// Una correlación promedio alta entre los instrumentos de la cartera significa que se mueven
+// juntos: si cae uno, es probable que caigan todos, y la diversificación real es menor a la
+// que sugiere la cantidad de posiciones.
+const UMBRAL_CORRELACION_ALTA = 0.7
+const UMBRAL_CORRELACION_MEDIA = 0.4
+
+/** Correlación promedio de la cartera, como ratio -1..1. */
+export function nivelCorrelacion(promedio: number | null | undefined): NivelInfo | null {
+  if (promedio == null) return null
+  if (promedio >= UMBRAL_CORRELACION_ALTA) return { nivel: 'riesgo', etiqueta: 'Poco diversificada' }
+  if (promedio >= UMBRAL_CORRELACION_MEDIA) return { nivel: 'atencion', etiqueta: 'Diversificación media' }
+  return { nivel: 'bien', etiqueta: 'Bien diversificada' }
+}

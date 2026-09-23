@@ -33,6 +33,7 @@ const Riesgo = lazy(() => import('./pages/Riesgo'))
 const PerformanceRelativa = lazy(() => import('./pages/PerformanceRelativa'))
 const CostoOportunidad = lazy(() => import('./pages/CostoOportunidad'))
 const Contribucion = lazy(() => import('./pages/Contribucion'))
+const MatrizCorrelaciones = lazy(() => import('./pages/MatrizCorrelaciones'))
 const ExplicacionResultado = lazy(() => import('./pages/ExplicacionResultado'))
 const Diagnostico = lazy(() => import('./pages/Diagnostico'))
 const SaludCartera = lazy(() => import('./pages/SaludCartera'))
@@ -166,6 +167,7 @@ function Root() {
             <Route path="performance-relativa" element={<PerformanceRelativa />} />
             <Route path="costo-oportunidad" element={<CostoOportunidad />} />
             <Route path="contribucion" element={<Contribucion />} />
+            <Route path="correlaciones" element={<MatrizCorrelaciones />} />
             <Route path="explicacion-resultado" element={<ExplicacionResultado />} />
             <Route path="diagnostico" element={<Diagnostico />} />
             <Route path="salud" element={<SaludCartera />} />

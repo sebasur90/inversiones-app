@@ -1236,6 +1236,67 @@ class CorrelacionesOut(BaseModel):
     advertencia_historial_corto: bool
 
 
+# --- Matriz de correlaciones (services/correlaciones_analytics.py) ---
+# Pantalla dedicada, distinta de CorrelacionesOut (que sigue sirviendo a Contribución): soporta
+# frecuencia diaria/semanal/mensual, período e instrumentos elegibles. `estado` + `advertencias`
+# siguen la misma convención que CostoOportunidadOut: la falta de datos nunca es un error HTTP.
+
+class MatrizCorrelacionParItem(BaseModel):
+    ticker_a: str
+    ticker_b: str
+    valor: Optional[float] = None
+    n_obs: int
+    solapamiento_pct: Optional[float] = None
+    estado: str
+    motivo: str  # "ok" | "sin_solapamiento" | "menos_de_min_obs" | "serie_constante"
+
+
+class MatrizCorrelacionTickerItem(BaseModel):
+    ticker: str
+    n_retornos: int
+    cobertura_pct: Optional[float] = None
+    primer_periodo: Optional[date] = None
+    ultimo_periodo: Optional[date] = None
+
+
+class MatrizCorrelacionDescartadoItem(BaseModel):
+    ticker: str
+    motivo: str  # "sin_precios" | "tope_tickers"
+
+
+class MatrizCorrelacionRankingOut(BaseModel):
+    mas_correlacionados: list[MatrizCorrelacionParItem] = Field(default_factory=list)
+    menos_correlacionados: list[MatrizCorrelacionParItem] = Field(default_factory=list)
+    mas_negativos: list[MatrizCorrelacionParItem] = Field(default_factory=list)
+
+
+class MatrizCorrelacionesOut(BaseModel):
+    estado: str  # "ok" | "sin_tickers" | "sin_suficientes_tickers" | "datos_insuficientes"
+    moneda: str = "USD"
+    frecuencia_pedida: str
+    frecuencia_efectiva: str
+    min_obs: int
+    periodo_pedido_desde: Optional[date] = None
+    periodo_pedido_hasta: Optional[date] = None
+    periodo_desde: Optional[date] = None
+    periodo_hasta: Optional[date] = None
+    n_periodos: int = 0
+    n_periodos_posibles: int = 0
+    tickers: list[str] = Field(default_factory=list)
+    n_tickers: int = 0
+    tickers_detalle: list[MatrizCorrelacionTickerItem] = Field(default_factory=list)
+    tickers_descartados: list[MatrizCorrelacionDescartadoItem] = Field(default_factory=list)
+    matriz: list[list[Optional[float]]] = Field(default_factory=list)
+    pares: list[MatrizCorrelacionParItem] = Field(default_factory=list)
+    n_pares: int = 0
+    n_pares_ok: int = 0
+    correlacion_promedio: Optional[float] = None
+    nivel_diversificacion: Optional[str] = None  # "alta" | "media" | "baja"
+    ranking: MatrizCorrelacionRankingOut = Field(default_factory=MatrizCorrelacionRankingOut)
+    pocos_datos: bool = False
+    advertencias: list[str] = Field(default_factory=list)
+
+
 # --- Diagnóstico ---
 
 class HallazgoItem(BaseModel):

@@ -19,9 +19,15 @@ Supuestos documentados:
 """
 import math
 import statistics
+from datetime import date
 
 EPS = 1e-9
 MIN_OBS_CORRELACION = 6  # igual a risk_engine.MIN_OBS_VOLATILIDAD
+
+# Clave de una serie de retornos: (año, mes) en la serie mensual histórica de esta pantalla, o la
+# fecha del boundary en las series por frecuencia de `correlaciones_analytics`. La función no
+# interpreta la clave: sólo la intersecta y la ordena, así que cualquier tipo ordenable sirve.
+ClaveSerie = tuple[int, int] | date
 
 
 def calcular_hhi(pesos_pct: list[float]) -> dict:
@@ -44,8 +50,8 @@ def calcular_hhi(pesos_pct: list[float]) -> dict:
 
 
 def calcular_correlacion_par(
-    retornos_x: dict[tuple[int, int], float],
-    retornos_y: dict[tuple[int, int], float],
+    retornos_x: dict[ClaveSerie, float],
+    retornos_y: dict[ClaveSerie, float],
     min_obs: int = MIN_OBS_CORRELACION,
 ) -> dict:
     """Pearson sobre la intersección de meses (año, mes) presentes en ambas series."""
@@ -73,7 +79,7 @@ def calcular_correlacion_par(
 
 def construir_matriz_correlacion(
     tickers: list[str],
-    series_por_ticker: dict[str, dict[tuple[int, int], float]],
+    series_por_ticker: dict[str, dict[ClaveSerie, float]],
     min_obs: int = MIN_OBS_CORRELACION,
 ) -> dict:
     """Matriz simétrica de correlación entre `tickers`, en el orden dado.

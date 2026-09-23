@@ -43,6 +43,7 @@ from ..schemas import (
     CostoOportunidadOut,
     ContribucionOut,
     CorrelacionesOut,
+    MatrizCorrelacionesOut,
     DiagnosticoOut,
     SaludCarteraEstadoOut,
     DescomposicionOut,
@@ -83,6 +84,11 @@ from ..services.benchmarks_analytics import get_performance_relativa, get_perfor
 from ..services.opportunity_cost_analytics import get_opportunity_cost
 from ..services.costo_oportunidad_analytics import get_costo_oportunidad
 from ..services.contribucion_analytics import get_contribucion, get_correlaciones, UNIVERSOS_VALIDOS
+from ..services.correlaciones_analytics import (
+    get_matriz_correlaciones,
+    FRECUENCIAS_VALIDAS,
+    MAX_TICKERS as MAX_TICKERS_CORRELACION,
+)
 from ..services.diagnostico_analytics import get_diagnostico
 from ..services.salud_analytics import get_salud
 from ..services.descomposicion_analytics import get_descomposicion
@@ -463,6 +469,51 @@ def correlaciones_cartera(nombre: str, universo: str = Query("tenencias"), db: S
 def correlaciones_consolidado(universo: str = Query("tenencias"), db: Session = Depends(get_db)):
     _validar_universo(universo)
     return get_correlaciones(None, db, universo)
+
+
+def _validar_frecuencia_correlacion(frecuencia: str) -> None:
+    if frecuencia not in FRECUENCIAS_VALIDAS:
+        raise HTTPException(status_code=422, detail=f"frecuencia inválida: {frecuencia}. Válidas: {FRECUENCIAS_VALIDAS}")
+
+
+def _validar_params_matriz_correlaciones(tickers: list[str], desde: Optional[date], hasta: Optional[date]) -> None:
+    if len(tickers) > MAX_TICKERS_CORRELACION:
+        raise HTTPException(
+            status_code=422,
+            detail=f"máximo {MAX_TICKERS_CORRELACION} tickers, se recibieron {len(tickers)}",
+        )
+    if desde and hasta and desde > hasta:
+        raise HTTPException(status_code=422, detail="desde no puede ser posterior a hasta")
+
+
+@router.get("/carteras/{nombre}/matriz-correlaciones", response_model=MatrizCorrelacionesOut)
+def matriz_correlaciones_cartera(
+    nombre: str,
+    tickers: list[str] = Query(default=[]),
+    frecuencia: str = Query("mensual"),
+    desde: Optional[date] = Query(None),
+    hasta: Optional[date] = Query(None),
+    min_obs: Optional[int] = Query(None, ge=3, le=250),
+    db: Session = Depends(get_db),
+):
+    _validar_cartera(nombre, db)
+    _validar_frecuencia_correlacion(frecuencia)
+    _validar_params_matriz_correlaciones(tickers, desde, hasta)
+    return get_matriz_correlaciones(nombre, db, tickers, frecuencia, desde, hasta, min_obs)
+
+
+@router.get("/consolidado/matriz-correlaciones", response_model=MatrizCorrelacionesOut)
+def matriz_correlaciones_consolidado(
+    tickers: list[str] = Query(default=[]),
+    frecuencia: str = Query("mensual"),
+    desde: Optional[date] = Query(None),
+    hasta: Optional[date] = Query(None),
+    min_obs: Optional[int] = Query(None, ge=3, le=250),
+    db: Session = Depends(get_db),
+):
+    _validar_frecuencia_correlacion(frecuencia)
+    _validar_params_matriz_correlaciones(tickers, desde, hasta)
+    return get_matriz_correlaciones(None, db, tickers, frecuencia, desde, hasta, min_obs)
 
 
 @router.get("/carteras/{nombre}/diagnostico", response_model=DiagnosticoOut)

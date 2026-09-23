@@ -331,6 +331,18 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
     terminos: ['costooportunidad_comparacion', 'costooportunidad_diferencia_monetaria', 'costooportunidad_homogeneidad'],
   },
 
+  '/correlaciones': {
+    queEs: 'Qué tan parecido se movieron tus instrumentos entre sí, en una matriz que podés filtrar por período, frecuencia y activos.',
+    comoLeerla: [
+      'Cada celda es la correlación entre dos instrumentos: +1 se movieron de manera muy similar, 0 no se observa relación lineal clara, -1 se movieron en direcciones opuestas.',
+      'Tocá una celda para ver el detalle del par: el valor exacto, cuántas observaciones lo respaldan y qué porcentaje del período cubren.',
+      'Si la frecuencia elegida deja muchas celdas vacías, es porque no hay suficientes precios cargados con esa frecuencia: probá una más gruesa (semanal o mensual).',
+    ],
+    queHacer: ['Usá la tabla de pares para ordenar por correlación y encontrar rápido qué instrumentos se mueven más parecido (o más al revés) entre sí.'],
+    ojo: 'Correlación no es causalidad: dos instrumentos pueden moverse juntos por un factor común, sin que uno influya sobre el otro. Además, la correlación pasada no se sostiene siempre: en las crisis, activos que antes iban por separado suelen caer todos juntos.',
+    terminos: ['matrizcorr_correlacion', 'matrizcorr_frecuencia', 'matrizcorr_moneda'],
+  },
+
   '/mas': {
     queEs: 'El resto de las pantallas, agrupadas por tema: todo lo que no entra en la barra de abajo vive acá.',
     comoLeerla: ['Buscá por nombre o usá la lupa del encabezado para encontrar cualquier pantalla más rápido.'],

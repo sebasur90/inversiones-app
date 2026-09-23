@@ -1311,6 +1311,77 @@ export interface CorrelacionesOut {
 export const getCorrelaciones = (cartera: string | null, universo: UniversoCorrelacion = 'tenencias') =>
   api.get<CorrelacionesOut>(`${carteraPath(cartera)}/correlaciones`, { params: { universo } }).then(r => r.data)
 
+// --- Matriz de correlaciones (pantalla dedicada, distinta de CorrelacionesOut de Contribución) ---
+
+export type FrecuenciaCorrelacion = 'diaria' | 'semanal' | 'mensual'
+
+export interface MatrizCorrelacionParItem {
+  ticker_a: string
+  ticker_b: string
+  valor: number | null
+  n_obs: number
+  solapamiento_pct: number | null
+  estado: 'ok' | 'datos_insuficientes'
+  motivo: 'ok' | 'sin_solapamiento' | 'menos_de_min_obs' | 'serie_constante'
+}
+
+export interface MatrizCorrelacionTickerItem {
+  ticker: string
+  n_retornos: number
+  cobertura_pct: number | null
+  primer_periodo: string | null
+  ultimo_periodo: string | null
+}
+
+export interface MatrizCorrelacionDescartadoItem {
+  ticker: string
+  motivo: 'sin_precios' | 'tope_tickers'
+}
+
+export interface MatrizCorrelacionRankingOut {
+  mas_correlacionados: MatrizCorrelacionParItem[]
+  menos_correlacionados: MatrizCorrelacionParItem[]
+  mas_negativos: MatrizCorrelacionParItem[]
+}
+
+export interface MatrizCorrelacionesOut {
+  estado: 'ok' | 'sin_tickers' | 'sin_suficientes_tickers' | 'datos_insuficientes'
+  moneda: string
+  frecuencia_pedida: FrecuenciaCorrelacion
+  frecuencia_efectiva: FrecuenciaCorrelacion
+  min_obs: number
+  periodo_pedido_desde: string | null
+  periodo_pedido_hasta: string | null
+  periodo_desde: string | null
+  periodo_hasta: string | null
+  n_periodos: number
+  n_periodos_posibles: number
+  tickers: string[]
+  n_tickers: number
+  tickers_detalle: MatrizCorrelacionTickerItem[]
+  tickers_descartados: MatrizCorrelacionDescartadoItem[]
+  matriz: (number | null)[][]
+  pares: MatrizCorrelacionParItem[]
+  n_pares: number
+  n_pares_ok: number
+  correlacion_promedio: number | null
+  nivel_diversificacion: 'alta' | 'media' | 'baja' | null
+  ranking: MatrizCorrelacionRankingOut
+  pocos_datos: boolean
+  advertencias: string[]
+}
+
+export interface MatrizCorrelacionesOpts {
+  tickers: string[]
+  frecuencia: FrecuenciaCorrelacion
+  desde?: string
+}
+
+export const getMatrizCorrelaciones = (cartera: string | null, opts: MatrizCorrelacionesOpts) =>
+  api.get<MatrizCorrelacionesOut>(`${carteraPath(cartera)}/matriz-correlaciones`, {
+    params: { tickers: opts.tickers, frecuencia: opts.frecuencia, desde: opts.desde ?? undefined },
+  }).then(r => r.data)
+
 // --- Diagnóstico ---
 
 export interface HallazgoItem {
