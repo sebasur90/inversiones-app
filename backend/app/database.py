@@ -141,6 +141,30 @@ class RebalanceoObjetivo(Base):
     __table_args__ = (UniqueConstraint("cartera", "eje", "categoria", name="uq_rebalanceo_objetivo"),)
 
 
+class ObjetivoAporteMensual(Base):
+    """Cuánto se propone aportar el usuario por mes, en USD. **La gestiona el usuario desde la
+    app** (pantalla "Ritmo de aportes"), no el Sheet: a diferencia de `ObjetivoInversion` —que es
+    una meta de patrimonio y la pisa el sync en cada corrida— ésta es una meta de *hábito* y
+    sobrevive a los syncs.
+
+    Una fila por cartera; `cartera IS NULL` = Consolidado (mismo criterio que
+    `RebalanceoObjetivo` y `ConfiguracionCartera`).
+
+    `vigente_desde` ("YYYY-MM") es el mes desde el que se mide el cumplimiento: por defecto el mes
+    en que se fijó el objetivo, porque dar por incumplido un mes en que la meta todavía no existía
+    sería inventar historia. `retroactivo` (0/1) lo lleva hasta el primer mes con movimientos,
+    pero sólo si el usuario lo pide explícitamente.
+    """
+    __tablename__ = "objetivo_aporte_mensual"
+    id = Column(Integer, primary_key=True, index=True)
+    cartera = Column(String, nullable=True, unique=True, index=True)  # None = Consolidado
+    monto_usd = Column(Numeric(18, 2), nullable=False)
+    vigente_desde = Column(String, nullable=False)  # "YYYY-MM"
+    retroactivo = Column(Integer, nullable=False, default=0)
+    fecha_creacion = Column(DateTime, nullable=False)
+    fecha_actualizacion = Column(DateTime, nullable=False)
+
+
 class ConfiguracionCartera(Base):
     __tablename__ = "configuracion_carteras"
     id = Column(Integer, primary_key=True, index=True)

@@ -154,19 +154,21 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
   },
 
   '/aportes': {
-    queEs: 'Cuánta plata nueva ponés en tus inversiones cada mes, y si ese ritmo mejora o empeora contra tu propio historial.',
+    queEs: 'Cuánta plata nueva ponés en tus inversiones cada mes, qué tan constante venís siendo y a dónde llegarías si mantenés el ritmo.',
     comoLeerla: [
-      'La tarjeta de arriba es este mes: lo aportado hasta hoy, cómo terminaría al ritmo actual, y cómo se compara con el mes pasado y con tu promedio.',
-      'El estado (acelerando / sostenido / frenando / parado) compara tus últimos 3 meses cerrados con los 3 anteriores.',
-      'Las barras son tu aporte neto mes a mes; en rojo los meses en que retiraste más de lo que pusiste. La línea es el promedio móvil de 3 meses.',
-      'La proyección a fin de año muestra tres escenarios según qué ritmo mantengas; el calendario y la tabla por año dejan ver los meses buenos y malos.',
+      'Tiene dos pestañas: "Progreso" mira tu hábito (racha, nivel, objetivo del mes, logros, récords) y "Análisis" mira el detalle estadístico de siempre (comparaciones, proyección a fin de año, tabla por año).',
+      'El nivel de constancia depende sólo de cuántos meses aportaste y de tu mejor racha: nunca del monto ni de cuánto rindieron tus inversiones.',
+      'Si definís un objetivo mensual, la tarjeta de arriba muestra cuánto llevás, cuánto falta y a qué ritmo semanal llegarías antes de que termine el mes.',
+      'El calendario marca con un anillo los meses en que alcanzaste el objetivo; el gráfico muestra tu aporte mes a mes con el promedio móvil de 3 meses.',
+      '"Si mantenés este ritmo" es una suma de aportes, sin rendimiento: sirve para dimensionar el hábito, no para predecir tu patrimonio.',
     ],
     queHacer: [
-      'Si el estado es "frenando", mirá en el calendario qué meses bajaron y decidí si fue algo puntual o una tendencia.',
+      'Definí un objetivo mensual realista: la pantalla te sugiere el promedio que ya venís sosteniendo.',
       'Usá las rachas y los logros como referencia de constancia: sostener un aporte chico todos los meses vale más que uno grande cada tanto.',
+      'Si querés ver qué pasaría con rendimiento incluido, desde "Si mantenés este ritmo" pasás al simulador con tu aporte ya cargado.',
     ],
-    ojo: 'Acá no hay metas: todo se compara contra vos mismo, y siempre en USD. Para fijar una meta en dólares y ver el aporte necesario, está la pantalla Objetivo.',
-    terminos: ['aportes_neto_criterio', 'aportes_estado_ritmo', 'aportes_racha', 'aportes_proyeccion_fin_anio'],
+    ojo: 'Todo está en USD, siempre. El objetivo mensual es una meta de hábito y es independiente por cartera; para fijar una meta de patrimonio con fecha, está la pantalla Objetivo.',
+    terminos: ['aportes_neto_criterio', 'aportes_meta_mensual', 'aportes_nivel', 'aportes_racha', 'aportes_proyeccion_ritmo'],
   },
 
   '/precios': {

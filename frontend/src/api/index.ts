@@ -707,6 +707,11 @@ export interface AporteMesItem {
   futuro: boolean
   con_aporte: boolean
   promedio_movil_3_usd: number | null
+  // Objetivo vigente ese mes. `null` = no había objetivo vigente, que no es lo mismo que
+  // haberlo incumplido.
+  objetivo_usd: number | null
+  cumplimiento_pct: number | null
+  cumple_objetivo: boolean | null
 }
 
 export interface AporteComparacion {
@@ -862,6 +867,142 @@ export interface AporteMensaje {
   detalle: string
 }
 
+// --- Progreso: niveles, objetivo, logros, récords, misión
+//     (espejo de schemas.ProgresoAportes) ---
+
+export interface AporteNivelRequisito {
+  clave: string
+  etiqueta: string
+  actual: number
+  objetivo: number
+  cumple: boolean
+}
+
+export interface AporteNivelSiguiente {
+  clave: string
+  nombre: string
+  emoji: string
+  requisitos: AporteNivelRequisito[]
+  progreso_pct: number
+  falta_texto: string
+}
+
+export interface AporteNivelConstancia {
+  clave: string
+  nombre: string
+  emoji: string
+  orden: number
+  total_niveles: number
+  motivos: string[]
+  siguiente: AporteNivelSiguiente | null
+  sello_objetivo: { etiqueta: string; meses: number } | null
+}
+
+export interface AporteObjetivoMesActual {
+  objetivo_usd: number
+  aportado_usd: number
+  cumplimiento_pct: number | null
+  restante_usd: number
+  cumplido: boolean
+  vigente: boolean
+  dias_restantes: number
+  ritmo_necesario_diario_usd: number | null
+  ritmo_necesario_semanal_usd: number | null
+  alcanzable_al_ritmo_actual: boolean
+}
+
+export interface AporteObjetivo {
+  configurado: boolean
+  monto_usd: number | null
+  /** Mes desde el que se mide de hecho (con `retroactivo`, el primero del historial). */
+  vigente_desde: string | null
+  /** Mes en que se creó el objetivo: a él se vuelve si se desmarca la retroactividad. */
+  fijado_en: string | null
+  retroactivo: boolean
+  sugerido_usd: number | null
+  sugerido_origen: string | null
+  mes_actual: AporteObjetivoMesActual | null
+  meses_evaluados: number | null
+  meses_cumplidos: number | null
+  meses_cumplidos_pct: number | null
+  racha_cumplimiento: number | null
+  record_cumplimiento: number | null
+}
+
+export interface AporteLogro {
+  clave: string
+  titulo: string
+  descripcion: string
+  categoria: 'inicio' | 'constancia' | 'capital' | 'mejora' | 'objetivo'
+  emoji: string
+  unidad: 'meses' | 'usd' | 'conteo'
+  objetivo: number
+  actual: number | null
+  progreso_pct: number | null
+  desbloqueado: boolean
+  fecha: string | null
+  bloqueado_por_falta_objetivo: boolean
+}
+
+export interface AporteRecords {
+  mayor_aporte_mensual: AporteMesRef | null
+  mejor_racha: { meses: number; desde: string | null; hasta: string | null }
+  mayor_aporte_anual: { anio: number; total_usd: number } | null
+  mayor_promedio_mensual_anual: { anio: number; promedio_usd: number } | null
+  mas_meses_cumpliendo_objetivo: { anio: number; meses: number } | null
+}
+
+export interface AporteEvolucion {
+  clave: 'sube' | 'baja' | 'estable' | 'sin_historial'
+  frase: string
+  delta_pct: number | null
+  promedio_actual_usd: number | null
+  promedio_anterior_usd: number | null
+}
+
+export interface AporteHorizonte {
+  anios: number
+  meses: number
+  total_usd: number
+  extra_usd: number | null
+}
+
+export interface AporteEscenarioAumento {
+  clave: string
+  delta_mensual_usd: number
+  ritmo_resultante_usd: number
+  horizontes: AporteHorizonte[]
+}
+
+export interface AporteProyeccionRitmo {
+  ritmo_mensual_usd: number | null
+  origen: 'promedio_12' | 'promedio_6' | 'promedio_3' | 'promedio_historico' | 'insuficiente'
+  horizontes: AporteHorizonte[]
+  escenarios_aumento: AporteEscenarioAumento[]
+  disclaimer: string
+}
+
+export interface AporteMision {
+  clave: string
+  titulo: string
+  detalle: string
+  unidad: 'meses' | 'usd' | 'conteo'
+  actual: number
+  objetivo: number
+  progreso_pct: number
+  por_que: string
+}
+
+export interface ProgresoAportes {
+  nivel: AporteNivelConstancia
+  objetivo: AporteObjetivo
+  logros: AporteLogro[]
+  records: AporteRecords
+  evolucion: AporteEvolucion
+  proyeccion_ritmo: AporteProyeccionRitmo
+  mision: AporteMision | null
+}
+
 export interface RitmoAportesOut {
   estado: 'ok' | 'sin_datos'
   hoy: string
@@ -878,10 +1019,32 @@ export interface RitmoAportesOut {
   hitos_alcanzados: AporteHito[]
   proximos_hitos: AporteProximoHito[]
   mensajes: AporteMensaje[]
+  progreso: ProgresoAportes | null
 }
 
 export const getRitmoAportes = (cartera: string | null) =>
   api.get<RitmoAportesOut>(`${carteraPath(cartera)}/aportes/ritmo`).then(r => r.data)
+
+// --- Objetivo de aporte mensual ---
+
+export interface ObjetivoAporteOut {
+  cartera: string | null
+  monto_usd: number
+  vigente_desde: string
+  retroactivo: boolean
+}
+
+/** `null` cuando todavía no hay objetivo configurado (el backend responde 204, sin cuerpo). */
+export const getObjetivoAporte = (cartera: string | null) =>
+  api.get<ObjetivoAporteOut | ''>(`${carteraPath(cartera)}/aportes/objetivo`)
+    .then(r => (r.status === 204 || !r.data ? null : (r.data as ObjetivoAporteOut)))
+
+export const guardarObjetivoAporte = (cartera: string | null, monto_usd: number, retroactivo = false) =>
+  api.put<ObjetivoAporteOut>(`${carteraPath(cartera)}/aportes/objetivo`, { monto_usd, retroactivo })
+    .then(r => r.data)
+
+export const eliminarObjetivoAporte = (cartera: string | null) =>
+  api.delete<void>(`${carteraPath(cartera)}/aportes/objetivo`).then(() => undefined)
 
 // --- P&L Realizado vs No Realizado ---
 

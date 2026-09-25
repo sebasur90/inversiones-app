@@ -837,6 +837,11 @@ class AporteMesItem(BaseModel):
     futuro: bool = False
     con_aporte: bool
     promedio_movil_3_usd: Optional[float] = None
+    # Objetivo mensual vigente ese mes. `None` = el objetivo no estaba vigente (o no hay
+    # objetivo): no es lo mismo que haberlo incumplido.
+    objetivo_usd: Optional[float] = None
+    cumplimiento_pct: Optional[float] = None
+    cumple_objetivo: Optional[bool] = None
 
 
 class AporteComparacion(BaseModel):
@@ -988,6 +993,171 @@ class AporteMensaje(BaseModel):
     detalle: str
 
 
+# --- Progreso: niveles, objetivo, logros, récords, misión
+#     (services/aportes_progreso_engine.py) ---
+
+class AporteNivelRequisito(BaseModel):
+    clave: str
+    etiqueta: str
+    actual: int
+    objetivo: int
+    cumple: bool
+
+
+class AporteNivelSiguiente(BaseModel):
+    clave: str
+    nombre: str
+    emoji: str
+    requisitos: list[AporteNivelRequisito]
+    progreso_pct: float
+    falta_texto: str
+
+
+class AporteSelloObjetivo(BaseModel):
+    etiqueta: str
+    meses: int
+
+
+class AporteNivelConstancia(BaseModel):
+    clave: str
+    nombre: str
+    emoji: str
+    orden: int
+    total_niveles: int
+    motivos: list[str]
+    siguiente: Optional[AporteNivelSiguiente] = None
+    sello_objetivo: Optional[AporteSelloObjetivo] = None
+
+
+class AporteObjetivoMesActual(BaseModel):
+    objetivo_usd: float
+    aportado_usd: float
+    cumplimiento_pct: Optional[float] = None
+    restante_usd: float
+    cumplido: bool
+    vigente: bool
+    dias_restantes: int
+    ritmo_necesario_diario_usd: Optional[float] = None
+    ritmo_necesario_semanal_usd: Optional[float] = None
+    alcanzable_al_ritmo_actual: bool
+
+
+class AporteObjetivo(BaseModel):
+    configurado: bool
+    monto_usd: Optional[float] = None
+    # Mes desde el que se mide de hecho (con `retroactivo`, el primero del historial).
+    vigente_desde: Optional[str] = None
+    # Mes en que se creó el objetivo: a él se vuelve si se desmarca la retroactividad.
+    fijado_en: Optional[str] = None
+    retroactivo: bool = False
+    # Sugerencia para precargar el formulario; no es un objetivo hasta que el usuario lo acepta.
+    sugerido_usd: Optional[float] = None
+    sugerido_origen: Optional[str] = None
+    mes_actual: Optional[AporteObjetivoMesActual] = None
+    meses_evaluados: Optional[int] = None
+    meses_cumplidos: Optional[int] = None
+    meses_cumplidos_pct: Optional[float] = None
+    racha_cumplimiento: Optional[int] = None
+    record_cumplimiento: Optional[int] = None
+
+
+class AporteLogro(BaseModel):
+    clave: str
+    titulo: str
+    descripcion: str
+    categoria: Literal["inicio", "constancia", "capital", "mejora", "objetivo"]
+    emoji: str
+    unidad: Literal["meses", "usd", "conteo"]
+    objetivo: float
+    actual: Optional[float] = None
+    progreso_pct: Optional[float] = None
+    desbloqueado: bool
+    fecha: Optional[str] = None
+    bloqueado_por_falta_objetivo: bool = False
+
+
+class AporteRachaRef(BaseModel):
+    meses: int
+    desde: Optional[str] = None
+    hasta: Optional[str] = None
+
+
+class AporteAnioTotal(BaseModel):
+    anio: int
+    total_usd: float
+
+
+class AporteAnioPromedio(BaseModel):
+    anio: int
+    promedio_usd: float
+
+
+class AporteAnioMeses(BaseModel):
+    anio: int
+    meses: int
+
+
+class AporteRecords(BaseModel):
+    mayor_aporte_mensual: Optional[AporteMesRef] = None
+    mejor_racha: AporteRachaRef
+    mayor_aporte_anual: Optional[AporteAnioTotal] = None
+    mayor_promedio_mensual_anual: Optional[AporteAnioPromedio] = None
+    mas_meses_cumpliendo_objetivo: Optional[AporteAnioMeses] = None
+
+
+class AporteEvolucion(BaseModel):
+    clave: Literal["sube", "baja", "estable", "sin_historial"]
+    frase: str
+    delta_pct: Optional[float] = None
+    promedio_actual_usd: Optional[float] = None
+    promedio_anterior_usd: Optional[float] = None
+
+
+class AporteHorizonte(BaseModel):
+    anios: int
+    meses: int
+    total_usd: float
+    extra_usd: Optional[float] = None
+
+
+class AporteEscenarioAumento(BaseModel):
+    clave: str
+    delta_mensual_usd: float
+    ritmo_resultante_usd: float
+    horizontes: list[AporteHorizonte]
+
+
+class AporteProyeccionRitmo(BaseModel):
+    ritmo_mensual_usd: Optional[float] = None
+    origen: Literal[
+        "promedio_12", "promedio_6", "promedio_3", "promedio_historico", "insuficiente"
+    ]
+    horizontes: list[AporteHorizonte]
+    escenarios_aumento: list[AporteEscenarioAumento]
+    disclaimer: str
+
+
+class AporteMision(BaseModel):
+    clave: str
+    titulo: str
+    detalle: str
+    unidad: Literal["meses", "usd", "conteo"]
+    actual: float
+    objetivo: float
+    progreso_pct: float
+    por_que: str
+
+
+class ProgresoAportes(BaseModel):
+    nivel: AporteNivelConstancia
+    objetivo: AporteObjetivo
+    logros: list[AporteLogro]
+    records: AporteRecords
+    evolucion: AporteEvolucion
+    proyeccion_ritmo: AporteProyeccionRitmo
+    mision: Optional[AporteMision] = None
+
+
 class RitmoAportesOut(BaseModel):
     estado: Literal["ok", "sin_datos"]
     hoy: date
@@ -1004,6 +1174,21 @@ class RitmoAportesOut(BaseModel):
     hitos_alcanzados: list[AporteHito]
     proximos_hitos: list[AporteProximoHito]
     mensajes: list[AporteMensaje]
+    progreso: Optional[ProgresoAportes] = None
+
+
+# --- Objetivo de aporte mensual (services/objetivo_aporte_analytics.py) ---
+
+class ObjetivoAporteIn(BaseModel):
+    monto_usd: float = Field(gt=0, description="Meta mensual de aporte, en USD")
+    retroactivo: bool = False
+
+
+class ObjetivoAporteOut(BaseModel):
+    cartera: Optional[str] = None
+    monto_usd: float
+    vigente_desde: str
+    retroactivo: bool
 
 
 # --- P&L Realizado vs No Realizado ---

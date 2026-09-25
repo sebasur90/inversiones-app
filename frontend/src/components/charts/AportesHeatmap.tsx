@@ -14,9 +14,29 @@ export function formatCompactUSD(v: number): string {
   return `${signo}$${abs.toFixed(0)}`
 }
 
+/** Texto del tooltip de una celda: monto y, si había objetivo vigente, cuánto se cumplió. */
+function detalleMes(item: AporteMesItem, conObjetivo: boolean): string {
+  const base = `${item.mes}: ${item.neto_usd.toFixed(2)} USD`
+  if (!conObjetivo || item.objetivo_usd == null) return base
+  const pct = item.cumplimiento_pct != null ? ` (${item.cumplimiento_pct.toFixed(0)}%)` : ''
+  const estado = item.cumple_objetivo == null ? 'en curso' : item.cumple_objetivo ? 'cumplido' : 'no alcanzado'
+  return `${base}\nObjetivo ${item.objetivo_usd.toFixed(0)} USD${pct} · ${estado}`
+}
+
 /** Calendario año × mes del aporte neto. Misma tabla que `RendimientoHeatmap`, pero la
- *  intensidad es relativa al mejor mes cerrado (el récord satura, el resto escala), no un % fijo. */
-export default function AportesHeatmap({ meses, anios }: { meses: AporteMesItem[]; anios: AporteAnioItem[] }) {
+ *  intensidad es relativa al mejor mes cerrado (el récord satura, el resto escala), no un % fijo.
+ *
+ *  Con `mostrarObjetivo`, los meses que alcanzaron el objetivo vigente llevan un anillo: la
+ *  pestaña Análisis lo omite y se ve exactamente igual que siempre. */
+export default function AportesHeatmap({
+  meses,
+  anios,
+  mostrarObjetivo = false,
+}: {
+  meses: AporteMesItem[]
+  anios: AporteAnioItem[]
+  mostrarObjetivo?: boolean
+}) {
   const porClave = new Map<string, AporteMesItem>()
   let maxAbs = 0
   for (const item of meses) {
@@ -27,6 +47,7 @@ export default function AportesHeatmap({ meses, anios }: { meses: AporteMesItem[
   const aniosOrdenados = [...anios].sort((a, b) => b.anio - a.anio)
   const maxAnual = Math.max(...aniosOrdenados.map(a => Math.abs(a.total_usd)), 0)
   const hayMesEnCurso = meses.some(m => m.en_curso)
+  const hayObjetivo = meses.some(m => m.cumple_objetivo === true)
   // heatmapIntensity espera un ratio y satura en capPct=100 → ratio 1 = el máximo.
   const ratio = (v: number, max: number) => (max > 0 ? v / max : 0)
 
@@ -54,12 +75,15 @@ export default function AportesHeatmap({ meses, anios }: { meses: AporteMesItem[
               <td className="sticky left-0 z-10 bg-app-surface font-semibold text-app-text py-1 pr-2">{anio.anio}</td>
               {MESES.map((_, idx) => {
                 const item = porClave.get(`${anio.anio}-${String(idx + 1).padStart(2, '0')}`)
+                const cumplio = mostrarObjetivo && item?.cumple_objetivo === true
                 return (
                   <td
                     key={idx}
-                    className="text-center font-mono tabular-nums text-app-text py-1.5 px-0.5 rounded-[4px]"
+                    className={`text-center font-mono tabular-nums text-app-text py-1.5 px-0.5 rounded-[4px] ${
+                      cumplio ? 'ring-1 ring-inset ring-app-pos' : ''
+                    }`}
                     style={item ? heatmapIntensity(ratio(item.neto_usd, maxAbs), 100) : undefined}
-                    title={item ? `${item.mes}: ${item.neto_usd.toFixed(2)} USD` : undefined}
+                    title={item ? detalleMes(item, mostrarObjetivo) : undefined}
                   >
                     {item ? formatCompactUSD(item.neto_usd) : '—'}
                     {item?.en_curso ? '*' : ''}
@@ -77,7 +101,15 @@ export default function AportesHeatmap({ meses, anios }: { meses: AporteMesItem[
           ))}
         </tbody>
       </table>
-      {hayMesEnCurso && <div className="text-label text-app-text-faint mt-2">* mes en curso</div>}
+      <div className="text-label text-app-text-faint mt-2 flex flex-wrap gap-x-3">
+        {hayMesEnCurso && <span>* mes en curso</span>}
+        {mostrarObjetivo && hayObjetivo && (
+          <span>
+            <span className="inline-block w-2.5 h-2.5 rounded-[3px] ring-1 ring-inset ring-app-pos align-middle mr-1" />
+            objetivo cumplido
+          </span>
+        )}
+      </div>
     </Card>
   )
 }

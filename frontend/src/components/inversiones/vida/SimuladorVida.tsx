@@ -19,6 +19,9 @@ import { formatUSD, formatARS } from '../../../utils'
 interface Props {
   cartera: string | null
   syncVersion: number
+  /** Aporte con el que arrancar, si se llegó desde otra pantalla (ver "Ritmo de aportes").
+   *  Tiene prioridad sobre el que trae `/defaults`, que es el promedio histórico. */
+  aporteInicialUsd?: number
 }
 
 const SUPUESTOS_INICIALES: SupuestosVidaIn = {
@@ -30,7 +33,7 @@ const SUPUESTOS_INICIALES: SupuestosVidaIn = {
   inflacion_anual_pct: null,
 }
 
-export default function SimuladorVida({ cartera, syncVersion }: Props) {
+export default function SimuladorVida({ cartera, syncVersion, aporteInicialUsd }: Props) {
   const [defaults, setDefaults] = useState<DefaultsVida | null>(null)
   const [supuestos, setSupuestos] = useState<SupuestosVidaIn>(SUPUESTOS_INICIALES)
   const [seleccionados, setSeleccionados] = useState<EscenarioVidaIn[]>([
@@ -51,16 +54,20 @@ export default function SimuladorVida({ cartera, syncVersion }: Props) {
         setSupuestos(s => ({
           ...s,
           patrimonio_inicial: d.patrimonio_inicial_usd,
-          aporte_mensual: d.aporte_mensual_usd ?? s.aporte_mensual,
+          // El aporte que llegó desde otra pantalla manda: es el que el usuario eligió simular.
+          aporte_mensual: aporteInicialUsd ?? d.aporte_mensual_usd ?? s.aporte_mensual,
         }))
       })
       .catch(() => {
         // Sin precarga: el formulario sigue usable con los valores iniciales.
+        if (aporteInicialUsd != null) {
+          setSupuestos(s => ({ ...s, aporte_mensual: aporteInicialUsd }))
+        }
       })
     return () => {
       cancelado = true
     }
-  }, [cartera, syncVersion])
+  }, [cartera, syncVersion, aporteInicialUsd])
 
   const restaurarDefaults = () => {
     if (!defaults) return

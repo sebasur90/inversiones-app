@@ -183,14 +183,18 @@ def _sin_datos(hoy: date) -> dict:
         "hitos_alcanzados": [],
         "proximos_hitos": [],
         "mensajes": [],
+        "progreso": None,
     }
 
 
 # ── Motor ────────────────────────────────────────────────────────────────────
 
-def calcular_ritmo(serie: dict[str, dict], hoy: date) -> dict:
+def calcular_ritmo(serie: dict[str, dict], hoy: date, objetivo: dict | None = None) -> dict:
     """`serie`: {"YYYY-MM": {"neto", "compras", "salidas"}} sólo con los meses que tuvieron
-    movimientos, en USD; `salidas` en valor absoluto. Los huecos se rellenan acá con ceros."""
+    movimientos, en USD; `salidas` en valor absoluto. Los huecos se rellenan acá con ceros.
+
+    `objetivo` es la meta mensual del usuario (`{monto_usd, vigente_desde, retroactivo}`) o `None`.
+    Todo lo que agrega va bajo la clave `progreso`, sin tocar el resto del payload."""
     if not serie:
         return _sin_datos(hoy)
 
@@ -571,12 +575,26 @@ def calcular_ritmo(serie: dict[str, dict], hoy: date) -> dict:
         anio_anterior_total=anio_anterior_total, proximos=proximos, hoy=hoy,
     )
 
+    # ── Progreso (niveles, objetivo, logros, récords, misión) ──
+    # Se importa acá y no arriba para evitar el import circular: el motor de progreso reutiliza
+    # las constantes y los formateadores de este módulo.
+    from . import aportes_progreso_engine
+
+    progreso, cumplimiento_por_mes = aportes_progreso_engine.calcular_progreso(
+        items=items, estadisticas=estadisticas, rachas=rachas, estado_ritmo=estado_ritmo,
+        por_anio=por_anio, mejor_anio=mejor_anio, primer_mes=primer_mes,
+        mes_actual=mes_actual, ytd=ytd, hoy=hoy, objetivo=objetivo,
+    )
+
     # Promedio móvil de 3 para el gráfico: el mes en curso usa su proyección para que la línea
     # no se desplome al principio de cada mes.
     serie_out: list[dict] = []
     valores_movil = [proyeccion if it["en_curso"] else it["neto"] for it in items]
     for i, it in enumerate(items):
         movil = _prom(valores_movil[i - 2:i + 1]) if i >= 2 and not it["futuro"] else None
+        # El cumplimiento viaja en la propia serie para que el calendario pueda pintarlo sin
+        # cruzar dos arrays en el frontend. `None` = mes sin objetivo vigente, nunca "incumplido".
+        cumplimiento = cumplimiento_por_mes.get(it["mes"], {})
         serie_out.append({
             "mes": it["mes"],
             "neto_usd": _r(it["neto"]),
@@ -586,6 +604,9 @@ def calcular_ritmo(serie: dict[str, dict], hoy: date) -> dict:
             "futuro": it["futuro"],
             "con_aporte": it["neto"] > EPS,
             "promedio_movil_3_usd": _r(movil),
+            "objetivo_usd": cumplimiento.get("objetivo_usd"),
+            "cumplimiento_pct": cumplimiento.get("cumplimiento_pct"),
+            "cumple_objetivo": cumplimiento.get("cumple_objetivo"),
         })
 
     return {
@@ -603,6 +624,7 @@ def calcular_ritmo(serie: dict[str, dict], hoy: date) -> dict:
         "hitos_alcanzados": hitos,
         "proximos_hitos": proximos,
         "mensajes": mensajes,
+        "progreso": progreso,
     }
 
 

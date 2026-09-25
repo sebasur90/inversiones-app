@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useInversionesContext } from '../context/InversionesContext'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
@@ -30,6 +31,14 @@ import type { ParsedApiError } from '../help/errors/apiErrors'
 
 export default function Simulador() {
   const { carteraSeleccionada, syncVersion } = useInversionesContext()
+
+  // "Ritmo de aportes" puede mandar acá un aporte mensual para arrancar la simulación con él
+  // (botón "Simular con rendimiento"). Sin ese estado, todo se comporta como siempre.
+  const { state } = useLocation()
+  const aporteInicialUsd =
+    state && typeof (state as { aporteMensualUsd?: unknown }).aporteMensualUsd === 'number'
+      ? (state as { aporteMensualUsd: number }).aporteMensualUsd
+      : undefined
 
   // "Sencillo" (Escenarios de vida) es el modo por defecto: pensado para quien no sabe
   // responder cuánto va a variar el dólar o el dividend yield. "Avanzado" es este mismo
@@ -258,7 +267,11 @@ export default function Simulador() {
 
       {modo === 'sencillo' && (
         <div className="px-3">
-          <SimuladorVida cartera={carteraSeleccionada} syncVersion={syncVersion} />
+          <SimuladorVida
+            cartera={carteraSeleccionada}
+            syncVersion={syncVersion}
+            aporteInicialUsd={aporteInicialUsd}
+          />
         </div>
       )}
 

@@ -13,6 +13,12 @@ export type AportesHelpKey =
   | 'aportes_hitos'
   | 'aportes_mismo_periodo'
   | 'aportes_moneda'
+  | 'aportes_meta_mensual'
+  | 'aportes_nivel'
+  | 'aportes_logros'
+  | 'aportes_mision'
+  | 'aportes_proyeccion_ritmo'
+  | 'aportes_vs_crecimiento'
 
 export const APORTES_HELP: Record<AportesHelpKey, HelpContent> = {
   aportes_neto_criterio: {
@@ -107,5 +113,64 @@ export const APORTES_HELP: Record<AportesHelpKey, HelpContent> = {
     whyItMatters:
       'Comparar meses en pesos nominales entre años mide inflación, no ritmo de ahorro: USD 500 de hace dos años y USD 500 de hoy son el mismo esfuerzo, pero en pesos el segundo parecería mucho mayor. Cada movimiento se convierte al dólar MEP del día en que lo hiciste.',
     relatedTerms: ['mep'],
+  },
+  aportes_meta_mensual: {
+    title: 'Objetivo mensual de aporte',
+    shortDescription: 'Cuánto te propusiste aportar por mes. Lo definís vos y podés cambiarlo cuando quieras.',
+    whyItMatters:
+      'Es una meta de hábito, no de patrimonio: sirve para saber si estás sosteniendo el ritmo que te propusiste, sin importar cómo venga el mercado. Es distinta del objetivo de la pantalla Objetivo, que es un monto de patrimonio a alcanzar en una fecha.',
+    howItIsCalculated:
+      'El cumplimiento de un mes es el aporte neto de ese mes dividido por el objetivo. Se cuenta como cumplido desde el 99,5% para que quedar a centavos por el redondeo del dólar no cuente como incumplido.',
+    howToInterpret:
+      'El cumplimiento se mide desde el mes en que fijaste el objetivo: los meses anteriores no figuran como incumplidos, porque la meta todavía no existía. Si querés medirte contra todo tu historial, marcá "Aplicarlo también a mi historial" al editarlo.',
+    limitations:
+      'El objetivo es por cartera: el del Consolidado es independiente del de cada cartera, y no se suman entre sí.',
+    relatedTerms: ['aportes_neto_criterio', 'objetivo_aporte_mensual'],
+  },
+  aportes_nivel: {
+    title: 'Nivel de constancia',
+    shortDescription: 'Qué tan afianzado está tu hábito de aportar, medido sólo por constancia.',
+    howItIsCalculated:
+      'Cada nivel pide dos cosas: una cantidad de meses en los que aportaste (seguidos o no) y una racha máxima de meses consecutivos. Se muestra el nivel más alto cuyos dos requisitos cumplís, junto con los motivos concretos.',
+    whyItMatters:
+      'No depende de cuánta plata aportás ni de cuánto rindieron tus inversiones: sostener un aporte chico todos los meses vale más que uno grande cada tanto. Tampoco depende de cumplir el objetivo, así que definir una meta nunca puede bajarte de nivel.',
+    howToInterpret:
+      'Usa tu mejor racha histórica, no la actual: un mes flojo corta la racha en curso pero no te hace perder el nivel que ya alcanzaste.',
+    relatedTerms: ['aportes_racha'],
+  },
+  aportes_logros: {
+    title: 'Logros',
+    shortDescription: 'Objetivos de hábito que ya conseguiste, y cuánto te falta para los que siguen.',
+    howItIsCalculated:
+      'Salen de tu historial real: meses consecutivos aportando, meses con aporte acumulados, un año calendario completo, capital aportado neto, superar tu mejor año, y —si configuraste un objetivo mensual— meses cumpliéndolo.',
+    howToInterpret:
+      'Los bloqueados muestran su progreso ("8 / 12"). Los de la familia objetivo aparecen apagados hasta que definas una meta mensual: no están incumplidos, simplemente todavía no se pueden medir.',
+  },
+  aportes_mision: {
+    title: 'Próxima misión',
+    shortDescription: 'El próximo paso concreto de tu hábito de inversión.',
+    howItIsCalculated:
+      'Se elige la más cercana a completarse: hacer el primer aporte, completar el objetivo del mes, encadenar meses cumpliéndolo, estirar la racha o llegar al próximo escalón de capital aportado.',
+    whyItMatters:
+      'Siempre es sobre tu comportamiento, nunca sobre el mercado: no sugiere aportar más de lo que venís aportando, ni operar, ni tomar más riesgo.',
+  },
+  aportes_proyeccion_ritmo: {
+    title: 'Si mantenés este ritmo',
+    shortDescription: 'Cuánto habrías aportado en 1, 3, 5 y 10 años sosteniendo tu ritmo actual.',
+    howItIsCalculated:
+      'Tu aporte promedio mensual (el de los últimos 12 meses, o el mayor período disponible) multiplicado por la cantidad de meses. Nada más.',
+    limitations:
+      'No es una predicción ni incluye el rendimiento de las inversiones, ni dividendos, ni inflación: es sólo la suma de la plata que pondrías vos. Para ver qué pasaría con rendimiento, usá el simulador.',
+    howToInterpret:
+      'Los escenarios "+USD 50" y "+USD 100" muestran únicamente cuánta plata más habrías aportado, no cuánto habría rendido.',
+  },
+  aportes_vs_crecimiento: {
+    title: 'Lo que pusiste vs. lo que creció',
+    shortDescription: 'Qué parte de tu patrimonio es plata que aportaste y qué parte la generaron las inversiones.',
+    howItIsCalculated:
+      'Sale de la descomposición de la pantalla Patrimonio, que garantiza que el valor actual sea igual a aportes + rendimiento + dividendos + comisiones y otros ajustes. Acá no se vuelve a calcular ningún rendimiento.',
+    limitations:
+      'El monto de aportes de esta tarjeta puede no coincidir con el "Total aportado" de arriba: aquél mide sólo capital nuevo (compras menos ventas), mientras que Patrimonio contempla todos los movimientos del período.',
+    relatedTerms: ['patrimonio_capital_aportado', 'aportes_neto_criterio'],
   },
 }
