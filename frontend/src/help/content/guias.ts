@@ -345,6 +345,19 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
     terminos: ['matrizcorr_correlacion', 'matrizcorr_frecuencia', 'matrizcorr_moneda'],
   },
 
+  '/comparador-estrategias': {
+    queEs: 'Corre varias estrategias guardadas sobre el mismo ticker y el mismo período, para ver cómo les fue una al lado de la otra.',
+    comoLeerla: [
+      'Elegí un ticker, un período y hasta 8 estrategias guardadas: todas corren sobre exactamente la misma serie de precios.',
+      'La tabla y el gráfico de capital comparan el resultado; "La diferencia" lo traduce a puntos porcentuales y a dinero contra la referencia que elijas.',
+      '"Comprar y mantener" siempre aparece como piso de comparación, además de poder elegir cualquiera de las estrategias como referencia.',
+      'Los tramos de divergencia muestran en qué meses se originó la diferencia final, no sólo cuánto fue.',
+    ],
+    queHacer: ['Si el resultado es "Sin señales" o "Datos insuficientes", probá un período más largo o un ticker con más historia.'],
+    ojo: 'Es un backtest, no una recomendación: describe qué habría pasado con los datos históricos disponibles, nunca cuál es "la mejor" estrategia para este instrumento de acá en adelante.',
+    terminos: ['comparador_simulado', 'comparador_referencia', 'comparador_costos', 'comparador_limitaciones'],
+  },
+
   '/mas': {
     queEs: 'El resto de las pantallas, agrupadas por tema: todo lo que no entra en la barra de abajo vive acá.',
     comoLeerla: ['Buscá por nombre o usá la lupa del encabezado para encontrar cualquier pantalla más rápido.'],

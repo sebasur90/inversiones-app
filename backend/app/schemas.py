@@ -1989,6 +1989,94 @@ class ScreenerOut(BaseModel):
     advertencias: list[str] = Field(default_factory=list)
 
 
+# ─── Comparador de estrategias ─────────────────────────────────────────────────
+
+class ComparadorRequest(BaseModel):
+    # Tope de 8: espejo de `comparador_estrategias_engine.MAX_ESTRATEGIAS`.
+    estrategia_ids: list[int] = Field(..., min_length=1, max_length=8)
+    desde: Optional[date] = None
+    hasta: Optional[date] = None
+    variante: str = "local"
+    capital_inicial: float = Field(1_000_000.0, gt=0, le=1e12)
+    # `None` = la referencia es "Comprar y mantener"; si no, el id de una de `estrategia_ids`.
+    referencia_id: Optional[int] = None
+    sin_costos: bool = False
+
+
+class ComparadorRiesgoOut(BaseModel):
+    max_drawdown_pct: Optional[float] = None
+    fecha_pico: Optional[date] = None
+    fecha_valle: Optional[date] = None
+    duracion_caida_dias: Optional[int] = None
+    duracion_recuperacion_dias: Optional[int] = None
+    recuperado: Optional[bool] = None
+    volatilidad_anualizada_pct: Optional[float] = None
+    volatilidad_estado: str
+    operaciones: int
+    operaciones_cerradas: int
+    ganadoras: int
+    perdedoras: int
+    win_rate_pct: Optional[float] = None
+    mejor_operacion_pct: Optional[float] = None
+    peor_operacion_pct: Optional[float] = None
+    exposicion_pct: float
+    tiempo_fuera_mercado_pct: float
+    comisiones_pct_acum: float
+
+
+class ComparadorDivergenciaOut(BaseModel):
+    desde: date
+    hasta: date
+    delta_pp: float
+    invertida_pct: float
+    invertida_referencia_pct: float
+
+
+class ComparadorFilaOut(BaseModel):
+    estrategia_id: Optional[int] = None  # None = fila "Comprar y mantener"
+    nombre: str
+    es_referencia: bool
+    estado: str  # "ok" | "sin_senales" | "datos_insuficientes" | "warm_up_insuficiente" | "definicion_invalida"
+    errores: list[str] = Field(default_factory=list)
+    retorno_total_pct: Optional[float] = None
+    retorno_anualizado_pct: Optional[float] = None
+    capital_final: Optional[float] = None
+    ganancia: Optional[float] = None
+    diferencia_pp: Optional[float] = None
+    diferencia_monetaria: Optional[float] = None
+    diferencia_relativa_pct: Optional[float] = None
+    riesgo: Optional[ComparadorRiesgoOut] = None
+    divergencias: list[ComparadorDivergenciaOut] = Field(default_factory=list)
+    # Base 100, alineada 1:1 con `ComparadorOut.fechas`; `None` en los puntos sin dato (p.ej. una
+    # definición inválida, que nunca corrió un backtest).
+    curva: list[Optional[float]] = Field(default_factory=list)
+    advertencias: list[str] = Field(default_factory=list)
+
+
+class ComparadorMejorOut(BaseModel):
+    estrategia_id: Optional[int] = None
+    nombre: str
+    retorno_total_pct: float
+    diferencia_pp: Optional[float] = None
+    disclaimer: str
+
+
+class ComparadorOut(BaseModel):
+    ticker: str
+    variante: str = "local"
+    moneda: str = ""
+    capital_inicial: float
+    estado: str  # "ok" | "sin_serie" | "datos_insuficientes"
+    desde: Optional[date] = None
+    hasta: Optional[date] = None
+    referencia_id: Optional[int] = None
+    estrategias_omitidas: list[int] = Field(default_factory=list)
+    fechas: list[date] = Field(default_factory=list)
+    filas: list[ComparadorFilaOut] = Field(default_factory=list)
+    mejor: Optional[ComparadorMejorOut] = None
+    advertencias: list[str] = Field(default_factory=list)
+
+
 # --- Explicación del resultado ("¿Por qué ganó o perdió mi cartera?", services/
 #     explicacion_resultado_engine.py + explicacion_resultado_analytics.py) ---
 # Todo lo que depende de un precio de mercado va Optional: un ticker sin cotización en el

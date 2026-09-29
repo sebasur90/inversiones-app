@@ -13,9 +13,11 @@ from ..schemas import (
     BacktestRequest, BacktestOut, PresetEstrategiaOut, SenalTickerOut,
     EstrategiaGuardarRequest, EstrategiaOut, SiembraPresetsOut,
     ScreenerRequest, ScreenerOut,
+    ComparadorRequest, ComparadorOut,
 )
 from ..services import ohlcv_analytics, estrategias_analytics, screener_analytics, estrategias_seed
 from ..services import indicadores_engine, estrategia_engine
+from ..services import comparador_estrategias_analytics, comparador_estrategias_engine
 
 router = APIRouter(prefix="/api/inversiones", tags=["tecnico"])
 
@@ -165,6 +167,28 @@ def backtest_tecnico(ticker: str, body: BacktestRequest, db: Session = Depends(g
         raise HTTPException(status_code=422, detail="; ".join(errores))
     return estrategias_analytics.ejecutar_backtest(
         ticker, body.definicion, db, body.desde, body.hasta, variante=body.variante,
+    )
+
+
+# ─── Comparador de estrategias ────────────────────────────────────────────────
+
+@router.post("/tecnico/{ticker}/comparar", response_model=ComparadorOut)
+def comparar_estrategias(ticker: str, body: ComparadorRequest, db: Session = Depends(get_db)):
+    """Corre N estrategias guardadas sobre la misma serie del mismo ticker, en el mismo período, y
+    las compara entre sí y contra una referencia (Comprar y mantener, u otra de las elegidas)."""
+    _validar_ticker_tecnico(ticker, db)
+    _validar_variante(body.variante)
+    ids = sorted(set(body.estrategia_ids))
+    if len(ids) > comparador_estrategias_engine.MAX_ESTRATEGIAS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"máximo {comparador_estrategias_engine.MAX_ESTRATEGIAS} estrategias por comparación",
+        )
+    if body.referencia_id is not None and body.referencia_id not in ids:
+        raise HTTPException(status_code=422, detail="referencia_id debe ser una de las estrategias seleccionadas")
+    return comparador_estrategias_analytics.comparar_estrategias(
+        ticker, tuple(ids), db, desde=body.desde, hasta=body.hasta, variante=body.variante,
+        capital_inicial=body.capital_inicial, referencia_id=body.referencia_id, sin_costos=body.sin_costos,
     )
 
 

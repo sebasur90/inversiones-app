@@ -28,8 +28,9 @@ import { EXPLICACIONRESULTADO_HELP, type ExplicacionResultadoHelpKey } from './e
 import { DESCOMPOSICION_HELP, type DescomposicionHelpKey } from './descomposicion'
 import { COSTOOPORTUNIDAD_HELP, type CostoOportunidadHelpKey } from './costooportunidad'
 import { MATRIZCORRELACIONES_HELP, type MatrizCorrelacionesHelpKey } from './matrizcorrelaciones'
+import { COMPARADORESTRATEGIAS_HELP, type ComparadorEstrategiasHelpKey } from './comparadorEstrategias'
 
-export type HelpKey = GlosarioKey | SimuladorHelpKey | SimuladorVidaHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey | ComisionesHelpKey | RebalanceoHelpKey | FlujoCajaHelpKey | WatchlistHelpKey | AnalisisTecnicoHelpKey | EstrategiasHelpKey | AportesHelpKey | SaludHelpKey | ExplicacionResultadoHelpKey | DescomposicionHelpKey | CostoOportunidadHelpKey | MatrizCorrelacionesHelpKey
+export type HelpKey = GlosarioKey | SimuladorHelpKey | SimuladorVidaHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey | ComisionesHelpKey | RebalanceoHelpKey | FlujoCajaHelpKey | WatchlistHelpKey | AnalisisTecnicoHelpKey | EstrategiasHelpKey | AportesHelpKey | SaludHelpKey | ExplicacionResultadoHelpKey | DescomposicionHelpKey | CostoOportunidadHelpKey | MatrizCorrelacionesHelpKey | ComparadorEstrategiasHelpKey
 
 export const HELP: Record<HelpKey, HelpContent> = {
   ...GLOSARIO_HELP,
@@ -61,6 +62,7 @@ export const HELP: Record<HelpKey, HelpContent> = {
   ...DESCOMPOSICION_HELP,
   ...COSTOOPORTUNIDAD_HELP,
   ...MATRIZCORRELACIONES_HELP,
+  ...COMPARADORESTRATEGIAS_HELP,
 }
 
 export {
@@ -93,4 +95,5 @@ export {
   DESCOMPOSICION_HELP,
   COSTOOPORTUNIDAD_HELP,
   MATRIZCORRELACIONES_HELP,
+  COMPARADORESTRATEGIAS_HELP,
 }

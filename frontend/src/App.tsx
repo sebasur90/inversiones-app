@@ -42,6 +42,7 @@ const Simulador = lazy(() => import('./pages/Simulador'))
 const BenchmarksComparacion = lazy(() => import('./pages/BenchmarksComparacion'))
 const AnalisisTecnico = lazy(() => import('./pages/AnalisisTecnico'))
 const Screener = lazy(() => import('./pages/Screener'))
+const ComparadorEstrategias = lazy(() => import('./pages/ComparadorEstrategias'))
 const Mas = lazy(() => import('./pages/Mas'))
 const Ajustes = lazy(() => import('./pages/Ajustes'))
 const Ayuda = lazy(() => import('./pages/Ayuda'))
@@ -176,6 +177,7 @@ function Root() {
             <Route path="benchmarks-comparacion" element={<BenchmarksComparacion />} />
             <Route path="analisis-tecnico" element={<AnalisisTecnico />} />
             <Route path="screener" element={<Screener />} />
+            <Route path="comparador-estrategias" element={<ComparadorEstrategias />} />
             <Route path="mas" element={<Mas />} />
             <Route path="ajustes" element={<Ajustes />} />
             <Route path="ayuda" element={<Ayuda />} />

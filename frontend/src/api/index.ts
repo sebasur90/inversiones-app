@@ -2337,3 +2337,94 @@ export interface ScreenerOut {
 
 export const correrScreener = (body: ScreenerRequest) =>
   api.post<ScreenerOut>('/inversiones/tecnico/screener', body).then(r => r.data)
+
+// ---- Comparador de estrategias ----
+
+export interface ComparadorRequest {
+  estrategia_ids: number[]
+  desde?: string | null
+  hasta?: string | null
+  variante?: VarianteSerie
+  capital_inicial?: number
+  referencia_id?: number | null
+  sin_costos?: boolean
+}
+
+export interface ComparadorRiesgoOut {
+  max_drawdown_pct: number | null
+  fecha_pico: string | null
+  fecha_valle: string | null
+  duracion_caida_dias: number | null
+  duracion_recuperacion_dias: number | null
+  recuperado: boolean | null
+  volatilidad_anualizada_pct: number | null
+  volatilidad_estado: 'ok' | 'datos_insuficientes'
+  operaciones: number
+  operaciones_cerradas: number
+  ganadoras: number
+  perdedoras: number
+  win_rate_pct: number | null
+  mejor_operacion_pct: number | null
+  peor_operacion_pct: number | null
+  exposicion_pct: number
+  tiempo_fuera_mercado_pct: number
+  comisiones_pct_acum: number
+}
+
+export interface ComparadorDivergenciaOut {
+  desde: string
+  hasta: string
+  delta_pp: number
+  invertida_pct: number
+  invertida_referencia_pct: number
+}
+
+export type ComparadorEstadoFila = 'ok' | 'sin_senales' | 'datos_insuficientes' | 'warm_up_insuficiente' | 'definicion_invalida'
+
+export interface ComparadorFilaOut {
+  estrategia_id: number | null  // null = "Comprar y mantener"
+  nombre: string
+  es_referencia: boolean
+  estado: ComparadorEstadoFila
+  errores: string[]
+  retorno_total_pct: number | null
+  retorno_anualizado_pct: number | null
+  capital_final: number | null
+  ganancia: number | null
+  diferencia_pp: number | null
+  diferencia_monetaria: number | null
+  diferencia_relativa_pct: number | null
+  riesgo: ComparadorRiesgoOut | null
+  divergencias: ComparadorDivergenciaOut[]
+  // Base 100, alineada 1:1 con `ComparadorOut.fechas`; `null` donde no hay dato (p.ej. una
+  // definición inválida, que nunca corrió un backtest).
+  curva: (number | null)[]
+  advertencias: string[]
+}
+
+export interface ComparadorMejorOut {
+  estrategia_id: number | null
+  nombre: string
+  retorno_total_pct: number
+  diferencia_pp: number | null
+  disclaimer: string
+}
+
+export interface ComparadorOut {
+  ticker: string
+  variante: VarianteSerie
+  moneda: string
+  capital_inicial: number
+  estado: 'ok' | 'sin_serie' | 'datos_insuficientes'
+  desde: string | null
+  hasta: string | null
+  referencia_id: number | null
+  estrategias_omitidas: number[]
+  fechas: string[]
+  filas: ComparadorFilaOut[]
+  mejor: ComparadorMejorOut | null
+  advertencias: string[]
+}
+
+export const compararEstrategias = (ticker: string, body: ComparadorRequest) =>
+  api.post<ComparadorOut>(`/inversiones/tecnico/${encodeURIComponent(ticker)}/comparar`, body).then(r => r.data)

@@ -67,7 +67,7 @@ export const CHART_COLORS = [
   '#60a5fa', '#34d399', '#fbbf24', '#9ca3af', '#22d3ee', '#a78bfa',
 ]
 
-export type PeriodoEvolucion = '1M' | '3M' | '6M' | '1Y' | '3Y' | 'YTD' | 'ALL'
+export type PeriodoEvolucion = '1M' | '3M' | '6M' | '1Y' | '3Y' | '5Y' | 'YTD' | 'ALL'
 
 function formatDateLocal(d: Date): string {
   const y = d.getFullYear()
@@ -91,7 +91,7 @@ export function calcularDesde(periodo: PeriodoEvolucion): string | undefined {
   if (periodo === 'ALL') return undefined
   if (periodo === 'YTD') return `${hoy.getFullYear()}-01-01`
   const mesesPorPeriodo: Record<Exclude<PeriodoEvolucion, 'ALL' | 'YTD'>, number> = {
-    '1M': 1, '3M': 3, '6M': 6, '1Y': 12, '3Y': 36,
+    '1M': 1, '3M': 3, '6M': 6, '1Y': 12, '3Y': 36, '5Y': 60,
   }
   const d = restarMeses(hoy, mesesPorPeriodo[periodo as Exclude<PeriodoEvolucion, 'ALL' | 'YTD'>])
   return formatDateLocal(d)
