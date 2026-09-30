@@ -60,51 +60,57 @@ export default function TablaOrdenable<T>({ columnas, filas, getKey, ordenInicia
   }
 
   return (
-    <table className="w-full text-label border-separate border-spacing-0">
-      <thead>
-        <tr>
-          {columnas.map((c, i) => {
-            const activa = orden.key === c.key
-            const align = c.align ?? (i === 0 ? 'left' : 'right')
-            const ariaSort = activa ? (orden.dir === 'asc' ? 'ascending' : 'descending') : 'none'
-            return (
-              <th key={c.key} className={`pb-2 ${align === 'right' ? 'text-right' : 'text-left'}`} aria-sort={ariaSort}>
-                {c.ordenable === false ? (
-                  <span className="text-app-text-faint font-bold uppercase text-label">{c.label}</span>
-                ) : (
-                  <button
-                    onClick={() => onHeaderClick(c)}
-                    className={`inline-flex items-center gap-1 py-2.5 -my-2.5 px-2 -mx-2 font-bold uppercase text-label ${
-                      activa ? 'text-app-text' : 'text-app-text-faint'
-                    }`}
-                  >
-                    {c.label}
-                    {activa && <Icon name={orden.dir === 'asc' ? 'up' : 'down'} className="w-3 h-3" />}
-                  </button>
-                )}
-              </th>
-            )
-          })}
-        </tr>
-      </thead>
-      <tbody>
-        {filasOrdenadas.map(fila => (
-          <tr
-            key={getKey(fila)}
-            onClick={onFilaClick ? () => onFilaClick(fila) : undefined}
-            className={onFilaClick ? 'cursor-pointer active:bg-app-accent-soft' : undefined}
-          >
+    // El shell de la app mide como máximo 448px, así que una tabla de varias columnas no entra.
+    // Sin este contenedor el desborde lo absorbía el scroller de la pantalla y se deslizaba la
+    // vista entera. El -mx-4/px-4 asume el padding de `Card` (p-4): el scroll llega al borde de
+    // la tarjeta en vez de cortarse contra el padding, igual que en `TablaOperaciones`.
+    <div className="overflow-x-auto -mx-4 px-4">
+      <table className="w-full text-label border-separate border-spacing-0">
+        <thead>
+          <tr>
             {columnas.map((c, i) => {
+              const activa = orden.key === c.key
               const align = c.align ?? (i === 0 ? 'left' : 'right')
+              const ariaSort = activa ? (orden.dir === 'asc' ? 'ascending' : 'descending') : 'none'
               return (
-                <td key={c.key} className={`py-1.5 ${align === 'right' ? 'text-right' : 'text-left'}`}>
-                  {c.render ? c.render(fila) : String(c.valor(fila) ?? '—')}
-                </td>
+                <th key={c.key} className={`pb-2 ${align === 'right' ? 'text-right' : 'text-left'}`} aria-sort={ariaSort}>
+                  {c.ordenable === false ? (
+                    <span className="text-app-text-faint font-bold uppercase text-label">{c.label}</span>
+                  ) : (
+                    <button
+                      onClick={() => onHeaderClick(c)}
+                      className={`inline-flex items-center gap-1 py-2.5 -my-2.5 px-2 -mx-2 font-bold uppercase text-label ${
+                        activa ? 'text-app-text' : 'text-app-text-faint'
+                      }`}
+                    >
+                      {c.label}
+                      {activa && <Icon name={orden.dir === 'asc' ? 'up' : 'down'} className="w-3 h-3" />}
+                    </button>
+                  )}
+                </th>
               )
             })}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {filasOrdenadas.map(fila => (
+            <tr
+              key={getKey(fila)}
+              onClick={onFilaClick ? () => onFilaClick(fila) : undefined}
+              className={onFilaClick ? 'cursor-pointer active:bg-app-accent-soft' : undefined}
+            >
+              {columnas.map((c, i) => {
+                const align = c.align ?? (i === 0 ? 'left' : 'right')
+                return (
+                  <td key={c.key} className={`py-1.5 ${align === 'right' ? 'text-right' : 'text-left'}`}>
+                    {c.render ? c.render(fila) : String(c.valor(fila) ?? '—')}
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }

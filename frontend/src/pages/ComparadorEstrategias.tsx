@@ -15,7 +15,7 @@ import EmptyState from '../components/ui/EmptyState'
 import QueryBoundary from '../components/ui/QueryBoundary'
 import InfoTooltip from '../help/components/InfoTooltip'
 import { Icon } from '../components/icons/Icons'
-import TablaComparadorEstrategias from '../components/tecnico/TablaComparadorEstrategias'
+import ListaComparadorEstrategias from '../components/tecnico/ListaComparadorEstrategias'
 import GraficoComparadorCapital from '../components/tecnico/GraficoComparadorCapital'
 import PanelDiferenciaEstrategias from '../components/tecnico/PanelDiferenciaEstrategias'
 import RiesgoComparadorCards from '../components/tecnico/RiesgoComparadorCards'
@@ -299,7 +299,7 @@ export default function ComparadorEstrategias() {
               <div>
                 <h3 className="text-body font-bold text-app-text mb-2">Comparación</h3>
                 <Card>
-                  <TablaComparadorEstrategias
+                  <ListaComparadorEstrategias
                     filas={resultado.filas} moneda={resultado.moneda}
                     onFilaClick={f => { if (f.estrategia_id != null) setDetalleId(f.estrategia_id) }}
                   />
