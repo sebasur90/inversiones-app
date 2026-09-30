@@ -36,7 +36,7 @@ export default function EscenarioComparacionTable({ resultado }: EscenarioCompar
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-xs">
+      <table className="w-full text-caption">
         <thead>
           <tr className="border-b border-app-border">
             <th className="text-left py-2 px-2 text-app-text-dim font-medium">Métrica</th>
@@ -45,7 +45,7 @@ export default function EscenarioComparacionTable({ resultado }: EscenarioCompar
                 key={idx}
                 className="text-right py-2 px-2 font-medium text-app-text tabular-nums"
               >
-                <div className="text-xs font-semibold">{esc.nombre}</div>
+                <div className="text-caption font-semibold">{esc.nombre}</div>
                 <div className="text-label text-app-text-dim">({esc.tipo_preset})</div>
               </th>
             ))}

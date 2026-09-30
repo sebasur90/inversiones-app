@@ -43,7 +43,7 @@ export function CampoNumerico({ valor, onCommit, placeholder, className = '' }: 
       placeholder={placeholder}
       onChange={e => onInput(e.target.value)}
       onBlur={onBlur}
-      className={`w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-xs focus:border-app-accent/60 tabular-nums ${className}`}
+      className={`w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-2.5 text-caption focus:border-app-accent/60 tabular-nums ${className}`}
     />
   )
 }
@@ -97,7 +97,7 @@ export default function VidaSupuestosForm({
             placeholder="0"
             className="max-w-[7rem]"
           />
-          <span className="text-xs text-app-text-dim">% anual</span>
+          <span className="text-caption text-app-text-dim">% anual</span>
         </div>
       </div>
 
@@ -110,7 +110,7 @@ export default function VidaSupuestosForm({
             placeholder="sin cargar"
             className="max-w-[7rem]"
           />
-          <span className="text-xs text-app-text-dim">% anual, "en plata de hoy"</span>
+          <span className="text-caption text-app-text-dim">% anual, "en plata de hoy"</span>
         </div>
       </div>
 

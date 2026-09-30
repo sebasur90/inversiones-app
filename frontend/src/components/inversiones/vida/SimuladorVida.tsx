@@ -108,7 +108,7 @@ export default function SimuladorVida({ cartera, syncVersion, aporteInicialUsd }
       <ErrorBanner error={error} />
 
       <Card className="p-3 bg-app-surface-2">
-        <h2 className="text-sm font-semibold text-app-text mb-3">Tus supuestos</h2>
+        <h2 className="text-strong font-semibold text-app-text mb-3">Tus supuestos</h2>
         <VidaSupuestosForm
           supuestos={supuestos}
           onChange={handleChangeSupuesto}
@@ -118,7 +118,7 @@ export default function SimuladorVida({ cartera, syncVersion, aporteInicialUsd }
       </Card>
 
       <div>
-        <h2 className="text-sm font-semibold text-app-text mb-3">¿Qué querés probar?</h2>
+        <h2 className="text-strong font-semibold text-app-text mb-3">¿Qué querés probar?</h2>
         <VidaEscenarioSelector
           seleccionados={seleccionados}
           onChange={setSeleccionados}
@@ -160,14 +160,14 @@ export default function SimuladorVida({ cartera, syncVersion, aporteInicialUsd }
           )}
 
           <div>
-            <h2 className="text-sm font-semibold text-app-text mb-3">Evolución del patrimonio</h2>
+            <h2 className="text-strong font-semibold text-app-text mb-3">Evolución del patrimonio</h2>
             <Card className="p-3 bg-app-surface-2">
               <VidaProyeccionChart resultado={resultado} />
             </Card>
           </div>
 
           <div>
-            <h2 className="text-sm font-semibold text-app-text mb-3">Comparación de escenarios</h2>
+            <h2 className="text-strong font-semibold text-app-text mb-3">Comparación de escenarios</h2>
             <Card className="p-3 bg-app-surface-2">
               <VidaComparacionTable resultado={resultado} />
             </Card>
@@ -175,7 +175,7 @@ export default function SimuladorVida({ cartera, syncVersion, aporteInicialUsd }
 
           {resultado.advertencias.length > 0 && (
             <Card className="p-3 bg-yellow-900/20 border border-yellow-600/30">
-              <div className="text-xs space-y-1">
+              <div className="text-caption space-y-1">
                 {resultado.advertencias.map((adv, idx) => (
                   <div key={idx} className="text-yellow-200">• {adv}</div>
                 ))}

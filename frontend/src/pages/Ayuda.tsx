@@ -65,7 +65,7 @@ function SeccionTutoriales() {
                         {paso.ruta && (
                           <button
                             onClick={() => navigate(paso.ruta as string)}
-                            className="text-xs px-2 py-1 rounded-md bg-app-accent-soft text-app-accent font-semibold"
+                            className="text-caption px-2 py-1 rounded-md bg-app-accent-soft text-app-accent font-semibold"
                           >
                             Ir ahí →
                           </button>

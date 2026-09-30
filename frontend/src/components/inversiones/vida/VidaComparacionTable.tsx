@@ -14,7 +14,7 @@ export default function VidaComparacionTable({ resultado }: Props) {
   return (
     <div className="space-y-2">
       <div className="overflow-x-auto">
-        <table className="w-full text-xs tabular-nums">
+        <table className="w-full text-caption tabular-nums">
           <thead>
             <tr className="border-b border-app-border">
               <th className="text-left py-2 px-2 text-app-text-dim font-medium">Escenario</th>

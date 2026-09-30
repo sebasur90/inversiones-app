@@ -182,7 +182,7 @@ export default function VidaEscenarioSelector({
             const s = spec(op.tipo)!
             return (
               <div key={op.tipo} className="bg-app-surface-2 border border-app-border rounded-[11px] p-2.5">
-                <div className="text-xs font-semibold text-app-text mb-1.5">
+                <div className="text-caption font-semibold text-app-text mb-1.5">
                   <InfoTooltip term={op.helpKey} label={op.etiqueta} />
                 </div>
                 <CamposDeEscenario

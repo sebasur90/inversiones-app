@@ -287,7 +287,7 @@ export default function Simulador() {
 
         {/* Panel de configuración — 3 escenarios lado a lado */}
         <div>
-          <h2 className="text-sm font-semibold text-app-text mb-3">Escenarios</h2>
+          <h2 className="text-strong font-semibold text-app-text mb-3">Escenarios</h2>
           <div className="space-y-3">
             {escenarios.map((esc, idx) => (
               <EscenarioConfigPanel
@@ -345,7 +345,7 @@ export default function Simulador() {
           <>
             {/* Gráfico */}
             <div className="mt-6">
-              <h2 className="text-sm font-semibold text-app-text mb-3">Evolución del patrimonio</h2>
+              <h2 className="text-strong font-semibold text-app-text mb-3">Evolución del patrimonio</h2>
               <Card className="p-3 bg-app-surface-2">
                 <EscenarioProyeccionChart resultado={resultado} />
               </Card>
@@ -353,7 +353,7 @@ export default function Simulador() {
 
             {/* Tabla comparativa */}
             <div className="mt-6">
-              <h2 className="text-sm font-semibold text-app-text mb-3">Comparación de escenarios</h2>
+              <h2 className="text-strong font-semibold text-app-text mb-3">Comparación de escenarios</h2>
               <Card className="p-3 bg-app-surface-2">
                 <EscenarioComparacionTable resultado={resultado} />
               </Card>
@@ -368,7 +368,7 @@ export default function Simulador() {
             {/* Advertencias */}
             {resultado.advertencias.length > 0 && (
               <Card className="p-3 bg-yellow-900/20 border border-yellow-600/30">
-                <div className="text-xs space-y-1">
+                <div className="text-caption space-y-1">
                   {resultado.advertencias.map((adv, idx) => (
                     <div key={idx} className="text-yellow-200">• {adv}</div>
                   ))}
@@ -381,14 +381,14 @@ export default function Simulador() {
         {/* Escenarios guardados */}
         {escenariosSaved.length > 0 && (
           <Card className="p-3 border border-app-border">
-            <div className="text-xs font-medium text-app-text-dim mb-2">
+            <div className="text-caption font-medium text-app-text-dim mb-2">
               Escenarios guardados ({escenariosSaved.length})
             </div>
             <div className="space-y-1">
               {escenariosSaved.map(esc => (
                 <div
                   key={esc.id}
-                  className="flex items-center gap-2 text-xs text-app-text py-1.5 border-b border-app-border last:border-0"
+                  className="flex items-center gap-2 text-caption text-app-text py-1.5 border-b border-app-border last:border-0"
                 >
                   <div className="flex-1 min-w-0 truncate">
                     {esc.nombre}

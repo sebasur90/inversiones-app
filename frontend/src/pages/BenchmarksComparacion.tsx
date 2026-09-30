@@ -166,7 +166,7 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
               </div>
             </div>
             <div>
-              <div className="text-xs font-semibold text-app-text mb-2">Tickers</div>
+              <div className="text-caption font-semibold text-app-text mb-2">Tickers</div>
               <div className="flex flex-wrap gap-2 max-h-12 overflow-y-auto">
                 {tickersConPrecios.map((t) => (
                   <button

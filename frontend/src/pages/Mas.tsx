@@ -51,7 +51,7 @@ export default function Mas() {
                     {alertas > 0 && (
                       <span
                         aria-label={`${alertas} alerta${alertas !== 1 ? 's' : ''} de compra`}
-                        className={`min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center font-bold text-[11px] leading-none tabular-nums shrink-0 ${claseContador(conteoWatchlist.criticas, conteoWatchlist.advertencias)}`}
+                        className={`min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center font-bold text-label leading-none tabular-nums shrink-0 ${claseContador(conteoWatchlist.criticas, conteoWatchlist.advertencias)}`}
                       >
                         {alertas > 9 ? '9+' : alertas}
                       </span>

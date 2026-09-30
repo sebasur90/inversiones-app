@@ -14,7 +14,7 @@ export default function FormHelp({ term, label, fieldKey, className = '' }: Form
 
   return (
     <div className={className}>
-      <label className="block text-xs font-semibold text-app-text mb-2">
+      <label className="block text-caption font-semibold text-app-text mb-2">
         <InfoTooltip term={term} label={label} />
       </label>
       {limits && (

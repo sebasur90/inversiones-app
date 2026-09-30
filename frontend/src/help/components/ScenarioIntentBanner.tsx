@@ -18,11 +18,11 @@ export default function ScenarioIntentBanner({ variant, children }: ScenarioInte
 
   return (
     <Card className={`border ${bgClass} p-4`}>
-      <div className={`text-sm font-semibold ${textColor} flex items-center gap-2 mb-2`}>
-        <span className="text-base">{icon}</span>
+      <div className={`text-strong font-semibold ${textColor} flex items-center gap-2 mb-2`}>
+        <span className="text-title">{icon}</span>
         {title}
       </div>
-      <div className="text-xs text-app-text-dim leading-relaxed">{children || defaultContent}</div>
+      <div className="text-caption text-app-text-dim leading-relaxed">{children || defaultContent}</div>
     </Card>
   )
 }
