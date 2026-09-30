@@ -1489,7 +1489,7 @@ class HallazgoItem(BaseModel):
     severidad: str
     titulo: str
     explicacion: str
-    dato_disparador: dict[str, float | int | str | bool | None]
+    dato_disparador: dict[str, float | int | str | bool | list[str] | None]
     pantalla: str
     fecha_calculo: date
 
