@@ -26,14 +26,14 @@ import AlertaPrecioBadge from '../components/inversiones/AlertaPrecioBadge'
 import SelectorInstrumento from '../components/inversiones/SelectorInstrumento'
 import DetalleWatchlist from '../components/inversiones/DetalleWatchlist'
 import { Icon } from '../components/icons/Icons'
-import { formatARS, formatUSD, formatPrecio } from '../utils'
+import { formatARSCrudo, formatUSDCrudo, formatPrecio } from '../utils'
 import { estadoWatchlist, type EstadoAlerta } from '../utils/alertasPrecio'
 
 type Filtro = 'todas' | 'con_alerta'
 
 function formatMoneda(valor: number, moneda: string): string {
-  if (moneda === 'ARS') return formatARS(valor)
-  if (moneda === 'USD') return formatUSD(valor)
+  if (moneda === 'ARS') return formatARSCrudo(valor)
+  if (moneda === 'USD') return formatUSDCrudo(valor)
   return formatPrecio(valor)
 }
 

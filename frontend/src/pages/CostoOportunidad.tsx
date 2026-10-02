@@ -4,7 +4,9 @@ import { useNavigate } from 'react-router-dom'
 import { useInversionesContext } from '../context/InversionesContext'
 import { useBenchmarkSeleccionado } from '../hooks/useBenchmarkSeleccionado'
 import { getCostoOportunidad, type MonedaRiesgo } from '../api'
-import { calcularDesde, formatUSD, formatARS, formatPctRatio, type PeriodoEvolucion } from '../utils'
+import { calcularDesde, formatPctRatio, type PeriodoEvolucion } from '../utils'
+import { formatMonto } from '../utils/formatoMonto'
+import { useMontosOcultos } from '../utils/privacidad'
 import { qk } from '../api/queryClient'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
@@ -34,9 +36,9 @@ const OPCIONES_MONEDA: { value: MonedaRiesgo; label: string }[] = [
   { value: 'ars_real', label: 'ARS real (CER)' },
 ]
 
-function fmtMoneda(v: number | null | undefined, moneda: MonedaRiesgo): string {
-  if (v == null) return '—'
-  return moneda === 'usd' ? formatUSD(v) : formatARS(v)
+function fmtMoneda(v: number | null | undefined, moneda: MonedaRiesgo, ocultos: boolean): string {
+  // `ars_real` es la serie ajustada por CER: sigue siendo pesos.
+  return formatMonto(v, moneda === 'usd' ? 'USD' : 'ARS', ocultos)
 }
 
 function fmtFecha(iso: string | null): string {
@@ -50,6 +52,7 @@ export default function CostoOportunidad() {
   const { carteraSeleccionada } = useInversionesContext()
   const [periodo, setPeriodo] = useState<Periodo>('1Y')
   const [moneda, setMoneda] = useState<MonedaRiesgo>('usd')
+  const ocultos = useMontosOcultos()
   const { benchmarks, benchmarkSeleccionado, setBenchmarkSeleccionado } = useBenchmarkSeleccionado(carteraSeleccionada)
 
   const desde = calcularDesde(periodo)
@@ -149,7 +152,7 @@ export default function CostoOportunidad() {
                 </b>
                 . En dinero, al cierre del período la diferencia es de{' '}
                 <b className={data.diferencia_monetaria != null && data.diferencia_monetaria >= 0 ? 'text-app-pos' : 'text-app-neg'}>
-                  {fmtMoneda(data.diferencia_monetaria, moneda)}
+                  {fmtMoneda(data.diferencia_monetaria, moneda, ocultos)}
                 </b>
                 .
               </p>
@@ -174,13 +177,13 @@ export default function CostoOportunidad() {
               />
             </div>
             <div className="grid grid-cols-3 gap-2">
-              <MetricTile label="Valor de la cartera" value={fmtMoneda(data.valor_final_cartera, moneda)} />
-              <MetricTile label="Valor siguiendo la referencia" value={fmtMoneda(data.valor_final_referencia, moneda)} />
+              <MetricTile label="Valor de la cartera" value={fmtMoneda(data.valor_final_cartera, moneda, ocultos)} />
+              <MetricTile label="Valor siguiendo la referencia" value={fmtMoneda(data.valor_final_referencia, moneda, ocultos)} />
               <MetricTile
                 label="Diferencia"
-                value={fmtMoneda(data.diferencia_monetaria, moneda)}
+                value={fmtMoneda(data.diferencia_monetaria, moneda, ocultos)}
                 tone={data.diferencia_monetaria != null ? (data.diferencia_monetaria >= 0 ? 'pos' : 'neg') : undefined}
-                sub={`Mismo capital inicial (${fmtMoneda(data.valor_inicial, moneda)}) y los mismos aportes netos (${fmtMoneda(data.aportes_netos_periodo, moneda)})`}
+                sub={`Mismo capital inicial (${fmtMoneda(data.valor_inicial, moneda, ocultos)}) y los mismos aportes netos (${fmtMoneda(data.aportes_netos_periodo, moneda, ocultos)})`}
               />
             </div>
 
@@ -211,7 +214,7 @@ export default function CostoOportunidad() {
                   dataKeyCartera="valor_cartera"
                   dataKeyReferencia="valor_referencia"
                   nombreReferencia={data.referencia ?? 'Referencia'}
-                  formatValor={v => fmtMoneda(v, moneda)}
+                  formatValor={v => fmtMoneda(v, moneda, ocultos)}
                 />
               </Card>
               <p className="text-label text-app-text-faint mt-1.5">

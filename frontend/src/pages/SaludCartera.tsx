@@ -5,7 +5,7 @@ import { useInversionesContext } from '../context/InversionesContext'
 import { getSaludCartera, type SaludDimension, type SaludIndicador, type EstadoSalud } from '../api'
 import type { HelpKey } from '../help/content/index'
 import { qk } from '../api/queryClient'
-import { formatARS, formatUSD } from '../utils'
+import { useFormatoMoneda } from '../hooks/useFormatoMoneda'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
 import MetricTile from '../components/ui/MetricTile'
@@ -78,7 +78,7 @@ export default function SaludCartera() {
   const [dimensionAbierta, setDimensionAbierta] = useState<string | null>(null)
 
   const esARS = monedaSeleccionada === 'ARS'
-  const formatMoneda = esARS ? formatARS : formatUSD
+  const { monto: formatMoneda } = useFormatoMoneda()
 
   const saludQuery = useQuery({
     queryKey: qk.de('salud', carteraSeleccionada),

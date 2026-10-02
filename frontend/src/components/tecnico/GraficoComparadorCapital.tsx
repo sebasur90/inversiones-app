@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import type { ComparadorFilaOut } from '../../api'
-import { CHART_COLORS, formatARS, formatUSD, formatPrecio } from '../../utils'
+import { CHART_COLORS, formatARSCrudo, formatUSDCrudo, formatPrecio } from '../../utils'
 
 type Fila = { fecha: string } & Record<string, string | number | null>
 
@@ -10,8 +10,8 @@ function claveFila(f: ComparadorFilaOut): string {
 }
 
 function formatMoneda(v: number, moneda: string): string {
-  if (moneda === 'ARS') return formatARS(v)
-  if (moneda === 'USD') return formatUSD(v)
+  if (moneda === 'ARS') return formatARSCrudo(v)
+  if (moneda === 'USD') return formatUSDCrudo(v)
   return formatPrecio(v)
 }
 

@@ -1,5 +1,6 @@
 import type { EscenarioVidaOut } from '../../../api'
-import { formatUSD, formatARS, heatmapIntensity } from '../../../utils'
+import { heatmapIntensity } from '../../../utils'
+import { useFormatoFijo } from '../../../hooks/useFormatoMoneda'
 import BotonExportarCsv from '../../ui/BotonExportarCsv'
 import InfoTooltip from '../../../help/components/InfoTooltip'
 
@@ -8,7 +9,7 @@ interface Props {
 }
 
 export default function VidaComparacionTable({ resultado }: Props) {
-  const formatMonto = resultado.moneda === 'ARS' ? formatARS : formatUSD
+  const { monto: formatMonto } = useFormatoFijo(resultado.moneda === 'ARS' ? 'ARS' : 'USD')
   const hayInflacion = resultado.resultados.some(r => r.metricas.patrimonio_final_real != null)
 
   return (

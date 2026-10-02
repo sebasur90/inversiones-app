@@ -1,26 +1,22 @@
 import type { AporteAnioItem, AporteMesItem } from '../../api'
 import { heatmapIntensity } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
+import { MASCARA } from '../../utils/formatoMonto'
 import Card from '../ui/Card'
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
-/** `$1.2k` para que las 13 columnas entren en el ancho de un teléfono. */
-export function formatCompactUSD(v: number): string {
-  const abs = Math.abs(v)
-  const signo = v < 0 ? '-' : ''
-  if (abs >= 1_000_000) return `${signo}$${(abs / 1_000_000).toFixed(1)}M`
-  if (abs >= 10_000) return `${signo}$${(abs / 1000).toFixed(0)}k`
-  if (abs >= 1000) return `${signo}$${(abs / 1000).toFixed(1)}k`
-  return `${signo}$${abs.toFixed(0)}`
-}
-
-/** Texto del tooltip de una celda: monto y, si había objetivo vigente, cuánto se cumplió. */
-function detalleMes(item: AporteMesItem, conObjetivo: boolean): string {
-  const base = `${item.mes}: ${item.neto_usd.toFixed(2)} USD`
+/**
+ * Texto del tooltip de una celda: monto y, si había objetivo vigente, cuánto se cumplió.
+ * Con el modo privacidad los dos importes se tapan; el cumplimiento en % y el estado quedan.
+ */
+function detalleMes(item: AporteMesItem, conObjetivo: boolean, ocultos: boolean): string {
+  const importe = (v: number) => (ocultos ? MASCARA : v.toFixed(2))
+  const base = `${item.mes}: ${importe(item.neto_usd)} USD`
   if (!conObjetivo || item.objetivo_usd == null) return base
   const pct = item.cumplimiento_pct != null ? ` (${item.cumplimiento_pct.toFixed(0)}%)` : ''
   const estado = item.cumple_objetivo == null ? 'en curso' : item.cumple_objetivo ? 'cumplido' : 'no alcanzado'
-  return `${base}\nObjetivo ${item.objetivo_usd.toFixed(0)} USD${pct} · ${estado}`
+  return `${base}\nObjetivo ${ocultos ? MASCARA : item.objetivo_usd.toFixed(0)} USD${pct} · ${estado}`
 }
 
 /** Calendario año × mes del aporte neto. Misma tabla que `RendimientoHeatmap`, pero la
@@ -37,6 +33,9 @@ export default function AportesHeatmap({
   anios: AporteAnioItem[]
   mostrarObjetivo?: boolean
 }) {
+  // El tinte de las celdas se mantiene con el modo privacidad: es magnitud relativa al mejor mes,
+  // sin el tinte esto deja de ser un heatmap.
+  const { compactoFino, ocultos } = useFormatoFijo('USD')
   const porClave = new Map<string, AporteMesItem>()
   let maxAbs = 0
   for (const item of meses) {
@@ -83,9 +82,9 @@ export default function AportesHeatmap({
                       cumplio ? 'ring-1 ring-inset ring-app-pos' : ''
                     }`}
                     style={item ? heatmapIntensity(ratio(item.neto_usd, maxAbs), 100) : undefined}
-                    title={item ? detalleMes(item, mostrarObjetivo) : undefined}
+                    title={item ? detalleMes(item, mostrarObjetivo, ocultos) : undefined}
                   >
-                    {item ? formatCompactUSD(item.neto_usd) : '—'}
+                    {item ? compactoFino(item.neto_usd) : '—'}
                     {item?.en_curso ? '*' : ''}
                   </td>
                 )
@@ -94,7 +93,7 @@ export default function AportesHeatmap({
                 className="text-center font-mono font-bold tabular-nums text-app-text py-1.5 pl-2 border-l border-app-border rounded-[4px]"
                 style={heatmapIntensity(ratio(anio.total_usd, maxAnual), 100)}
               >
-                {formatCompactUSD(anio.total_usd)}
+                {compactoFino(anio.total_usd)}
                 {anio.en_curso ? '*' : ''}
               </td>
             </tr>

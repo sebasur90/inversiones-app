@@ -37,6 +37,7 @@ export type GlosarioKey =
   | 'efectoAportes'
   | 'twrBruto'
   | 'costoOperar'
+  | 'modoPrivacidad'
 
 export const GLOSARIO_HELP: Record<GlosarioKey, HelpContent> = {
   xirr: {
@@ -97,6 +98,18 @@ export const GLOSARIO_HELP: Record<GlosarioKey, HelpContent> = {
     howToInterpret:
       'Es negativo o cero. Cuanto más lejos de cero, más rendimiento perdiste por comisiones. Cero significa que no hubo comisiones registradas.',
     relatedTerms: ['twr', 'twrBruto'],
+  },
+  modoPrivacidad: {
+    title: 'Modo privacidad',
+    shortDescription:
+      'Un interruptor que reemplaza los importes de tu cartera por •••• en toda la app, para poder mirarla con alguien al lado. Se activa con el ojo del encabezado o desde Ajustes, y queda recordado.',
+    whyItMatters:
+      'Los rendimientos en %, las cantidades de nominales y los niveles de los semáforos siguen a la vista: podés seguir leyendo cómo va la cartera sin mostrar cuánta plata hay.',
+    howToInterpret:
+      'Las cotizaciones de mercado no se tapan (el precio de una acción es público, no dice nada de lo tuyo), así que Análisis técnico, Precios, Watchlist, Screener y los backtests se ven igual que siempre. En los gráficos se tapan el eje y el tooltip, pero la forma de la curva queda: es la misma información que el %, que ya está visible.',
+    limitations:
+      'Es una capa de presentación, no seguridad. No cubre: una captura de pantalla, un CSV exportado (sale con los números completos, a propósito), ni el precio de compra de tus posiciones, que queda visible junto a la cantidad. Los datos guardados para uso offline se borran con el botón de Ajustes.',
+    relatedTerms: ['invertido'],
   },
   simple: {
     title: 'Rendimiento simple',

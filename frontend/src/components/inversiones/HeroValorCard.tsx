@@ -1,5 +1,6 @@
 import type { EvolucionPunto, InversionesResumen } from '../../api'
-import { formatARS, formatPctRatio, formatUSD } from '../../utils'
+import { formatPctRatio } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import { Icon } from '../icons/Icons'
 import Sparkline from '../charts/Sparkline'
 import InfoTooltip from '../../help/components/InfoTooltip'
@@ -17,7 +18,9 @@ export default function HeroValorCard({
   const valorActual = esARS ? resumen?.valor_actual_ars : resumen?.valor_actual_usd
   const totalInvertido = esARS ? resumen?.total_invertido_ars : resumen?.total_invertido_usd
   const rendimiento = esARS ? resumen?.rendimiento_simple_ars : resumen?.rendimiento_simple_usd
-  const formatMoneda = esARS ? formatARS : formatUSD
+  const fmt = useFormatoFijo(moneda)
+  // El equivalente en pesos de la línea secundaria: va siempre en ARS, pase lo que pase arriba.
+  const fmtArs = useFormatoFijo('ARS')
   const deltaAbs = valorActual != null && totalInvertido != null ? valorActual - totalInvertido : null
   const positivo = (rendimiento ?? 0) >= 0
 
@@ -27,9 +30,9 @@ export default function HeroValorCard({
     <div className="bg-gradient-to-br from-app-surface to-app-surface-2 border border-app-border rounded-[18px] p-[18px] mb-3.5">
       <div className="text-label font-bold uppercase tracking-wide text-app-text-dim mb-1.5">Valor actual</div>
       <div className="font-mono text-hero font-semibold tracking-tight tabular-nums text-app-text">
-        {resumen ? formatMoneda(valorActual) : '—'}
+        {resumen ? fmt.monto(valorActual) : '—'}
       </div>
-      {!esARS && resumen && <div className="font-mono text-caption text-app-text-dim mt-0.5 tabular-nums">≈ {formatARS(resumen.valor_actual_ars)}</div>}
+      {!esARS && resumen && <div className="font-mono text-caption text-app-text-dim mt-0.5 tabular-nums">≈ {fmtArs.monto(resumen.valor_actual_ars)}</div>}
 
       {resumen && rendimiento != null && (
         <div className="mt-2.5">
@@ -47,8 +50,7 @@ export default function HeroValorCard({
             </span>
             {deltaAbs != null && (
               <span className="font-mono text-label text-app-text-dim tabular-nums">
-                {deltaAbs >= 0 ? '+' : ''}
-                {formatMoneda(deltaAbs)} vs. invertido
+                {fmt.montoConSigno(deltaAbs)} vs. invertido
               </span>
             )}
           </div>

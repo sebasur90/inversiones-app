@@ -11,7 +11,7 @@ import QueryBoundary from '../ui/QueryBoundary'
 import { Skeleton } from '../ui/Skeleton'
 import { Icon } from '../icons/Icons'
 import InfoTooltip from '../../help/components/InfoTooltip'
-import { calcularDesde, formatARS, formatPct, formatPrecio, formatUSD, type PeriodoEvolucion } from '../../utils'
+import { calcularDesde, formatARSCrudo, formatPct, formatPrecio, formatUSDCrudo, type PeriodoEvolucion } from '../../utils'
 import GraficoBacktest from './GraficoBacktest'
 import type { GatilloPrecio } from './PanelPrecio'
 
@@ -26,8 +26,8 @@ export const MOTIVO_LABEL: Record<string, string> = {
 }
 
 export function formatMoneda(valor: number, moneda: string): string {
-  if (moneda === 'ARS') return formatARS(valor)
-  if (moneda === 'USD') return formatUSD(valor)
+  if (moneda === 'ARS') return formatARSCrudo(valor)
+  if (moneda === 'USD') return formatUSDCrudo(valor)
   return formatPrecio(valor)
 }
 

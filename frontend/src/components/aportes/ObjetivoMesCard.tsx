@@ -4,7 +4,7 @@ import Card from '../ui/Card'
 import Button from '../ui/Button'
 import BarraProgreso from '../ui/BarraProgreso'
 import InfoTooltip from '../../help/components/InfoTooltip'
-import { formatUSD } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import { mesCorto, meses } from './comun'
 
 /** Objetivo del mes en curso: cuánto llevás, cuánto falta y a qué ritmo llegarías.
@@ -18,6 +18,7 @@ export default function ObjetivoMesCard({
   objetivo: AporteObjetivo
   onConfigurar: () => void
 }) {
+  const { monto: formatUSD } = useFormatoFijo('USD')
   const mesNombre = dayjs().format('MMMM')
 
   if (!objetivo.configurado || !objetivo.mes_actual) {

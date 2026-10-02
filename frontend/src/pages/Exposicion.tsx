@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useInversionesContext } from '../context/InversionesContext'
 import type { ExposicionItem } from '../api'
-import { CHART_COLORS, formatARS, formatUSD } from '../utils'
+import { CHART_COLORS } from '../utils'
+import { useFormatoFijo } from '../hooks/useFormatoMoneda'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import Donut from '../components/charts/Donut'
@@ -31,7 +32,7 @@ export default function Exposicion() {
   const { exposicion, monedaSeleccionada, loading } = useInversionesContext()
   const [ejeActivo, setEjeActivo] = useState<string | null>(null)
   const esARS = monedaSeleccionada === 'ARS'
-  const formatMoneda = esARS ? formatARS : formatUSD
+  const { monto: formatMoneda } = useFormatoFijo(esARS ? 'ARS' : 'USD')
 
   const eje = useMemo(() => {
     if (exposicion.ejes.length === 0) return null

@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useInversionesContext } from '../context/InversionesContext'
 import { getVencimientos, type VencimientoItem, type VencimientoAnioItem } from '../api'
-import { formatARS, formatUSD } from '../utils'
+import { useFormatoFijo } from '../hooks/useFormatoMoneda'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import VencimientoRow from '../components/inversiones/VencimientoRow'
 import Card from '../components/ui/Card'
@@ -19,7 +19,7 @@ function ResumenPorAnio({
   porAnio: VencimientoAnioItem[]
   esARS: boolean
 }) {
-  const fmt = esARS ? formatARS : formatUSD
+  const { monto: fmt } = useFormatoFijo(esARS ? 'ARS' : 'USD')
   const maxPct = Math.max(
     0.0001,
     ...porAnio.map(a => (esARS ? a.pct_cartera_ars : a.pct_cartera_usd) ?? 0),

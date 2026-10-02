@@ -3,7 +3,7 @@ import { getPatrimonioSummary } from '../../api'
 import { qk } from '../../api/queryClient'
 import Card from '../ui/Card'
 import InfoTooltip from '../../help/components/InfoTooltip'
-import { formatUSD } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 
 /** Cuánto de tu patrimonio pusiste vos y cuánto lo pusieron las inversiones.
  *
@@ -14,6 +14,7 @@ import { formatUSD } from '../../utils'
  *  Es una segunda consulta y puede fallar sin arrastrar al resto de la pantalla: en ese caso la
  *  tarjeta no se dibuja. */
 export default function AportesVsCrecimientoCard({ cartera }: { cartera: string | null }) {
+  const { monto: formatUSD } = useFormatoFijo('USD')
   const query = useQuery({
     queryKey: qk.de('patrimonio-summary', cartera),
     queryFn: () => getPatrimonioSummary(cartera),

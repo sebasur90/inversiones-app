@@ -2,7 +2,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell,
 } from 'recharts'
 import type { InversionesResumen } from '../../api'
-import { formatARS } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 
 interface BarData {
   name: string
@@ -41,6 +41,9 @@ const renderCustomLabel = (props: any): React.ReactElement | null => {
 }
 
 export default function ComparacionChart({ resumen }: { resumen: InversionesResumen | null }) {
+  // Las barras están siempre en pesos. Los deltas en % de arriba de cada barra quedan visibles.
+  const { monto, compacto } = useFormatoFijo('ARS')
+
   if (!resumen) {
     return <div className="text-center py-10 text-app-text-dim text-caption">Sin datos de comparación</div>
   }
@@ -61,11 +64,11 @@ export default function ComparacionChart({ resumen }: { resumen: InversionesResu
         <BarChart data={data} margin={{ top: 44, right: 4, left: 4, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1c1f2a" />
           <XAxis dataKey="name" stroke="#94a3b8" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-          <YAxis stroke="#94a3b8" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={v => `$${v.toLocaleString('es-AR')}`} width={64} />
+          <YAxis stroke="#94a3b8" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={v => compacto(v as number)} width={64} />
           <Tooltip
             contentStyle={{ background: '#171b26', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, fontSize: 12 }}
             labelStyle={{ color: '#f8fafc' }}
-            formatter={(v: any) => (v !== null ? formatARS(v) : 'N/A')}
+            formatter={(v: any) => (v !== null ? monto(v) : 'N/A')}
             labelFormatter={() => 'Comparación'}
             cursor={{ fill: 'rgba(255,255,255,0.04)' }}
           />

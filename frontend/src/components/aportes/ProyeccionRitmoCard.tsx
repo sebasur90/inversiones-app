@@ -5,7 +5,8 @@ import Card from '../ui/Card'
 import Button from '../ui/Button'
 import Segmented from '../ui/Segmented'
 import InfoTooltip from '../../help/components/InfoTooltip'
-import { formatUSD } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
+import { formatUSDCrudo } from '../../utils'
 
 const ORIGEN_TEXTO: Record<string, string> = {
   promedio_12: 'tu promedio de los últimos 12 meses',
@@ -21,6 +22,7 @@ const ORIGEN_TEXTO: Record<string, string> = {
 export default function ProyeccionRitmoCard({ proyeccion }: { proyeccion: AporteProyeccionRitmo }) {
   const navigate = useNavigate()
   const [escenario, setEscenario] = useState('base')
+  const { monto: formatUSD } = useFormatoFijo('USD')
 
   if (proyeccion.origen === 'insuficiente' || proyeccion.ritmo_mensual_usd == null) {
     return (
@@ -34,11 +36,13 @@ export default function ProyeccionRitmoCard({ proyeccion }: { proyeccion: Aporte
     )
   }
 
+  // Estas etiquetas son el control para elegir escenario, no un dato: tapadas quedarían tres
+  // opciones idénticas y el selector dejaría de servir. Van con el formateador crudo a propósito.
   const opciones = [
     { value: 'base', label: 'Tu ritmo' },
     ...proyeccion.escenarios_aumento.map(e => ({
       value: e.clave,
-      label: `+${formatUSD(e.delta_mensual_usd)}`,
+      label: `+${formatUSDCrudo(e.delta_mensual_usd)}`,
     })),
   ]
   const elegido = proyeccion.escenarios_aumento.find(e => e.clave === escenario)

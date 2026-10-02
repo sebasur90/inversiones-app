@@ -7,6 +7,7 @@ import Modal from '../ui/Modal'
 import BuscadorGlobal from './BuscadorGlobal'
 import GuiaPantalla from '../../help/components/GuiaPantalla'
 import { calcularFrescura, type NivelFrescura } from '../../utils/frescura'
+import { toggleMontosOcultos, useMontosOcultos } from '../../utils/privacidad'
 
 const COLOR_FRESCURA: Record<NivelFrescura, string> = {
   fresco: 'text-app-text-dim',
@@ -23,6 +24,22 @@ export default function ScreenHeader({ title, onBack }: { title: string; onBack?
   } = useInversionesContext()
   const [carteraModalOpen, setCarteraModalOpen] = useState(false)
   const [buscadorOpen, setBuscadorOpen] = useState(false)
+  const montosOcultos = useMontosOcultos()
+
+  // El ojo del modo privacidad va en las dos variantes del encabezado (la app es de teléfono: si
+  // sólo estuviera en la principal, taparías los montos recién después de volver al inicio).
+  // Muestra el estado actual; el aria-label describe la acción, como manda la convención.
+  const botonPrivacidad = (
+    <IconButton
+      onClick={toggleMontosOcultos}
+      aria-pressed={montosOcultos}
+      aria-label={montosOcultos ? 'Mostrar los importes' : 'Ocultar los importes'}
+      tone={montosOcultos ? 'accent' : 'default'}
+      className="shrink-0"
+    >
+      <Icon name={montosOcultos ? 'eyeOff' : 'eye'} className="w-[18px] h-[18px]" />
+    </IconButton>
+  )
 
   if (onBack) {
     return (
@@ -31,7 +48,8 @@ export default function ScreenHeader({ title, onBack }: { title: string; onBack?
           <IconButton onClick={onBack} aria-label="Volver">
             <Icon name="back" />
           </IconButton>
-          <h1 className="font-display text-heading font-semibold text-app-text truncate">{title}</h1>
+          <h1 className="font-display text-heading font-semibold text-app-text truncate flex-1 min-w-0">{title}</h1>
+          {botonPrivacidad}
         </div>
         <GuiaPantalla />
       </>
@@ -64,6 +82,7 @@ export default function ScreenHeader({ title, onBack }: { title: string; onBack?
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
+          {botonPrivacidad}
           <IconButton onClick={() => setBuscadorOpen(true)} aria-label="Buscar ticker o pantalla">
             <Icon name="search" className="w-[18px] h-[18px]" />
           </IconButton>

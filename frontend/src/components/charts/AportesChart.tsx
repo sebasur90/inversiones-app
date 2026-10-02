@@ -3,7 +3,7 @@ import {
 } from 'recharts'
 import dayjs from 'dayjs'
 import type { AportesHistoricosOut } from '../../api'
-import { formatUSD } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 
 export default function AportesChart({
   aportesHistoricos,
@@ -12,6 +12,10 @@ export default function AportesChart({
   aportesHistoricos: AportesHistoricosOut | null
   montoObjetivo?: number | null
 }) {
+  // Con el modo privacidad se tapan el eje, el tooltip y los totales de abajo. La forma de la
+  // curva queda: dice lo mismo que el rendimiento en %, que también queda a la vista.
+  const { monto, montoConSigno, compactoFino } = useFormatoFijo('USD')
+
   if (!aportesHistoricos || aportesHistoricos.curva.length === 0) {
     return <div className="text-center py-8 text-app-text-dim text-caption">Sin movimientos en esta cartera</div>
   }
@@ -38,12 +42,12 @@ export default function AportesChart({
             tickFormatter={v => dayjs(`${v}-01`).format('MMM YY')}
             interval="preserveStartEnd"
           />
-          <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} tickFormatter={v => `$${((v as number) / 1000).toFixed(0)}k`} width={42} />
+          <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} tickFormatter={v => compactoFino(v as number)} width={42} />
           <Tooltip
             contentStyle={{ background: '#171b26', border: '1px solid #1c1f2a', borderRadius: 10, fontSize: 12 }}
             labelStyle={{ color: '#f8fafc' }}
             labelFormatter={v => dayjs(`${v}-01`).format('MMMM YYYY')}
-            formatter={(v: number, name: string) => (name === 'aportes_netos_acumulados' ? [formatUSD(v), 'Aportes acumulados'] : [v, name])}
+            formatter={(v: number, name: string) => (name === 'aportes_netos_acumulados' ? [monto(v), 'Aportes acumulados'] : [v, name])}
           />
           {montoObjetivo && (
             <ReferenceLine y={montoObjetivo} stroke="#10b981" strokeDasharray="6 3" label={{ value: 'Meta', fill: '#10b981', fontSize: 11 }} />
@@ -63,12 +67,12 @@ export default function AportesChart({
         </ComposedChart>
       </ResponsiveContainer>
       <div className="mt-3 text-label text-app-text-dim space-y-1">
-        <div>Últimos aportes netos acumulados: <strong className="text-app-text">{formatUSD(acumuladoFinal)}</strong></div>
-        <div>Valor actual (hoy): <strong className="text-app-text">{formatUSD(aportesHistoricos.valor_actual_usd)}</strong></div>
+        <div>Últimos aportes netos acumulados: <strong className="text-app-text">{monto(acumuladoFinal)}</strong></div>
+        <div>Valor actual (hoy): <strong className="text-app-text">{monto(aportesHistoricos.valor_actual_usd)}</strong></div>
         <div>
           Rendimiento acumulado:{' '}
           <strong className={rendimientoAcumulado >= 0 ? 'text-app-pos' : 'text-app-neg'}>
-            {rendimientoAcumulado >= 0 ? '+' : ''}{formatUSD(rendimientoAcumulado)} ({rendimientoPct >= 0 ? '+' : ''}{rendimientoPct.toFixed(1)}%)
+            {montoConSigno(rendimientoAcumulado)} ({rendimientoPct >= 0 ? '+' : ''}{rendimientoPct.toFixed(1)}%)
           </strong>
         </div>
       </div>

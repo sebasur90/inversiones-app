@@ -1,4 +1,5 @@
-import { heatmapIntensity, formatUSD } from '../../utils'
+import { heatmapIntensity } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import Card from '../ui/Card'
 
 interface CeldaData {
@@ -11,6 +12,12 @@ interface SensibilidadGridProps {
   tasas: number[]
   aportes: number[]
   mesesRestantesAlFinal: number
+  /**
+   * El aporte mensual que haría falta para llegar a la meta. Con el modo privacidad los importes
+   * de los encabezados se tapan, y cuatro columnas `$••••` iguales dejarían la grilla ilegible:
+   * en ese caso se rotulan como múltiplos de esta referencia.
+   */
+  aporteReferenciaUsd?: number | null
 }
 
 function calcularIntensidad(mesesResultado: number | null, mesesRestantes: number): number | null {
@@ -24,7 +31,16 @@ export default function SensibilidadGrid({
   tasas,
   aportes,
   mesesRestantesAlFinal,
+  aporteReferenciaUsd,
 }: SensibilidadGridProps) {
+  const { monto, ocultos } = useFormatoFijo('USD')
+
+  const rotuloAporte = (aporte: number): string => {
+    if (!ocultos || !aporteReferenciaUsd) return monto(aporte)
+    const multiplo = aporte / aporteReferenciaUsd
+    return `×${multiplo.toFixed(2).replace(/\.?0+$/, '').replace('.', ',')}`
+  }
+
   if (grilla.length === 0 || grilla[0].length === 0) {
     return (
       <div className="text-center py-8 text-app-text-dim text-caption">
@@ -46,8 +62,8 @@ export default function SensibilidadGrid({
                 key={idx}
                 className="text-center text-app-text-faint font-bold uppercase text-label pb-2 px-0.5 min-w-[60px]"
               >
-                <div>{formatUSD(aporte)}</div>
-                <div className="text-label font-normal">/mes</div>
+                <div>{rotuloAporte(aporte)}</div>
+                <div className="text-label font-normal">{ocultos && aporteReferenciaUsd ? 'del necesario' : '/mes'}</div>
               </th>
             ))}
           </tr>

@@ -1,5 +1,6 @@
 import type { RebalanceoItem } from '../../api'
-import { formatARS, formatPct, formatUSD } from '../../utils'
+import { formatPct } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 
 export default function RebalanceoRow({
   item,
@@ -11,7 +12,7 @@ export default function RebalanceoRow({
   toleranciaPp: number
 }) {
   const esARS = moneda === 'ARS'
-  const formatMoneda = esARS ? formatARS : formatUSD
+  const fmt = useFormatoFijo(moneda)
   const valorActual = esARS ? item.valor_actual_ars : item.valor_actual_usd
   const dentroDeTolerancia = Math.abs(item.delta_pp) <= toleranciaPp
 
@@ -19,7 +20,7 @@ export default function RebalanceoRow({
     <div>
       <div className="flex justify-between items-baseline text-caption mb-1.5">
         <span className="text-app-text">{item.etiqueta}</span>
-        <span className="font-mono font-bold text-app-text tabular-nums">{formatMoneda(valorActual)}</span>
+        <span className="font-mono font-bold text-app-text tabular-nums">{fmt.monto(valorActual)}</span>
       </div>
       <div className="relative h-1.5 rounded-full bg-app-surface-2">
         <div

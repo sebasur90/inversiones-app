@@ -2,12 +2,13 @@ import type { AporteMision } from '../../api'
 import Card from '../ui/Card'
 import BarraProgreso from '../ui/BarraProgreso'
 import InfoTooltip from '../../help/components/InfoTooltip'
-import { formatUSD } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 
 /** Próximo paso concreto, siempre de comportamiento: sostener la racha o cumplir la meta que el
  *  propio usuario fijó. Nunca sugiere subir el aporte ni tomar más riesgo. */
 export default function MisionCard({ mision }: { mision: AporteMision }) {
-  const fmt = (v: number) => (mision.unidad === 'usd' ? formatUSD(v) : String(v))
+  const { monto } = useFormatoFijo('USD')
+  const fmt = (v: number) => (mision.unidad === 'usd' ? monto(v) : String(v))
 
   return (
     <Card className="mb-4 border-l-[3px] border-l-app-accent">

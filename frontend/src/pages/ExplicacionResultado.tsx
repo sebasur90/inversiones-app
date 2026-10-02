@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import { useInversionesContext } from '../context/InversionesContext'
 import { getExplicacionResultado, type ExplicacionItem, type ExplicacionNoDisponible } from '../api'
 import { calcularDesde, type PeriodoEvolucion } from '../utils'
+import { MASCARA } from '../utils/formatoMonto'
+import { useMontosOcultos } from '../utils/privacidad'
 import { qk } from '../api/queryClient'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
@@ -32,12 +34,15 @@ function toneClass(v: number | null | undefined): string {
   return v >= 0 ? 'text-app-pos' : 'text-app-neg'
 }
 
-function fmtMonto(v: number | null | undefined, esUSD: boolean): string {
+// Conserva el signo explícito también con el modo privacidad: el `+`/`−` dice si el componente
+// sumó o restó, que es de lo que habla esta pantalla, y no revela cuánta plata hay.
+function fmtMonto(v: number | null | undefined, esUSD: boolean, ocultos: boolean): string {
   if (v == null) return 'No disponible'
   const abs = Math.abs(v)
   const signo = v < 0 ? '-' : v > 0 ? '+' : ''
   const prefijo = esUSD ? 'U$S' : '$'
-  return `${signo}${prefijo} ${abs.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`
+  const numero = ocultos ? MASCARA : abs.toLocaleString('es-AR', { maximumFractionDigits: 0 })
+  return `${signo}${prefijo} ${numero}`
 }
 
 function fmtPct(v: number | null | undefined): string {
@@ -47,17 +52,19 @@ function fmtPct(v: number | null | undefined): string {
 }
 
 function ComponenteRow({ label, valor, esUSD, term }: { label: string; valor: number | null | undefined; esUSD: boolean; term?: HelpKey }) {
+  const ocultos = useMontosOcultos()
   return (
     <div className="flex justify-between text-label py-1">
       <span className="text-app-text-dim">{term ? <InfoTooltip term={term} label={label} /> : label}</span>
       <span className={`font-mono ${valor == null ? 'text-app-text-faint' : toneClass(valor)}`}>
-        {valor == null ? 'No disponible' : fmtMonto(valor, esUSD)}
+        {valor == null ? 'No disponible' : fmtMonto(valor, esUSD, ocultos)}
       </span>
     </div>
   )
 }
 
 function AtribucionBar({ item, maxAbs, esUSD }: { item: ExplicacionItem; maxAbs: number; esUSD: boolean }) {
+  const ocultos = useMontosOcultos()
   const pct = item.contribucion_pct
   const ancho = pct != null && maxAbs > 0 ? (Math.abs(pct) / maxAbs) * 100 : 0
   return (
@@ -73,13 +80,14 @@ function AtribucionBar({ item, maxAbs, esUSD }: { item: ExplicacionItem; maxAbs:
         <div className={`h-full rounded-full ${(pct ?? 0) >= 0 ? 'bg-app-pos' : 'bg-app-neg'}`} style={{ width: `${ancho}%` }} />
       </div>
       <div className="flex justify-between text-label text-app-text-dim">
-        <span>P&amp;L: {fmtMonto(item.pnl, esUSD)}</span>
+        <span>P&amp;L: {fmtMonto(item.pnl, esUSD, ocultos)}</span>
       </div>
     </div>
   )
 }
 
 function RankingRow({ item, esUSD }: { item: ExplicacionItem; esUSD: boolean }) {
+  const ocultos = useMontosOcultos()
   return (
     <div className="flex items-center justify-between py-2 border-b border-app-border-soft last:border-b-0">
       <div className="min-w-0">
@@ -87,7 +95,7 @@ function RankingRow({ item, esUSD }: { item: ExplicacionItem; esUSD: boolean }) 
         <div className="text-label text-app-text-faint truncate">{item.nombre}</div>
       </div>
       <div className={`font-mono font-bold text-caption tabular-nums shrink-0 ml-2 ${toneClass(item.pnl)}`}>
-        {fmtMonto(item.pnl, esUSD)}
+        {fmtMonto(item.pnl, esUSD, ocultos)}
       </div>
     </div>
   )
@@ -108,6 +116,7 @@ export default function ExplicacionResultado() {
   const [periodo, setPeriodo] = useState<Periodo>('1Y')
 
   const esUSD = monedaSeleccionada === 'USD'
+  const ocultos = useMontosOcultos()
   const moneda = esUSD ? 'usd' : 'ars'
   const desde = calcularDesde(periodo)
 
@@ -140,14 +149,14 @@ export default function ExplicacionResultado() {
               </h3>
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <MetricTile label="Rendimiento del período" value={fmtPct(data.resultado.twr_pct)} tone={data.resultado.twr_pct != null ? (data.resultado.twr_pct >= 0 ? 'pos' : 'neg') : undefined} />
-                <MetricTile label="P&L" value={fmtMonto(data.resultado.pnl, esUSD)} tone={data.resultado.pnl != null ? (data.resultado.pnl >= 0 ? 'pos' : 'neg') : undefined} />
-                <MetricTile label="Aportes" value={fmtMonto(data.resultado.aportes, esUSD)} />
-                <MetricTile label="Retiros" value={fmtMonto(data.resultado.retiros, esUSD)} />
+                <MetricTile label="P&L" value={fmtMonto(data.resultado.pnl, esUSD, ocultos)} tone={data.resultado.pnl != null ? (data.resultado.pnl >= 0 ? 'pos' : 'neg') : undefined} />
+                <MetricTile label="Aportes" value={fmtMonto(data.resultado.aportes, esUSD, ocultos)} />
+                <MetricTile label="Retiros" value={fmtMonto(data.resultado.retiros, esUSD, ocultos)} />
               </div>
               {data.resultado.amortizaciones != null && Math.abs(data.resultado.amortizaciones) > 0.5 && (
                 <div className="text-label text-app-text-dim mb-2">
                   <InfoTooltip term="explicacion_amortizaciones" label="Amortizaciones cobradas (capital devuelto, no ganancia)" />:{' '}
-                  <span className="font-mono">{fmtMonto(data.resultado.amortizaciones, esUSD)}</span>
+                  <span className="font-mono">{fmtMonto(data.resultado.amortizaciones, esUSD, ocultos)}</span>
                 </div>
               )}
 
@@ -157,7 +166,7 @@ export default function ExplicacionResultado() {
                   {data.por_mercado.map(it => (
                     <div key={it.etiqueta} className="flex justify-between text-caption py-1">
                       <span className="text-app-text">{it.etiqueta}</span>
-                      <span className={`font-mono ${toneClass(it.pnl)}`}>{fmtMonto(it.pnl, esUSD)}</span>
+                      <span className={`font-mono ${toneClass(it.pnl)}`}>{fmtMonto(it.pnl, esUSD, ocultos)}</span>
                     </div>
                   ))}
                 </Card>

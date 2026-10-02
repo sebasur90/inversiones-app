@@ -1,5 +1,5 @@
 import type { PropuestaRebalanceoItem } from '../../api'
-import { formatUSD } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 
 const ACCION_LABELS: Record<string, string> = {
   comprar: 'Comprar',
@@ -14,6 +14,8 @@ const ACCION_CLASSES: Record<string, string> = {
 }
 
 export default function PropuestaRebalanceoRow({ item }: { item: PropuestaRebalanceoItem }) {
+  // Los importes sugeridos vienen siempre en dólares, no en la moneda del encabezado.
+  const fmt = useFormatoFijo('USD')
   const nombre = item.posicion ?? item.categoria
 
   return (
@@ -31,13 +33,13 @@ export default function PropuestaRebalanceoRow({ item }: { item: PropuestaRebala
           </span>
           {item.accion !== 'mantener' && (
             <div className="font-mono text-caption font-bold text-app-text tabular-nums mt-1">
-              {formatUSD(Math.abs(item.importe_sugerido_usd))}
+              {fmt.monto(Math.abs(item.importe_sugerido_usd))}
             </div>
           )}
         </div>
       </div>
       {item.accion !== 'mantener' && item.comision_estimada_usd > 0 && (
-        <div className="text-label text-app-text-faint mt-0.5">Comisión estimada: {formatUSD(item.comision_estimada_usd)}</div>
+        <div className="text-label text-app-text-faint mt-0.5">Comisión estimada: {fmt.monto(item.comision_estimada_usd)}</div>
       )}
       <div className="text-label text-app-text-dim mt-1">{item.motivo}</div>
     </div>

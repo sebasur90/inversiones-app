@@ -10,6 +10,7 @@ import {
   Legend,
 } from 'recharts'
 import { EscenarioSimulacionOut } from '../../api'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 
 interface EscenarioProyeccionChartProps {
   resultado: EscenarioSimulacionOut
@@ -25,6 +26,8 @@ const COLORES = {
 }
 
 export default function EscenarioProyeccionChart({ resultado }: EscenarioProyeccionChartProps) {
+  const { monto, compacto } = useFormatoFijo('USD')
+
   // Construir datos para el gráfico
   // Todos los escenarios tienen la misma cantidad de puntos (mismo horizonte)
   const data = resultado.resultados[0]?.puntos.map((punto, idx) => {
@@ -59,7 +62,7 @@ export default function EscenarioProyeccionChart({ resultado }: EscenarioProyecc
         <YAxis
           tick={{ fontSize: 10 }}
           stroke="#94a3b8"
-          tickFormatter={(val) => `$${(val / 1000).toFixed(0)}k`}
+          tickFormatter={(val) => compacto(val as number)}
         />
         <Tooltip
           contentStyle={{
@@ -69,7 +72,7 @@ export default function EscenarioProyeccionChart({ resultado }: EscenarioProyecc
             fontSize: 12,
           }}
           labelStyle={{ color: '#ccc' }}
-          formatter={(val: any) => `$${(val as number).toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
+          formatter={(val: any) => monto(val as number)}
           labelFormatter={(label) => {
             if (typeof label === 'string') {
               const d = new Date(label)

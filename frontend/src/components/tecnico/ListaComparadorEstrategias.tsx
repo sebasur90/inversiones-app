@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { ComparadorFilaOut } from '../../api'
-import { formatARS, formatUSD, formatPrecio } from '../../utils'
+import { formatARSCrudo, formatUSDCrudo, formatPrecio } from '../../utils'
 
 const ETIQUETA_ESTADO: Record<string, string> = {
   sin_senales: 'Sin señales',
@@ -55,8 +55,8 @@ function comparar(a: string | number | null, b: string | number | null, asc: boo
 }
 
 function formatMoneda(v: number, moneda: string): string {
-  if (moneda === 'ARS') return formatARS(v)
-  if (moneda === 'USD') return formatUSD(v)
+  if (moneda === 'ARS') return formatARSCrudo(v)
+  if (moneda === 'USD') return formatUSDCrudo(v)
   return formatPrecio(v)
 }
 

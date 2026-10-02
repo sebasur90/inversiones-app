@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useInversionesContext } from '../context/InversionesContext'
-import { formatARS, formatUSD } from '../utils'
+import { useFormatoFijo, useFormatoMoneda } from '../hooks/useFormatoMoneda'
 import {
   getConfiguracionCartera,
   simularRebalanceo,
@@ -29,7 +29,9 @@ export default function Rebalanceo() {
   const { carteraSeleccionada, rebalanceo, monedaSeleccionada, loading, error } = useInversionesContext()
   const [ejeActivo, setEjeActivo] = useState<string | null>(null)
   const esARS = monedaSeleccionada === 'ARS'
-  const formatMoneda = esARS ? formatARS : formatUSD
+  const { monto: formatMoneda } = useFormatoMoneda()
+  // Los totales del simulador de aporte vienen siempre en dólares.
+  const { monto: formatUSD } = useFormatoFijo('USD')
 
   const configuracionQuery = useQuery({
     queryKey: qk.de('configuracion', carteraSeleccionada),

@@ -21,6 +21,8 @@ export type IconName =
   | 'info'
   | 'scale'
   | 'more'
+  | 'eye'
+  | 'eyeOff'
 
 export function IconSprite() {
   return (
@@ -120,6 +122,16 @@ export function IconSprite() {
           <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" />
           <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" />
           <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" />
+        </symbol>
+        {/* El id va en camelCase porque `Icon` interpola `#i-${name}` sin transformar. */}
+        <symbol id="i-eye" viewBox="0 0 24 24">
+          <path d="M2.5 12S6 5.5 12 5.5s9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z" />
+          <circle cx="12" cy="12" r="3" />
+        </symbol>
+        <symbol id="i-eyeOff" viewBox="0 0 24 24">
+          <path d="M2.5 12S6 5.5 12 5.5s9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z" />
+          <circle cx="12" cy="12" r="3" />
+          <line x1="4" y1="20" x2="20" y2="4" />
         </symbol>
       </defs>
     </svg>

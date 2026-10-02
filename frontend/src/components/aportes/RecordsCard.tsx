@@ -1,11 +1,12 @@
 import type { AporteRecords } from '../../api'
 import Card from '../ui/Card'
-import { formatUSD } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import { mesCorto, meses } from './comun'
 
 /** Récords personales. La comparación es siempre contra uno mismo: no hay rankings ni otros
  *  usuarios. Lo que no se puede calcular todavía se omite, no se rellena con ceros. */
 export default function RecordsCard({ records }: { records: AporteRecords }) {
+  const { monto: formatUSD } = useFormatoFijo('USD')
   const filas: { clave: string; emoji: string; titulo: string; valor: string; detalle?: string }[] = []
 
   if (records.mayor_aporte_mensual) {

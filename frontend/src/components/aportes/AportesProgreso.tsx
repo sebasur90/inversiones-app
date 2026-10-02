@@ -6,7 +6,7 @@ import {
   type RitmoAportesOut,
 } from '../../api'
 import { qk } from '../../api/queryClient'
-import { formatUSD } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import Card from '../ui/Card'
 import MetricTile from '../ui/MetricTile'
 import Segmented from '../ui/Segmented'
@@ -45,6 +45,7 @@ export default function AportesProgreso({
   cartera: string | null
 }) {
   const qc = useQueryClient()
+  const { monto: formatUSD } = useFormatoFijo('USD')
   const [modalAbierto, setModalAbierto] = useState(false)
   const [ventana, setVentana] = useState<Ventana>('12')
   const [error, setError] = useState<ParsedApiError | null>(null)

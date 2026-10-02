@@ -1,22 +1,10 @@
 import type { PatrimonioPunto } from '../../api'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import Card from '../ui/Card'
 
 interface PatrimonioMensualTableProps {
   puntos: PatrimonioPunto[]
   esUSD: boolean
-}
-
-function formatCompact(v: number, esUSD: boolean): string {
-  const abs = Math.abs(v)
-  const signo = v < 0 ? '-' : ''
-  if (esUSD) {
-    if (abs >= 1_000_000) return `${signo}U$S ${(abs / 1_000_000).toFixed(1)}M`
-    if (abs >= 1000) return `${signo}U$S ${(abs / 1000).toFixed(0)}K`
-    return `${signo}U$S ${abs.toFixed(2)}`
-  }
-  if (abs >= 1_000_000) return `${signo}$${(abs / 1_000_000).toFixed(1)}M`
-  if (abs >= 1000) return `${signo}$${(abs / 1000).toFixed(0)}K`
-  return `${signo}$${abs.toFixed(0)}`
 }
 
 function formatFecha(iso: string): string {
@@ -30,6 +18,8 @@ function formatPctRatio(v: number | null): string {
 }
 
 export default function PatrimonioMensualTable({ puntos, esUSD }: PatrimonioMensualTableProps) {
+  const { compacto } = useFormatoFijo(esUSD ? 'USD' : 'ARS')
+
   if (puntos.length === 0) {
     return <div className="text-caption text-app-text-dim text-center py-4">Sin datos para mostrar</div>
   }
@@ -66,10 +56,10 @@ export default function PatrimonioMensualTable({ puntos, esUSD }: PatrimonioMens
           {datos.map((d, idx) => (
             <tr key={idx} className="border-b border-app-border-soft last:border-b-0 hover:bg-app-surface-hover">
               <td className="text-left text-app-text-dim py-2 px-2">{d.fecha}</td>
-              <td className="text-right text-app-text font-mono py-2 px-2 tabular-nums">{formatCompact(d.aportes_delta, esUSD)}</td>
-              <td className="text-right text-app-text font-mono py-2 px-2 tabular-nums font-semibold">{formatCompact(d.valor, esUSD)}</td>
+              <td className="text-right text-app-text font-mono py-2 px-2 tabular-nums">{compacto(d.aportes_delta)}</td>
+              <td className="text-right text-app-text font-mono py-2 px-2 tabular-nums font-semibold">{compacto(d.valor)}</td>
               <td className={`text-right font-mono py-2 px-2 tabular-nums ${d.ganancia >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
-                {formatCompact(d.ganancia, esUSD)}
+                {compacto(d.ganancia)}
               </td>
               <td className={`text-right font-mono py-2 px-2 tabular-nums ${d.rendimiento === null ? 'text-app-text-dim' : d.rendimiento >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
                 {formatPctRatio(d.rendimiento)}

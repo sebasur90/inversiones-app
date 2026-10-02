@@ -3,7 +3,8 @@ import { qk } from '../api/queryClient'
 import { useNavigate } from 'react-router-dom'
 import { useInversionesContext } from '../context/InversionesContext'
 import { getPnlRealizadoNoRealizado, getRendimientoMensual, getPerformanceRelativa, getDescomposicionFx } from '../api'
-import { formatARS, formatUSD, formatPctRatio } from '../utils'
+import { formatPctRatio } from '../utils'
+import { useFormatoMoneda } from '../hooks/useFormatoMoneda'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
@@ -52,7 +53,7 @@ export default function Rendimiento() {
   const loading = rendimientoQuery.isLoading
 
   const esARS = monedaSeleccionada === 'ARS'
-  const formatMoneda = esARS ? formatARS : formatUSD
+  const { monto: formatMoneda } = useFormatoMoneda()
   const c = pnl?.consolidado
 
   const realizado = c ? (esARS ? c.realizado_ars : c.realizado_usd) : null

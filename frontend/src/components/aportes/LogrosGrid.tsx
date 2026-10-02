@@ -4,16 +4,17 @@ import Card from '../ui/Card'
 import Button from '../ui/Button'
 import BarraProgreso from '../ui/BarraProgreso'
 import InfoTooltip from '../../help/components/InfoTooltip'
-import { formatUSD } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import { mesCorto } from './comun'
 
 const VISIBLES_POR_DEFECTO = 6
 
-function valorTexto(logro: AporteLogro, valor: number): string {
-  return logro.unidad === 'usd' ? formatUSD(valor) : String(Math.round(valor))
+function valorTexto(logro: AporteLogro, valor: number, monto: (v: number) => string): string {
+  return logro.unidad === 'usd' ? monto(valor) : String(Math.round(valor))
 }
 
 function LogroFila({ logro }: { logro: AporteLogro }) {
+  const { monto } = useFormatoFijo('USD')
   const bloqueadoSinObjetivo = logro.bloqueado_por_falta_objetivo && !logro.desbloqueado
 
   return (
@@ -47,7 +48,7 @@ function LogroFila({ logro }: { logro: AporteLogro }) {
                 <BarraProgreso pct={logro.progreso_pct} alto="fino" />
               </div>
               <div className="text-label text-app-text-faint mt-1 font-mono tabular-nums">
-                {valorTexto(logro, logro.actual ?? 0)} / {valorTexto(logro, logro.objetivo)}
+                {valorTexto(logro, logro.actual ?? 0, monto)} / {valorTexto(logro, logro.objetivo, monto)}
               </div>
             </>
           )}

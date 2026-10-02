@@ -364,9 +364,16 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
   },
 
   '/ajustes': {
-    queEs: 'Tus preferencias personales: moneda, sincronización automática, alertas y tamaño de texto.',
-    comoLeerla: ['Nada de esto cambia tus datos: sólo cómo se te muestran.'],
-    queHacer: ['"Restablecer" vuelve todo a los valores de fábrica sin tocar tu cartera.'],
+    queEs: 'Tus preferencias personales: moneda, privacidad, sincronización automática, alertas y tamaño de texto.',
+    comoLeerla: [
+      'Nada de esto cambia tus datos: sólo cómo se te muestran.',
+      'El ojo del encabezado activa y desactiva el modo privacidad desde cualquier pantalla, sin entrar acá.',
+    ],
+    queHacer: [
+      '"Restablecer" vuelve todo a los valores de fábrica sin tocar tu cartera.',
+      'Si prestás el teléfono o lo perdés, "Borrar datos guardados para uso offline" saca del dispositivo las últimas respuestas del servidor, que incluyen tus importes reales.',
+    ],
+    terminos: ['modoPrivacidad'],
   },
 }
 

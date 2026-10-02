@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { AporteObjetivo } from '../../api'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
-import { formatUSD } from '../../utils'
+import { formatUSDCrudo } from '../../utils'
 import { mesCorto } from './comun'
 
 const ORIGEN_TEXTO: Record<string, string> = {
@@ -56,12 +56,14 @@ export default function ModalObjetivoAporte({
         />
       </div>
 
+      {/* El importe acá es el botón que rellena el input de arriba: si se tapara, no habría forma
+          de saber qué valor se va a cargar. Por eso no pasa por el modo privacidad. */}
       {objetivo.sugerido_usd != null && !objetivo.configurado && (
         <button
           onClick={() => setMonto(String(objetivo.sugerido_usd))}
           className="mt-2 text-label font-semibold text-app-accent text-left"
         >
-          Usar {formatUSD(objetivo.sugerido_usd)}
+          Usar {formatUSDCrudo(objetivo.sugerido_usd)}
           {objetivo.sugerido_origen && ORIGEN_TEXTO[objetivo.sugerido_origen] && (
             <span className="text-app-text-faint font-normal"> · {ORIGEN_TEXTO[objetivo.sugerido_origen]}</span>
           )}

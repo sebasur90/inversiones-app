@@ -8,6 +8,7 @@ import {
   getPreciosHistoricos,
   type TickerConPrecio,
 } from '../api'
+import { formatCompacto } from '../utils/formatoMonto'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import EmptyState from '../components/ui/EmptyState'
@@ -20,16 +21,9 @@ import { qk } from '../api/queryClient'
 
 type Vista = 'nominal' | 'usd' | 'cer'
 
+// Cotizaciones del instrumento: el modo privacidad no las tapa (ver `utils/formatoMonto.ts`).
 function formatCompact(v: number, esUSD: boolean): string {
-  const abs = Math.abs(v)
-  if (esUSD) {
-    if (abs >= 1_000_000) return `U$S ${(v / 1_000_000).toFixed(1)}M`
-    if (abs >= 1000) return `U$S ${(v / 1000).toFixed(0)}K`
-    return `U$S ${v.toFixed(2)}`
-  }
-  if (abs >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`
-  if (abs >= 1000) return `$${(v / 1000).toFixed(0)}K`
-  return `$${v.toFixed(0)}`
+  return formatCompacto(v, esUSD ? 'USD' : 'ARS')
 }
 
 function formatFechaLabel(iso: string): string {

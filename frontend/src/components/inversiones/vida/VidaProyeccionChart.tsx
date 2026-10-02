@@ -11,7 +11,7 @@ import {
   Legend,
 } from 'recharts'
 import type { EscenarioVidaOut } from '../../../api'
-import { formatUSD, formatARS } from '../../../utils'
+import { useFormatoFijo } from '../../../hooks/useFormatoMoneda'
 import Segmented from '../../ui/Segmented'
 
 interface Props {
@@ -31,7 +31,7 @@ function downsample<T>(puntos: T[], max: number): T[] {
 }
 
 export default function VidaProyeccionChart({ resultado }: Props) {
-  const formatMonto = resultado.moneda === 'ARS' ? formatARS : formatUSD
+  const { monto: formatMonto, compacto } = useFormatoFijo(resultado.moneda === 'ARS' ? 'ARS' : 'USD')
   const hayInflacion = resultado.resultados.some(r => r.metricas.patrimonio_final_real != null)
   const [vista, setVista] = useState<'nominal' | 'real'>('nominal')
 
@@ -94,7 +94,7 @@ export default function VidaProyeccionChart({ resultado }: Props) {
           <YAxis
             tick={{ fontSize: 10 }}
             stroke="#94a3b8"
-            tickFormatter={(val: number) => `${resultado.moneda === 'ARS' ? '$' : 'U$S'}${(val / 1000).toFixed(0)}k`}
+            tickFormatter={(val: number) => compacto(val)}
           />
           <Tooltip
             contentStyle={{ background: '#171b26', border: '1px solid #1c1f2a', borderRadius: 10, fontSize: 12 }}

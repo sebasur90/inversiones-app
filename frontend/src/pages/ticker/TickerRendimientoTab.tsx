@@ -1,4 +1,5 @@
-import { formatARS, formatPctRatio, formatUSD } from '../../utils'
+import { formatPctRatio } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import Card from '../../components/ui/Card'
 import MetricTile from '../../components/ui/MetricTile'
 import type { TickerPerformanceOut, TickerPositionOut } from '../../api'
@@ -10,7 +11,10 @@ function toneFor(v: number | null | undefined): 'pos' | 'neg' | undefined {
 
 export default function TickerRendimientoTab({ performance, position, monedaSeleccionada }: { performance: TickerPerformanceOut; position: TickerPositionOut; monedaSeleccionada: 'ARS' | 'USD' }) {
   const esARS = monedaSeleccionada === 'ARS'
-  const formatMoneda = esARS ? formatARS : formatUSD
+  const { monto: formatMoneda } = useFormatoFijo(monedaSeleccionada)
+  // El desglose de abajo muestra las dos monedas a la vez, sin importar la elegida arriba.
+  const { monto: formatUSD } = useFormatoFijo('USD')
+  const { monto: formatARS } = useFormatoFijo('ARS')
 
   const realizado = esARS ? performance.realizado_ars : performance.realizado_usd
   const noRealizado = esARS ? performance.no_realizado_ars : performance.no_realizado_usd

@@ -14,7 +14,7 @@ import ScenarioIntentBanner from '../../../help/components/ScenarioIntentBanner'
 import ErrorBanner from '../../../help/components/ErrorBanner'
 import { parseApiError } from '../../../help/errors/apiErrors'
 import type { ParsedApiError } from '../../../help/errors/apiErrors'
-import { formatUSD, formatARS } from '../../../utils'
+import { useFormatoFijo } from '../../../hooks/useFormatoMoneda'
 
 interface Props {
   cartera: string | null
@@ -95,7 +95,7 @@ export default function SimuladorVida({ cartera, syncVersion, aporteInicialUsd }
     }
   }
 
-  const formatMonto = supuestos.moneda === 'ARS' ? formatARS : formatUSD
+  const { monto: formatMonto } = useFormatoFijo(supuestos.moneda === 'ARS' ? 'ARS' : 'USD')
   const base = resultado?.resultados.find(r => r.es_base)
 
   return (

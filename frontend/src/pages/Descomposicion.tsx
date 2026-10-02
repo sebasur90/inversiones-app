@@ -4,7 +4,9 @@ import { useNavigate } from 'react-router-dom'
 import { useInversionesContext } from '../context/InversionesContext'
 import { getDescomposicion, type DescomposicionNodo } from '../api'
 import { qk } from '../api/queryClient'
-import { CHART_COLORS, formatARS, formatUSD } from '../utils'
+import { CHART_COLORS } from '../utils'
+import { formatMonto } from '../utils/formatoMonto'
+import { useMontosOcultos } from '../utils/privacidad'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import Donut from '../components/charts/Donut'
@@ -23,9 +25,12 @@ const OPCIONES_UNIDAD: { value: Unidad; label: string }[] = [
   { value: 'usd', label: 'USD' },
 ]
 
-function formatValor(nodo: DescomposicionNodo, unidad: Unidad): string {
+// La unidad `pct` nunca se tapa: un peso relativo no dice cuánta plata hay.
+function formatValor(nodo: DescomposicionNodo, unidad: Unidad, ocultos: boolean): string {
   if (unidad === 'pct') return `${nodo.porcentaje_padre.toFixed(1)}%`
-  return unidad === 'ars' ? formatARS(nodo.valor_ars) : formatUSD(nodo.valor_usd)
+  return unidad === 'ars'
+    ? formatMonto(nodo.valor_ars, 'ARS', ocultos)
+    : formatMonto(nodo.valor_usd, 'USD', ocultos)
 }
 
 /** Encuentra el nodo señalado por `ruta` (lista de claves, una por nivel) dentro del árbol. */
@@ -46,6 +51,7 @@ export default function Descomposicion() {
   const { carteraSeleccionada } = useInversionesContext()
   const [unidad, setUnidad] = useState<Unidad>('pct')
   const [ruta, setRuta] = useState<string[]>([])
+  const ocultos = useMontosOcultos()
 
   // El toggle ARS/USD del header (moneda "de referencia" de la cartera) se ignora a
   // propósito: acá manda el selector local %/ARS/USD, que además incluye la vista porcentual.
@@ -71,7 +77,7 @@ export default function Descomposicion() {
 
   const formatTotal = () => {
     if (unidad === 'pct') return '100%'
-    return unidad === 'ars' ? formatARS(totalNivel) : formatUSD(totalNivel)
+    return formatMonto(totalNivel, unidad === 'ars' ? 'ARS' : 'USD', ocultos)
   }
 
   const irARaiz = () => setRuta([])
@@ -175,7 +181,7 @@ export default function Descomposicion() {
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       <span className="font-mono font-bold text-app-text tabular-nums">
-                        {formatValor(nodo, unidad)}
+                        {formatValor(nodo, unidad, ocultos)}
                       </span>
                       {(nodo.hijos.length > 0 || nodo.nivel === 'Ticker') && (
                         <Icon name="chevron" className="w-3.5 h-3.5 text-app-text-dim -rotate-90" />

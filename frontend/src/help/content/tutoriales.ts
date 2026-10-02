@@ -23,6 +23,31 @@ export interface Tutorial {
  */
 export const TUTORIALES: Tutorial[] = [
   {
+    id: 'privacidad',
+    titulo: 'Mostrar la app sin mostrar tus números',
+    resumen: 'Cómo tapar los importes para poder mirar la cartera con alguien al lado.',
+    pasos: [
+      {
+        titulo: 'Tocá el ojo del encabezado',
+        detalle:
+          'Está en todas las pantallas, arriba a la derecha. Reemplaza los importes de tu cartera por •••• al instante, y queda recordado para la próxima vez que abras la app. El mismo interruptor está en Ajustes, en la sección Privacidad.',
+        ruta: '/ajustes',
+        termino: 'modoPrivacidad',
+      },
+      {
+        titulo: 'Lo que sigue a la vista, y por qué',
+        detalle:
+          'Los rendimientos en %, las cantidades de nominales y la forma de los gráficos no se tapan: dicen cómo va la cartera sin decir cuánta plata hay. Las cotizaciones tampoco, porque el precio de una acción es público y no habla de lo tuyo: Análisis técnico, Precios, Watchlist, Screener y los backtests se ven igual que siempre. Ojo con una consecuencia: el precio de compra queda visible junto a la cantidad, así que alguien que multiplique los dos reconstruye el monto invertido.',
+      },
+      {
+        titulo: 'Para qué no alcanza',
+        detalle:
+          'Es una capa de presentación, no seguridad. Una captura de pantalla y un CSV exportado salen con los números completos. Y la app guarda las últimas respuestas del servidor en el dispositivo para poder abrir sin conexión: eso se borra con "Borrar datos guardados para uso offline", en la misma sección de Ajustes.',
+        ruta: '/ajustes',
+      },
+    ],
+  },
+  {
     id: 'primeros-pasos',
     titulo: 'Primeros pasos: del Sheet a la app',
     resumen: 'Cómo se conecta tu Google Sheet con lo que ves acá, y qué hacer si algo no aparece.',

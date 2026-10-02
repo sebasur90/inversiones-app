@@ -1,4 +1,14 @@
-export function formatARS(value: number | null | undefined): string {
+/**
+ * ⚠️ Formateadores **crudos**: no pasan por el modo privacidad. El sufijo está para que elegirlos
+ * sea una decisión explícita al escribir el import, y no el camino por omisión.
+ *
+ * Usalos sólo para precios de mercado, cotizaciones y capital simulado de backtests. Si el número
+ * sale de las tenencias, movimientos o aportes del usuario va por `useFormatoMoneda()` (o
+ * `useFormatoFijo('USD')` si la moneda no depende del selector del encabezado); si no, el importe
+ * queda a la vista con el modo privacidad activo y nada lo detecta: no hay tests de frontend y
+ * `tsc` no puede verlo.
+ */
+export function formatARSCrudo(value: number | null | undefined): string {
   if (value == null) return '—'
   return new Intl.NumberFormat('es-AR', {
     style: 'currency',
@@ -8,7 +18,7 @@ export function formatARS(value: number | null | undefined): string {
   }).format(value)
 }
 
-export function formatUSD(value: number | null | undefined): string {
+export function formatUSDCrudo(value: number | null | undefined): string {
   if (value == null) return '—'
   return new Intl.NumberFormat('en-US', {
     style: 'currency',

@@ -1,5 +1,6 @@
 import type { MovimientoInversion } from '../../api'
-import { formatUSD } from '../../utils'
+import { formatMonto } from '../../utils/formatoMonto'
+import { useMontosOcultos } from '../../utils/privacidad'
 import InfoTooltip from '../../help/components/InfoTooltip'
 import type { MovimientosHelpKey } from '../../help/content/movimientos'
 
@@ -27,14 +28,16 @@ const TIPO_HELP_KEY: Record<string, MovimientosHelpKey | undefined> = {
 
 const MOVIMIENTOS_INGRESO = ['dividendo', 'cupon']
 
-function formatMonto(mov: MovimientoInversion): string {
+// La moneda es un dato de cada movimiento (uno puede ser en pesos y el siguiente en dólares), así
+// que el interruptor de privacidad viaja como parámetro en vez de por un formateador fijo.
+function montoDelMovimiento(mov: MovimientoInversion, ocultos: boolean): string {
   const monto = mov.cantidad != null ? mov.cantidad * mov.precio : mov.precio
   const prefijo = MOVIMIENTOS_INGRESO.includes(mov.tipo_movimiento) ? '+' : mov.tipo_movimiento === 'compra' ? '−' : '+'
-  const valor = mov.moneda === 'USD' ? formatUSD(Math.abs(monto)) : `$${Math.abs(monto).toLocaleString('es-AR')}`
-  return `${prefijo}${valor}`
+  return `${prefijo}${formatMonto(Math.abs(monto), mov.moneda === 'USD' ? 'USD' : 'ARS', ocultos)}`
 }
 
 export default function MovimientoRow({ mov }: { mov: MovimientoInversion }) {
+  const ocultos = useMontosOcultos()
   const esIngreso = MOVIMIENTOS_INGRESO.includes(mov.tipo_movimiento)
   const detalle = mov.cantidad != null ? `${mov.cantidad.toLocaleString('es-AR', { maximumFractionDigits: 8 })} @ ${mov.precio.toLocaleString('es-AR', { maximumFractionDigits: 6 })} ${mov.moneda}` : mov.moneda
 
@@ -56,13 +59,13 @@ export default function MovimientoRow({ mov }: { mov: MovimientoInversion }) {
         {mov.comision > 0 && (
           <div className="flex items-center gap-1 text-label text-app-text-faint mt-0.5">
             <span>
-              Comisión: {mov.moneda === 'USD' ? formatUSD(mov.comision) : `$${mov.comision.toLocaleString('es-AR')}`}
+              Comisión: {formatMonto(mov.comision, mov.moneda === 'USD' ? 'USD' : 'ARS', ocultos)}
             </span>
             <InfoTooltip term="movimientos_comision" />
           </div>
         )}
       </div>
-      <div className={`font-mono text-caption font-bold tabular-nums shrink-0 ${esIngreso ? 'text-app-pos' : 'text-app-text'}`}>{formatMonto(mov)}</div>
+      <div className={`font-mono text-caption font-bold tabular-nums shrink-0 ${esIngreso ? 'text-app-pos' : 'text-app-text'}`}>{montoDelMovimiento(mov, ocultos)}</div>
     </div>
   )
 }

@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useInversionesContext } from '../context/InversionesContext'
 import { getVistaFiscalPorAnio } from '../api'
 import { qk } from '../api/queryClient'
-import { formatARS, formatUSD } from '../utils'
+import { useFormatoMoneda } from '../hooks/useFormatoMoneda'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
@@ -31,7 +31,7 @@ export default function VistaFiscal() {
   const datos = fiscalQuery.data ?? null
 
   const esARS = monedaSeleccionada === 'ARS'
-  const fmt = esARS ? formatARS : formatUSD
+  const { monto: fmt } = useFormatoMoneda()
 
   const filasCsv = useMemo(
     () => () => {

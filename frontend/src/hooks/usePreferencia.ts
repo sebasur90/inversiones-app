@@ -88,6 +88,8 @@ export const CLAVE_UMBRAL_PROXIMIDAD = 'inversiones-alerta-proximidad-pct'
 export const CLAVE_MODO_GUIADO = 'inversiones-modo-guiado'
 /** Si ya se vio (o salteó) el tour de bienvenida. */
 export const CLAVE_TOUR_VISTO = 'inversiones-tour-visto'
+/** Modo privacidad: los importes de la cartera se reemplazan por una máscara. Ver `utils/privacidad.ts`. */
+export const CLAVE_MONTOS_OCULTOS = 'inversiones-montos-ocultos'
 /** Prefijo de la clave de colapso por pantalla: se completa con la ruta (`claveRutaGuia`). */
 export const PREFIJO_GUIA_COLAPSADA = 'inversiones-guia-colapsada:'
 

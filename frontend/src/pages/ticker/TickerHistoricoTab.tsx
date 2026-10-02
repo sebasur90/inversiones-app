@@ -1,4 +1,5 @@
-import { formatARS, formatPrecio, formatUSD } from '../../utils'
+import { formatARSCrudo, formatPrecio, formatUSDCrudo } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import Card from '../../components/ui/Card'
 import Sparkline from '../../components/charts/Sparkline'
 import InfoTooltip from '../../help/components/InfoTooltip'
@@ -8,7 +9,9 @@ export default function TickerHistoricoTab({ historico, monedaSeleccionada }: { 
   const { puntos } = historico
 
   const moneda = monedaSeleccionada === 'ARS'
-  const formatMoneda = moneda ? formatARS : formatUSD
+  // Las columnas de precio son cotizaciones del instrumento y quedan visibles; sólo el valor de
+  // la posición es dinero tuyo, y siempre viene en dólares.
+  const { monto: montoPosicion } = useFormatoFijo('USD')
   const precios = puntos.map(p => p.precio_nominal || 0)
   const esCreciente = precios.length > 1 && precios[precios.length - 1] >= precios[0]
 
@@ -58,15 +61,15 @@ export default function TickerHistoricoTab({ historico, monedaSeleccionada }: { 
                     {formatPrecio(p.precio_nominal)}
                   </td>
                   <td className="text-right py-2 px-2 font-mono font-semibold tabular-nums text-app-text">
-                    {p.precio_usd != null ? formatUSD(p.precio_usd) : '—'}
+                    {p.precio_usd != null ? formatUSDCrudo(p.precio_usd) : '—'}
                   </td>
                   {moneda && (
                     <td className="text-right py-2 px-2 font-mono font-semibold tabular-nums text-app-text">
-                      {p.precio_cer != null ? formatARS(p.precio_cer) : '—'}
+                      {p.precio_cer != null ? formatARSCrudo(p.precio_cer) : '—'}
                     </td>
                   )}
                   <td className={`text-right py-2 px-2 font-mono font-semibold tabular-nums ${p.valor_posicion_usd ? 'text-app-text' : 'text-app-text-dim'}`}>
-                    {p.valor_posicion_usd ? formatUSD(p.valor_posicion_usd) : '—'}
+                    {p.valor_posicion_usd ? montoPosicion(p.valor_posicion_usd) : '—'}
                   </td>
                 </tr>
               ))}

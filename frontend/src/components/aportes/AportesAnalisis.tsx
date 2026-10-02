@@ -7,7 +7,7 @@ import {
   type AporteProximoHito,
   type RitmoAportesOut,
 } from '../../api'
-import { formatUSD } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import Card from '../ui/Card'
 import Chip from '../ui/Chip'
 import MetricTile from '../ui/MetricTile'
@@ -51,6 +51,7 @@ function BarrasComparativas({
   proyeccion: number
   referencias: { etiqueta: string; cmp: AporteComparacion | null }[]
 }) {
+  const { monto: formatUSD } = useFormatoFijo('USD')
   const validas = referencias.filter(r => r.cmp != null) as { etiqueta: string; cmp: AporteComparacion }[]
   const maxAbs = Math.max(Math.abs(neto), Math.abs(proyeccion), ...validas.map(r => Math.abs(r.cmp.referencia_usd)), 1)
   const ancho = (v: number) => `${(Math.abs(v) / maxAbs) * 100}%`
@@ -102,7 +103,8 @@ function MensajeCard({ mensaje }: { mensaje: AporteMensaje }) {
 }
 
 function ProximoHito({ hito }: { hito: AporteProximoHito }) {
-  const falta = hito.unidad === 'usd' ? formatUSD(hito.falta) : `${hito.falta} ${hito.falta === 1 ? 'mes' : 'meses'}`
+  const { monto } = useFormatoFijo('USD')
+  const falta = hito.unidad === 'usd' ? monto(hito.falta) : `${hito.falta} ${hito.falta === 1 ? 'mes' : 'meses'}`
   return (
     <div className="mb-2">
       <div className="flex justify-between items-baseline text-caption mb-1">
@@ -133,6 +135,7 @@ function ListaHitos({ hitos }: { hitos: AporteHito[] }) {
 export default function AportesAnalisis({ datos, cartera }: { datos: RitmoAportesOut; cartera: string | null }) {
   const [ventana, setVentana] = useState<Ventana>('12')
   const [verTodosLosLogros, setVerTodosLosLogros] = useState(false)
+  const { monto: formatUSD } = useFormatoFijo('USD')
 
   const em = datos.este_mes!
   const anio = datos.anio_en_curso!

@@ -16,6 +16,7 @@ import {
   CLAVE_MONEDA,
   CLAVE_UMBRAL_PROXIMIDAD,
   CLAVE_MODO_GUIADO,
+  CLAVE_MONTOS_OCULTOS,
   UMBRAL_PROXIMIDAD_DEFAULT,
   AUTOSYNC_HORAS_DEFAULT,
   AUTOSYNC_HORAS_MAX,
@@ -25,6 +26,9 @@ import {
 } from '../hooks/usePreferencia'
 import { aplicarEscalaTexto } from '../utils/escalaTexto'
 import { calcularFrescura } from '../utils/frescura'
+import { setMontosOcultos, useMontosOcultos } from '../utils/privacidad'
+import { purgarCacheApi } from '../utils/purgarCacheApi'
+import InfoTooltip from '../help/components/InfoTooltip'
 
 const OPCIONES_AUTOSYNC: { value: string; label: string }[] = [
   { value: '0', label: 'Nunca' },
@@ -51,7 +55,12 @@ const OPCIONES_MODO_GUIADO: { value: string; label: string }[] = [
   { value: '0', label: 'Desactivado' },
 ]
 
-function Seccion({ titulo, ayuda, children }: { titulo: string; ayuda: string; children: ReactNode }) {
+const OPCIONES_PRIVACIDAD: { value: string; label: string }[] = [
+  { value: '1', label: 'Activado' },
+  { value: '0', label: 'Desactivado' },
+]
+
+function Seccion({ titulo, ayuda, children }: { titulo: ReactNode; ayuda: string; children: ReactNode }) {
   return (
     <Card className="mb-3">
       <div className="text-body font-semibold text-app-text mb-0.5">{titulo}</div>
@@ -73,14 +82,30 @@ export default function Ajustes() {
     CLAVE_ESCALA_TEXTO, ESCALA_TEXTO_DEFAULT, ESCALA_TEXTO_MIN, ESCALA_TEXTO_MAX,
   )
   const [modoGuiado, setModoGuiado] = usePreferenciaBooleana(CLAVE_MODO_GUIADO, true)
+  // El modo privacidad no usa `usePreferenciaBooleana`: vive en un store propio para que el ojo
+  // del encabezado y este interruptor queden siempre sincronizados. Ver `utils/privacidad.ts`.
+  const montosOcultos = useMontosOcultos()
 
   function cambiarEscala(valor: number) {
     setEscalaTexto(valor)
     aplicarEscalaTexto(valor)
   }
 
+  // Deliberadamente fuera de `restablecer()`: borrar datos del dispositivo es destructivo de otra
+  // forma que volver las preferencias a su valor original.
+  async function borrarCacheOffline() {
+    const borrados = await purgarCacheApi()
+    showToast(
+      borrados === null
+        ? 'Este navegador no guarda datos para uso offline.'
+        : borrados === 0
+          ? 'No había datos guardados en este dispositivo.'
+          : 'Se borraron los datos guardados en este dispositivo.',
+    )
+  }
+
   function restablecer() {
-    for (const clave of [CLAVE_AUTOSYNC_HORAS, CLAVE_ESCALA_TEXTO, CLAVE_CARTERA, CLAVE_MONEDA, CLAVE_UMBRAL_PROXIMIDAD, CLAVE_MODO_GUIADO]) {
+    for (const clave of [CLAVE_AUTOSYNC_HORAS, CLAVE_ESCALA_TEXTO, CLAVE_CARTERA, CLAVE_MONEDA, CLAVE_UMBRAL_PROXIMIDAD, CLAVE_MODO_GUIADO, CLAVE_MONTOS_OCULTOS]) {
       guardarPreferencia(clave, null)
     }
     limpiarGuiasColapsadas()
@@ -89,6 +114,9 @@ export default function Ajustes() {
     setMonedaSeleccionada('USD')
     setUmbralProximidadPct(UMBRAL_PROXIMIDAD_DEFAULT)
     setModoGuiado(true)
+    // Además de borrar la clave: el store guarda el flag en memoria, y sin esto los importes
+    // seguirían tapados hasta recargar la app.
+    setMontosOcultos(false)
     showToast('Preferencias restablecidas.')
   }
 
@@ -107,6 +135,29 @@ export default function Ajustes() {
           value={monedaSeleccionada}
           onChange={v => setMonedaSeleccionada(v as 'USD' | 'ARS')}
         />
+      </Seccion>
+
+      <Seccion
+        titulo={<InfoTooltip term="modoPrivacidad" label="Privacidad" />}
+        ayuda="Con el modo privacidad los importes de tu cartera se reemplazan por ••••. Los rendimientos en %, las cantidades de nominales y las cotizaciones de mercado siguen a la vista."
+      >
+        <Segmented
+          options={OPCIONES_PRIVACIDAD}
+          value={montosOcultos ? '1' : '0'}
+          onChange={v => setMontosOcultos(v === '1')}
+        />
+        <div className="text-caption text-app-text-dim mt-2">
+          También lo activás con el ojo del encabezado, desde cualquier pantalla. No alcanza para
+          una captura de pantalla ni para un CSV exportado.
+        </div>
+        <div className="text-caption text-app-text-dim mt-3 mb-2">
+          La app guarda las últimas respuestas del servidor en este dispositivo para poder abrir sin
+          conexión. Si lo borrás, la próxima vez que abras sin red no vas a ver datos hasta
+          sincronizar.
+        </div>
+        <Button variant="outline" onClick={borrarCacheOffline}>
+          Borrar datos guardados para uso offline
+        </Button>
       </Seccion>
 
       <Seccion
@@ -171,7 +222,7 @@ export default function Ajustes() {
         </div>
       </Seccion>
 
-      <Seccion titulo="Restablecer preferencias" ayuda="Vuelve moneda, cartera, auto-sync, tamaño de texto y modo guiado a los valores iniciales. No toca los datos.">
+      <Seccion titulo="Restablecer preferencias" ayuda="Vuelve moneda, cartera, auto-sync, privacidad, tamaño de texto y modo guiado a los valores iniciales. No toca los datos ni lo guardado en el dispositivo.">
         <Button variant="danger" onClick={restablecer}>
           Restablecer
         </Button>

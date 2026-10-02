@@ -1,4 +1,4 @@
-const CACHE_NAME = 'inversiones-shell-v3'
+const CACHE_NAME = 'inversiones-shell-v4'
 const API_CACHE = 'inversiones-api-v1'
 const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png']
 
@@ -7,13 +7,15 @@ self.addEventListener('install', (event) => {
   self.skipWaiting()
 })
 
+// El caché de la API se borra en cada activación de una versión nueva del service worker: son
+// respuestas con el patrimonio, las posiciones y los movimientos, y quedan en disco sin cifrar.
+// Antes estaba excluido de esta limpieza, así que nunca caducaba. Ajustes tiene además un botón
+// para borrarlo a mano (`utils/purgarCacheApi.ts`).
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) =>
-        Promise.all(keys.filter((key) => key !== CACHE_NAME && key !== API_CACHE).map((key) => caches.delete(key)))
-      )
+      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
   )
 })

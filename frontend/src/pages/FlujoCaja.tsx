@@ -8,7 +8,7 @@ import dayjs from 'dayjs'
 import { useInversionesContext } from '../context/InversionesContext'
 import { getFlujoCajaProyectado } from '../api'
 import { qk } from '../api/queryClient'
-import { formatARS, formatUSD } from '../utils'
+import { useFormatoFijo } from '../hooks/useFormatoMoneda'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import Card from '../components/ui/Card'
@@ -50,7 +50,7 @@ export default function FlujoCaja() {
   const [horizonte, setHorizonte] = useState<Horizonte>('24')
 
   const esARS = monedaSeleccionada === 'ARS'
-  const fmt = esARS ? formatARS : formatUSD
+  const { monto: fmt, compacto } = useFormatoFijo(esARS ? 'ARS' : 'USD')
 
   const flujoQuery = useQuery({
     queryKey: qk.de('flujo-caja', carteraSeleccionada, horizonte),
@@ -145,7 +145,7 @@ export default function FlujoCaja() {
                     stroke="#94a3b8"
                     tick={{ fontSize: 10, fill: '#94a3b8' }}
                     width={54}
-                    tickFormatter={v => (esARS ? `$${(v / 1000).toFixed(0)}k` : `U$S ${v}`)}
+                    tickFormatter={v => compacto(v as number)}
                   />
                   <Tooltip
                     contentStyle={{ background: '#171b26', border: '1px solid #1c1f2a', borderRadius: 10, fontSize: 12 }}

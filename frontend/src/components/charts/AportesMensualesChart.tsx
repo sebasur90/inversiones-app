@@ -3,20 +3,16 @@ import {
 } from 'recharts'
 import dayjs from 'dayjs'
 import type { AporteMesItem } from '../../api'
-import { formatUSD } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 
 const COLOR_APORTE = '#10b981' // app-pos
 const COLOR_RETIRO = '#ef4444' // app-neg
 const COLOR_MOVIL = '#3b82f6'
 const COLOR_REFERENCIA = '#94a3b8'
 
-function ejeK(v: number): string {
-  const abs = Math.abs(v)
-  const txt = abs >= 1000 ? `${(abs / 1000).toFixed(abs >= 10000 ? 0 : 1)}k` : `${abs}`
-  return `${v < 0 ? '-' : ''}$${txt}`
-}
-
 function TooltipMes({ active, payload }: { active?: boolean; payload?: { payload: AporteMesItem }[] }) {
+  // Es un componente, no un `formatter`: puede usar el hook del modo privacidad como cualquier otro.
+  const { monto } = useFormatoFijo('USD')
   const item = payload?.[0]?.payload
   if (!active || !item) return null
   return (
@@ -28,16 +24,16 @@ function TooltipMes({ active, payload }: { active?: boolean; payload?: { payload
       <div className="flex items-center gap-1.5">
         <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: item.neto_usd < 0 ? COLOR_RETIRO : COLOR_APORTE }} />
         <span className="text-app-text-dim">Aporte neto</span>
-        <span className="font-mono tabular-nums text-app-text ml-auto pl-3">{formatUSD(item.neto_usd)}</span>
+        <span className="font-mono tabular-nums text-app-text ml-auto pl-3">{monto(item.neto_usd)}</span>
       </div>
       <div className="text-app-text-faint pl-3.5">
-        compras {formatUSD(item.compras_usd)} · salidas {formatUSD(item.salidas_usd)}
+        compras {monto(item.compras_usd)} · salidas {monto(item.salidas_usd)}
       </div>
       {item.promedio_movil_3_usd != null && (
         <div className="flex items-center gap-1.5 mt-1">
           <span className="w-2 h-0.5 shrink-0" style={{ background: COLOR_MOVIL }} />
           <span className="text-app-text-dim">Promedio móvil 3m</span>
-          <span className="font-mono tabular-nums text-app-text ml-auto pl-3">{formatUSD(item.promedio_movil_3_usd)}</span>
+          <span className="font-mono tabular-nums text-app-text ml-auto pl-3">{monto(item.promedio_movil_3_usd)}</span>
         </div>
       )}
     </div>
@@ -53,6 +49,7 @@ export default function AportesMensualesChart({
   serie: AporteMesItem[]
   promedio12: number | null
 }) {
+  const { compactoFino } = useFormatoFijo('USD')
   const data = serie.filter(s => !s.futuro)
   if (data.length === 0) return null
 
@@ -68,7 +65,7 @@ export default function AportesMensualesChart({
           interval="preserveStartEnd"
           minTickGap={24}
         />
-        <YAxis stroke="#94a3b8" tick={{ fontSize: 10, fill: '#94a3b8' }} width={48} tickFormatter={v => ejeK(v as number)} />
+        <YAxis stroke="#94a3b8" tick={{ fontSize: 10, fill: '#94a3b8' }} width={48} tickFormatter={v => compactoFino(v as number)} />
         <Tooltip cursor={{ fill: 'rgba(255,255,255,0.04)' }} content={<TooltipMes />} />
         <Legend
           verticalAlign="top"

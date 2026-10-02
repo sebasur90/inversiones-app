@@ -1,4 +1,5 @@
 import { EscenarioSimulacionOut } from '../../api'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 
 interface EscenarioComparacionTableProps {
   resultado: EscenarioSimulacionOut
@@ -17,11 +18,9 @@ function heatmapIntensity(ratio: number): string {
   return 'transparent'
 }
 
-function formatUSD(val: number): string {
-  return `$${val.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
-}
-
 export default function EscenarioComparacionTable({ resultado }: EscenarioComparacionTableProps) {
+  // Los escenarios proyectan tu patrimonio, siempre en dólares: son importes de la cartera.
+  const { monto: formatUSD } = useFormatoFijo('USD')
   const metricas = [
     { key: 'patrimonio_inicial_usd', label: 'Patrimonio inicial', format: formatUSD },
     { key: 'patrimonio_final_usd', label: 'Patrimonio final', format: formatUSD },

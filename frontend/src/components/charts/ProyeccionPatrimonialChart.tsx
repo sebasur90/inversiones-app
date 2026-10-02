@@ -4,7 +4,7 @@ import {
 import dayjs from 'dayjs'
 import type { EvolucionOut } from '../../api'
 import type { PuntoSimulado } from '../../utils/proyeccion'
-import { formatUSD } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 
 interface ProyeccionPatrimonialChartProps {
   evolucionReal: EvolucionOut | null
@@ -23,6 +23,10 @@ export default function ProyeccionPatrimonialChart({
   fechaLimite,
   esProyeccionAlcanzable,
 }: ProyeccionPatrimonialChartProps) {
+  // Se tapan el eje y el tooltip; la línea de la meta rotula la palabra "Meta" y su altura es
+  // geometría, no un número legible, así que no hace falta tocarla.
+  const { monto, compacto } = useFormatoFijo('USD')
+
   if (!evolucionReal || evolucionReal.puntos.length === 0) {
     return (
       <div className="text-center py-8 text-app-text-dim text-caption">
@@ -90,16 +94,16 @@ export default function ProyeccionPatrimonialChart({
             stroke="#94a3b8"
             tick={{ fontSize: 10, fill: '#94a3b8' }}
             width={62}
-            tickFormatter={v => `$${((v as number) / 1000).toFixed(0)}k`}
+            tickFormatter={v => compacto(v as number)}
           />
           <Tooltip
             contentStyle={{ background: '#171b26', border: '1px solid #1c1f2a', borderRadius: 10, fontSize: 12 }}
             labelStyle={{ color: '#f8fafc' }}
             labelFormatter={v => dayjs(v).format('MMM DD, YYYY')}
             formatter={(value: any, name: string) => {
-              if (name === 'valorReal') return [formatUSD(value), 'Valor real']
-              if (name === 'valorPlan') return [formatUSD(value), 'Plan']
-              if (name === 'valorProyeccion') return [formatUSD(value), 'Proyección']
+              if (name === 'valorReal') return [monto(value), 'Valor real']
+              if (name === 'valorPlan') return [monto(value), 'Plan']
+              if (name === 'valorProyeccion') return [monto(value), 'Proyección']
               return [value, name]
             }}
           />

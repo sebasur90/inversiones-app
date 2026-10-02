@@ -2,7 +2,8 @@ import { useEffect, useState, useMemo } from 'react'
 import dayjs from 'dayjs'
 import { useInversionesContext } from '../context/InversionesContext'
 import { useObjetivoInversion } from '../hooks/useObjetivoInversion'
-import { formatUSD, formatPct } from '../utils'
+import { formatPct } from '../utils'
+import { useFormatoFijo } from '../hooks/useFormatoMoneda'
 import {
   derivarPlanObjetivo,
   calcularEscenarios,
@@ -26,6 +27,7 @@ import FormHelp from '../help/components/FormHelp'
 import SkeletonPantalla from '../components/ui/Skeleton'
 
 export default function Objetivo() {
+  const { monto: formatUSD } = useFormatoFijo('USD')
   const { carteras, carteraSeleccionada, setCarteraSeleccionada } = useInversionesContext()
   const { objetivo, aportesHistoricos, evolucion, riesgo, configuracion, loading } =
     useObjetivoInversion(carteraSeleccionada)
@@ -492,6 +494,7 @@ export default function Objetivo() {
                 tasas={grillaSensibilidad.tasas}
                 aportes={grillaSensibilidad.aportes}
                 mesesRestantesAlFinal={objetivo.meses_restantes}
+                aporteReferenciaUsd={objetivo.aporte_mensual_necesario_usd}
               />
             </>
           ) : null}

@@ -1,5 +1,6 @@
 import type { RendimientoPorTickerItem } from '../../api'
-import { formatARS, formatPctRatio, formatUSD } from '../../utils'
+import { formatPctRatio } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import { pctDelEstado, severidadDeEstado, type EstadoAlerta } from '../../utils/alertasPrecio'
 import { Icon } from '../icons/Icons'
 import InfoTooltip from '../../help/components/InfoTooltip'
@@ -29,7 +30,7 @@ export default function PosicionRow({
   const esARS = moneda === 'ARS'
   const valor = esARS ? item.valor_actual_ars : item.valor_actual_usd
   const rendimiento = esARS ? item.rendimiento_simple_ars : item.rendimiento_simple_usd
-  const formatMoneda = esARS ? formatARS : formatUSD
+  const fmt = useFormatoFijo(moneda)
   const positivo = (rendimiento ?? 0) >= 0
   const avatarAlerta = alerta ? AVATAR_ALERTA[severidadDeEstado(alerta)] : 'border-app-border text-app-text'
 
@@ -62,7 +63,7 @@ export default function PosicionRow({
         </div>
       </div>
       <div className="text-right shrink-0">
-        <div className="font-mono text-caption font-bold text-app-text tabular-nums">{formatMoneda(valor)}</div>
+        <div className="font-mono text-caption font-bold text-app-text tabular-nums">{fmt.monto(valor)}</div>
         {rendimiento != null && (
           <div className={`flex items-center justify-end gap-0.5 font-mono text-label font-bold mt-0.5 tabular-nums ${positivo ? 'text-app-pos' : 'text-app-neg'}`}>
             <Icon name={positivo ? 'up' : 'down'} className="w-2.5 h-2.5" />

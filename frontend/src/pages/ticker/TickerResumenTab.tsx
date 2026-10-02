@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { getDescomposicionFxPorPosicion, getPreciosTicker, type PrecioPunto, type DescomposicionFxPosicionItem } from '../../api'
 import { qk } from '../../api/queryClient'
-import { formatARS, formatCantidad, formatPctRatio, formatPrecio, formatUSD } from '../../utils'
+import { formatCantidad, formatPctRatio, formatPrecio } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import Sparkline from '../../components/charts/Sparkline'
 import MetricTile from '../../components/ui/MetricTile'
 import AlertaPrecioBadge from '../../components/inversiones/AlertaPrecioBadge'
@@ -30,7 +31,9 @@ export default function TickerResumenTab({ position, cartera, monedaSeleccionada
     fxQuery.data?.posiciones.find(p => p.ticker === position.ticker) ?? null
 
   const esARS = monedaSeleccionada === 'ARS'
-  const formatMoneda = esARS ? formatARS : formatUSD
+  // Sólo "Invertido" y "Valor actual" son dinero tuyo. El precio actual, el promedio, el objetivo
+  // y el stop-loss son precios del instrumento y siguen visibles con el modo privacidad.
+  const { monto: formatMoneda } = useFormatoFijo(monedaSeleccionada)
   const valorInvertido = esARS ? position.total_invertido_ars : position.total_invertido_usd
   const valorActual = esARS ? position.valor_actual_ars : position.valor_actual_usd
   const rendimiento = esARS ? position.rendimiento_simple_ars : position.rendimiento_simple_usd

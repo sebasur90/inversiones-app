@@ -1,6 +1,6 @@
 import dayjs from 'dayjs'
 import type { VencimientoItem } from '../../api'
-import { formatARS, formatUSD } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 
 function badgeClase(item: VencimientoItem): string {
   if (item.vencido || item.dias_restantes < 30) return 'bg-app-neg-soft text-app-neg'
@@ -36,7 +36,7 @@ function Metrica({ label, valor }: { label: string; valor: string }) {
 export default function VencimientoRow({ item, moneda }: { item: VencimientoItem; moneda: 'USD' | 'ARS' }) {
   const esARS = moneda === 'ARS'
   const valor = esARS ? item.valor_actual_ars : item.valor_actual_usd
-  const formatMoneda = esARS ? formatARS : formatUSD
+  const fmt = useFormatoFijo(moneda)
 
   const hayMetricas =
     item.paridad != null || item.tir_vencimiento != null || item.duration_modificada != null
@@ -54,7 +54,7 @@ export default function VencimientoRow({ item, moneda }: { item: VencimientoItem
           </div>
         </div>
         <div className="text-right shrink-0">
-          <div className="font-mono text-caption font-bold text-app-text tabular-nums">{formatMoneda(valor)}</div>
+          <div className="font-mono text-caption font-bold text-app-text tabular-nums">{fmt.monto(valor)}</div>
           <span className={`inline-block font-bold text-label tracking-wide px-1.5 py-0.5 rounded-[6px] mt-0.5 ${badgeClase(item)}`}>
             {badgeLabel(item)}
           </span>

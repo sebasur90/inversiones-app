@@ -17,6 +17,8 @@ import ErrorBanner from '../help/components/ErrorBanner'
 import { parseApiError, type ParsedApiError } from '../help/errors/apiErrors'
 import PatrimonioMensualTable from '../components/tables/PatrimonioMensualTable'
 import { calcularDesde, type PeriodoEvolucion } from '../utils'
+import { useFormatoFijo } from '../hooks/useFormatoMoneda'
+import { formatMonto } from '../utils/formatoMonto'
 import { qk } from '../api/queryClient'
 import { Skeleton } from '../components/ui/Skeleton'
 
@@ -86,23 +88,10 @@ function capitalPorVista(p: EvolucionPunto, vista: Vista): number | null {
   return vista === 'ars' ? p.capital_aportado_ars : vista === 'usd' ? p.capital_aportado_usd : p.capital_aportado_ars_real
 }
 
-function formatCompact(v: number, esUSD: boolean): string {
-  const abs = Math.abs(v)
-  const signo = v < 0 ? '-' : ''
-  if (esUSD) {
-    if (abs >= 1_000_000) return `${signo}U$S ${(abs / 1_000_000).toFixed(1)}M`
-    if (abs >= 1000) return `${signo}U$S ${(abs / 1000).toFixed(0)}K`
-    return `${signo}U$S ${abs.toFixed(2)}`
-  }
-  if (abs >= 1_000_000) return `${signo}$${(abs / 1_000_000).toFixed(1)}M`
-  if (abs >= 1000) return `${signo}$${(abs / 1000).toFixed(0)}K`
-  return `${signo}$${abs.toFixed(0)}`
-}
-
-function formatMontoMovimiento(mov: MovimientoInversion): string {
+// La moneda es un dato de cada movimiento, no la de la vista elegida arriba.
+function formatMontoMovimiento(mov: MovimientoInversion, ocultos: boolean): string {
   const monto = mov.cantidad != null ? mov.cantidad * mov.precio : mov.precio
-  const valor = mov.moneda === 'USD' ? `U$S ${Math.abs(monto).toLocaleString('es-AR', { maximumFractionDigits: 2 })}` : `$${Math.abs(monto).toLocaleString('es-AR')}`
-  return valor
+  return formatMonto(Math.abs(monto), mov.moneda === 'USD' ? 'USD' : 'ARS', ocultos)
 }
 
 function formatFechaLabel(iso: string): string {
@@ -179,6 +168,9 @@ export default function Patrimonio() {
     : null
 
   const esUSD = vista === 'usd'
+  // La vista "ARS real" (ajustada por CER) sigue siendo pesos: para formatear sólo importan los
+  // dos símbolos de moneda.
+  const { monto, montoConSigno, compacto, ocultos } = useFormatoFijo(esUSD ? 'USD' : 'ARS')
   type DatoGrafico = { fecha: string; valor: number; capitalAportado: number | null }
   const datosGrafico: DatoGrafico[] = puntos
     .map(p => ({
@@ -270,14 +262,14 @@ export default function Patrimonio() {
             <div>
               <div className="text-label text-app-text-faint uppercase tracking-wide mb-0.5">Valor actual</div>
               <div className="font-mono font-bold text-metric text-app-text tabular-nums">
-                {formatCompact(ultimoPunto.valor, esUSD)}
+                {compacto(ultimoPunto.valor)}
               </div>
             </div>
             {deltaAbs != null && variacionPct != null && (
               <div className="text-right shrink-0 ml-4">
                 <div className="text-label text-app-text-faint uppercase tracking-wide mb-0.5">Variación del período</div>
                 <div className={`font-mono font-bold text-strong tabular-nums ${variacionPct >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
-                  {variacionPct >= 0 ? '+' : ''}{formatCompact(deltaAbs, esUSD)} ({variacionPct >= 0 ? '+' : ''}{variacionPct.toFixed(1)}%)
+                  {montoConSigno(deltaAbs)} ({variacionPct >= 0 ? '+' : ''}{variacionPct.toFixed(1)}%)
                 </div>
               </div>
             )}
@@ -288,7 +280,7 @@ export default function Patrimonio() {
             const ganancia = valor !== null && capital !== null ? valor - capital : null
             return ganancia !== null ? (
               <div className="text-label text-app-text-dim mb-3">
-                Ganancia: <span className={ganancia >= 0 ? 'text-app-pos' : 'text-app-neg'}>{formatCompact(ganancia, esUSD)}</span>
+                Ganancia: <span className={ganancia >= 0 ? 'text-app-pos' : 'text-app-neg'}>{monto(ganancia)}</span>
               </div>
             ) : null
           })()}
@@ -332,7 +324,7 @@ export default function Patrimonio() {
                 stroke="#94a3b8"
                 tick={{ fontSize: 10, fill: '#94a3b8' }}
                 width={62}
-                tickFormatter={v => formatCompact(v, esUSD)}
+                tickFormatter={v => compacto(v as number)}
               />
               <Tooltip
                 cursor={{ stroke: colorLinea, strokeWidth: 1 }}
@@ -351,7 +343,7 @@ export default function Patrimonio() {
                       <div style={{ color: '#f8fafc', marginBottom: 4 }}>{formatFechaTooltip(String(label))}</div>
                       {filas.map(item => (
                         <div key={String(item.dataKey)} style={{ color: item.dataKey === 'valor' ? colorLinea : '#94a3b8' }}>
-                          {item.dataKey === 'valor' ? 'Valor de mercado' : 'Capital aportado'}: {formatCompact(Number(item.value), esUSD)}
+                          {item.dataKey === 'valor' ? 'Valor de mercado' : 'Capital aportado'}: {monto(Number(item.value))}
                         </div>
                       ))}
                     </div>
@@ -417,7 +409,7 @@ export default function Patrimonio() {
               <MetricTile
                 label="Máximo histórico"
                 infoTerm="maximoHistorico"
-                value={formatCompact(vista === 'usd' ? (patrimonioSummary.maximo.valor_usd ?? 0) : (patrimonioSummary.maximo.valor_ars ?? 0), esUSD)}
+                value={compacto(vista === 'usd' ? (patrimonioSummary.maximo.valor_usd ?? 0) : (patrimonioSummary.maximo.valor_ars ?? 0))}
                 insuficiente={false}
               />
               {(() => {
@@ -442,35 +434,35 @@ export default function Patrimonio() {
                 <span className="text-app-text-dim">
                   <InfoTooltip term="patrimonio_descomposicion_aportes" label="Aportes:" className="text-app-text-dim" />
                 </span>
-                <span className="text-app-text font-mono">{formatCompact(vista === 'usd' ? patrimonioSummary.descomposicion.aportes_usd : patrimonioSummary.descomposicion.aportes_ars, esUSD)}</span>
+                <span className="text-app-text font-mono">{compacto(vista === 'usd' ? patrimonioSummary.descomposicion.aportes_usd : patrimonioSummary.descomposicion.aportes_ars)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-app-text-dim">
                   <InfoTooltip term="patrimonio_descomposicion_rendimiento" label="Rendimiento:" className="text-app-text-dim" />
                 </span>
                 <span className={`font-mono ${(vista === 'usd' ? patrimonioSummary.descomposicion.rendimiento_usd : patrimonioSummary.descomposicion.rendimiento_ars) >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
-                  {formatCompact(vista === 'usd' ? patrimonioSummary.descomposicion.rendimiento_usd : patrimonioSummary.descomposicion.rendimiento_ars, esUSD)}
+                  {compacto(vista === 'usd' ? patrimonioSummary.descomposicion.rendimiento_usd : patrimonioSummary.descomposicion.rendimiento_ars)}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-app-text-dim">
                   <InfoTooltip term="ingresos" label="Dividendos:" className="text-app-text-dim" />
                 </span>
-                <span className="text-app-text font-mono">{formatCompact(vista === 'usd' ? patrimonioSummary.descomposicion.dividendos_usd : patrimonioSummary.descomposicion.dividendos_ars, esUSD)}</span>
+                <span className="text-app-text font-mono">{compacto(vista === 'usd' ? patrimonioSummary.descomposicion.dividendos_usd : patrimonioSummary.descomposicion.dividendos_ars)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-app-text-dim">
                   <InfoTooltip term="patrimonio_descomposicion_otros_ajustes" label="Otros ajustes (comisiones):" className="text-app-text-dim" />
                 </span>
-                <span className="text-app-text font-mono">{formatCompact(vista === 'usd' ? patrimonioSummary.descomposicion.otros_ajustes_usd : patrimonioSummary.descomposicion.otros_ajustes_ars, esUSD)}</span>
+                <span className="text-app-text font-mono">{compacto(vista === 'usd' ? patrimonioSummary.descomposicion.otros_ajustes_usd : patrimonioSummary.descomposicion.otros_ajustes_ars)}</span>
               </div>
               <div className="flex justify-between border-t border-app-border-soft pt-2 mt-2">
                 <span className="text-app-text-dim font-semibold">
                   <InfoTooltip term="patrimonio_descomposicion_total" label="Total:" className="text-app-text-dim font-semibold" />
                 </span>
                 <span className="text-app-text font-mono font-bold">
-                  {formatCompact(
-                    (vista === 'usd'
+                  {compacto(
+                    vista === 'usd'
                       ? patrimonioSummary.descomposicion.aportes_usd +
                         patrimonioSummary.descomposicion.rendimiento_usd +
                         patrimonioSummary.descomposicion.dividendos_usd +
@@ -478,8 +470,7 @@ export default function Patrimonio() {
                       : patrimonioSummary.descomposicion.aportes_ars +
                         patrimonioSummary.descomposicion.rendimiento_ars +
                         patrimonioSummary.descomposicion.dividendos_ars +
-                        patrimonioSummary.descomposicion.otros_ajustes_ars),
-                    esUSD
+                        patrimonioSummary.descomposicion.otros_ajustes_ars,
                   )}
                 </span>
               </div>
@@ -514,7 +505,7 @@ export default function Patrimonio() {
                     className="font-mono text-caption font-bold tabular-nums"
                     style={{ color: tipo ? COLOR_EVENTO[tipo] : undefined }}
                   >
-                    {tipo === 'retiro' ? '−' : '+'}{formatMontoMovimiento(mov)}
+                    {tipo === 'retiro' ? '−' : '+'}{formatMontoMovimiento(mov, ocultos)}
                   </div>
                 </div>
               )

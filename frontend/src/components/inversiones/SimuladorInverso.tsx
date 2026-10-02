@@ -9,7 +9,8 @@ import {
   type ResultadoSolverFecha,
   type ResultadoSolverTasa,
 } from '../../utils/proyeccion'
-import { formatUSD, formatPct } from '../../utils'
+import { formatUSDCrudo, formatPct } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import Card from '../ui/Card'
 import Segmented from '../ui/Segmented'
 import FormHelp from '../../help/components/FormHelp'
@@ -64,6 +65,7 @@ export default function SimuladorInverso({
   tasaBaseCargada,
   tasaBaseSource,
 }: SimuladorInversoProps) {
+  const { monto: formatUSD } = useFormatoFijo('USD')
   const [mode, setMode] = useState<SolverMode>('aporte')
   const [form, setForm] = useState<FormState>({
     objetivo: objetivoMontoCargado,
@@ -259,7 +261,7 @@ export default function SimuladorInverso({
                     {formatUSD(resultado.aporte.aporteMensualUsd)}
                   </div>
                   <div className="text-label text-app-text-dim mt-1">
-                    Para alcanzar {formatUSD(form.objetivo)} en {mesesRestantes} meses
+                    Para alcanzar {formatUSDCrudo(form.objetivo)} en {mesesRestantes} meses
                   </div>
                 </div>
               ) : (
@@ -299,7 +301,7 @@ export default function SimuladorInverso({
                     {formatPct(resultado.tasa.tasaAnualPct)}
                   </div>
                   <div className="text-label text-app-text-dim mt-1">
-                    Para alcanzar {formatUSD(form.objetivo)} en {mesesRestantes} meses
+                    Para alcanzar {formatUSDCrudo(form.objetivo)} en {mesesRestantes} meses
                   </div>
                 </div>
               ) : (

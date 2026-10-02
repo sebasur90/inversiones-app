@@ -59,7 +59,7 @@ export const GRUPOS_PANTALLAS: GrupoPantallas[] = [
       { to: '/diagnostico', label: 'Diagnóstico', desc: 'Score de salud de la cartera y hallazgos', icon: 'check' },
       { to: '/calidad-datos', label: 'Calidad de datos', desc: 'Estado del último sync y problemas detectados', icon: 'info' },
       { to: '/indicadores', label: 'Indicadores macro', desc: 'CER, MEP, riesgo país e inflación mensual', icon: 'trend' },
-      { to: '/ajustes', label: 'Ajustes', desc: 'Moneda, sincronización automática y tamaño de texto', icon: 'edit' },
+      { to: '/ajustes', label: 'Ajustes', desc: 'Moneda, privacidad, sincronización automática y tamaño de texto', icon: 'edit' },
     ],
   },
 ]

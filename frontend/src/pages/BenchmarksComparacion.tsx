@@ -9,7 +9,7 @@ import {
 } from '../api'
 import BenchmarkComparisonTable from '../components/inversiones/BenchmarkComparisonTable'
 import PerformanceCompareChart from '../components/charts/PerformanceCompareChart'
-import { formatUSD, formatARS } from '../utils'
+import { useFormatoFijo } from '../hooks/useFormatoMoneda'
 import { Icon } from '../components/icons/Icons'
 import MetricTile from '../components/ui/MetricTile'
 import FormHelp from '../help/components/FormHelp'
@@ -50,6 +50,9 @@ export default function BenchmarksComparacion({ cartera = null }: BenchmarksComp
   const { syncVersion } = useInversionesContext()
   const [periodo, setPeriodo] = useState('1y')
   const [moneda, setMoneda] = useState<'usd' | 'ars_nominal' | 'ars_real'>('usd')
+  // La cartera "shadow" se deriva de tus tenencias reales: sus importes son dinero tuyo.
+  const { monto: formatUSD } = useFormatoFijo('USD')
+  const { monto: formatARS } = useFormatoFijo('ARS')
   const [benchmarks, setBenchmarks] = useState<string[]>([])
   const [tickers, setTickers] = useState<string[]>([])
   const [benchmarksDisponibles, setBenchmarksDisponibles] = useState<string[]>([])

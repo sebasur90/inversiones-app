@@ -1,5 +1,6 @@
 import type { InversionesResumen } from '../../api'
 import { formatPctRatio } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import MetricTile from '../ui/MetricTile'
 import type { HelpKey } from '../../help/content/index'
 
@@ -9,6 +10,7 @@ function toneFor(v: number | null | undefined): 'pos' | 'neg' | undefined {
 }
 
 export default function KpiGrid({ resumen, moneda }: { resumen: InversionesResumen | null; moneda: 'USD' | 'ARS' }) {
+  const fmt = useFormatoFijo(moneda)
   const esARS = moneda === 'ARS'
   const invertido = esARS ? resumen?.total_invertido_ars : resumen?.total_invertido_usd
   const xirr = esARS ? resumen?.xirr_ars ?? null : resumen?.xirr_usd ?? null
@@ -19,7 +21,7 @@ export default function KpiGrid({ resumen, moneda }: { resumen: InversionesResum
       <MetricTile
         label="Invertido"
         infoTerm="invertido"
-        value={invertido != null ? (esARS ? `$${Math.round(invertido).toLocaleString('es-AR')}` : `$${Math.round(invertido).toLocaleString('en-US')}`) : '—'}
+        value={fmt.monto(invertido)}
         suffix={esARS ? 'ARS' : 'USD'}
         size="md"
       />

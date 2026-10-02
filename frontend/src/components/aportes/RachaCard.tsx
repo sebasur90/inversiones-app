@@ -2,7 +2,7 @@ import dayjs from 'dayjs'
 import type { AporteMesItem, AporteRachas } from '../../api'
 import Card from '../ui/Card'
 import InfoTooltip from '../../help/components/InfoTooltip'
-import { formatUSD } from '../../utils'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import { mesCorto, meses } from './comun'
 
 /** Racha de aportes con la tira de los últimos 12 meses.
@@ -10,6 +10,7 @@ import { mesCorto, meses } from './comun'
  *  La marca nunca es sólo color: cada mes lleva ✓ / ○ y su `title`, para que se entienda sin
  *  distinguir verde de gris. */
 export default function RachaCard({ rachas, serie }: { rachas: AporteRachas; serie: AporteMesItem[] }) {
+  const { monto: formatUSD } = useFormatoFijo('USD')
   const ultimos = serie.filter(s => !s.futuro).slice(-12)
   const actual = rachas.aportando_actual
   const record = rachas.aportando_record
