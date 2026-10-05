@@ -100,6 +100,8 @@ export interface WatchlistItemOut {
   fecha_precio: string | null
   moneda_precio: string | null
   fuente_precio: string | null
+  variacion_dia: number | null
+  variacion_dia_pct: number | null
   precio_objetivo: number | null
   pct_a_objetivo: number | null
   en_zona: boolean | null
@@ -292,6 +294,9 @@ export interface RendimientoPorTickerItem {
   cantidad_actual: number
   precio_promedio: number
   precio_actual: number
+  fecha_precio?: string | null
+  variacion_dia?: number | null
+  variacion_dia_pct?: number | null
   valor_invertido_usd: number
   valor_actual_usd: number
   valor_invertido_ars: number

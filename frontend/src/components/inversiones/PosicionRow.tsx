@@ -1,5 +1,6 @@
 import type { RendimientoPorTickerItem } from '../../api'
-import { formatPctRatio } from '../../utils'
+import { formatPctRatio, formatARSCrudo, formatUSDCrudo, formatPrecio } from '../../utils'
+import VariacionDia from '../ui/VariacionDia'
 import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import { pctDelEstado, severidadDeEstado, type EstadoAlerta } from '../../utils/alertasPrecio'
 import { Icon } from '../icons/Icons'
@@ -60,6 +61,12 @@ export default function PosicionRow({
               <InfoTooltip term="posiciones_mercado" />
             </span>
           </span>
+        </div>
+        <div className="flex items-center gap-1.5 text-label mt-0.5">
+          <span className="font-mono text-app-text-dim tabular-nums">
+            {item.moneda === 'ARS' ? formatARSCrudo(item.precio_actual) : item.moneda === 'USD' ? formatUSDCrudo(item.precio_actual) : formatPrecio(item.precio_actual)}
+          </span>
+          <VariacionDia pct={item.variacion_dia_pct} />
         </div>
       </div>
       <div className="text-right shrink-0">

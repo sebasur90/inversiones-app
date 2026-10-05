@@ -516,6 +516,9 @@ class RendimientoPorTickerItem(BaseModel):
     cantidad_actual: float
     precio_promedio: float
     precio_actual: float
+    fecha_precio: Optional[date] = None
+    variacion_dia: Optional[float] = None       # precio_actual - precio del registro anterior
+    variacion_dia_pct: Optional[float] = None   # ratio (0.012 = +1,2%)
     valor_invertido_usd: float
     valor_actual_usd: float
     valor_invertido_ars: float
@@ -558,6 +561,8 @@ class WatchlistItemOut(BaseModel):
     fecha_precio: Optional[date] = None
     moneda_precio: Optional[str] = None
     fuente_precio: Optional[str] = None  # "cartera" | "iol" | "api"
+    variacion_dia: Optional[float] = None
+    variacion_dia_pct: Optional[float] = None  # ratio vs. el cierre inmediato anterior
     precio_objetivo: Optional[float] = None
     pct_a_objetivo: Optional[float] = None
     en_zona: Optional[bool] = None

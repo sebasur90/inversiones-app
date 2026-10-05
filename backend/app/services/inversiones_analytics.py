@@ -288,6 +288,27 @@ def _precio_conocido(precios_sorted: list[tuple[date, float, str]], fecha: date)
     return precios_sorted[idx]
 
 
+def _variacion_diaria(
+    precios_sorted: list[tuple[date, float, str]],
+    fecha_precio: date,
+    precio_actual: float,
+    moneda: str,
+) -> tuple[float | None, float | None]:
+    """(variación absoluta, variación %) del precio contra el registro inmediato anterior.
+
+    "Anterior" es el último precio con fecha estrictamente menor a la del precio actual: si el
+    actual es del viernes, se compara con el jueves (o el último día con dato), no con el mismo
+    día. Sin precio previo, en otra moneda, o con previo <= 0, devuelve (None, None).
+    """
+    idx = bisect.bisect_left(precios_sorted, fecha_precio, key=lambda p: p[0]) - 1
+    if idx < 0:
+        return None, None
+    _f, previo, moneda_previo = precios_sorted[idx]
+    if moneda_previo != moneda or previo <= 0:
+        return None, None
+    return precio_actual - previo, precio_actual / previo - 1
+
+
 def _valuar_holdings(
     holdings: dict[str, float],
     fecha: date,
@@ -1607,7 +1628,8 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
         if precio_info is None:
             continue
 
-        _fecha_precio, precio_actual, moneda = precio_info
+        fecha_precio, precio_actual, moneda = precio_info
+        variacion_dia, variacion_dia_pct = _variacion_diaria(precios_sorted, fecha_precio, precio_actual, moneda)
 
         # Calcular valor actual
         valor_actual_usd = _to_usd(precio_actual * tenencia, moneda, hoy, db, mep_cache) or 0.0
@@ -1670,6 +1692,9 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
             "cantidad_actual": round(tenencia, 8),
             "precio_promedio": round(precio_promedio_compra, 6),
             "precio_actual": round(precio_actual, 6),
+            "fecha_precio": fecha_precio,
+            "variacion_dia": round(variacion_dia, 6) if variacion_dia is not None else None,
+            "variacion_dia_pct": round(variacion_dia_pct, 4) if variacion_dia_pct is not None else None,
             "valor_invertido_usd": round(inversion_total_usd, 2),
             "valor_actual_usd": round(valor_actual_usd, 2),
             "valor_invertido_ars": round(inversion_total_ars, 2),

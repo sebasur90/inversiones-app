@@ -26,6 +26,7 @@ import AlertaPrecioBadge from '../components/inversiones/AlertaPrecioBadge'
 import SelectorInstrumento from '../components/inversiones/SelectorInstrumento'
 import DetalleWatchlist from '../components/inversiones/DetalleWatchlist'
 import { Icon } from '../components/icons/Icons'
+import VariacionDia from '../components/ui/VariacionDia'
 import { formatARSCrudo, formatUSDCrudo, formatPrecio } from '../utils'
 import { estadoWatchlist, type EstadoAlerta } from '../utils/alertasPrecio'
 
@@ -224,8 +225,11 @@ export default function Watchlist() {
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="font-mono text-caption font-bold text-app-text tabular-nums">
-                      {item.precio_actual != null ? formatMoneda(item.precio_actual, item.moneda_precio ?? item.moneda) : '—'}
+                    <div className="flex items-center justify-end gap-1.5">
+                      <span className="font-mono text-caption font-bold text-app-text tabular-nums">
+                        {item.precio_actual != null ? formatMoneda(item.precio_actual, item.moneda_precio ?? item.moneda) : '—'}
+                      </span>
+                      <VariacionDia pct={item.variacion_dia_pct} />
                     </div>
                     <div className="flex items-center justify-end gap-0.5 text-label text-app-text-dim mt-0.5 tabular-nums">
                       <span className="inline-flex items-center gap-0.5">

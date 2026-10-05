@@ -31,6 +31,7 @@ from .inversiones_analytics import (
     _nivel_precio,
     _precio_conocido,
     _precios_por_ticker,
+    _variacion_diaria,
 )
 from . import market_data
 from .market_data import precios as market_data_precios
@@ -44,6 +45,23 @@ def _tickers_en_cartera(db: Session, hasta: date) -> set[str]:
     for (_cartera, ticker), cantidad in _holdings_por_cartera_ticker(movs, hasta).items():
         totales[ticker] = totales.get(ticker, 0.0) + cantidad
     return {t for t, cant in totales.items() if cant > 0}
+
+
+def _cierres_barras(db: Session, tickers: list[str]) -> dict[str, list[tuple[date, float, str]]]:
+    """Cierres diarios de `BarraOHLCV` con la forma de `_precios_por_ticker` (la moneda se pasa
+    vacía: las velas no la guardan, así que la comparación de moneda se hace con la del precio)."""
+    if not tickers:
+        return {}
+    filas = (
+        db.query(BarraOHLCV.ticker, BarraOHLCV.fecha, BarraOHLCV.cierre)
+        .filter(BarraOHLCV.ticker.in_(tickers))
+        .order_by(BarraOHLCV.ticker, BarraOHLCV.fecha)
+        .all()
+    )
+    out: dict[str, list[tuple[date, float, str]]] = {}
+    for ticker, fecha, cierre in filas:
+        out.setdefault(ticker, []).append((fecha, float(cierre), ""))
+    return out
 
 
 def get_watchlist(db: Session) -> list[dict]:
@@ -66,6 +84,9 @@ def get_watchlist(db: Session) -> list[dict]:
     precios_wl = {row.ticker: row for row in db.query(PrecioWatchlist).all()}
     precios_inst = _precios_por_ticker(db) if tickers_instrumento else {}
 
+    solo_seguidos = [i.ticker for i in items if i.ticker not in tickers_instrumento]
+    cierres = _cierres_barras(db, solo_seguidos)
+
     resultado: list[dict] = []
     for item in items:
         precio_actual: float | None = None
@@ -85,6 +106,15 @@ def get_watchlist(db: Session) -> list[dict]:
                 precio_actual = float(fila.precio)
                 moneda_precio = fila.moneda
                 fuente_precio = fila.fuente
+
+        variacion_dia = variacion_dia_pct = None
+        if precio_actual is not None and fecha_precio is not None:
+            if item.ticker in tickers_instrumento:
+                serie = precios_inst.get(item.ticker, [])
+                variacion_dia, variacion_dia_pct = _variacion_diaria(serie, fecha_precio, precio_actual, moneda_precio or "")
+            else:
+                # Cierres de las velas: sin moneda guardada, así que se compara contra "".
+                variacion_dia, variacion_dia_pct = _variacion_diaria(cierres.get(item.ticker, []), fecha_precio, precio_actual, "")
 
         objetivo = float(item.objetivo) if item.objetivo is not None else None
         precio_objetivo, pct_a_objetivo, en_zona = _nivel_precio(
@@ -107,6 +137,8 @@ def get_watchlist(db: Session) -> list[dict]:
             "fecha_precio": fecha_precio,
             "moneda_precio": moneda_precio or item.moneda,
             "fuente_precio": fuente_precio,
+            "variacion_dia": round(variacion_dia, 6) if variacion_dia is not None else None,
+            "variacion_dia_pct": round(variacion_dia_pct, 4) if variacion_dia_pct is not None else None,
             "precio_objetivo": precio_objetivo,
             "pct_a_objetivo": pct_a_objetivo,
             "en_zona": en_zona,
