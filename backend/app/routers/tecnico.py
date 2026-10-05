@@ -79,11 +79,30 @@ def sembrar_presets_endpoint(forzar: bool = Query(False), db: Session = Depends(
     return estrategias_seed.sembrar_presets(db, forzar=forzar)
 
 
+# Tope de tickers por consulta: el costo real ya está acotado por `MAX_PARES`, pero una lista
+# pedida a mano no debería poder inflar la query string sin límite. Holgado a propósito para que
+# una watchlist grande (que manda todos sus tickers) nunca choque con el 422.
+_MAX_TICKERS_SENALES = 200
+
+
 @router.get("/tecnico/senales", response_model=list[SenalTickerOut])
-def listar_senales_recientes(db: Session = Depends(get_db)):
-    """Última señal de cada estrategia guardada con ticker asignado, si es reciente. La consume
-    la watchlist para mostrar un badge sin tener que abrir el gráfico de cada ticker."""
-    return estrategias_analytics.senales_recientes(db)
+def listar_senales_recientes(
+    db: Session = Depends(get_db),
+    tickers: Optional[list[str]] = Query(
+        None, description="Acota el universo a estos tickers. Vacío = cartera ∪ watchlist.",
+    ),
+):
+    """Última señal reciente de cada par (estrategia, ticker). La consume la watchlist para
+    mostrar un badge sin tener que abrir el gráfico de cada ticker.
+
+    Las estrategias reusables (sin ticker, como los presets sembrados) corren sobre todo el
+    universo; `tickers` lo acota a los que al consumidor le interesan.
+    """
+    if tickers and len(tickers) > _MAX_TICKERS_SENALES:
+        raise HTTPException(
+            status_code=422, detail=f"demasiados tickers (máximo {_MAX_TICKERS_SENALES})",
+        )
+    return estrategias_analytics.senales_recientes(db, tickers=tuple(tickers or ()))
 
 
 _ORIGENES_SCREENER = ("todos", "cartera", "watchlist")

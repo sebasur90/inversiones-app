@@ -1,7 +1,7 @@
 import {
   Bar, Cell, ComposedChart, CartesianGrid, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
-import dayjs from 'dayjs'
+import { mesAnioCorto, mesAnioLargo } from '../../utils/fechas'
 import type { AporteMesItem } from '../../api'
 import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 
@@ -18,7 +18,7 @@ function TooltipMes({ active, payload }: { active?: boolean; payload?: { payload
   return (
     <div className="bg-app-surface border border-app-surface-2 rounded-[10px] px-3 py-2 text-caption">
       <div className="text-app-text font-semibold mb-1">
-        {dayjs(`${item.mes}-01`).format('MMMM YYYY')}
+        {mesAnioLargo(item.mes)}
         {item.en_curso ? ' (en curso)' : ''}
       </div>
       <div className="flex items-center gap-1.5">
@@ -61,7 +61,7 @@ export default function AportesMensualesChart({
           dataKey="mes"
           stroke="#94a3b8"
           tick={{ fontSize: 10, fill: '#94a3b8' }}
-          tickFormatter={v => dayjs(`${v}-01`).format('MMM YY')}
+          tickFormatter={v => mesAnioCorto(v)}
           interval="preserveStartEnd"
           minTickGap={24}
         />

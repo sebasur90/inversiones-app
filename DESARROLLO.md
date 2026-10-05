@@ -198,6 +198,165 @@ exactamente en el Google Sheet y en `sheet_local/sheet_inversiones.xlsx`:
 `Modo` y `Valor` deben completarse juntos (o dejarse ambos vacíos). Se ven en el detalle de
 cada ticker en la app, junto con el % que falta para alcanzarlos.
 
+Además de verse en la app, **el cruce de estos niveles dispara un aviso por Telegram** (ver
+"Alertas de precio al celular" más abajo).
+
+## Alertas de precio al celular (Telegram)
+
+Cuando una posición cruza su stop loss o su precio objetivo, o un ticker de la watchlist entra en
+su zona de compra, el backend manda **un mensaje por Telegram**. Llega con la app cerrada.
+
+### Por qué Telegram y no notificaciones del navegador
+
+La app se sirve por HTTP en la LAN (`http://smoa7001lx:8087`). Los navegadores no permiten la API
+de notificaciones ni registran service workers en orígenes que no son seguros, así que Web Push
+obligaría a montar HTTPS primero (con Tailscale Serve, por ejemplo). Telegram esquiva todo eso: es
+un POST saliente del backend. De paso: **por el mismo motivo, el modo offline del service worker
+sólo funciona entrando por `localhost`**, no desde el celular.
+
+### Configuración
+
+**Los pasos de puesta en marcha, uno por uno, están en
+[`docs/alertas-telegram.md`](docs/alertas-telegram.md)** (crear el bot, sacar el chat id, sembrar el
+estado inicial, qué hacer si falla). Acá queda sólo el resumen.
+
+```
+ALERTAS_ENABLED=true
+TELEGRAM_BOT_TOKEN=...   # @BotFather → /newbot
+TELEGRAM_CHAT_ID=...     # @userinfobot te responde tu "Id"
+```
+
+**En qué archivo** depende de cómo levantes la app, porque `--env-file` *reemplaza* al `.env` por
+defecto en vez de sumarse:
+
+| Cómo levantás | Archivo que compose lee |
+|---|---|
+| `docker compose -f docker-compose.yml -f docker-compose.corporate.yml up` | `.env` |
+| `./docker-helper.sh corporate up` | `.env.corporate` |
+
+Si usás las dos formas, las líneas tienen que estar en los dos archivos (ambos gitignored).
+Para confirmar que llegaron al contenedor:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.corporate.yml config | grep TELEGRAM
+```
+
+En Ajustes → "Avisos al celular" se ve el estado y hay un botón para mandar un mensaje de prueba.
+
+**Proxy corporativo**: el POST a `api.telegram.org` sale por `HTTP_PROXY`/`HTTPS_PROXY`
+(`market_data/client.py` usa `trust_env=True`). Si el proxy bloquea Telegram, las alertas no van a
+funcionar desde la máquina de desarrollo pero sí desde el servidor, que sale directo.
+
+### Un aviso por cruce, no uno por corrida
+
+Cada nivel vigilado guarda estado en la tabla `alertas_precio`: `armada` o `disparada`. Un cruce
+avisa **una sola vez**; la alerta vuelve a `armada` sólo cuando el precio regresa al otro lado del
+nivel y se aleja más de un 2% (`alertas_engine.BANDA_REARMADO_PCT`).
+
+Esa banda de histéresis es lo que hace que la función sea usable: sin ella, un precio oscilando
+alrededor del nivel generaría un aviso por corrida hasta que uno silencie el bot. La lógica está
+en `services/alertas_engine.py` (puro, con tests) y el adaptador en `services/alertas_analytics.py`.
+
+El estado **sobrevive al sync**: si se borrara, todos los niveles ya cruzados volverían a avisar.
+
+Si el envío falla, la fila queda `disparada` con `entregada=0` y se reintenta en la corrida
+siguiente, sin volver a tratar el cruce como nuevo.
+
+### Endpoints
+
+| Método | Ruta | Para qué |
+|---|---|---|
+| GET | `/api/inversiones/alertas` | historial de cruces avisados |
+| GET | `/api/inversiones/alertas/estado` | si están habilitadas/configuradas y el último aviso |
+| POST | `/api/inversiones/alertas/probar` | mensaje de prueba, para verificar la configuración |
+| POST | `/api/inversiones/alertas/evaluar` | evaluar ahora (`?notificar=false` siembra el estado sin avisar) |
+
+**La primera vez conviene correr `POST /alertas/evaluar?notificar=false`**: deja todos los niveles
+ya cruzados en estado `disparada` sin mandar nada, y así el primer aviso real es un cruce nuevo y
+no una andanada con todo el historial.
+
+## Jobs programados: datos y alertas sin abrir la app
+
+El sync siempre fue **pull desde el cliente** (el botón del header o `useAutoSync` al abrir la
+PWA). Es decir: si nadie abre la app, no entra ningún dato — y una alerta que sólo se evalúa
+cuando uno mira la app no sirve para nada.
+
+`services/scheduler.py` programa **dos jobs** (APScheduler, dentro del contenedor), ambos de lunes
+a viernes:
+
+| Job | Cuándo | Qué hace |
+|---|---|---|
+| `sync_y_alertas` | 18:30 (tras el cierre) | `sync_from_sheet` completo + evaluar alertas |
+| `refresco_y_alertas` | 11, 13, 15, 17 (la rueda) | sólo cotizaciones + evaluar alertas |
+
+```
+SCHEDULER_ENABLED=true          # apagado por default: prenderlo sólo en el servidor
+SCHEDULER_HORA=18               # sync completo
+SCHEDULER_MINUTO=30
+SCHEDULER_TZ=America/Argentina/Buenos_Aires
+REFRESCO_HORAS=11,13,15,17      # refresco liviano; vacío lo desactiva
+REFRESCO_MINUTO=5
+```
+
+### Por qué son dos y no uno más frecuente
+
+Un `sync_from_sheet` lee el Google Sheet entero, valida ocho pestañas, hace ~20 bloques de
+delete/insert y escribe un `SyncRun`. Correrlo cada dos horas tendría dos problemas que **no son el
+cupo de IOL**:
+
+- el historial de `SyncRun` se conserva de a 20 (`_prune_sync_runs`), así que con varias corridas
+  por día el sparkline de Calidad de datos cubriría horas en vez de semanas;
+- su `health_score` sería perfecto por construcción (no mira el Sheet), inflando la métrica que
+  sirve justamente para detectar problemas del Sheet.
+
+De ahí el job liviano, `services/refresco_precios.py`: pide el precio del día por la **misma vía que
+el sync** (`market_data.precios.fetch_precios_api`, así que la precedencia `iol > sheet > api`, la
+calibración de escala y el conteo de cupo son los mismos, no una copia), hace upsert en
+`precios_instrumento` + espejo close-only en `serie_ohlcv`, re-cotiza la watchlist y deja la marca
+en la tabla `refresco_precios` (una fila). **No** lee el Sheet, no hace backfill histórico, no toca
+CER/MEP y no escribe en el historial de calidad de datos.
+
+### Consecuencia en la UI
+
+El chip de frescura del encabezado sigue mostrando el último **sync completo**, que es lo correcto:
+los movimientos y los niveles de stop-loss vienen del Sheet. La frescura de las **cotizaciones** se
+ve en Ajustes → "Cotizaciones", y sale de `GET /api/inversiones/refrescar-precios/estado`.
+
+### Resto de las garantías
+
+- **Apagado en la máquina de desarrollo**: cada corrida gasta cupo de IOL.
+- Los dos jobs respetan el mutex de sync (`services/sync_lock.py`, compartido con `POST /sync`): si
+  hay una corrida en curso, la otra se saltea en vez de encolarse. El refresco también escribe en
+  `precios_instrumento`, así que dos escritores simultáneos sobre SQLite es justo lo que el lock
+  evita.
+- Las alertas se evalúan **aunque la traída de datos falle o se saltee**: los niveles se comparan
+  contra los últimos precios que haya en la base, y un sync fallido no es razón para no avisar de un
+  cruce que ya pasó.
+- Costo de cupo: tanto un sync como un refresco gastan ~10 llamadas (1 token + ~9 paneles). Un sync
+  diario + 4 refrescos por día hábil son ~1.050 al mes contra el tope de 22.000: **menos del 5%**.
+
+### Dispararlo a mano
+
+```bash
+curl -X POST http://localhost:8087/api/inversiones/refrescar-precios
+```
+
+Mismo trabajo que el job de la rueda, para verificarlo sin esperar al horario.
+
+## Logs
+
+`LOG_LEVEL` (default `INFO`) fija el nivel del root logger. **Antes no había configuración de
+logging**, así que el root quedaba en `WARNING` de Python y ningún `logger.info` de la app se
+emitía nunca — incluido el resumen de cada sync. Con un job que corre solo a las 18:30, eso era
+inoperable.
+
+`docker-compose.yml` limita el `json-file` del backend a 5 archivos de 10 MB: con INFO los logs
+crecen de verdad y sin rotación llenarían el disco del host.
+
+```bash
+docker compose logs -f backend
+```
+
 ## Watchlist
 
 Sirve para seguir instrumentos que **todavía no están en cartera** (no tienen movimientos) y que la

@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts'
+import { fechaCorta } from '../../utils/fechas'
 import { EscenarioSimulacionOut } from '../../api'
 import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 
@@ -76,7 +77,7 @@ export default function EscenarioProyeccionChart({ resultado }: EscenarioProyecc
           labelFormatter={(label) => {
             if (typeof label === 'string') {
               const d = new Date(label)
-              return d.toLocaleDateString('es-ES')
+              return fechaCorta(d)
             }
             return label
           }}

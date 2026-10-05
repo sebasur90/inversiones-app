@@ -1,8 +1,8 @@
-import dayjs from 'dayjs'
+import { mesAnio } from '../../utils/fechas'
 
 /** "sep 2025" a partir de "2025-09". */
 export function mesCorto(mes: string | null | undefined): string {
-  return mes ? dayjs(`${mes}-01`).format('MMM YYYY') : '—'
+  return mesAnio(mes)
 }
 
 export function pct(v: number | null | undefined): string {

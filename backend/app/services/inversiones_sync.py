@@ -1,7 +1,8 @@
 """Orquestación del sync desde Google Sheets con validación de calidad."""
 import time
 import logging
-from datetime import datetime, UTC
+from datetime import date, datetime, UTC
+from typing import NamedTuple
 from sqlalchemy import func, tuple_
 from sqlalchemy.orm import Session
 
@@ -17,7 +18,9 @@ from .validation.reglas_estructura import validar_estructura_tab
 from .validation import reglas_instrumentos, reglas_movimientos, reglas_precios, reglas_objetivos, reglas_rebalanceo, reglas_benchmarks, reglas_configuracion, reglas_tipos_cambio, reglas_cer
 from .validation.health_score import calcular_health_score
 from . import market_data
+from . import estado_market_data
 from . import ohlcv_analytics
+from . import splits_engine
 from . import watchlist_analytics
 from .market_data import indices as market_data_indices
 from .market_data import precios as market_data_precios
@@ -58,6 +61,65 @@ def _prune_sync_runs(db: Session, keep: int = 20):
     subq = db.query(SyncRun.id).order_by(SyncRun.timestamp.desc()).limit(keep).subquery()
     db.query(SyncIssue).filter(SyncIssue.sync_run_id.notin_(db.query(subq))).delete()
     db.query(SyncRun).filter(SyncRun.id.notin_(db.query(subq))).delete()
+
+
+# Tope de tickers reportados: con muchas series afectadas, un issue por cada uno infla la
+# respuesta del endpoint sin agregar información.
+_MAX_TICKERS_SPLIT = 20
+
+
+class _BarraCierre(NamedTuple):
+    """Lo mínimo que necesita `splits_engine`: fecha y cierre."""
+    fecha: date
+    cierre: float
+
+
+def _issues_de_splits(db: Session) -> list[ValidationIssue]:
+    """Un aviso por ticker cuya serie tiene un escalón compatible con un split sin ajustar.
+
+    Severidad `INFO` a propósito: **no penaliza el health score**. Un split no es un defecto de
+    carga del Sheet que el usuario pueda arreglar, es una limitación de la fuente (a IOL se le
+    piden las series sin ajustar). Castigar el score por eso sería culpar al usuario de algo que
+    no hizo; lo que hace falta es que lo sepa cuando mire un gráfico o un backtest.
+    """
+    filas = (
+        db.query(BarraOHLCV.ticker, BarraOHLCV.fecha, BarraOHLCV.cierre)
+        .order_by(BarraOHLCV.ticker, BarraOHLCV.fecha)
+        .all()
+    )
+    por_ticker: dict[str, list[_BarraCierre]] = {}
+    for ticker, fecha, cierre in filas:
+        if cierre is None:
+            continue
+        por_ticker.setdefault(ticker, []).append(_BarraCierre(fecha, float(cierre)))
+
+    afectados: list[tuple[str, list]] = []
+    for ticker, barras in sorted(por_ticker.items()):
+        saltos = splits_engine.detectar_saltos(barras)
+        if saltos:
+            afectados.append((ticker, saltos))
+
+    out: list[ValidationIssue] = []
+    for ticker, saltos in afectados[:_MAX_TICKERS_SPLIT]:
+        ultimo = saltos[-1]
+        out.append(ValidationIssue(
+            tab="Precios", regla="posible_split_sin_ajustar",
+            mensaje=(
+                f"{ticker}: la serie tiene {len(saltos)} salto(s) compatible(s) con un split sin "
+                f"ajustar. El último: {ultimo.descripcion}."
+            ),
+            impacto="Los indicadores técnicos y el backtest leen el escalón como un movimiento real",
+            severidad=Severity.INFO,
+        ))
+    sobrantes = len(afectados) - _MAX_TICKERS_SPLIT
+    if sobrantes > 0:
+        out.append(ValidationIssue(
+            tab="Precios", regla="posible_split_sin_ajustar",
+            mensaje=f"Otros {sobrantes} ticker(s) con saltos compatibles con un split sin ajustar.",
+            impacto="Los indicadores técnicos y el backtest leen el escalón como un movimiento real",
+            severidad=Severity.INFO,
+        ))
+    return out
 
 
 def sync_from_sheet(db: Session) -> dict:
@@ -367,23 +429,9 @@ def sync_from_sheet(db: Session) -> dict:
         ohlcv_existentes: dict = {}
         ohlcv_maximos: dict = {}
         if usa_apis:
-            estado_por_ticker = {
-                r.ticker: {
-                    "factor_escala": float(r.factor_escala) if r.factor_escala is not None else None,
-                    "factor_fecha": r.factor_fecha,
-                    "backfill_estado": r.backfill_estado,
-                    "backfill_intento": r.backfill_intento,
-                    "ohlcv_estado": r.ohlcv_estado,
-                    "ohlcv_intento": r.ohlcv_intento,
-                    "simbolo_local": r.simbolo_local,
-                    "simbolo_subyacente": r.simbolo_subyacente,
-                    "mercado_subyacente": r.mercado_subyacente,
-                    "moneda_subyacente": r.moneda_subyacente,
-                    "resolucion_estado": r.resolucion_estado,
-                    "resolucion_intento": r.resolucion_intento,
-                }
-                for r in db.query(EstadoMarketDataTicker).all()
-            }
+            # Compartido con el job liviano de precios (`refresco_precios`), que necesita el mismo
+            # estado para calibrar la escala: ver `estado_market_data`.
+            estado_por_ticker = estado_market_data.cargar(db)
             paneles_fn = market_data_precios.memo_paneles(db)
             fci_fn = market_data_precios.memo_fci(db)
             for tk, f_min, f_max in db.query(
@@ -660,28 +708,14 @@ def sync_from_sheet(db: Session) -> dict:
 
         if usa_apis:
             ohlcv_count = db.query(BarraOHLCV).count()
+            # Splits no ajustados en las series ya persistidas. Va acá, después del upsert y de
+            # la purga de huérfanas, para mirar exactamente lo que va a leer el análisis técnico.
+            issues.extend(_issues_de_splits(db))
 
         # A1/A3: persistir el factor de escala calibrado y el estado de backfill por ticker, una vez
         # que pasaron por acá todas las rutas que lo mutan.
         if usa_apis:
-            for tk, est in estado_por_ticker.items():
-                fila_est = db.get(EstadoMarketDataTicker, tk)
-                if fila_est is None:
-                    fila_est = EstadoMarketDataTicker(ticker=tk)
-                    db.add(fila_est)
-                fila_est.factor_escala = est.get("factor_escala")
-                fila_est.factor_fecha = est.get("factor_fecha")
-                fila_est.backfill_estado = est.get("backfill_estado")
-                fila_est.backfill_intento = est.get("backfill_intento")
-                fila_est.ohlcv_estado = est.get("ohlcv_estado")
-                fila_est.ohlcv_intento = est.get("ohlcv_intento")
-                fila_est.simbolo_local = est.get("simbolo_local")
-                fila_est.simbolo_subyacente = est.get("simbolo_subyacente")
-                fila_est.mercado_subyacente = est.get("mercado_subyacente")
-                fila_est.moneda_subyacente = est.get("moneda_subyacente")
-                fila_est.resolucion_estado = est.get("resolucion_estado")
-                fila_est.resolucion_intento = est.get("resolucion_intento")
-            db.flush()
+            estado_market_data.persistir(db, estado_por_ticker)
 
         indices_mercado_api_count = 0
         if not fuentes_cer_mep_bloqueadas:

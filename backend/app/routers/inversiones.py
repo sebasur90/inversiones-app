@@ -1,4 +1,3 @@
-import threading
 from datetime import date
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -8,6 +7,7 @@ from ..database import get_db, MovimientoInversion, InstrumentoInversion
 from ..schemas import (
     SyncResult,
     IolEstadoOut,
+    AlertaPrecioOut, AlertasEstadoOut, AlertasEnvioOut, RefrescoCotizacionesOut,
     CalidadDatosOut,
     WatchlistItemOut,
     WatchlistItemIn,
@@ -58,7 +58,9 @@ from ..schemas import (
 from ..services.sheets_client import SheetsClientError
 from ..services.inversiones_sync import sync_from_sheet
 from ..services.calidad_datos import get_calidad_datos
-from ..services import catalogo_instrumentos, watchlist_analytics
+from ..services import (
+    alertas_analytics, catalogo_instrumentos, refresco_precios, sync_lock, watchlist_analytics,
+)
 from ..services.watchlist_analytics import get_watchlist
 from ..services.inversiones_analytics import (
     get_carteras,
@@ -110,11 +112,8 @@ from ..services.ticker_analytics import (
 
 router = APIRouter(prefix="/api/inversiones", tags=["inversiones"])
 
-# Un solo sync a la vez. Dos corridas concurrentes (dos pestañas, `useAutoSync` en dos
-# dispositivos) se pisaban: la segunda chocaba con el lock de escritura de SQLite y además
-# `iol_auth.iniciar_corrida()` resetea el contador por-corrida del sync en vuelo. No bloqueante:
-# encolar sólo alargaría el tiempo con la DB tomada, así que la segunda corrida se rechaza con 409.
-_sync_lock = threading.Lock()
+# El mutex vive en `services/sync_lock` porque lo comparte con el job programado (ver ahí por qué).
+_sync_lock = sync_lock.lock
 
 
 @router.post("/sync", response_model=SyncResult)
@@ -128,6 +127,43 @@ def sync(db: Session = Depends(get_db)):
     finally:
         _sync_lock.release()
     return result
+
+
+@router.post("/refrescar-precios", response_model=RefrescoCotizacionesOut)
+def refrescar_precios_ahora(db: Session = Depends(get_db)):
+    """Refresco liviano de cotizaciones: sólo el precio del día, sin leer el Sheet.
+
+    Es lo que corre el job de la rueda cada dos horas; el endpoint existe para dispararlo a mano y
+    para poder verificarlo sin esperar al horario. Toma el mismo mutex que `/sync`.
+    """
+    if not _sync_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Ya hay una sincronización en curso")
+    try:
+        resumen = refresco_precios.refrescar(db)
+    finally:
+        _sync_lock.release()
+    ultimo = refresco_precios.ultimo(db) or {}
+    return RefrescoCotizacionesOut(**{**resumen, "timestamp": ultimo.get("timestamp"),
+                                 "duration_ms": ultimo.get("duration_ms", 0)})
+
+
+@router.get("/refrescar-precios/estado", response_model=Optional[RefrescoCotizacionesOut])
+def estado_refresco_precios(db: Session = Depends(get_db)):
+    """Última corrida del refresco de cotizaciones, o `null` si nunca corrió.
+
+    Es la frescura de los **precios**, distinta del chip de frescura de la app, que muestra el
+    último sync completo (de donde salen los movimientos y los niveles de stop-loss)."""
+    ultimo = refresco_precios.ultimo(db)
+    if ultimo is None:
+        return None
+    return RefrescoCotizacionesOut(
+        resultado=ultimo["resultado"],
+        precios_actualizados=ultimo["precios_actualizados"],
+        precios_watchlist=ultimo["precios_watchlist"],
+        iol_llamadas=ultimo["iol_llamadas"],
+        timestamp=ultimo["timestamp"],
+        duration_ms=ultimo["duration_ms"],
+    )
 
 
 @router.get("/iol/estado", response_model=IolEstadoOut)
@@ -864,3 +900,48 @@ def ticker_historico(
     if cartera is not None:
         _validar_cartera(cartera, db)
     return get_ticker_historico(ticker, cartera, desde, db)
+
+
+# --- Alertas de precio ---------------------------------------------------------------------
+# Son globales, no por cartera: un cruce de stop-loss importa igual en qué cartera esté, y la
+# watchlist no pertenece a ninguna.
+
+@router.get("/alertas", response_model=list[AlertaPrecioOut])
+def listar_alertas(limite: int = Query(50, ge=1, le=200), db: Session = Depends(get_db)):
+    """Historial de cruces avisados, el más reciente primero."""
+    return alertas_analytics.listar(db, limite=limite)
+
+
+@router.get("/alertas/estado", response_model=AlertasEstadoOut)
+def estado_alertas(db: Session = Depends(get_db)):
+    """Si las alertas están habilitadas y configuradas, y cuándo fue el último aviso."""
+    return alertas_analytics.estado_configuracion(db)
+
+
+@router.post("/alertas/probar", response_model=AlertasEnvioOut)
+def probar_alertas():
+    """Manda un mensaje de prueba al canal configurado.
+
+    Existe para poder verificar la configuración sin esperar a que el precio cruce un nivel ni a
+    que corra el job de las 18:30.
+    """
+    from ..services.notificaciones import telegram
+
+    entregado, motivo = telegram.enviar(
+        "✅ Prueba de alertas de inversiones-app. Si leés esto, el canal está bien configurado."
+    )
+    return AlertasEnvioOut(entregado=entregado, motivo=motivo)
+
+
+@router.post("/alertas/evaluar", response_model=AlertasEnvioOut)
+def evaluar_alertas(
+    notificar: bool = Query(True, description="False evalúa y persiste sin mandar nada"),
+    db: Session = Depends(get_db),
+):
+    """Corre la evaluación de alertas ahora, sin esperar al job programado.
+
+    `notificar=false` siembra el estado de todos los niveles sin disparar avisos: útil la primera
+    vez, para no recibir una andanada por cada nivel que ya estaba cruzado.
+    """
+    resumen = alertas_analytics.evaluar_y_notificar(db, notificar=notificar)
+    return AlertasEnvioOut(**resumen)

@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { fechaCorta, fechaHora } from '../utils/fechas'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import { getCalidadDatos } from '../api'
 import CalidadIssueRow from '../components/inversiones/CalidadIssueRow'
@@ -70,7 +71,7 @@ export default function CalidadDatos() {
             </div>
             {nivelCalidad && <Semaforo nivel={nivelCalidad.nivel} etiqueta={nivelCalidad.etiqueta} className="mb-2" />}
             <div className="text-body text-app-text-dim">
-              Última sincronización: {new Date(ultimo_sync.timestamp).toLocaleString()}
+              Última sincronización: {fechaHora(ultimo_sync.timestamp)}
               <br />
               Tiempo: {ultimo_sync.duration_ms}ms
             </div>
@@ -119,9 +120,9 @@ export default function CalidadDatos() {
                   }
                 />
                 <div className="flex justify-between text-label text-app-text-faint mt-0.5 tabular-nums">
-                  <span>{new Date(historial[0].timestamp).toLocaleDateString()}</span>
+                  <span>{fechaCorta(historial[0].timestamp)}</span>
                   <span>{scores[0]} → {scores[scores.length - 1]}</span>
-                  <span>{new Date(historial[historial.length - 1].timestamp).toLocaleDateString()}</span>
+                  <span>{fechaCorta(historial[historial.length - 1].timestamp)}</span>
                 </div>
               </div>
             )}

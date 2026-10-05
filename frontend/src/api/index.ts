@@ -2263,8 +2263,13 @@ export interface SenalTickerOut {
 export const getPresetsEstrategia = () =>
   api.get<PresetEstrategiaOut[]>('/inversiones/tecnico/presets').then(r => r.data)
 
-export const getSenalesTecnicas = () =>
-  api.get<SenalTickerOut[]>('/inversiones/tecnico/senales').then(r => r.data)
+/** `tickers` acota el universo; sin él, el backend corre las reusables sobre cartera ∪ watchlist. */
+export const getSenalesTecnicas = (tickers?: string[]) =>
+  api
+    .get<SenalTickerOut[]>('/inversiones/tecnico/senales', {
+      params: { tickers: tickers && tickers.length > 0 ? tickers : undefined },
+    })
+    .then(r => r.data)
 
 export const backtestEstrategia = (
   ticker: string, definicion: EstrategiaDsl, desde?: string, hasta?: string, variante: VarianteSerie = 'local',
@@ -2433,3 +2438,82 @@ export interface ComparadorOut {
 
 export const compararEstrategias = (ticker: string, body: ComparadorRequest) =>
   api.post<ComparadorOut>(`/inversiones/tecnico/${encodeURIComponent(ticker)}/comparar`, body).then(r => r.data)
+
+// --- Alertas de precio (avisos al celular) ---
+
+export interface AlertaPrecioOut {
+  ticker: string
+  nombre: string
+  tipo: 'stop_loss' | 'objetivo' | 'compra_zona'
+  etiqueta: string
+  cartera: string | null
+  estado: 'armada' | 'disparada'
+  nivel: number | null
+  precio_disparo: number | null
+  moneda: string
+  emitida_en: string | null
+  entregada: boolean
+}
+
+export interface AlertasEstadoOut {
+  habilitadas: boolean
+  configurado: boolean
+  canal: string
+  niveles_vigilados: number
+  ultimo_aviso: string | null
+  sin_entregar: number
+}
+
+export interface AlertasEnvioOut {
+  entregado: boolean
+  motivo: string | null
+  niveles_vigilados: number
+  nuevas: number
+  rearmadas: number
+  pendientes_de_entrega: number
+}
+
+export const getAlertas = (limite = 50) =>
+  api.get<AlertaPrecioOut[]>('/inversiones/alertas', { params: { limite } }).then(r => r.data)
+
+export const getAlertasEstado = () =>
+  api.get<AlertasEstadoOut>('/inversiones/alertas/estado').then(r => r.data)
+
+export const probarAlertas = () =>
+  api.post<AlertasEnvioOut>('/inversiones/alertas/probar').then(r => r.data)
+
+export const evaluarAlertas = (notificar = true) =>
+  api.post<AlertasEnvioOut>('/inversiones/alertas/evaluar', null, { params: { notificar } }).then(r => r.data)
+
+// --- Consumo de la API de IOL ---
+
+export interface IolEstadoOut {
+  periodo: string
+  llamadas: number
+  limite: number
+  restante: number
+  limite_por_sync: number
+  habilitada: boolean
+}
+
+export const getIolEstado = () =>
+  api.get<IolEstadoOut>('/inversiones/iol/estado').then(r => r.data)
+
+// --- Refresco liviano de cotizaciones (job de la rueda) ---
+
+export interface RefrescoCotizacionesOut {
+  resultado: 'ok' | 'sin_fuentes' | 'error'
+  precios_actualizados: number
+  precios_watchlist: number
+  iol_llamadas: number
+  issues: number
+  timestamp: string | null
+  duration_ms: number
+}
+
+/** `null` si el job nunca corrió. */
+export const getRefrescoPrecios = () =>
+  api.get<RefrescoCotizacionesOut | null>('/inversiones/refrescar-precios/estado').then(r => r.data)
+
+export const refrescarPrecios = () =>
+  api.post<RefrescoCotizacionesOut>('/inversiones/refrescar-precios').then(r => r.data)

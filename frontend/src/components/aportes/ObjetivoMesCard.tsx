@@ -1,4 +1,4 @@
-import dayjs from 'dayjs'
+import { nombreMes } from '../../utils/fechas'
 import type { AporteObjetivo } from '../../api'
 import Card from '../ui/Card'
 import Button from '../ui/Button'
@@ -19,7 +19,8 @@ export default function ObjetivoMesCard({
   onConfigurar: () => void
 }) {
   const { monto: formatUSD } = useFormatoFijo('USD')
-  const mesNombre = dayjs().format('MMMM')
+  // En minúscula porque va en medio de la frase ("Objetivo de octubre").
+  const mesNombre = nombreMes(new Date()).toLowerCase()
 
   if (!objetivo.configurado || !objetivo.mes_actual) {
     return (

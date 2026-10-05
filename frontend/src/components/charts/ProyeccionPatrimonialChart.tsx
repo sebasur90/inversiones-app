@@ -2,6 +2,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer, ComposedChart, Line,
 } from 'recharts'
 import dayjs from 'dayjs'
+import { fechaCorta, mesAnioCorto } from '../../utils/fechas'
 import type { EvolucionOut } from '../../api'
 import type { PuntoSimulado } from '../../utils/proyeccion'
 import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
@@ -87,7 +88,7 @@ export default function ProyeccionPatrimonialChart({
             dataKey="fecha"
             stroke="#94a3b8"
             tick={{ fontSize: 10, fill: '#94a3b8' }}
-            tickFormatter={v => dayjs(v).format('MMM YY')}
+            tickFormatter={v => mesAnioCorto(v)}
             interval="preserveStartEnd"
           />
           <YAxis
@@ -99,7 +100,7 @@ export default function ProyeccionPatrimonialChart({
           <Tooltip
             contentStyle={{ background: '#171b26', border: '1px solid #1c1f2a', borderRadius: 10, fontSize: 12 }}
             labelStyle={{ color: '#f8fafc' }}
-            labelFormatter={v => dayjs(v).format('MMM DD, YYYY')}
+            labelFormatter={v => fechaCorta(v)}
             formatter={(value: any, name: string) => {
               if (name === 'valorReal') return [monto(value), 'Valor real']
               if (name === 'valorPlan') return [monto(value), 'Plan']

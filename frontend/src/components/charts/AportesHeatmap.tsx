@@ -3,8 +3,7 @@ import { heatmapIntensity } from '../../utils'
 import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import { MASCARA } from '../../utils/formatoMonto'
 import Card from '../ui/Card'
-
-const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+import { MESES_CORTOS } from '../../utils/fechas'
 
 /**
  * Texto del tooltip de una celda: monto y, si había objetivo vigente, cuánto se cumplió.
@@ -58,7 +57,7 @@ export default function AportesHeatmap({
             <th className="sticky left-0 z-10 bg-app-surface text-left text-app-text-faint font-bold uppercase text-label pb-2 pr-2">
               Año
             </th>
-            {MESES.map(m => (
+            {MESES_CORTOS.map(m => (
               <th key={m} className="text-center text-app-text-faint font-bold uppercase text-label pb-2 px-0.5 min-w-[44px]">
                 {m}
               </th>
@@ -72,7 +71,7 @@ export default function AportesHeatmap({
           {aniosOrdenados.map(anio => (
             <tr key={anio.anio}>
               <td className="sticky left-0 z-10 bg-app-surface font-semibold text-app-text py-1 pr-2">{anio.anio}</td>
-              {MESES.map((_, idx) => {
+              {MESES_CORTOS.map((_, idx) => {
                 const item = porClave.get(`${anio.anio}-${String(idx + 1).padStart(2, '0')}`)
                 const cumplio = mostrarObjetivo && item?.cumple_objetivo === true
                 return (

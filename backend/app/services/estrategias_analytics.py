@@ -14,7 +14,8 @@ from datetime import date, datetime
 from sqlalchemy.orm import Session
 
 from ..database import EstrategiaTecnica
-from . import estrategia_engine, ohlcv_analytics
+from . import estrategia_engine, estrategias_universo, ohlcv_analytics
+from .cache import cache_por_sync
 
 
 # ─── Identidad por nombre ─────────────────────────────────────────────────────
@@ -286,38 +287,60 @@ def ejecutar_backtest(
 MAX_BARRAS_SENAL_RECIENTE = 5
 
 
-def senales_recientes(db: Session, max_barras: int = MAX_BARRAS_SENAL_RECIENTE) -> list[dict]:
-    """Última señal de cada estrategia guardada **con ticker asignado**, si disparó dentro de las
-    últimas `max_barras` ruedas de la serie.
+@cache_por_sync
+def senales_recientes(
+    db: Session,
+    max_antiguedad_barras: int = MAX_BARRAS_SENAL_RECIENTE,
+    tickers: tuple[str, ...] = (),
+) -> list[dict]:
+    """Última señal de cada par (estrategia, ticker), si disparó dentro de las últimas
+    `max_antiguedad_barras` ruedas de la serie.
+
+    Las estrategias con `ticker` fijo corren sobre ese ticker; las reusables (`ticker IS NULL`,
+    que es como se siembran los 16 presets del catálogo) corren sobre todo el universo
+    cartera ∪ watchlist, con el mismo tope de pares que el screener
+    (`estrategias_universo.armar_pares`).
+
+    Antes se descartaban las estrategias sin ticker "porque no hay forma de saber sobre qué serie
+    correrlas". Como los presets se siembran justamente sin ticker, el endpoint devolvía siempre
+    una lista vacía y el badge de la watchlist no aparecía nunca.
+
+    `tickers` acota el universo: la watchlist pide sólo los suyos en vez de escanear todo.
 
     Reusa `estrategia_engine.backtest` en vez de evaluar las condiciones sueltas: así la señal que
     se muestra es la que la máquina de estados realmente habría operado (una compra no se repite
     mientras la posición sigue abierta), no cada barra en la que la condición da verdadera.
 
-    Las estrategias sin ticker (reusables) se omiten: no hay forma de saber sobre qué serie
-    correrlas sin que el usuario lo elija.
+    La serie se prepara igual que en `screener_analytics._evaluar_par` (`barras_previas=0` y el
+    mismo tope por DSL) para que las dos pantallas no puedan contradecirse: sería raro que el
+    screener diga "dispara ahora" y acá no figure la señal.
     """
     hoy = date.today()
+
+    estrategias, _ = estrategias_universo.estrategias_validas(db)
+    universo = ohlcv_analytics.listar_tickers_tecnicos(db)
+    if tickers:
+        pedidos = set(tickers)
+        universo = [t for t in universo if t["ticker"] in pedidos]
+    pares, _truncado = estrategias_universo.armar_pares(estrategias, universo)
+
     resultado: list[dict] = []
-
-    for estrategia in db.query(EstrategiaTecnica).filter(EstrategiaTecnica.ticker.isnot(None)).all():
-        if estrategia_engine.validar_estrategia(estrategia.definicion):
-            continue  # una definición inválida no debería frenar al resto de la lista
-
+    for estrategia, info in pares:
         variante = getattr(estrategia, "variante", None) or "local"
+        dsl = estrategia.definicion
         try:
-            # `barras_minimas` y `get_serie_barras` también van dentro del `try`: una estrategia
-            # guardada antes de que `validar_estrategia` chequeara los params de sus indicadores
-            # (o con params corruptos por otra vía) no debería tirar 500 y frenar la lista entera.
-            warm_up = estrategia_engine.barras_minimas(estrategia.definicion)
+            # `get_serie_barras` también va dentro del `try`: una estrategia guardada antes de que
+            # `validar_estrategia` chequeara los params de sus indicadores (o con params corruptos
+            # por otra vía) no debería tirar 500 y frenar la lista entera.
             serie = ohlcv_analytics.get_serie_barras(
-                estrategia.ticker, date(1900, 1, 1), hoy, db, barras_previas=warm_up, max_barras=3000,
+                info["ticker"], date(1900, 1, 1), hoy, db,
+                barras_previas=0, max_barras=estrategias_universo.max_barras_para(dsl),
                 variante=variante,
             )
             barras = serie["barras"]
             if len(barras) < 2:
                 continue
-            backtest_out = estrategia_engine.backtest(estrategia.definicion, barras)
+            backtest_out = estrategia_engine.backtest(dsl, barras)
         except (ValueError, KeyError, TypeError):
             continue  # DSL válido para el validador pero roto para esta serie: se omite
 
@@ -325,11 +348,11 @@ def senales_recientes(db: Session, max_barras: int = MAX_BARRAS_SENAL_RECIENTE) 
             continue
         ultima = backtest_out.senales[-1]
         barras_desde = (len(barras) - 1) - ultima.indice
-        if barras_desde > max_barras:
+        if barras_desde > max_antiguedad_barras:
             continue
 
         resultado.append({
-            "ticker": estrategia.ticker,
+            "ticker": info["ticker"],
             "estrategia_id": estrategia.id,
             "estrategia_nombre": estrategia.nombre,
             "tipo": ultima.tipo,

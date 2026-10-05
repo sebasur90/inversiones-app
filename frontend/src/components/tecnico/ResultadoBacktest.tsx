@@ -4,6 +4,7 @@ import MetricTile from '../ui/MetricTile'
 import GraficoBacktest from './GraficoBacktest'
 import GraficoFullscreen from './GraficoFullscreen'
 import TablaOperaciones from './TablaOperaciones'
+import { textosAdvertenciasSerie } from '../../utils/advertenciasSerie'
 
 function formatPctSigned(v: number | null | undefined): string {
   if (v == null) return '—'
@@ -41,9 +42,11 @@ export default function ResultadoBacktest({ resultado, dsl }: { resultado: Backt
       )}
 
       {resultado.advertencias.length > 0 && (
-        <div className="bg-app-surface-2 rounded-lg px-3 py-2 text-label text-app-text-dim">
-          {resultado.advertencias.join(' · ')}
-        </div>
+        <ul className="bg-app-surface-2 rounded-lg px-3 py-2 text-label text-app-text-dim list-disc pl-6 space-y-0.5">
+          {textosAdvertenciasSerie(resultado.advertencias).map(texto => (
+            <li key={texto}>{texto}</li>
+          ))}
+        </ul>
       )}
 
       <div className="grid grid-cols-2 gap-2">

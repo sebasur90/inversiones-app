@@ -1,4 +1,4 @@
-import dayjs from 'dayjs'
+import { fechaCorta } from '../../utils/fechas'
 import type { VencimientoItem } from '../../api'
 import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 
@@ -50,7 +50,7 @@ export default function VencimientoRow({ item, moneda }: { item: VencimientoItem
         <div className="flex-1 min-w-0">
           <div className="text-caption font-bold text-app-text truncate">{item.nombre}</div>
           <div className="text-label text-app-text-dim mt-0.5 truncate">
-            Vence: {dayjs(item.fecha_vencimiento).format('D MMM YYYY')}
+            Vence: {fechaCorta(item.fecha_vencimiento)}
           </div>
         </div>
         <div className="text-right shrink-0">

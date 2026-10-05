@@ -2,11 +2,7 @@ import type { ComparadorFilaOut } from '../../api'
 import Card from '../ui/Card'
 import EmptyState from '../ui/EmptyState'
 import InfoTooltip from '../../help/components/InfoTooltip'
-
-function fmtFecha(iso: string): string {
-  const d = new Date(iso + 'T00:00:00')
-  return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
-}
+import { fechaCorta } from '../../utils/fechas'
 
 /** Tramos donde cada estrategia se separó más de la referencia, tal como los devuelve el backend
  * (ya agrupados por mes y limitados a los de mayor magnitud): no se recalcula nada acá. */
@@ -33,7 +29,7 @@ export default function DivergenciasEstrategias({ filas }: { filas: ComparadorFi
           <div className="flex flex-col gap-2">
             {f.divergencias.map((t, i) => (
               <div key={i} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-label">
-                <span className="text-app-text-dim">{fmtFecha(t.desde)} → {fmtFecha(t.hasta)}</span>
+                <span className="text-app-text-dim">{fechaCorta(t.desde)} → {fechaCorta(t.hasta)}</span>
                 <span className={`font-mono font-bold ${t.delta_pp >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
                   {t.delta_pp >= 0 ? '+' : ''}{t.delta_pp.toFixed(2)} pp
                 </span>

@@ -18,8 +18,7 @@ import { Icon } from '../components/icons/Icons'
 import SkeletonPantalla from '../components/ui/Skeleton'
 import { qk } from '../api/queryClient'
 import { nivelDrawdown, nivelVolatilidad } from '../utils/niveles'
-
-const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+import { MESES_CORTOS } from '../utils/fechas'
 
 const OPCIONES_VISTA: { value: MonedaRiesgo; label: string }[] = [
   { value: 'ars_nominal', label: 'ARS Nominal' },
@@ -28,12 +27,12 @@ const OPCIONES_VISTA: { value: MonedaRiesgo; label: string }[] = [
 ]
 
 function formatMesLabel(anio: number, mes: number): string {
-  return `${MESES[mes - 1]} ${String(anio).slice(2)}`
+  return `${MESES_CORTOS[mes - 1]} ${String(anio).slice(2)}`
 }
 
 function formatFechaEje(iso: string): string {
   const d = new Date(iso + 'T00:00:00')
-  return `${MESES[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`
+  return `${MESES_CORTOS[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`
 }
 
 function formatRatio(v: number | null | undefined): string {

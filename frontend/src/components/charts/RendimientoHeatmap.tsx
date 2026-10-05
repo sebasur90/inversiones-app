@@ -1,8 +1,7 @@
 import type { RendimientoAnualItem, RendimientoMensualItem } from '../../api'
 import { formatPctRatio, heatmapIntensity } from '../../utils'
 import Card from '../ui/Card'
-
-const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+import { MESES_CORTOS } from '../../utils/fechas'
 
 interface RendimientoHeatmapProps {
   meses: RendimientoMensualItem[]
@@ -26,7 +25,7 @@ export default function RendimientoHeatmap({ meses, anios, esARS }: RendimientoH
             <th className="sticky left-0 z-10 bg-app-surface text-left text-app-text-faint font-bold uppercase text-label pb-2 pr-2">
               Año
             </th>
-            {MESES.map(m => (
+            {MESES_CORTOS.map(m => (
               <th key={m} className="text-center text-app-text-faint font-bold uppercase text-label pb-2 px-0.5 min-w-[40px]">
                 {m}
               </th>
@@ -42,7 +41,7 @@ export default function RendimientoHeatmap({ meses, anios, esARS }: RendimientoH
               <td className="sticky left-0 z-10 bg-app-surface font-semibold text-app-text py-1 pr-2">
                 {anio.anio}
               </td>
-              {MESES.map((_, idx) => {
+              {MESES_CORTOS.map((_, idx) => {
                 const item = porClave.get(`${anio.anio}-${idx + 1}`)
                 const valor = item ? (esARS ? item.twr_ars : item.twr_usd) : null
                 return (

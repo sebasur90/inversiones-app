@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import dayjs from 'dayjs'
+import { fechaCorta, mesAnio } from '../utils/fechas'
 import { useInversionesContext } from '../context/InversionesContext'
 import { useObjetivoInversion } from '../hooks/useObjetivoInversion'
 import { formatPct } from '../utils'
@@ -267,7 +268,7 @@ export default function Objetivo() {
                 {objetivo.nombre}
               </div>
               <div className="text-caption text-app-text-dim">
-                Meta al {dayjs(objetivo.fecha_limite).format('MMM YYYY')} · cartera {carteraSeleccionada}
+                Meta al {mesAnio(objetivo.fecha_limite)} · cartera {carteraSeleccionada}
               </div>
             </div>
           </div>
@@ -365,7 +366,7 @@ export default function Objetivo() {
                 </div>
                 {fechaAportueActual?.fecha ? (
                   <div className="font-mono text-strong font-semibold text-app-text">
-                    {dayjs(fechaAportueActual.fecha).format('MMM DD, YYYY')}{' '}
+                    {fechaCorta(fechaAportueActual.fecha)}{' '}
                     <span className="text-label text-app-text-dim">
                       ({fechaAportueActual.meses} meses)
                     </span>
@@ -381,7 +382,7 @@ export default function Objetivo() {
                 </div>
                 {fechaAporteObjetivo?.fecha ? (
                   <div className="font-mono text-strong font-semibold text-app-text mb-2">
-                    {dayjs(fechaAporteObjetivo.fecha).format('MMM DD, YYYY')}{' '}
+                    {fechaCorta(fechaAporteObjetivo.fecha)}{' '}
                     <span className="text-label text-app-text-dim">
                       ({fechaAporteObjetivo.meses} meses)
                     </span>
@@ -425,7 +426,7 @@ export default function Objetivo() {
                         </div>
                         <div className="text-label text-app-text-dim mb-2">
                           {fechaEsc.fecha
-                            ? dayjs(fechaEsc.fecha).format('MMM YYYY')
+                            ? mesAnio(fechaEsc.fecha)
                             : '∞'}
                         </div>
                         <span

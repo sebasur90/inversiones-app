@@ -34,6 +34,62 @@ class SyncResult(BaseModel):
     issues: list[SyncIssueOut]
 
 
+# --- Refresco liviano de cotizaciones ---
+
+class RefrescoCotizacionesOut(BaseModel):
+    """Resultado de una corrida del refresco liviano de cotizaciones.
+
+    No es un `SyncResult`: este job no lee el Sheet, así que no tiene health score ni issues de
+    validación que reportar (ver `database.RefrescoPrecios`).
+
+    Y no se llama `RefrescoPreciosOut` porque ese nombre ya está tomado más abajo por la respuesta
+    de `POST /watchlist/precios`, que es otra cosa (re-cotizar sólo la watchlist)."""
+    resultado: str          # "ok" | "sin_fuentes" | "error"
+    precios_actualizados: int = 0
+    precios_watchlist: int = 0
+    iol_llamadas: int = 0
+    issues: int = 0
+    timestamp: Optional[datetime] = None
+    duration_ms: int = 0
+
+
+# --- Alertas de precio ---
+
+class AlertaPrecioOut(BaseModel):
+    """Un cruce de nivel ya avisado (o pendiente de entregar)."""
+    ticker: str
+    nombre: str
+    tipo: str          # "stop_loss" | "objetivo" | "compra_zona"
+    etiqueta: str      # el tipo en palabras, para mostrarlo tal cual
+    cartera: Optional[str] = None  # None = watchlist
+    estado: str        # "armada" | "disparada"
+    nivel: Optional[float] = None
+    precio_disparo: Optional[float] = None
+    moneda: str = ""
+    emitida_en: Optional[datetime] = None
+    entregada: bool = False
+
+
+class AlertasEstadoOut(BaseModel):
+    """Si las alertas están prendidas y configuradas. Lo muestra Ajustes."""
+    habilitadas: bool       # ALERTAS_ENABLED
+    configurado: bool       # hay token y chat id
+    canal: str              # "telegram"
+    niveles_vigilados: int
+    ultimo_aviso: Optional[datetime] = None
+    sin_entregar: int = 0
+
+
+class AlertasEnvioOut(BaseModel):
+    """Resultado de un envío: el de prueba o el de una evaluación disparada a mano."""
+    entregado: bool
+    motivo: Optional[str] = None
+    niveles_vigilados: int = 0
+    nuevas: int = 0
+    rearmadas: int = 0
+    pendientes_de_entrega: int = 0
+
+
 class IolEstadoOut(BaseModel):
     """Consumo de la API de IOL sin necesidad de correr un sync. `restante` es contra el cupo
     mensual bonificado (25.000); `limite`/`limite_por_sync` son los topes configurados."""

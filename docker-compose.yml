@@ -12,6 +12,24 @@ services:
       - IOL_ENABLED=${IOL_ENABLED:-true}
       - IOL_LIMITE_MENSUAL=${IOL_LIMITE_MENSUAL:-22000}
       - IOL_MAX_LLAMADAS_POR_SYNC=${IOL_MAX_LLAMADAS_POR_SYNC:-60}
+      # Nivel de los logs de la app. Sin esto el root logger queda en WARNING y no se ve el
+      # resumen de cada sync ni lo que hace el job programado.
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Jobs programados, para que entren datos y se avise de los cruces sin que nadie abra la app.
+      # Apagados por default: prenderlos sólo en el servidor.
+      - SCHEDULER_ENABLED=${SCHEDULER_ENABLED:-false}
+      # Sync completo del Sheet, una vez por día tras el cierre.
+      - SCHEDULER_HORA=${SCHEDULER_HORA:-18}
+      - SCHEDULER_MINUTO=${SCHEDULER_MINUTO:-30}
+      - SCHEDULER_TZ=${SCHEDULER_TZ:-America/Argentina/Buenos_Aires}
+      # Refresco liviano de cotizaciones durante la rueda (sólo precios, no toca el Sheet).
+      # Vacío desactiva este job sin tocar el de arriba.
+      - REFRESCO_HORAS=${REFRESCO_HORAS:-11,13,15,17}
+      - REFRESCO_MINUTO=${REFRESCO_MINUTO:-5}
+      # Alertas de precio por Telegram. El token y el chat id van en .env (gitignored), nunca acá.
+      - ALERTAS_ENABLED=${ALERTAS_ENABLED:-false}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
     volumes:
       # /app/data en un volumen nombrado: la DB (contador de cupo de IOL incluido) y la serie
       # histórica bajada por market_data sobreviven a un `docker compose up --build`.
@@ -32,6 +50,13 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    # Con LOG_LEVEL=INFO los logs crecen de verdad (antes el root en WARNING no emitía casi nada):
+    # sin rotación, el json-file del contenedor crece sin tope hasta llenar el disco del host.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   frontend:
     build: ./frontend

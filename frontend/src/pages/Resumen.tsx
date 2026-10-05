@@ -85,7 +85,10 @@ export default function Resumen() {
                 onClick={() => navigate('/diagnostico')}
                 className="text-left bg-app-surface border border-app-border rounded-2xl p-3 hover:border-app-border-soft transition-colors"
               >
-                <div className="text-label font-bold uppercase tracking-wide text-app-text-dim mb-0.5">Salud de cartera</div>
+                {/* "Diagnóstico", no "Salud de cartera": el score y los hallazgos salen de
+                    `getDiagnostico` y el tile lleva a /diagnostico. Con el nombre de la otra
+                    pantalla (/salud, que no tiene score) el destino contradecía la etiqueta. */}
+                <div className="text-label font-bold uppercase tracking-wide text-app-text-dim mb-0.5">Diagnóstico</div>
                 <div className="font-display text-metric font-semibold text-app-text">
                   {diagnostico.salud.score_total !== null ? Math.round(diagnostico.salud.score_total) : '—'}
                   <span className="text-body text-app-text-dim">/100</span>

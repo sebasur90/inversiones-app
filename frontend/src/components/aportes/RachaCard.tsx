@@ -1,4 +1,4 @@
-import dayjs from 'dayjs'
+import { mesAbreviado, mesAnioLargo } from '../../utils/fechas'
 import type { AporteMesItem, AporteRachas } from '../../api'
 import Card from '../ui/Card'
 import InfoTooltip from '../../help/components/InfoTooltip'
@@ -28,7 +28,7 @@ export default function RachaCard({ rachas, serie }: { rachas: AporteRachas; ser
 
       <div className="flex gap-1 mb-3" role="list">
         {ultimos.map(m => {
-          const etiqueta = `${dayjs(`${m.mes}-01`).format('MMMM YYYY')}: ${
+          const etiqueta = `${mesAnioLargo(m.mes)}: ${
             m.con_aporte ? formatUSD(m.neto_usd) : 'sin aporte'
           }${m.en_curso ? ' (mes en curso)' : ''}`
           return (
@@ -46,7 +46,7 @@ export default function RachaCard({ rachas, serie }: { rachas: AporteRachas; ser
                 {m.con_aporte ? '✓' : '○'}
               </div>
               <span className="text-label text-app-text-faint">
-                {dayjs(`${m.mes}-01`).format('MMM')[0].toUpperCase()}
+                {mesAbreviado(m.mes)[0]}
               </span>
             </div>
           )

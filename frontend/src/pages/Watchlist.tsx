@@ -66,9 +66,14 @@ export default function Watchlist() {
 
   // Señales de las estrategias técnicas guardadas para estos tickers. Es información extra: si
   // el pedido falla, la watchlist se muestra igual (sin badges).
+  // Se mandan los tickers de la watchlist: las estrategias reusables (sin ticker, como los
+  // presets sembrados) corren sobre todo el universo cartera ∪ watchlist, y acá sólo importan
+  // estos. Ordenados para que la clave de caché no cambie por el orden de la lista.
+  const tickersWatchlist = useMemo(() => items.map(i => i.ticker).sort(), [items])
   const senalesQuery = useQuery({
-    queryKey: qk.de('tecnico-senales'),
-    queryFn: () => getSenalesTecnicas(),
+    queryKey: qk.de('tecnico-senales', tickersWatchlist),
+    queryFn: () => getSenalesTecnicas(tickersWatchlist),
+    enabled: tickersWatchlist.length > 0,
   })
   const senalPorTicker = useMemo(() => {
     const mapa = new Map<string, SenalTickerOut>()

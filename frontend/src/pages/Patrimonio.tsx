@@ -21,6 +21,7 @@ import { useFormatoFijo } from '../hooks/useFormatoMoneda'
 import { formatMonto } from '../utils/formatoMonto'
 import { qk } from '../api/queryClient'
 import { Skeleton } from '../components/ui/Skeleton'
+import { fechaCorta } from '../utils/fechas'
 
 type Periodo = PeriodoEvolucion
 type Vista = 'ars' | 'ars_real' | 'usd'
@@ -99,11 +100,6 @@ function formatFechaLabel(iso: string): string {
   const dia = d.getDate().toString().padStart(2, '0')
   const mes = (d.getMonth() + 1).toString().padStart(2, '0')
   return `${dia}/${mes}`
-}
-
-function formatFechaTooltip(iso: string): string {
-  const d = new Date(iso + 'T00:00:00')
-  return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 const COLOR_POR_VISTA: Record<Vista, string> = {
@@ -340,7 +336,7 @@ export default function Patrimonio() {
                   })
                   return (
                     <div style={{ background: '#171b26', border: '1px solid #1c1f2a', borderRadius: 10, fontSize: 12, padding: '8px 10px' }}>
-                      <div style={{ color: '#f8fafc', marginBottom: 4 }}>{formatFechaTooltip(String(label))}</div>
+                      <div style={{ color: '#f8fafc', marginBottom: 4 }}>{fechaCorta(String(label))}</div>
                       {filas.map(item => (
                         <div key={String(item.dataKey)} style={{ color: item.dataKey === 'valor' ? colorLinea : '#94a3b8' }}>
                           {item.dataKey === 'valor' ? 'Valor de mercado' : 'Capital aportado'}: {monto(Number(item.value))}
@@ -489,7 +485,7 @@ export default function Patrimonio() {
       <Modal
         open={eventoSeleccionado != null}
         onClose={() => setEventoSeleccionado(null)}
-        title={eventoSeleccionado ? formatFechaTooltip(eventoSeleccionado.fecha) : ''}
+        title={eventoSeleccionado ? fechaCorta(eventoSeleccionado.fecha) : ''}
       >
         {eventoSeleccionado && (
           <div className="space-y-2">

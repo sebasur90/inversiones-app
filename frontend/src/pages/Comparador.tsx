@@ -17,6 +17,7 @@ import SkeletonPantalla, { Skeleton } from '../components/ui/Skeleton'
 import QueryBoundary from '../components/ui/QueryBoundary'
 import { useQuery } from '@tanstack/react-query'
 import { qk } from '../api/queryClient'
+import { fechaCorta } from '../utils/fechas'
 
 type Vista = 'nominal' | 'usd' | 'cer'
 
@@ -27,11 +28,6 @@ function formatFechaLabel(iso: string): string {
   const mes = (d.getMonth() + 1).toString().padStart(2, '0')
   const anio = d.getFullYear().toString().slice(2)
   return `${mes}/${anio}`
-}
-
-function formatFechaTooltip(iso: string): string {
-  const d = new Date(iso + 'T00:00:00')
-  return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 function valorEnVista(punto: PrecioHistoricoPunto, vista: Vista): number | null {
@@ -243,7 +239,7 @@ export default function Comparador() {
                     contentStyle={{ background: '#171b26', border: '1px solid #1c1f2a', borderRadius: 10, fontSize: 12 }}
                     labelStyle={{ color: '#f8fafc' }}
                     formatter={(v: number) => formatValor(v, vista, normalizado)}
-                    labelFormatter={formatFechaTooltip}
+                    labelFormatter={fechaCorta}
                   />
                   <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
                   {tickersSel.map((ticker, i) => (

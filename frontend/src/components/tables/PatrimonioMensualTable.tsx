@@ -1,15 +1,11 @@
 import type { PatrimonioPunto } from '../../api'
 import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import Card from '../ui/Card'
+import { fechaCorta } from '../../utils/fechas'
 
 interface PatrimonioMensualTableProps {
   puntos: PatrimonioPunto[]
   esUSD: boolean
-}
-
-function formatFecha(iso: string): string {
-  const d = new Date(iso + 'T00:00:00')
-  return d.toLocaleDateString('es-AR', { year: 'numeric', month: 'short', day: '2-digit' })
 }
 
 function formatPctRatio(v: number | null): string {
@@ -32,7 +28,7 @@ export default function PatrimonioMensualTable({ puntos, esUSD }: PatrimonioMens
     const rendimiento_pct = aportes !== 0 ? (ganancia / Math.abs(aportes)) : (i === 0 ? 0 : null)
 
     return {
-      fecha: formatFecha(p.fecha),
+      fecha: fechaCorta(p.fecha),
       valor: valor_actual,
       aportes_delta: i === 0 ? aportes : aportes - (esUSD ? puntos[i - 1].aportes_acumulados_usd : puntos[i - 1].aportes_acumulados_ars),
       ganancia,

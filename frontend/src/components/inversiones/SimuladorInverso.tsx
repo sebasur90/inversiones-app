@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import dayjs from 'dayjs'
+import { fechaCorta } from '../../utils/fechas'
 import {
   resolverAporteMensual,
   resolverFechaAlcanzable,
@@ -278,7 +279,7 @@ export default function SimuladorInverso({
               {resultado.fecha.fecha ? (
                 <div>
                   <div className="font-mono text-title font-bold text-app-text tabular-nums">
-                    {dayjs(resultado.fecha.fecha).format('MMM DD, YYYY')}
+                    {fechaCorta(resultado.fecha.fecha)}
                   </div>
                   <div className="text-label text-app-text-dim mt-1">
                     En {resultado.fecha.meses} meses ({resultado.fecha.meses && resultado.fecha.meses > mesesRestantes ? 'después' : 'antes'} del límite)

@@ -293,9 +293,42 @@ def test_senal_vieja_no_se_reporta(client):
     assert r.json() == []
 
 
-def test_estrategia_sin_ticker_no_genera_senal(client):
+def test_estrategia_sin_ticker_corre_sobre_el_universo(client):
+    """Regresión: las estrategias reusables (`ticker IS NULL`) tienen que correr sobre el
+    universo cartera ∪ watchlist.
+
+    Antes se descartaban, y como los 16 presets del catálogo se siembran justamente sin ticker
+    (`estrategias_seed`), el endpoint devolvía siempre `[]` y el badge de la watchlist no
+    aparecía nunca. El universo del fixture es AL30 (cartera, con serie) y GGAL (watchlist, sin
+    serie): sólo AL30 puede dar señal.
+    """
     dsl = _dsl_compra_siempre_que_cruce(109.75)
     client.post("/api/inversiones/estrategias", json={"nombre": "Reusable", "definicion": dsl})
 
     r = client.get("/api/inversiones/tecnico/senales")
+    assert r.status_code == 200
+    senales = r.json()
+    assert [s["ticker"] for s in senales] == ["AL30"]
+    assert senales[0]["estrategia_nombre"] == "Reusable"
+    assert senales[0]["tipo"] == "compra"
+
+
+def test_senales_acota_el_universo_a_los_tickers_pedidos(client):
+    """`tickers` es lo que le permite a la watchlist pedir sólo los suyos en vez de escanear
+    todo el universo."""
+    dsl = _dsl_compra_siempre_que_cruce(109.75)
+    client.post("/api/inversiones/estrategias", json={"nombre": "Reusable", "definicion": dsl})
+
+    # AL30 es el único con serie, así que pedir sólo GGAL deja la lista vacía.
+    r = client.get("/api/inversiones/tecnico/senales", params={"tickers": ["GGAL"]})
+    assert r.status_code == 200
     assert r.json() == []
+
+    r = client.get("/api/inversiones/tecnico/senales", params={"tickers": ["AL30"]})
+    assert [s["ticker"] for s in r.json()] == ["AL30"]
+
+
+def test_senales_rechaza_demasiados_tickers(client):
+    r = client.get("/api/inversiones/tecnico/senales",
+                   params={"tickers": [f"T{i}" for i in range(201)]})
+    assert r.status_code == 422

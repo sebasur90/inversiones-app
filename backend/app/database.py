@@ -297,6 +297,64 @@ class PrecioWatchlist(Base):
     fuente = Column(String, nullable=False)  # "iol" | "api"
 
 
+class RefrescoPrecios(Base):
+    """Última corrida del job liviano de precios (`services/refresco_precios.py`). Una sola fila.
+
+    **No es un `SyncRun` a propósito.** El refresco liviano no lee el Sheet ni valida pestañas, así
+    que no tiene nada que decir sobre la calidad de los datos: si escribiera un `SyncRun`, su
+    `health_score` perfecto inflaría el sparkline de Calidad de datos y, con varias corridas por
+    día, consumiría en pocas jornadas el historial de 20 que sirve para detectar problemas del
+    Sheet (ver `_prune_sync_runs`).
+
+    Por eso el chip de frescura de la app sigue mostrando el último sync **completo**: los
+    movimientos y los niveles de stop-loss vienen del Sheet, y esa es la fecha que importa para
+    ellos. El timestamp de acá es la frescura de las **cotizaciones**, que es otra cosa.
+    """
+    __tablename__ = "refresco_precios"
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime, nullable=False)
+    duration_ms = Column(Integer, nullable=False, default=0)
+    precios_actualizados = Column(Integer, nullable=False, default=0)
+    precios_watchlist = Column(Integer, nullable=False, default=0)
+    iol_llamadas = Column(Integer, nullable=False, default=0)
+    resultado = Column(String, nullable=False, default="ok")  # "ok" | "sin_fuentes" | "error"
+    detalle = Column(JSON, nullable=True)
+
+
+class AlertaPrecio(Base):
+    """Estado de cada nivel de precio vigilado, y bitácora de los avisos emitidos.
+
+    Una fila por `(ticker, tipo, cartera)`: el stop-loss y el objetivo de una posición, y el
+    precio de compra de un ticker de la watchlist. `estado` es lo que hace que la alerta avise
+    **una vez por cruce** en vez de una vez por corrida -- el antirrebote vive en
+    `services/alertas_engine.py`, que explica por qué hace falta.
+
+    La gestiona la app, no el Sheet: **el sync no la toca** (igual que `watchlist`,
+    `estrategias_tecnicas` y `escenarios_simulacion`). Si se borrara en cada sync, todos los
+    niveles cruzados volverían a avisar en la corrida siguiente.
+
+    `cartera` guarda `""` y no `NULL` para la watchlist: el UNIQUE incluye la columna y en SQLite
+    dos NULL no colisionan, así que con `NULL` se acumularían filas duplicadas del mismo nivel.
+
+    `entregada` distingue "se decidió avisar" de "el aviso salió": si el POST al canal falla, la
+    fila queda `disparada` pero sin entregar, y el envío se reintenta en la corrida siguiente sin
+    volver a tratar el cruce como nuevo.
+    """
+    __tablename__ = "alertas_precio"
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String, nullable=False)
+    tipo = Column(String, nullable=False)  # "stop_loss" | "objetivo" | "compra_zona"
+    cartera = Column(String, nullable=False, default="")  # "" = watchlist
+    estado = Column(String, nullable=False, default="armada")  # "armada" | "disparada"
+    nivel = Column(Numeric(18, 6), nullable=True)
+    precio_disparo = Column(Numeric(18, 6), nullable=True)
+    moneda = Column(String, nullable=True)
+    emitida_en = Column(DateTime, nullable=True)
+    entregada = Column(Integer, nullable=False, default=0)
+    detalle = Column(JSON, nullable=True)
+    __table_args__ = (UniqueConstraint("ticker", "tipo", "cartera", name="uq_alerta_precio"),)
+
+
 class EstadoApiIol(Base):
     """Contador mensual de llamadas a la API de IOL, para no pasarse del cupo bonificado.
 

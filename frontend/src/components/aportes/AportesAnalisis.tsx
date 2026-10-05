@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import dayjs from 'dayjs'
+import { mesAbreviado } from '../../utils/fechas'
 import {
   type AporteComparacion,
   type AporteHito,
@@ -375,7 +375,7 @@ export default function AportesAnalisis({ datos, cartera }: { datos: RitmoAporte
                 </td>
                 <td className={`text-right font-mono tabular-nums py-1.5 px-1 ${claseTono(a.var_vs_anio_anterior_pct)}`}>{pct(a.var_vs_anio_anterior_pct)}</td>
                 <td className="text-right font-mono tabular-nums text-app-text py-1.5 pl-1">
-                  {a.mejor_mes ? `${formatUSD(a.mejor_mes.neto_usd)} (${dayjs(`${a.mejor_mes.mes}-01`).format('MMM')})` : '—'}
+                  {a.mejor_mes ? `${formatUSD(a.mejor_mes.neto_usd)} (${mesAbreviado(a.mejor_mes.mes)})` : '—'}
                 </td>
               </tr>
             ))}

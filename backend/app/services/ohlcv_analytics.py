@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 from ..database import (
     BarraOHLCV, EstadoMarketDataTicker, InstrumentoInversion, PrecioInstrumento, WatchlistItem,
 )
+from . import splits_engine
 from .cache import cache_por_sync
 from .indicadores_engine import Barra
 
@@ -269,6 +270,11 @@ def get_serie_barras(
         advertencias.append("serie_con_huecos")
     if len(set(monedas)) > 1:
         advertencias.append("moneda_mixta")
+    # Las series de IOL vienen sin ajustar, así que un split queda como un escalón que los
+    # indicadores leen como un movimiento real. No se corrige la serie: se avisa. Ver
+    # `splits_engine`. El chequeo es O(n) sobre las barras que ya están en memoria.
+    if splits_engine.detectar_saltos(barras):
+        advertencias.append("posible_split")
 
     # La moneda efectiva sale de las barras de la ventana (para el subyacente, USD nativo; para
     # la local, la del instrumento salvo que la serie diga otra cosa).

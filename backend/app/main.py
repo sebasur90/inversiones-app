@@ -11,6 +11,7 @@ from sqlalchemy.pool import NullPool
 
 from .database import init_db, DB_PATH
 from .routers import inversiones, objetivos_inversion, escenarios, tecnico, aportes
+from .services import scheduler
 
 logger = logging.getLogger("inversiones")
 
@@ -24,6 +25,26 @@ _health_engine = create_engine(
     connect_args={"check_same_thread": False, "timeout": 2},
     poolclass=NullPool,
 )
+
+
+def _configurar_logging() -> None:
+    """Nivel y formato de los logs de la app.
+
+    Sin esto el root logger queda en WARNING, que es el default de Python: todos los
+    `logger.info` de la app -- incluido el resumen de cada sync
+    (`inversiones_sync`), el del job programado y el de las alertas -- **no se emitían nunca**.
+    Un job que corre solo a las 18:30 y no deja rastro en `docker logs` es inoperable.
+
+    `force=True` porque uvicorn ya instaló sus propios handlers antes de llegar acá; sus loggers
+    (`uvicorn.access` y compañía) no propagan al root, así que no se duplican líneas.
+    """
+    nivel = (os.getenv("LOG_LEVEL") or "INFO").upper()
+    logging.basicConfig(
+        level=getattr(logging, nivel, logging.INFO),
+        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+        stream=sys.stdout,
+        force=True,
+    )
 
 
 def _habilitar_volcado_de_stacks() -> None:
@@ -46,9 +67,14 @@ def _habilitar_volcado_de_stacks() -> None:
 async def lifespan(app: FastAPI):
     # Startup. El MEP y el CER salen del Sheet (tabla IndiceMercado), no de una API externa:
     # el arranque no depende de la red.
+    _configurar_logging()
     _habilitar_volcado_de_stacks()
     init_db()
+    # Después de `init_db`: el job escribe en la base, así que el esquema tiene que estar listo.
+    # `iniciar()` no hace nada si SCHEDULER_ENABLED no está prendido.
+    scheduler.iniciar()
     yield
+    scheduler.detener()
 
 
 app = FastAPI(title="Inversiones API", version="1.0.0", lifespan=lifespan)

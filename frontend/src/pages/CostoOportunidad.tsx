@@ -17,6 +17,7 @@ import QueryBoundary from '../components/ui/QueryBoundary'
 import BotonExportarCsv from '../components/ui/BotonExportarCsv'
 import CostoOportunidadChart from '../components/charts/CostoOportunidadChart'
 import { Icon } from '../components/icons/Icons'
+import { fechaCorta } from '../utils/fechas'
 
 type Periodo = PeriodoEvolucion
 
@@ -39,12 +40,6 @@ const OPCIONES_MONEDA: { value: MonedaRiesgo; label: string }[] = [
 function fmtMoneda(v: number | null | undefined, moneda: MonedaRiesgo, ocultos: boolean): string {
   // `ars_real` es la serie ajustada por CER: sigue siendo pesos.
   return formatMonto(v, moneda === 'usd' ? 'USD' : 'ARS', ocultos)
-}
-
-function fmtFecha(iso: string | null): string {
-  if (!iso) return '—'
-  const d = new Date(iso + 'T00:00:00')
-  return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 export default function CostoOportunidad() {
@@ -137,8 +132,8 @@ export default function CostoOportunidad() {
             {/* Frase principal */}
             <Card>
               <p className="text-caption text-app-text leading-relaxed">
-                Durante el período seleccionado —del <b>{fmtFecha(data.periodo_desde)}</b> al{' '}
-                <b>{fmtFecha(data.periodo_hasta)}</b>— la cartera tuvo{' '}
+                Durante el período seleccionado —del <b>{fechaCorta(data.periodo_desde)}</b> al{' '}
+                <b>{fechaCorta(data.periodo_hasta)}</b>— la cartera tuvo{' '}
                 <b className={data.resultado_cartera_pct != null && data.resultado_cartera_pct >= 0 ? 'text-app-pos' : 'text-app-neg'}>
                   {formatPctRatio(data.resultado_cartera_pct)}
                 </b>{' '}
@@ -200,7 +195,7 @@ export default function CostoOportunidad() {
                 />
               </Card>
               <p className="text-label text-app-text-faint mt-1.5">
-                Ambas líneas arrancan en 100 el {fmtFecha(data.periodo_desde)}. La distancia entre
+                Ambas líneas arrancan en 100 el {fechaCorta(data.periodo_desde)}. La distancia entre
                 ellas es la diferencia porcentual acumulada.
               </p>
             </div>
@@ -235,8 +230,8 @@ export default function CostoOportunidad() {
               <h3 className="text-caption font-bold text-app-text mb-2">Qué no dice esta comparación</h3>
               <ul className="list-disc list-inside text-label text-app-text-dim space-y-1.5">
                 <li>
-                  Es una descripción de lo que ocurrió entre el {fmtFecha(data.periodo_desde)} y el{' '}
-                  {fmtFecha(data.periodo_hasta)}, con los datos cargados hoy. No proyecta ni sugiere
+                  Es una descripción de lo que ocurrió entre el {fechaCorta(data.periodo_desde)} y el{' '}
+                  {fechaCorta(data.periodo_hasta)}, con los datos cargados hoy. No proyecta ni sugiere
                   nada sobre el futuro.
                 </li>
                 <li>

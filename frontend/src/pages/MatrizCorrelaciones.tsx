@@ -25,6 +25,7 @@ import MatrizCorrelacionHeatmap, { type CeldaSeleccionada } from '../components/
 import DetalleParCorrelacion from '../components/charts/DetalleParCorrelacion'
 import InfoTooltip from '../help/components/InfoTooltip'
 import { Icon } from '../components/icons/Icons'
+import { fechaCorta } from '../utils/fechas'
 
 type Periodo = Exclude<PeriodoEvolucion, '1M'>
 
@@ -48,11 +49,6 @@ const MAX_TICKERS = 12
 const MOTIVO_DESCARTE_TEXTO: Record<string, string> = {
   sin_precios: 'sin precios cargados',
   tope_tickers: `por encima del máximo de ${MAX_TICKERS}`,
-}
-
-function fmtFecha(iso: string | null): string {
-  if (!iso) return '—'
-  return new Date(iso + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 function fmtPar(p: MatrizCorrelacionParItem): string {
@@ -243,8 +239,8 @@ export default function MatrizCorrelaciones() {
                 <MetricTile label="Pares calculados" value={`${data.n_pares_ok}/${data.n_pares}`} />
                 <MetricTile
                   label="Período cubierto"
-                  value={data.periodo_desde ? fmtFecha(data.periodo_desde) : '—'}
-                  sub={data.periodo_hasta ? `hasta ${fmtFecha(data.periodo_hasta)}` : undefined}
+                  value={data.periodo_desde ? fechaCorta(data.periodo_desde) : '—'}
+                  sub={data.periodo_hasta ? `hasta ${fechaCorta(data.periodo_hasta)}` : undefined}
                 />
               </div>
 

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import dayjs from 'dayjs'
+import { diaMes } from '../utils/fechas'
 import { useInversionesContext } from '../context/InversionesContext'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import MovimientoRow from '../components/inversiones/MovimientoRow'
@@ -43,7 +44,7 @@ export default function Movimientos() {
   const labelFecha = (fecha: string) => {
     const d = dayjs(fecha)
     if (d.isSame(dayjs(), 'day')) return 'Hoy'
-    return d.format('D MMM')
+    return diaMes(fecha)
   }
 
   return (

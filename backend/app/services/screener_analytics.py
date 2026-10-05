@@ -13,68 +13,20 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from ..database import EstrategiaTecnica
-from . import estrategia_engine, indicadores_engine, ohlcv_analytics, screener_engine
+from . import estrategia_engine, estrategias_universo, ohlcv_analytics, screener_engine
 from .cache import cache_por_sync
 
-MAX_BARRAS_CORTO = 750
-MAX_BARRAS_LARGO = 3000
+# La expansión de estrategias sobre el universo (y su tope) es compartida con
+# `estrategias_analytics.senales_recientes`: vive en `estrategias_universo`.
+MAX_PARES = estrategias_universo.MAX_PARES
 
-# Cota de pares (estrategia × ticker) por escaneo: una estrategia reusable sobre un universo grande
-# multiplica rápido. Por encima de esto se corta y se avisa, en vez de tardar minutos o agotar la
-# caché de `cache_por_sync` (`MAX_ENTRADAS = 256`).
-MAX_PARES = 400
-
-_ORIGENES_VALIDOS = ("todos", "cartera", "watchlist")
-
-
-def _requiere_historico(dsl: dict) -> bool:
-    """`True` si algún indicador del DSL necesita toda la serie cargada (OBV, o EXTREMOS/PERCENTIL
-    con `ventana=0`) — ahí hace falta pedir `MAX_BARRAS_LARGO`, no `MAX_BARRAS_CORTO`."""
-    for item in dsl.get("indicadores", []) or []:
-        tipo = item.get("tipo")
-        if tipo == "OBV":
-            return True
-        if tipo in ("EXTREMOS", "PERCENTIL"):
-            espec = indicadores_engine.INDICADORES.get(tipo)
-            if espec is None:
-                continue
-            params = {**espec.params_default, **(item.get("params") or {})}
-            if int(params.get("ventana", 0)) == 0:
-                return True
-    return False
-
-
-def _ticker_aplica(origen_ticker: str, origen_filtro: str) -> bool:
-    if origen_filtro == "todos":
-        return True
-    if origen_filtro == "cartera":
-        return origen_ticker in ("cartera", "ambos")
-    return origen_ticker in ("watchlist", "ambos")  # origen_filtro == "watchlist"
-
-
-def _armar_pares(
-    estrategias: list[EstrategiaTecnica], universo: list[dict], origen: str,
-) -> tuple[list[tuple[EstrategiaTecnica, dict]], bool]:
-    tickers_por_nombre = {t["ticker"]: t for t in universo if _ticker_aplica(t["origen"], origen)}
-    pares: list[tuple[EstrategiaTecnica, dict]] = []
-    truncado = False
-    for estrategia in estrategias:
-        if estrategia.ticker is not None:
-            info = tickers_por_nombre.get(estrategia.ticker)
-            candidatos = [info] if info is not None else []
-        else:
-            candidatos = list(tickers_por_nombre.values())
-        for info in candidatos:
-            if len(pares) >= MAX_PARES:
-                return pares, True
-            pares.append((estrategia, info))
-    return pares, truncado
+_ORIGENES_VALIDOS = estrategias_universo.ORIGENES_VALIDOS
 
 
 def _evaluar_par(estrategia: EstrategiaTecnica, ticker_info: dict, db: Session, hoy: date) -> dict | None:
     dsl = estrategia.definicion
     variante = getattr(estrategia, "variante", None) or "local"
-    max_barras = MAX_BARRAS_LARGO if _requiere_historico(dsl) else MAX_BARRAS_CORTO
+    max_barras = estrategias_universo.max_barras_para(dsl)
 
     serie = ohlcv_analytics.get_serie_barras(
         ticker_info["ticker"], date(1900, 1, 1), hoy, db,
@@ -145,16 +97,12 @@ def escanear(
     hoy = date.today()
     advertencias: list[str] = []
 
-    todas = db.query(EstrategiaTecnica).order_by(EstrategiaTecnica.nombre).all()
-    if estrategia_ids:
-        ids = set(estrategia_ids)
-        todas = [e for e in todas if e.id in ids]
-    estrategias = [e for e in todas if not estrategia_engine.validar_estrategia(e.definicion)]
-    if len(estrategias) < len(todas):
+    estrategias, hubo_invalidas = estrategias_universo.estrategias_validas(db, estrategia_ids)
+    if hubo_invalidas:
         advertencias.append("estrategias_invalidas_omitidas")
 
     universo = ohlcv_analytics.listar_tickers_tecnicos(db)
-    pares, truncado = _armar_pares(estrategias, universo, origen)
+    pares, truncado = estrategias_universo.armar_pares(estrategias, universo, origen)
     if truncado:
         advertencias.append("universo_truncado")
 

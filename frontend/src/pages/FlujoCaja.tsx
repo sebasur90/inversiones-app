@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import dayjs from 'dayjs'
+import { fechaCorta, mesAnioCorto, mesAnioLargo } from '../utils/fechas'
 import { useInversionesContext } from '../context/InversionesContext'
 import { getFlujoCajaProyectado } from '../api'
 import { qk } from '../api/queryClient'
@@ -41,7 +41,7 @@ const METODO_LABEL: Record<string, string> = {
 }
 
 function mesLabel(periodo: string): string {
-  return dayjs(`${periodo}-01`).format('MMM YY')
+  return mesAnioCorto(periodo)
 }
 
 export default function FlujoCaja() {
@@ -151,7 +151,7 @@ export default function FlujoCaja() {
                     contentStyle={{ background: '#171b26', border: '1px solid #1c1f2a', borderRadius: 10, fontSize: 12 }}
                     labelStyle={{ color: '#f8fafc' }}
                     cursor={{ fill: 'rgba(255,255,255,0.04)' }}
-                    labelFormatter={(v: string) => dayjs(`${v}-01`).format('MMMM YYYY')}
+                    labelFormatter={(v: string) => mesAnioLargo(v)}
                     formatter={(value: number, name: string) => [fmt(value), name === 'cupones' ? 'Cupones' : 'Amortizaciones']}
                   />
                   <Legend
@@ -211,10 +211,10 @@ export default function FlujoCaja() {
 
                     <div className="text-caption text-app-text-dim mt-2 space-y-0.5">
                       <div>
-                        Vence {dayjs(inst.fecha_vencimiento).format('DD/MM/YYYY')}
+                        Vence {fechaCorta(inst.fecha_vencimiento)}
                         {inst.proximo_cobro && (
                           <>
-                            {' · '}próximo cobro {dayjs(inst.proximo_cobro.fecha).format('DD/MM/YYYY')}
+                            {' · '}próximo cobro {fechaCorta(inst.proximo_cobro.fecha)}
                             {' ('}
                             {inst.proximo_cobro.tipo === 'cupon' ? 'cupón' : 'amortización'}{' '}
                             {fmt(esARS ? inst.proximo_cobro.monto_ars : inst.proximo_cobro.monto_usd)}
@@ -246,7 +246,7 @@ export default function FlujoCaja() {
                         <div className="text-caption text-app-text-dim truncate">{item.nombre}</div>
                       </div>
                       <div className="text-label text-app-text-faint shrink-0">
-                        vence {dayjs(item.fecha_vencimiento).format('DD/MM/YYYY')}
+                        vence {fechaCorta(item.fecha_vencimiento)}
                       </div>
                     </div>
                     <div className="text-caption text-app-text-faint mt-1.5">{item.motivo}</div>

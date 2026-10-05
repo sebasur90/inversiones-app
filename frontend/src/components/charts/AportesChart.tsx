@@ -1,7 +1,7 @@
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer, ComposedChart, Area, Scatter,
 } from 'recharts'
-import dayjs from 'dayjs'
+import { mesAnioCorto, mesAnioLargo } from '../../utils/fechas'
 import type { AportesHistoricosOut } from '../../api'
 import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 
@@ -39,14 +39,14 @@ export default function AportesChart({
           <XAxis
             dataKey="mes_label"
             tick={{ fill: '#94a3b8', fontSize: 10 }}
-            tickFormatter={v => dayjs(`${v}-01`).format('MMM YY')}
+            tickFormatter={v => mesAnioCorto(v)}
             interval="preserveStartEnd"
           />
           <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} tickFormatter={v => compactoFino(v as number)} width={42} />
           <Tooltip
             contentStyle={{ background: '#171b26', border: '1px solid #1c1f2a', borderRadius: 10, fontSize: 12 }}
             labelStyle={{ color: '#f8fafc' }}
-            labelFormatter={v => dayjs(`${v}-01`).format('MMMM YYYY')}
+            labelFormatter={v => mesAnioLargo(v)}
             formatter={(v: number, name: string) => (name === 'aportes_netos_acumulados' ? [monto(v), 'Aportes acumulados'] : [v, name])}
           />
           {montoObjetivo && (

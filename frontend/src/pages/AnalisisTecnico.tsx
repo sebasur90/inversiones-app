@@ -34,6 +34,7 @@ import { descargarArchivo } from '../utils/descargar'
 import {
   nombreArchivoEstrategia, parsearArchivoEstrategia, serializarEstrategia,
 } from '../utils/estrategiaArchivo'
+import { textosAdvertenciasSerie } from '../utils/advertenciasSerie'
 
 /** El backend une los errores del validador con "; ". Se listan uno por línea, truncando a los
  * primeros 5 con "y N más". */
@@ -218,7 +219,11 @@ export default function AnalisisTecnico() {
           </QueryBoundary>
 
           {serie && serie.barras.length > 0 && serie.advertencias.length > 0 && (
-            <div className="mt-2 text-label text-app-text-dim">{serie.advertencias.join(' · ')}</div>
+            <ul className="mt-2 text-label text-app-text-dim list-disc pl-4 space-y-0.5">
+              {textosAdvertenciasSerie(serie.advertencias).map(texto => (
+                <li key={texto}>{texto}</li>
+              ))}
+            </ul>
           )}
         </>
       ) : (
