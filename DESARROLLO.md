@@ -199,12 +199,13 @@ exactamente en el Google Sheet y en `sheet_local/sheet_inversiones.xlsx`:
 cada ticker en la app, junto con el % que falta para alcanzarlos.
 
 Además de verse en la app, **el cruce de estos niveles dispara un aviso por Telegram** (ver
-"Alertas de precio al celular" más abajo).
+"Avisos al celular" más abajo).
 
-## Alertas de precio al celular (Telegram)
+## Avisos al celular (Telegram)
 
-Cuando una posición cruza su stop loss o su precio objetivo, o un ticker de la watchlist entra en
-su zona de compra, el backend manda **un mensaje por Telegram**. Llega con la app cerrada.
+El backend manda **un mensaje por Telegram** cuando una posición cruza su stop loss o su precio
+objetivo, cuando un ticker de la watchlist entra en su zona de compra, y cuando dispara una señal
+de una estrategia técnica habilitada. Llega con la app cerrada.
 
 ### Por qué Telegram y no notificaciones del navegador
 
@@ -241,7 +242,8 @@ Para confirmar que llegaron al contenedor:
 docker compose -f docker-compose.yml -f docker-compose.corporate.yml config | grep TELEGRAM
 ```
 
-En Ajustes → "Avisos al celular" se ve el estado y hay un botón para mandar un mensaje de prueba.
+En Ajustes → "Avisos al celular" se ve el estado y hay un botón para mandar un mensaje de prueba;
+en "Qué avisar" se eligen los tipos y las estrategias, y en "Últimos avisos" se ve el historial.
 
 **Proxy corporativo**: el POST a `api.telegram.org` sale por `HTTP_PROXY`/`HTTPS_PROXY`
 (`market_data/client.py` usa `trust_env=True`). Si el proxy bloquea Telegram, las alertas no van a
@@ -262,6 +264,57 @@ El estado **sobrevive al sync**: si se borrara, todos los niveles ya cruzados vo
 Si el envío falla, la fila queda `disparada` con `entregada=0` y se reintenta en la corrida
 siguiente, sin volver a tratar el cruce como nuevo.
 
+### Señales de estrategia: mismo canal, otro antirrebote
+
+Las señales técnicas (`estrategias_analytics.senales_recientes`) viajan por la misma tabla, con
+`tipo = "estrategia:<id>"` y `cartera = ""`:
+
+- **El id va dentro de `tipo`** y no en una columna propia porque tiene que entrar en el UNIQUE
+  `(ticker, tipo, cartera)`, y SQLite no sabe alterar un UniqueConstraint sin reconstruir la tabla.
+- **`cartera` queda vacía** porque una señal es sobre la serie del ticker, no sobre una tenencia:
+  si la cartera entrara en la clave, un ticker con tenencia en dos carteras avisaría dos veces y
+  mover la tenencia re-dispararía la señal. La cartera a mostrar viaja en el contexto.
+- **No hay histéresis** (no hay nivel del cual alejarse): la deduplicación es por la **barra** de
+  la señal, guardada en `detalle` (`senal_fecha`, `senal_tipo`). Eso resuelve de una vez el rebote
+  —la misma señal aparece durante dos ruedas y sólo la primera avisa— y la secuencia
+  compra → venta → compra del mismo par, donde cada señal cae en una barra distinta.
+
+### Qué avisa y qué no: tres interruptores y dos casillas por estrategia
+
+- Los tipos de nivel se prenden en la tabla singleton `ajustes_avisos` (los tres arrancan en 1 =
+  el comportamiento previo). Un tipo apagado **se sigue igual**: el cruce se guarda con
+  `entregada=1` y `emitida_en=NULL`, así que prenderlo meses después no manda de golpe todo lo que
+  pasó mientras estaba apagado.
+- Cada estrategia tiene `notificar_compra` y `notificar_venta` por separado: confiar en las
+  entradas de una estrategia no obliga a confiar en sus salidas. **Arrancan en 0**: el catálogo
+  siembra 16 presets reusables sobre todo el universo, y prenderlos todos serían decenas de
+  mensajes diarios. Si no hay ninguna prendida, `senales_recientes` **no se llama** — correr hasta
+  400 backtests para descartarlos es el gasto más caro del job.
+- `guardar_por_nombre` (el upsert que usa el editor) **no toca** esas casillas: re-guardar una
+  definición no puede silenciar una estrategia.
+- Todo se maneja desde Ajustes → "Qué avisar" (`services/avisos_config.py`).
+
+### El texto del aviso
+
+El formato vive en `alertas_engine` porque es parte de la decisión de "cuándo avisar": un aviso
+que no se entiende de un vistazo en el celular es un aviso que no sirve. Cada aviso dice la acción
+(`COMPRA`/`VENTA`/`REVISAR`), el origen (cartera X o watchlist, y si ya hay posición), la regla que
+lo disparó y la tenencia.
+
+Tres cosas a tener en cuenta si se toca:
+
+- **Va en `parse_mode=HTML`**, así que *todo dato* se escapa con `escapar_html` (`&` primero). Un
+  `&` crudo —`S&P 500`, `AT&T`— hace que Telegram rechace el mensaje **entero** con 400, no que se
+  vea raro un nombre. `telegram.enviar` reintenta una vez sin `parse_mode` si el 400 es de formato:
+  un bug de escapado tiene que degradar el aviso, no hacerlo desaparecer.
+- **El recorte es por avisos enteros** (`texto_notificacion`, presupuesto 3800 de los 4096 de
+  Telegram): completo → compacto → compacto con tope por bloque → sólo conteos. Cortar a mitad de
+  un tag no pierde un pedazo del mensaje, pierde todo.
+- **Todo el contexto se persiste en `detalle`** (`contexto_a_detalle` / `detalle_a_contexto`),
+  porque el reintento reconstruye el aviso sólo desde las columnas más ese JSON. Lo que no viaje
+  ahí hace que el reintento mande un texto distinto al original. `detalle` es una columna JSON:
+  `senal_fecha` va en ISO, nunca como `date`.
+
 ### Endpoints
 
 | Método | Ruta | Para qué |
@@ -270,10 +323,15 @@ siguiente, sin volver a tratar el cruce como nuevo.
 | GET | `/api/inversiones/alertas/estado` | si están habilitadas/configuradas y el último aviso |
 | POST | `/api/inversiones/alertas/probar` | mensaje de prueba, para verificar la configuración |
 | POST | `/api/inversiones/alertas/evaluar` | evaluar ahora (`?notificar=false` siembra el estado sin avisar) |
+| GET | `/api/inversiones/alertas/config` | los tres interruptores + las casillas de cada estrategia |
+| PUT | `/api/inversiones/alertas/config` | prender/apagar tipos de nivel (parcial: `null` no toca) |
+| PUT | `/api/inversiones/alertas/config/estrategias/{id}` | prender/apagar compras y ventas de una estrategia |
 
-**La primera vez conviene correr `POST /alertas/evaluar?notificar=false`**: deja todos los niveles
-ya cruzados en estado `disparada` sin mandar nada, y así el primer aviso real es un cruce nuevo y
-no una andanada con todo el historial.
+**La primera vez conviene correr `POST /alertas/evaluar?notificar=false`**: deja todos los avisos
+ya disparados como "ya vistos" sin mandar nada, y así el primer aviso real es un cruce nuevo y no
+una andanada con todo el historial. Hasta 2026-10 esa receta **no funcionaba**: las filas quedaban
+`entregada=0` y la corrida siguiente las levantaba como pendientes de entrega y mandaba la andanada
+igual.
 
 ## Jobs programados: datos y alertas sin abrir la app
 

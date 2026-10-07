@@ -1,11 +1,55 @@
-# Alertas de precio por Telegram — puesta en marcha
+# Avisos por Telegram — puesta en marcha
 
 Pasos para activar los avisos al celular. Son de una sola vez: una vez configurado, no hay que
 volver acá.
 
-Qué avisa: una posición que cruza su **stop-loss** o su **precio objetivo**, y un ticker de la
-**watchlist** que entra en su zona de compra. Los niveles se cargan desde la pestaña `Instrumentos`
-del Sheet (posiciones) y desde la propia Watchlist (precio de compra).
+## Qué avisa
+
+| Aviso | De dónde sale el nivel / la regla |
+|---|---|
+| 🔴 **Stop-loss** de una posición | pestaña `Instrumentos` del Sheet (`stop_loss_modo` / `stop_loss_valor`) |
+| 🎯 **Objetivo** de una posición | pestaña `Instrumentos` del Sheet (`objetivo_modo` / `objetivo_valor`) |
+| 🟢 **Zona de compra** de la watchlist | el precio de compra que le fijaste al ticker en la Watchlist |
+| 🟠 **Señal de venta** de una estrategia | una estrategia de Análisis técnico con "Ventas" prendido |
+| 🟢 **Señal de compra** de una estrategia | una estrategia de Análisis técnico con "Compras" prendido |
+
+Los tres primeros vienen prendidos; las estrategias arrancan **todas apagadas** (ver el paso 6).
+Todo se configura en **Ajustes → Qué avisar**.
+
+## Cómo se lee un aviso
+
+```
+🔔 Alertas de inversiones
+
+🔴 STOP-LOSS — revisar salida
+AL30 (Bono AL30) · cartera Principal
+USD 95,50 ≤ stop USD 96,00 (-0,5%)
+10 un. · PPC USD 100,00 · -4,5%
+
+🟠 SEÑAL DE VENTA — revisar salida
+AAPL (Apple) · cartera Principal
+RSI sobrecompra · regla de salida
+cierre del 06/10: USD 231,40
+25 un. · PPC USD 180,00 · +28,6%
+
+🟢 OPORTUNIDAD DE COMPRA — en zona
+MSFT (Microsoft) · watchlist
+ARS 24.000,00 ≤ objetivo ARS 25.000,00 (-4,0%)
+
+🟢 SEÑAL DE COMPRA
+SPY (S&P 500 ETF) · watchlist · ya tenés posición
+Cruce de medias 20/50 · entrada
+cierre del 06/10: USD 540,10
+```
+
+Cada aviso responde, en ese orden: **qué acción implica** (el encabezado), **quién es y de dónde
+viene** (cartera X o watchlist, y si ya tenés posición), **qué regla lo disparó** y **cuánto
+tenés** (cantidad, precio promedio de compra y resultado actual). El encabezado dice la acción
+pero no recomienda ejecutarla: la decisión es tuya.
+
+En las señales el precio dice **"cierre del dd/mm"** y no "precio" porque sale de la serie diaria
+(`barras_ohlcv`), que por diseño no coincide con la última cotización de `precios_instrumento`.
+Sin esa aclaración verías dos precios distintos del mismo ticker el mismo día.
 
 ---
 
@@ -78,7 +122,22 @@ curl -X POST "http://localhost:8087/api/inversiones/alertas/evaluar?notificar=fa
 
 Desde ahí en adelante sólo avisa de los cruces **nuevos**.
 
-## 7. Para que corra solo
+## 7. Elegir qué estrategias avisan
+
+En **Ajustes → Qué avisar**, cada estrategia guardada tiene dos casillas independientes: *Compras*
+y *Ventas*. Arrancan apagadas a propósito — el catálogo siembra 16 presets reusables sobre todo el
+universo, y prenderlos todos serían decenas de mensajes por día.
+
+Mientras no haya ninguna prendida, el servidor **ni calcula** las señales: correr los backtests de
+todo el universo para después descartarlos sería el gasto más caro del job programado.
+
+Sólo se avisan las señales de las **últimas 2 ruedas**. Una señal de hace una semana ya no es
+accionable: el precio se movió.
+
+Después de prender la primera estrategia conviene volver a sembrar con el `curl` del paso 6, por si
+hay señales frescas de los últimos días.
+
+## 8. Para que corra solo
 
 En el `.env` del **servidor**:
 
@@ -145,10 +204,17 @@ en la máquina de desarrollo pero funcionar en el servidor, que sale directo.
 - **Se re-arma al alejarse.** La alerta vuelve a quedar lista sólo cuando el precio regresa al otro
   lado del nivel y se aleja más del 2%. Esa banda existe para que un precio oscilando sobre el nivel
   no genere un aviso por corrida.
-- **Un solo mensaje por corrida**, con todos los cruces agrupados.
+- **Las señales no usan esa banda** (no hay nivel del cual alejarse): deduplican por la barra de la
+  señal. La misma señal aparece durante dos ruedas y sólo la primera avisa; una compra, una venta y
+  otra compra del mismo par avisan tres veces porque cada una cae en una barra distinta.
+- **Un solo mensaje por corrida**, con todos los avisos agrupados por tipo. Si hay demasiados, el
+  mensaje se recorta por avisos enteros y cada bloque conserva su encabezado y su conteo
+  (`… y 12 más de este tipo`): nunca se corta a mitad de un aviso.
 - **Volver al lado normal no se avisa**: no es noticia.
+- **Apagar un tipo de aviso no deja de seguirlo.** El cruce se guarda igual y se silencia, así que
+  volver a prenderlo meses después no manda de golpe todo lo que pasó mientras estaba apagado.
 - Si el envío falla, el aviso queda pendiente y se reintenta en la corrida siguiente, sin volver a
-  tratar el cruce como nuevo.
+  tratar el cruce como nuevo. El texto del reintento es **idéntico** al del envío original.
 
 El detalle técnico está en `backend/app/services/alertas_engine.py` y en la sección de
 `DESARROLLO.md`.

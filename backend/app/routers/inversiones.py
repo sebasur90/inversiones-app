@@ -7,7 +7,8 @@ from ..database import get_db, MovimientoInversion, InstrumentoInversion
 from ..schemas import (
     SyncResult,
     IolEstadoOut,
-    AlertaPrecioOut, AlertasEstadoOut, AlertasEnvioOut, RefrescoCotizacionesOut,
+    AlertaPrecioOut, AlertasEstadoOut, AlertasEnvioOut, AvisosConfigIn, AvisosConfigOut,
+    AvisoEstrategiaIn, AvisoEstrategiaOut, RefrescoCotizacionesOut,
     CalidadDatosOut,
     WatchlistItemOut,
     WatchlistItemIn,
@@ -59,7 +60,8 @@ from ..services.sheets_client import SheetsClientError
 from ..services.inversiones_sync import sync_from_sheet
 from ..services.calidad_datos import get_calidad_datos
 from ..services import (
-    alertas_analytics, catalogo_instrumentos, refresco_precios, sync_lock, watchlist_analytics,
+    alertas_analytics, avisos_config, catalogo_instrumentos, estrategias_analytics,
+    refresco_precios, sync_lock, watchlist_analytics,
 )
 from ..services.watchlist_analytics import get_watchlist
 from ..services.inversiones_analytics import (
@@ -931,6 +933,47 @@ def probar_alertas():
         "✅ Prueba de alertas de inversiones-app. Si leés esto, el canal está bien configurado."
     )
     return AlertasEnvioOut(entregado=entregado, motivo=motivo)
+
+
+@router.get("/alertas/config", response_model=AvisosConfigOut)
+def leer_config_avisos(db: Session = Depends(get_db)):
+    """Qué avisos salen por Telegram: los tres tipos de nivel y el detalle por estrategia."""
+    return avisos_config.estado(db)
+
+
+@router.put("/alertas/config", response_model=AvisosConfigOut)
+def guardar_config_avisos(cambios: AvisosConfigIn, db: Session = Depends(get_db)):
+    """Prende o apaga los tipos de aviso de nivel. Lo que venga en `null` no se toca.
+
+    Apagar un tipo no deja de **seguir** esos niveles: el cruce se guarda igual y se silencia, así
+    que volver a prenderlo no manda de golpe todo lo que pasó mientras estaba apagado.
+    """
+    avisos_config.actualizar(
+        db,
+        avisar_stop_loss=cambios.avisar_stop_loss,
+        avisar_objetivo=cambios.avisar_objetivo,
+        avisar_compra_zona=cambios.avisar_compra_zona,
+    )
+    return avisos_config.estado(db)
+
+
+@router.put("/alertas/config/estrategias/{estrategia_id}", response_model=AvisoEstrategiaOut)
+def guardar_avisos_de_estrategia(
+    estrategia_id: int, cambios: AvisoEstrategiaIn, db: Session = Depends(get_db),
+):
+    """Por qué lado avisa una estrategia. Compras y ventas van por separado: confiar en las
+    entradas de una estrategia no obliga a confiar en sus salidas."""
+    estrategia = estrategias_analytics.actualizar_estrategia(
+        estrategia_id, db,
+        notificar_compra=cambios.notificar_compra, notificar_venta=cambios.notificar_venta,
+    )
+    if estrategia is None:
+        raise HTTPException(status_code=404, detail="Estrategia no encontrada")
+    return AvisoEstrategiaOut(
+        id=estrategia.id, nombre=estrategia.nombre, ticker=estrategia.ticker,
+        notificar_compra=bool(estrategia.notificar_compra),
+        notificar_venta=bool(estrategia.notificar_venta),
+    )
 
 
 @router.post("/alertas/evaluar", response_model=AlertasEnvioOut)

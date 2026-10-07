@@ -338,12 +338,26 @@ class AlertaPrecio(Base):
 
     `entregada` distingue "se decidió avisar" de "el aviso salió": si el POST al canal falla, la
     fila queda `disparada` pero sin entregar, y el envío se reintenta en la corrida siguiente sin
-    volver a tratar el cruce como nuevo.
+    volver a tratar el cruce como nuevo. También marca los avisos **silenciados** por la
+    configuración (`ajustes_avisos`): se guardan `entregada=1` y `emitida_en=NULL`, así el estado
+    avanza igual y volver a prender el interruptor no dispara una andanada de cruces viejos.
+
+    La tabla guarda además las **señales de estrategia técnica**, con `tipo = "estrategia:<id>"` y
+    `cartera = ""`. El id de la estrategia va dentro de `tipo` y no en una columna propia porque
+    tiene que entrar en la clave de unicidad, y SQLite no sabe alterar un UniqueConstraint sin
+    reconstruir la tabla. La cartera queda vacía a propósito: una señal es sobre la serie del
+    ticker, no sobre una tenencia. Esas filas no usan la histéresis del nivel (no hay nivel):
+    deduplican por la barra de la señal, guardada en `detalle`. Ver `alertas_engine`.
+
+    `detalle` es el contexto completo del aviso serializado (`alertas_engine.contexto_a_detalle`),
+    no un campo libre: el reintento de envío reconstruye el mensaje **sólo** desde las columnas
+    más este JSON, así que lo que no viaje acá hace que el reintento mande un texto distinto.
     """
     __tablename__ = "alertas_precio"
     id = Column(Integer, primary_key=True, index=True)
     ticker = Column(String, nullable=False)
-    tipo = Column(String, nullable=False)  # "stop_loss" | "objetivo" | "compra_zona"
+    # "stop_loss" | "objetivo" | "compra_zona" | "estrategia:<id>" (señal técnica)
+    tipo = Column(String, nullable=False)
     cartera = Column(String, nullable=False, default="")  # "" = watchlist
     estado = Column(String, nullable=False, default="armada")  # "armada" | "disparada"
     nivel = Column(Numeric(18, 6), nullable=True)
@@ -439,7 +453,34 @@ class EstrategiaTecnica(Base):
     # USD vía yfinance). `senales_recientes` corre las estrategias guardadas sin que nadie elija
     # variante en la UI, así que la elección tiene que viajar en la estrategia.
     variante = Column(String, nullable=False, default="local", server_default="local")
+    # Avisos por Telegram de las señales de esta estrategia, por lado. Dos columnas y no una
+    # porque confiar en las entradas de una estrategia no implica confiar en sus salidas (ni al
+    # revés). Apagadas por default: los 16 presets se siembran solos y prenderlos todos sería
+    # decenas de avisos por día, que es peor que no avisar nada. Ver `alertas_analytics`.
+    notificar_compra = Column(Integer, nullable=False, default=0, server_default="0")
+    notificar_venta = Column(Integer, nullable=False, default=0, server_default="0")
     fecha_creacion = Column(DateTime, nullable=False)
+    fecha_actualizacion = Column(DateTime, nullable=False)
+
+
+class AjustesAvisos(Base):
+    """Qué tipos de aviso de nivel salen por Telegram. Fila única (`id = 1`).
+
+    Vive en la DB y no en las preferencias del navegador porque quien manda los avisos es el job
+    del servidor, que no ve el `localStorage` de la app.
+
+    Los tres arrancan en 1 = el comportamiento previo a que existiera esta tabla: si pusiste un
+    stop-loss o un objetivo, avisa. Apagar uno **no deja de seguir el estado** de esos niveles
+    (ver el docstring de `AlertaPrecio`), sólo deja de mandarlos.
+
+    Los avisos de señales de estrategia no se configuran acá, sino estrategia por estrategia en
+    `EstrategiaTecnica.notificar_compra` / `notificar_venta`.
+    """
+    __tablename__ = "ajustes_avisos"
+    id = Column(Integer, primary_key=True)
+    avisar_stop_loss = Column(Integer, nullable=False, default=1, server_default="1")
+    avisar_objetivo = Column(Integer, nullable=False, default=1, server_default="1")
+    avisar_compra_zona = Column(Integer, nullable=False, default=1, server_default="1")
     fecha_actualizacion = Column(DateTime, nullable=False)
 
 
@@ -515,6 +556,14 @@ def init_db():
         if 'variante' not in cols:
             conn.execute(text("ALTER TABLE estrategias_tecnicas ADD COLUMN variante TEXT NOT NULL DEFAULT 'local'"))
             conn.commit()
+        # Avisos por Telegram de las señales, por lado. Default 0: una DB que ya existía no
+        # empieza a mandar avisos de estrategia sola.
+        for columna in ("notificar_compra", "notificar_venta"):
+            if columna not in cols:
+                conn.execute(text(
+                    f"ALTER TABLE estrategias_tecnicas ADD COLUMN {columna} INTEGER NOT NULL DEFAULT 0"
+                ))
+                conn.commit()
 
         # La watchlist dejó de ser espejo de la pestaña `Watchlist` del Sheet y pasó a gestionarse
         # desde la app (alta eligiendo del catálogo de IOL). La ausencia de `agregado_en` identifica

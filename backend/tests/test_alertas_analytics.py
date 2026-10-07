@@ -3,7 +3,7 @@
 El canal está stubeado; lo que se verifica acá es que el estado guardado haga que un cruce avise
 una sola vez, y que un envío fallido se reintente sin volver a tratar el cruce como nuevo.
 """
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 from sqlalchemy import create_engine
@@ -13,7 +13,7 @@ from app.database import (
     AlertaPrecio, Base, InstrumentoInversion, MovimientoInversion, PrecioInstrumento,
     PrecioWatchlist, WatchlistItem,
 )
-from app.services import alertas_analytics, alertas_engine
+from app.services import alertas_analytics, alertas_engine, avisos_config
 from app.services.notificaciones import telegram
 
 
@@ -29,10 +29,11 @@ def db():
 @pytest.fixture
 def canal(monkeypatch):
     """Canal falso: registra los mensajes y permite forzar un fallo de entrega."""
-    estado = {"mensajes": [], "entrega": True}
+    estado = {"mensajes": [], "modos": [], "entrega": True}
 
-    def enviar(texto):
+    def enviar(texto, parse_mode=None):
         estado["mensajes"].append(texto)
+        estado["modos"].append(parse_mode)
         return (True, None) if estado["entrega"] else (False, "canal caído")
 
     monkeypatch.setattr(telegram, "enviar", enviar)
@@ -157,8 +158,13 @@ def test_entrega_fallida_queda_pendiente_y_se_reintenta(db, canal):
     assert fila.entregada == 1
 
 
-def test_sin_notificar_persiste_el_estado_y_no_manda_nada(db, canal):
-    """Sirve para sembrar el estado inicial sin una andanada de avisos la primera vez."""
+def test_sin_notificar_siembra_el_estado_y_la_corrida_siguiente_no_manda_la_andanada(db, canal):
+    """Sembrar el estado inicial sin una andanada de avisos la primera vez.
+
+    Antes esto no funcionaba: la fila quedaba `entregada=0` y la corrida siguiente la levantaba
+    como pendiente de entrega y mandaba el aviso igual, así que la receta documentada para la
+    puesta en marcha no servía para nada.
+    """
     _posicion(db, stop_loss=96.0, precio_actual=95.0)
 
     resumen = alertas_analytics.evaluar_y_notificar(db, notificar=False)
@@ -167,7 +173,13 @@ def test_sin_notificar_persiste_el_estado_y_no_manda_nada(db, canal):
     assert canal["mensajes"] == []
     fila = db.query(AlertaPrecio).filter(AlertaPrecio.tipo == alertas_engine.TIPO_STOP_LOSS).one()
     assert fila.estado == alertas_engine.ESTADO_DISPARADA
-    assert fila.entregada == 0
+    assert fila.entregada == 1
+    assert fila.emitida_en is None  # no se emitió: no va al historial
+
+    segunda = alertas_analytics.evaluar_y_notificar(db)
+    assert segunda["pendientes_de_entrega"] == 0
+    assert canal["mensajes"] == []
+    assert alertas_analytics.listar(db) == []
 
 
 # --- Watchlist y objetivo ----------------------------------------------------------------------
@@ -178,7 +190,7 @@ def test_watchlist_en_zona_de_compra_avisa(db, canal):
     resumen = alertas_analytics.evaluar_y_notificar(db)
 
     assert resumen["nuevas"] == 1
-    assert "Zona de compra" in canal["mensajes"][0]
+    assert "OPORTUNIDAD DE COMPRA" in canal["mensajes"][0]
     fila = db.query(AlertaPrecio).filter(AlertaPrecio.tipo == alertas_engine.TIPO_COMPRA_ZONA).one()
     assert fila.cartera == ""  # la watchlist no pertenece a ninguna cartera
 
@@ -189,7 +201,7 @@ def test_objetivo_de_venta_alcanzado_avisa(db, canal):
     resumen = alertas_analytics.evaluar_y_notificar(db)
 
     assert resumen["nuevas"] == 1
-    assert "Objetivo alcanzado" in canal["mensajes"][0]
+    assert "OBJETIVO ALCANZADO" in canal["mensajes"][0]
 
 
 def test_un_solo_mensaje_con_todos_los_cruces(db, canal):
@@ -298,3 +310,348 @@ def test_endpoint_probar_usa_el_canal(client, canal):
     assert r.json()["entregado"] is True
     assert len(canal["mensajes"]) == 1
     assert "Prueba" in canal["mensajes"][0]
+
+
+# --- Contexto del aviso y reintento ------------------------------------------------------------
+
+def test_el_aviso_dice_cartera_tenencia_y_resultado(db, canal):
+    _posicion(db, stop_loss=96.0, precio_actual=95.0)
+
+    alertas_analytics.evaluar_y_notificar(db)
+
+    mensaje = canal["mensajes"][0]
+    assert "cartera Principal" in mensaje
+    assert "10 un." in mensaje and "PPC" in mensaje
+    # Y el contexto quedó persistido, que es lo que hace idéntico al reintento.
+    fila = db.query(AlertaPrecio).filter(AlertaPrecio.tipo == alertas_engine.TIPO_STOP_LOSS).one()
+    assert fila.detalle["cantidad"] == 10.0
+    assert fila.detalle["origen"] == alertas_engine.ORIGEN_CARTERA
+
+
+def test_el_mensaje_se_manda_con_formato_html(db, canal):
+    _posicion(db, stop_loss=96.0, precio_actual=95.0)
+    alertas_analytics.evaluar_y_notificar(db)
+    assert canal["modos"] == ["HTML"]
+
+
+def test_el_reintento_manda_exactamente_el_mismo_texto(db, canal):
+    """Si el reintento se armara con menos contexto, el mismo cruce avisaría dos cosas distintas."""
+    _posicion(db, stop_loss=96.0, precio_actual=95.0)
+    canal["entrega"] = False
+    alertas_analytics.evaluar_y_notificar(db)
+    primero = canal["mensajes"][0]
+
+    canal["entrega"] = True
+    alertas_analytics.evaluar_y_notificar(db)
+
+    assert canal["mensajes"][1] == primero
+
+
+def test_una_fila_vieja_con_detalle_minimo_se_reintenta_sin_explotar(db, canal):
+    """El estado de la DB el día del deploy: `detalle` con sólo el nombre."""
+    db.add(AlertaPrecio(
+        ticker="AL30", tipo=alertas_engine.TIPO_STOP_LOSS, cartera="Principal",
+        estado=alertas_engine.ESTADO_DISPARADA, nivel=96.0, precio_disparo=95.0, moneda="USD",
+        entregada=0, detalle={"nombre": "Bono AL30"},
+    ))
+    db.commit()
+
+    resumen = alertas_analytics.evaluar_y_notificar(db)
+
+    assert resumen["pendientes_de_entrega"] == 1
+    assert resumen["entregado"] is True
+    assert "AL30" in canal["mensajes"][0]
+
+
+# --- Interruptores de los tipos de nivel -------------------------------------------------------
+
+def test_un_tipo_apagado_no_manda_pero_sigue_el_estado(db, canal):
+    """Y lo importante: prenderlo después **no** dispara el cruce que ya pasó."""
+    _posicion(db, stop_loss=96.0, precio_actual=95.0)
+    avisos_config.actualizar(db, avisar_stop_loss=False)
+
+    resumen = alertas_analytics.evaluar_y_notificar(db)
+
+    assert resumen["nuevas"] == 1
+    assert resumen["silenciadas"] == 1
+    assert canal["mensajes"] == []
+    fila = db.query(AlertaPrecio).filter(AlertaPrecio.tipo == alertas_engine.TIPO_STOP_LOSS).one()
+    assert fila.estado == alertas_engine.ESTADO_DISPARADA
+    assert fila.entregada == 1
+    assert fila.emitida_en is None  # no se emitió: no va al historial
+    assert alertas_analytics.listar(db) == []
+
+    avisos_config.actualizar(db, avisar_stop_loss=True)
+    segunda = alertas_analytics.evaluar_y_notificar(db)
+    assert segunda["nuevas"] == 0
+    assert canal["mensajes"] == []
+
+
+def test_apagar_un_tipo_no_afecta_a_los_otros(db, canal):
+    _posicion(db, stop_loss=96.0, precio_actual=95.0, ticker="AL30")
+    _watchlist(db, objetivo=25000.0, precio_actual=24000.0)
+    avisos_config.actualizar(db, avisar_stop_loss=False)
+
+    alertas_analytics.evaluar_y_notificar(db)
+
+    assert len(canal["mensajes"]) == 1
+    assert "MSFT" in canal["mensajes"][0]
+    assert "AL30" not in canal["mensajes"][0]
+
+
+def test_los_tres_interruptores_arrancan_prendidos(db):
+    """El default tiene que ser el comportamiento previo a que la tabla existiera."""
+    assert avisos_config.tipos_habilitados(db) == set(alertas_engine.TIPOS)
+
+
+# --- Señales de estrategia ---------------------------------------------------------------------
+
+def _estrategia(db, *, nombre="Cruce de medias", compra=False, venta=False):
+    from app.database import EstrategiaTecnica
+    ahora = datetime.utcnow()
+    e = EstrategiaTecnica(
+        nombre=nombre, definicion={"entrada": {}}, variante="local",
+        notificar_compra=1 if compra else 0, notificar_venta=1 if venta else 0,
+        fecha_creacion=ahora, fecha_actualizacion=ahora,
+    )
+    db.add(e)
+    db.commit()
+    db.refresh(e)
+    return e
+
+
+def _senal(estrategia, *, ticker="AL30", tipo="compra", fecha=None, precio=95.0):
+    return {
+        "ticker": ticker, "estrategia_id": estrategia.id,
+        "estrategia_nombre": estrategia.nombre, "tipo": tipo,
+        "fecha": fecha or date.today(), "precio": precio, "motivo": "entrada",
+        "barras_desde": 0, "variante": "local", "moneda": "USD",
+    }
+
+
+def _stub_senales(monkeypatch, filas):
+    """Reemplaza `senales_recientes` y registra con qué se la llamó."""
+    llamadas = []
+
+    def fake(db, max_antiguedad_barras=5, tickers=(), estrategia_ids=()):
+        llamadas.append({"antiguedad": max_antiguedad_barras, "ids": estrategia_ids})
+        return list(filas)
+
+    monkeypatch.setattr(alertas_analytics.estrategias_analytics, "senales_recientes", fake)
+    return llamadas
+
+
+def test_una_senal_habilitada_avisa_una_sola_vez(db, canal, monkeypatch):
+    estrategia = _estrategia(db, compra=True)
+    _stub_senales(monkeypatch, [_senal(estrategia)])
+
+    primera = alertas_analytics.evaluar_y_notificar(db)
+    assert primera["senales_nuevas"] == 1
+    assert "SEÑAL DE COMPRA" in canal["mensajes"][0]
+    assert "Cruce de medias" in canal["mensajes"][0]
+
+    segunda = alertas_analytics.evaluar_y_notificar(db)
+    assert segunda["senales_nuevas"] == 0
+    assert len(canal["mensajes"]) == 1
+
+
+def test_una_barra_nueva_de_la_misma_estrategia_vuelve_a_avisar(db, canal, monkeypatch):
+    estrategia = _estrategia(db, compra=True)
+    vieja = date.today() - timedelta(days=3)
+    _stub_senales(monkeypatch, [_senal(estrategia, fecha=vieja)])
+    alertas_analytics.evaluar_y_notificar(db)
+    assert len(canal["mensajes"]) == 1
+
+    _stub_senales(monkeypatch, [_senal(estrategia, fecha=date.today())])
+    alertas_analytics.evaluar_y_notificar(db)
+    assert len(canal["mensajes"]) == 2
+
+
+def test_sin_estrategias_habilitadas_no_se_calculan_senales(db, canal, monkeypatch):
+    """Correr los backtests de todo el universo para descartarlos es el gasto más caro del job."""
+    _estrategia(db, compra=False, venta=False)
+
+    def explota(*args, **kwargs):
+        raise AssertionError("no se tiene que llamar a senales_recientes")
+
+    monkeypatch.setattr(alertas_analytics.estrategias_analytics, "senales_recientes", explota)
+
+    resumen = alertas_analytics.evaluar_y_notificar(db)
+    assert resumen["senales_vigiladas"] == 0
+    assert resumen["senales_nuevas"] == 0
+
+
+def test_solo_las_compras_habilitadas_dejan_pasar_una_venta(db, canal, monkeypatch):
+    estrategia = _estrategia(db, compra=True, venta=False)
+    _stub_senales(monkeypatch, [_senal(estrategia, tipo="venta")])
+
+    resumen = alertas_analytics.evaluar_y_notificar(db)
+
+    assert resumen["senales_nuevas"] == 0
+    assert canal["mensajes"] == []
+
+
+def test_la_estrategia_habilitada_acota_el_calculo_y_la_antiguedad(db, canal, monkeypatch):
+    habilitada = _estrategia(db, nombre="Con aviso", compra=True)
+    _estrategia(db, nombre="Sin aviso")
+    llamadas = _stub_senales(monkeypatch, [])
+
+    alertas_analytics.evaluar_y_notificar(db)
+
+    assert llamadas[0]["ids"] == (habilitada.id,)
+    assert llamadas[0]["antiguedad"] == alertas_analytics.MAX_BARRAS_SENAL_AVISO
+
+
+def test_la_senal_de_un_ticker_en_cartera_dice_la_cartera_y_la_tenencia(db, canal, monkeypatch):
+    _posicion(db, precio_actual=95.0, ticker="AL30")  # sin niveles: sólo la señal avisa
+    estrategia = _estrategia(db, venta=True)
+    _stub_senales(monkeypatch, [_senal(estrategia, ticker="AL30", tipo="venta")])
+
+    alertas_analytics.evaluar_y_notificar(db)
+
+    mensaje = canal["mensajes"][0]
+    assert "SEÑAL DE VENTA" in mensaje
+    assert "cartera Principal" in mensaje
+    assert "10 un." in mensaje
+
+
+def test_la_senal_de_un_ticker_de_la_watchlist_lo_dice(db, canal, monkeypatch):
+    _watchlist(db, objetivo=1.0, precio_actual=24000.0)  # objetivo lejísimo: no cruza
+    estrategia = _estrategia(db, compra=True)
+    _stub_senales(monkeypatch, [_senal(estrategia, ticker="MSFT", precio=24000.0)])
+
+    alertas_analytics.evaluar_y_notificar(db)
+
+    assert "watchlist" in canal["mensajes"][0]
+
+
+def test_la_senal_no_lleva_cartera_en_la_clave(db, canal, monkeypatch):
+    """Una señal es sobre la serie del ticker: si la cartera entrara en la clave, un ticker con
+    tenencia en dos carteras avisaría dos veces."""
+    _posicion(db, precio_actual=95.0, ticker="AL30")
+    estrategia = _estrategia(db, compra=True)
+    _stub_senales(monkeypatch, [_senal(estrategia, ticker="AL30")])
+
+    alertas_analytics.evaluar_y_notificar(db)
+
+    fila = db.query(AlertaPrecio).filter(
+        AlertaPrecio.tipo == alertas_engine.tipo_senal(estrategia.id)).one()
+    assert fila.cartera == ""
+    assert fila.nivel is None
+    assert fila.detalle["senal_fecha"] == date.today().isoformat()
+
+
+def test_el_reintento_de_una_senal_no_se_descarta_por_no_tener_nivel(db, canal, monkeypatch):
+    """El guard viejo (`nivel is None` → descartar) se habría tragado todas las señales."""
+    estrategia = _estrategia(db, compra=True)
+    _stub_senales(monkeypatch, [_senal(estrategia)])
+    canal["entrega"] = False
+    alertas_analytics.evaluar_y_notificar(db)
+    primero = canal["mensajes"][0]
+
+    canal["entrega"] = True
+    segunda = alertas_analytics.evaluar_y_notificar(db)
+
+    assert segunda["pendientes_de_entrega"] == 1
+    assert canal["mensajes"][1] == primero
+
+
+def test_las_senales_de_estrategias_que_ya_no_avisan_se_purgan(db, canal, monkeypatch):
+    estrategia = _estrategia(db, compra=True)
+    _stub_senales(monkeypatch, [_senal(estrategia)])
+    alertas_analytics.evaluar_y_notificar(db)
+    assert db.query(AlertaPrecio).filter(
+        AlertaPrecio.tipo == alertas_engine.tipo_senal(estrategia.id)).count() == 1
+
+    # Se apaga el aviso: la fila ya entregada no tiene por qué seguir ocupando lugar.
+    estrategia.notificar_compra = 0
+    db.commit()
+    alertas_analytics.evaluar_y_notificar(db)
+
+    assert db.query(AlertaPrecio).filter(
+        AlertaPrecio.tipo == alertas_engine.tipo_senal(estrategia.id)).count() == 0
+
+
+def test_una_senal_sin_entregar_no_se_purga(db, canal, monkeypatch):
+    """Un aviso pendiente no se tira, ni aunque se apague la estrategia."""
+    estrategia = _estrategia(db, compra=True)
+    _stub_senales(monkeypatch, [_senal(estrategia)])
+    canal["entrega"] = False
+    alertas_analytics.evaluar_y_notificar(db)
+
+    estrategia.notificar_compra = 0
+    db.commit()
+    alertas_analytics.evaluar_y_notificar(db)
+
+    assert db.query(AlertaPrecio).filter(
+        AlertaPrecio.tipo == alertas_engine.tipo_senal(estrategia.id)).count() == 1
+
+
+def test_listar_una_senal_trae_el_contexto_legible(db, canal, monkeypatch):
+    estrategia = _estrategia(db, compra=True)
+    _stub_senales(monkeypatch, [_senal(estrategia)])
+    alertas_analytics.evaluar_y_notificar(db)
+
+    fila = alertas_analytics.listar(db)[0]
+
+    assert fila["accion"] == alertas_engine.ACCION_COMPRA
+    assert fila["estrategia_nombre"] == "Cruce de medias"
+    assert fila["senal_fecha"] == date.today().isoformat()
+    assert fila["senal_tipo"] == "compra"
+    assert "estrategia:" not in fila["etiqueta"]
+    assert "SEÑAL DE COMPRA" in fila["encabezado"]
+    assert fila["nivel"] is None
+
+
+def test_estado_configuracion_separa_niveles_de_senales(db, canal, monkeypatch):
+    _posicion(db, stop_loss=50.0, precio_actual=100.0)  # un nivel armado
+    estrategia = _estrategia(db, compra=True)
+    _stub_senales(monkeypatch, [_senal(estrategia)])
+    alertas_analytics.evaluar_y_notificar(db)
+
+    estado = alertas_analytics.estado_configuracion(db)
+
+    assert estado["niveles_vigilados"] == 1
+    assert estado["senales_vigiladas"] == 1
+    assert estado["estrategias_con_aviso"] == 1
+
+
+# --- Endpoints de configuración ----------------------------------------------------------------
+
+def test_endpoint_config_de_avisos(client):
+    r = client.get("/api/inversiones/alertas/config")
+    assert r.status_code == 200
+    assert r.json()["avisar_stop_loss"] is True
+
+    r = client.put("/api/inversiones/alertas/config", json={"avisar_stop_loss": False})
+    assert r.status_code == 200
+    assert r.json()["avisar_stop_loss"] is False
+    assert r.json()["avisar_objetivo"] is True  # lo que no se manda no se toca
+
+
+def test_endpoint_avisos_de_una_estrategia_inexistente(client):
+    r = client.put("/api/inversiones/alertas/config/estrategias/999",
+                   json={"notificar_compra": True})
+    assert r.status_code == 404
+
+
+def test_silenciar_un_cruce_no_borra_del_historial_el_aviso_anterior(db, canal):
+    """La fila lleva el estado del nivel **y** el registro del último aviso emitido. Un cruce que
+    no se mandó no puede pisar ese registro."""
+    _posicion(db, stop_loss=96.0, precio_actual=95.0)
+    alertas_analytics.evaluar_y_notificar(db)
+    historial = alertas_analytics.listar(db)
+    assert len(historial) == 1
+
+    # Se re-arma, se apaga el tipo y vuelve a cruzar con otro precio.
+    avisos_config.actualizar(db, avisar_stop_loss=False)
+    for precio in (110.0, 90.0):
+        db.query(PrecioInstrumento).delete()
+        db.add(PrecioInstrumento(fecha=date.today(), ticker="AL30", precio=precio,
+                                 moneda="USD", fuente="sheet"))
+        db.commit()
+        alertas_analytics.evaluar_y_notificar(db)
+
+    assert len(canal["mensajes"]) == 1
+    assert alertas_analytics.listar(db) == historial
+    assert alertas_analytics.estado_configuracion(db)["ultimo_aviso"] is not None

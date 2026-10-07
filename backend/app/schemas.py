@@ -56,16 +56,35 @@ class RefrescoCotizacionesOut(BaseModel):
 # --- Alertas de precio ---
 
 class AlertaPrecioOut(BaseModel):
-    """Un cruce de nivel ya avisado (o pendiente de entregar)."""
+    """Un aviso ya emitido (o pendiente de entregar).
+
+    Los campos de contexto son los mismos que el mensaje de Telegram: la app los muestra para que
+    el historial y lo que llegó al celular no puedan contar cosas distintas. Vienen de
+    `AlertaPrecio.detalle`, así que en filas viejas pueden estar en `None`.
+    """
     ticker: str
     nombre: str
-    tipo: str          # "stop_loss" | "objetivo" | "compra_zona"
+    tipo: str          # "stop_loss" | "objetivo" | "compra_zona" | "estrategia:<id>"
     etiqueta: str      # el tipo en palabras, para mostrarlo tal cual
-    cartera: Optional[str] = None  # None = watchlist
+    accion: str        # "COMPRA" | "VENTA" | "REVISAR"
+    encabezado: str    # el encabezado del bloque del aviso, sin HTML
+    cartera: Optional[str] = None  # None = watchlist o señal sin tenencia
+    origen: Optional[str] = None   # "cartera" | "watchlist"
     estado: str        # "armada" | "disparada"
     nivel: Optional[float] = None
     precio_disparo: Optional[float] = None
     moneda: str = ""
+    distancia_pct: Optional[float] = None
+    cantidad: Optional[float] = None
+    precio_promedio: Optional[float] = None
+    resultado_pct: Optional[float] = None
+    en_cartera: Optional[bool] = None
+    estrategia_id: Optional[int] = None
+    estrategia_nombre: Optional[str] = None
+    senal_tipo: Optional[str] = None     # "compra" | "venta"
+    senal_fecha: Optional[str] = None    # ISO
+    senal_motivo: Optional[str] = None
+    variante: Optional[str] = None
     emitida_en: Optional[datetime] = None
     entregada: bool = False
 
@@ -76,6 +95,8 @@ class AlertasEstadoOut(BaseModel):
     configurado: bool       # hay token y chat id
     canal: str              # "telegram"
     niveles_vigilados: int
+    senales_vigiladas: int = 0
+    estrategias_con_aviso: int = 0
     ultimo_aviso: Optional[datetime] = None
     sin_entregar: int = 0
 
@@ -85,9 +106,41 @@ class AlertasEnvioOut(BaseModel):
     entregado: bool
     motivo: Optional[str] = None
     niveles_vigilados: int = 0
+    senales_vigiladas: int = 0
     nuevas: int = 0
+    senales_nuevas: int = 0
+    silenciadas: int = 0
     rearmadas: int = 0
     pendientes_de_entrega: int = 0
+
+
+class AvisoEstrategiaOut(BaseModel):
+    """Una estrategia guardada y por qué lado avisa."""
+    id: int
+    nombre: str
+    ticker: Optional[str] = None
+    notificar_compra: bool = False
+    notificar_venta: bool = False
+
+
+class AvisosConfigOut(BaseModel):
+    """Qué avisa por Telegram: los tres tipos de nivel y el detalle por estrategia."""
+    avisar_stop_loss: bool
+    avisar_objetivo: bool
+    avisar_compra_zona: bool
+    estrategias: list[AvisoEstrategiaOut] = Field(default_factory=list)
+
+
+class AvisosConfigIn(BaseModel):
+    """Cambio parcial: lo que viene en `None` no se toca."""
+    avisar_stop_loss: Optional[bool] = None
+    avisar_objetivo: Optional[bool] = None
+    avisar_compra_zona: Optional[bool] = None
+
+
+class AvisoEstrategiaIn(BaseModel):
+    notificar_compra: Optional[bool] = None
+    notificar_venta: Optional[bool] = None
 
 
 class IolEstadoOut(BaseModel):
@@ -1999,6 +2052,10 @@ class EstrategiaOut(BaseModel):
     tipo_preset: Optional[str] = None
     definicion: dict[str, Any]
     variante: str = "local"
+    # Avisos por Telegram de las señales de esta estrategia. Se configuran en Ajustes, no al
+    # guardar la definición: ver `estrategias_analytics.guardar_por_nombre`.
+    notificar_compra: bool = False
+    notificar_venta: bool = False
     fecha_creacion: datetime
     fecha_actualizacion: datetime
 

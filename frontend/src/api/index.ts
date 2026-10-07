@@ -2243,6 +2243,9 @@ export interface EstrategiaOut {
   tipo_preset: string | null
   definicion: EstrategiaDsl
   variante: VarianteSerie
+  /** Avisos por Telegram de las señales de esta estrategia; se configuran en Ajustes. */
+  notificar_compra: boolean
+  notificar_venta: boolean
   fecha_creacion: string
   fecha_actualizacion: string
 }
@@ -2441,16 +2444,38 @@ export const compararEstrategias = (ticker: string, body: ComparadorRequest) =>
 
 // --- Alertas de precio (avisos al celular) ---
 
+export type AccionAviso = 'COMPRA' | 'VENTA' | 'REVISAR'
+
 export interface AlertaPrecioOut {
   ticker: string
   nombre: string
-  tipo: 'stop_loss' | 'objetivo' | 'compra_zona'
+  /**
+   * `stop_loss` | `objetivo` | `compra_zona`, o `estrategia:<id>` para una señal técnica. No es
+   * una unión cerrada a propósito: el id de la estrategia viaja dentro del tipo (ver
+   * `alertas_engine.PREFIJO_SENAL`). Usar `esAvisoDeSenal()` en vez de comparar con literales.
+   */
+  tipo: string
   etiqueta: string
+  accion: AccionAviso
+  /** El mismo encabezado que lleva el mensaje de Telegram, sin HTML. */
+  encabezado: string
   cartera: string | null
+  origen: 'cartera' | 'watchlist' | null
   estado: 'armada' | 'disparada'
   nivel: number | null
   precio_disparo: number | null
   moneda: string
+  distancia_pct: number | null
+  cantidad: number | null
+  precio_promedio: number | null
+  resultado_pct: number | null
+  en_cartera: boolean | null
+  estrategia_id: number | null
+  estrategia_nombre: string | null
+  senal_tipo: 'compra' | 'venta' | null
+  senal_fecha: string | null
+  senal_motivo: string | null
+  variante: string | null
   emitida_en: string | null
   entregada: boolean
 }
@@ -2460,6 +2485,8 @@ export interface AlertasEstadoOut {
   configurado: boolean
   canal: string
   niveles_vigilados: number
+  senales_vigiladas: number
+  estrategias_con_aviso: number
   ultimo_aviso: string | null
   sin_entregar: number
 }
@@ -2468,9 +2495,39 @@ export interface AlertasEnvioOut {
   entregado: boolean
   motivo: string | null
   niveles_vigilados: number
+  senales_vigiladas: number
   nuevas: number
+  senales_nuevas: number
+  silenciadas: number
   rearmadas: number
   pendientes_de_entrega: number
+}
+
+export interface AvisoEstrategiaOut {
+  id: number
+  nombre: string
+  ticker: string | null
+  notificar_compra: boolean
+  notificar_venta: boolean
+}
+
+export interface AvisosConfigOut {
+  avisar_stop_loss: boolean
+  avisar_objetivo: boolean
+  avisar_compra_zona: boolean
+  estrategias: AvisoEstrategiaOut[]
+}
+
+/** Cambio parcial: lo que no se manda no se toca. */
+export interface AvisosConfigIn {
+  avisar_stop_loss?: boolean
+  avisar_objetivo?: boolean
+  avisar_compra_zona?: boolean
+}
+
+export interface AvisoEstrategiaIn {
+  notificar_compra?: boolean
+  notificar_venta?: boolean
 }
 
 export const getAlertas = (limite = 50) =>
@@ -2484,6 +2541,17 @@ export const probarAlertas = () =>
 
 export const evaluarAlertas = (notificar = true) =>
   api.post<AlertasEnvioOut>('/inversiones/alertas/evaluar', null, { params: { notificar } }).then(r => r.data)
+
+export const getAvisosConfig = () =>
+  api.get<AvisosConfigOut>('/inversiones/alertas/config').then(r => r.data)
+
+export const guardarAvisosConfig = (cambios: AvisosConfigIn) =>
+  api.put<AvisosConfigOut>('/inversiones/alertas/config', cambios).then(r => r.data)
+
+export const guardarAvisosDeEstrategia = (estrategiaId: number, cambios: AvisoEstrategiaIn) =>
+  api
+    .put<AvisoEstrategiaOut>(`/inversiones/alertas/config/estrategias/${estrategiaId}`, cambios)
+    .then(r => r.data)
 
 // --- Consumo de la API de IOL ---
 

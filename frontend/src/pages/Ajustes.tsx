@@ -10,6 +10,8 @@ import Card from '../components/ui/Card'
 import Segmented from '../components/ui/Segmented'
 import Button from '../components/ui/Button'
 import BarraProgreso from '../components/ui/BarraProgreso'
+import ConfigAvisos from '../components/inversiones/ConfigAvisos'
+import HistorialAvisos from '../components/inversiones/HistorialAvisos'
 import {
   usePreferenciaNumerica,
   usePreferenciaBooleana,
@@ -256,7 +258,7 @@ export default function Ajustes() {
 
       <Seccion
         titulo="Avisos al celular"
-        ayuda="Cuando una posición cruza su stop-loss o su precio objetivo, o un ticker de la watchlist entra en zona de compra, el servidor te manda un mensaje por Telegram. Llega con la app cerrada; se configura con TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID (ver .env.example)."
+        ayuda="El servidor te manda un mensaje por Telegram cuando una posición cruza su stop-loss o su precio objetivo, cuando un ticker de la watchlist entra en zona de compra, y cuando dispara una estrategia que habilitaste. Cada aviso dice si es compra o venta, de qué cartera (o de la watchlist) y qué regla lo disparó. Llega con la app cerrada; se configura con TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID (ver .env.example)."
       >
         <div className="text-caption text-app-text-dim">
           Estado: <span className="font-semibold text-app-text">{textoEstadoAlertas}</span>
@@ -265,6 +267,9 @@ export default function Ajustes() {
           <div className="text-caption text-app-text-dim mt-1">
             {estadoAlertas.niveles_vigilados} nivel{estadoAlertas.niveles_vigilados === 1 ? '' : 'es'} vigilado
             {estadoAlertas.niveles_vigilados === 1 ? '' : 's'}
+            {estadoAlertas.estrategias_con_aviso > 0
+              ? ` · ${estadoAlertas.estrategias_con_aviso} estrategia${estadoAlertas.estrategias_con_aviso === 1 ? '' : 's'} con aviso`
+              : ''}
             {estadoAlertas.ultimo_aviso ? ` · último aviso ${fechaHora(estadoAlertas.ultimo_aviso)}` : ' · todavía sin avisos'}
           </div>
         )}
@@ -294,6 +299,20 @@ export default function Ajustes() {
           La evaluación también corre sola de lunes a viernes después del cierre, si el job
           programado está activado en el servidor (SCHEDULER_ENABLED).
         </div>
+      </Seccion>
+
+      <Seccion
+        titulo="Qué avisar"
+        ayuda="Elegí qué te llega al celular. Las compras y las ventas de cada estrategia se prenden por separado: confiar en sus entradas no obliga a confiar en sus salidas."
+      >
+        <ConfigAvisos />
+      </Seccion>
+
+      <Seccion
+        titulo="Últimos avisos"
+        ayuda="Los mismos avisos que te llegaron por Telegram, con el contexto con que se mandaron."
+      >
+        <HistorialAvisos />
       </Seccion>
 
       <Seccion

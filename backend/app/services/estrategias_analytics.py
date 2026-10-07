@@ -91,6 +91,7 @@ def actualizar_estrategia(
     nombre: str | None = None, descripcion: str | None = None,
     ticker: str | None | object = _SIN_CAMBIO, definicion: dict | None = None,
     variante: str | None = None, tipo_preset: str | None | object = _SIN_CAMBIO,
+    notificar_compra: bool | None = None, notificar_venta: bool | None = None,
 ) -> EstrategiaTecnica | None:
     """Actualiza los campos pasados. **Renombrar sobre un nombre ya usado absorbe a la otra**:
     la fila homónima se elimina y ésta se queda con el nombre — es la misma regla de "el nombre
@@ -115,6 +116,12 @@ def actualizar_estrategia(
         estrategia.variante = variante
     if tipo_preset is not _SIN_CAMBIO:
         estrategia.tipo_preset = tipo_preset
+    # `None` = no tocar. Las casillas de aviso se gestionan desde Ajustes, aparte del editor:
+    # guardar de nuevo la definición de una estrategia no puede apagarle los avisos.
+    if notificar_compra is not None:
+        estrategia.notificar_compra = 1 if notificar_compra else 0
+    if notificar_venta is not None:
+        estrategia.notificar_venta = 1 if notificar_venta else 0
     estrategia.fecha_actualizacion = datetime.utcnow()
     db.commit()
     db.refresh(estrategia)
@@ -132,6 +139,9 @@ def guardar_por_nombre(
     estrategia existente (definición, descripción, ticker, preset de origen y variante) en vez de
     dejar dos filas homónimas. El `id` sobrevive, así que las referencias guardadas en el front
     (la estrategia cargada en el editor, la selección del screener) siguen valiendo.
+
+    **No toca `notificar_compra` / `notificar_venta`**: se configuran en Ajustes, y re-guardar la
+    definición desde el editor no tiene por qué apagarle los avisos a una estrategia.
     """
     existente = buscar_por_nombre(nombre, db)
     if existente is None:
@@ -164,6 +174,8 @@ def _nombre_libre(base: str, db: Session) -> str:
 
 
 def duplicar_estrategia(estrategia_id: int, nuevo_nombre: str | None, db: Session) -> EstrategiaTecnica | None:
+    """La copia **no hereda los avisos**: dos estrategias casi iguales avisando lo mismo es el
+    doble de mensajes por la misma señal. Se prenden a mano si se quieren."""
     original = obtener_estrategia(estrategia_id, db)
     if original is None:
         return None
@@ -292,6 +304,7 @@ def senales_recientes(
     db: Session,
     max_antiguedad_barras: int = MAX_BARRAS_SENAL_RECIENTE,
     tickers: tuple[str, ...] = (),
+    estrategia_ids: tuple[int, ...] = (),
 ) -> list[dict]:
     """Última señal de cada par (estrategia, ticker), si disparó dentro de las últimas
     `max_antiguedad_barras` ruedas de la serie.
@@ -306,6 +319,9 @@ def senales_recientes(
     una lista vacía y el badge de la watchlist no aparecía nunca.
 
     `tickers` acota el universo: la watchlist pide sólo los suyos en vez de escanear todo.
+    `estrategia_ids` acota las estrategias (vacío = todas): los avisos por Telegram piden sólo las
+    que el usuario habilitó, y correr los 16 presets sobre todo el universo para después descartar
+    casi todo sería el gasto más caro del job programado.
 
     Reusa `estrategia_engine.backtest` en vez de evaluar las condiciones sueltas: así la señal que
     se muestra es la que la máquina de estados realmente habría operado (una compra no se repite
@@ -317,7 +333,7 @@ def senales_recientes(
     """
     hoy = date.today()
 
-    estrategias, _ = estrategias_universo.estrategias_validas(db)
+    estrategias, _ = estrategias_universo.estrategias_validas(db, estrategia_ids)
     universo = ohlcv_analytics.listar_tickers_tecnicos(db)
     if tickers:
         pedidos = set(tickers)

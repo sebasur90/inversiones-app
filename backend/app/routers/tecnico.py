@@ -45,6 +45,8 @@ def _estrategia_out(e) -> EstrategiaOut:
         id=e.id, nombre=e.nombre, descripcion=e.descripcion, ticker=e.ticker,
         tipo_preset=e.tipo_preset, definicion=e.definicion,
         variante=getattr(e, "variante", None) or "local",
+        notificar_compra=bool(getattr(e, "notificar_compra", 0)),
+        notificar_venta=bool(getattr(e, "notificar_venta", 0)),
         fecha_creacion=e.fecha_creacion, fecha_actualizacion=e.fecha_actualizacion,
     )
 

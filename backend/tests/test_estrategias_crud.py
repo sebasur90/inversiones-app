@@ -242,3 +242,69 @@ def test_router_post_con_nombre_repetido_actualiza_y_devuelve_200(client):
     assert r.json()["definicion"] == otro_dsl
 
     assert len(client.get("/api/inversiones/estrategias").json()) == 1
+
+
+# ── Avisos por Telegram, por lado ─────────────────────────────────────────────
+
+def test_los_avisos_arrancan_apagados(db):
+    """Los 16 presets se siembran solos: si avisaran por default serían decenas de mensajes
+    diarios desde el primer arranque."""
+    creada = ea.crear_estrategia("Nueva", _DSL, db)
+    assert creada.notificar_compra == 0
+    assert creada.notificar_venta == 0
+
+
+def test_los_lados_se_prenden_por_separado(db):
+    creada = ea.crear_estrategia("Con avisos", _DSL, db)
+
+    ea.actualizar_estrategia(creada.id, db, notificar_compra=True)
+    estrategia = ea.obtener_estrategia(creada.id, db)
+    assert estrategia.notificar_compra == 1
+    assert estrategia.notificar_venta == 0
+
+    ea.actualizar_estrategia(creada.id, db, notificar_venta=True)
+    estrategia = ea.obtener_estrategia(creada.id, db)
+    assert (estrategia.notificar_compra, estrategia.notificar_venta) == (1, 1)
+
+    ea.actualizar_estrategia(creada.id, db, notificar_compra=False)
+    assert ea.obtener_estrategia(creada.id, db).notificar_compra == 0
+
+
+def test_guardar_la_definicion_de_nuevo_no_apaga_los_avisos(db):
+    """El upsert por nombre es lo que usa el editor al guardar: no puede tener el efecto lateral
+    de silenciar una estrategia."""
+    creada = ea.crear_estrategia("Mi RSI", _DSL, db)
+    ea.actualizar_estrategia(creada.id, db, notificar_compra=True, notificar_venta=True)
+
+    guardada, nueva = ea.guardar_por_nombre("Mi RSI", _DSL, db, descripcion="otra cosa")
+
+    assert nueva is False
+    assert (guardada.notificar_compra, guardada.notificar_venta) == (1, 1)
+
+
+def test_la_copia_no_hereda_los_avisos(db):
+    """Dos estrategias casi iguales avisando lo mismo es el doble de mensajes por la misma señal."""
+    creada = ea.crear_estrategia("Original", _DSL, db)
+    ea.actualizar_estrategia(creada.id, db, notificar_compra=True)
+
+    dup = ea.duplicar_estrategia(creada.id, None, db)
+
+    assert dup.notificar_compra == 0
+
+
+def test_el_router_devuelve_los_lados(client):
+    r = client.post("/api/inversiones/estrategias", json={"nombre": "Con lados", "definicion": _DSL})
+    assert r.status_code == 201
+    assert r.json()["notificar_compra"] is False
+
+    estrategia_id = r.json()["id"]
+    r = client.put(f"/api/inversiones/alertas/config/estrategias/{estrategia_id}",
+                   json={"notificar_venta": True})
+    assert r.status_code == 200
+    assert r.json() == {
+        "id": estrategia_id, "nombre": "Con lados", "ticker": None,
+        "notificar_compra": False, "notificar_venta": True,
+    }
+
+    r = client.get("/api/inversiones/estrategias")
+    assert r.json()[0]["notificar_venta"] is True

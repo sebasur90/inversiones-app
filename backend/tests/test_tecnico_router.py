@@ -328,6 +328,27 @@ def test_senales_acota_el_universo_a_los_tickers_pedidos(client):
     assert [s["ticker"] for s in r.json()] == ["AL30"]
 
 
+def test_senales_acota_las_estrategias_a_las_pedidas(client):
+    """`estrategia_ids` es lo que usan los avisos de Telegram: correr los 16 presets sobre todo
+    el universo para después descartar casi todo es el gasto más caro del job programado."""
+    from app.database import get_db
+    from app.services import estrategias_analytics
+
+    dsl = _dsl_compra_siempre_que_cruce(109.75)
+    una = client.post("/api/inversiones/estrategias",
+                      json={"nombre": "Pedida", "definicion": dsl}).json()
+    client.post("/api/inversiones/estrategias",
+                json={"nombre": "Otra", "definicion": dsl})
+
+    db = next(app.dependency_overrides[get_db]())
+
+    todas = estrategias_analytics.senales_recientes(db)
+    assert {s["estrategia_nombre"] for s in todas} == {"Pedida", "Otra"}
+
+    acotadas = estrategias_analytics.senales_recientes(db, estrategia_ids=(una["id"],))
+    assert {s["estrategia_nombre"] for s in acotadas} == {"Pedida"}
+
+
 def test_senales_rechaza_demasiados_tickers(client):
     r = client.get("/api/inversiones/tecnico/senales",
                    params={"tickers": [f"T{i}" for i in range(201)]})
