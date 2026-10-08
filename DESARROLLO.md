@@ -184,9 +184,35 @@ Consecuencias operativas a tener presentes si algún día esto cambia de context
 
 ## Precio Objetivo y Stop Loss
 
-La pestaña `Instrumentos` admite 4 columnas opcionales para fijar, por ticker, un precio
-objetivo (para tomar ganancias) y un stop loss (para cortar pérdidas). Deben coincidir
-exactamente en el Google Sheet y en `sheet_local/sheet_inversiones.xlsx`:
+Cada ticker puede tener un precio objetivo (para tomar ganancias) y un stop loss (para cortar
+pérdidas). Se cargan de **dos lados, y gana la app**:
+
+1. **Desde la app**, en el detalle del ticker, tocando las tiles "Precio Objetivo" o "Stop Loss".
+2. **Desde el Sheet**, en las 4 columnas opcionales de la pestaña `Instrumentos` (abajo).
+
+### Desde la app (lo que fijás acá pisa al Sheet)
+
+Los niveles fijados desde la app viven en `niveles_precio_override`, **una tabla aparte**, porque
+el sync le hace DELETE + INSERT completo a `instrumentos_inversion` en cada corrida: un nivel
+escrito ahí duraría hasta las 18:30 del mismo día. La precedencia se resuelve en un único lugar,
+`services/niveles_analytics.py`, que es lo que consumen los dos lectores de niveles
+(`get_rendimiento_por_ticker` y `get_ticker_position`); de ahí para abajo, alertas y diagnóstico
+no saben de dónde salió el nivel.
+
+El valor del Sheet se sigue leyendo y viaja en la API como referencia (`*_modo_sheet` /
+`*_valor_sheet`, más `*_origen` con `"app" | "sheet" | "ninguno"`), así que la app puede mostrarlo
+y ofrecer "volver al valor del Sheet". El override **no** se escribe de vuelta en el Sheet: si
+después se edita esa celda, las dos fuentes dicen cosas distintas y manda la app.
+
+Cambiar un nivel **re-arma** el aviso de Telegram de ese ticker
+(`alertas_analytics.rearmar_por_cambio_de_nivel`): si no, la fila seguiría `disparada` y el nivel
+nuevo quedaría silenciado por un cruce viejo. El aviso sale en la próxima corrida del job, no en
+el momento de guardar.
+
+### Desde el Sheet
+
+Las 4 columnas son opcionales y deben coincidir exactamente en el Google Sheet y en
+`sheet_local/sheet_inversiones.xlsx`:
 
 | Columna | Valores | Significado |
 |---|---|---|
@@ -196,7 +222,8 @@ exactamente en el Google Sheet y en `sheet_local/sheet_inversiones.xlsx`:
 | `Stop Loss Valor` | número | `Porcentaje`: % de caída sobre el precio promedio de compra (ej. `-5`). `Fijo`: precio absoluto |
 
 `Modo` y `Valor` deben completarse juntos (o dejarse ambos vacíos). Se ven en el detalle de
-cada ticker en la app, junto con el % que falta para alcanzarlos.
+cada ticker en la app, junto con el % que falta para alcanzarlos — y quedan tapados si ese ticker
+tiene un nivel fijado desde la app.
 
 Además de verse en la app, **el cruce de estos niveles dispara un aviso por Telegram** (ver
 "Avisos al celular" más abajo).

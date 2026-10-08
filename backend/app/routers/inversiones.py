@@ -13,6 +13,8 @@ from ..schemas import (
     WatchlistItemOut,
     WatchlistItemIn,
     WatchlistItemUpdate,
+    NivelesTickerIn,
+    NivelesTickerOut,
     RefrescoPreciosOut,
     CatalogoBusquedaOut,
     CarteraInfo,
@@ -61,7 +63,7 @@ from ..services.inversiones_sync import sync_from_sheet
 from ..services.calidad_datos import get_calidad_datos
 from ..services import (
     alertas_analytics, avisos_config, catalogo_instrumentos, estrategias_analytics,
-    refresco_precios, sync_lock, watchlist_analytics,
+    niveles_analytics, refresco_precios, sync_lock, watchlist_analytics,
 )
 from ..services.watchlist_analytics import get_watchlist
 from ..services.inversiones_analytics import (
@@ -844,6 +846,59 @@ def _validar_ticker(ticker: str, db: Session) -> None:
     existe = db.query(InstrumentoInversion).filter(InstrumentoInversion.ticker == ticker).first()
     if not existe:
         raise HTTPException(status_code=404, detail=f"Ticker '{ticker}' no encontrado")
+
+
+@router.get("/ticker/{ticker}/niveles", response_model=NivelesTickerOut)
+def niveles_ticker(ticker: str, db: Session = Depends(get_db)):
+    """Stop-loss y objetivo vigentes del ticker, con su origen y el valor del Sheet.
+
+    200 siempre (no 204 como el objetivo de aportes): hay dos niveles que describir aunque sea para
+    decir que no están definidos.
+    """
+    _validar_ticker(ticker, db)
+    return niveles_analytics.a_dict(ticker, niveles_analytics.niveles_de_ticker(db, ticker))
+
+
+@router.put("/ticker/{ticker}/niveles", response_model=NivelesTickerOut)
+def guardar_niveles_ticker(ticker: str, body: NivelesTickerIn, db: Session = Depends(get_db)):
+    """Fija los niveles desde la app, pisando los del Sheet.
+
+    `exclude_unset`: un PUT que sólo manda `stop_loss` no toca el objetivo. Mandar un nivel en
+    `null` borra su override y vuelve al valor del Sheet.
+    """
+    _validar_ticker(ticker, db)
+    cambios = body.model_dump(exclude_unset=True)
+    niveles, error = niveles_analytics.aplicar_cambios(db, ticker, cambios)
+    if error:
+        raise HTTPException(status_code=422, detail=niveles_analytics.MENSAJE_ERROR[error])
+    return niveles_analytics.a_dict(ticker, niveles)
+
+
+@router.delete("/ticker/{ticker}/niveles/{tipo}", status_code=204)
+def borrar_nivel_ticker(ticker: str, tipo: str, db: Session = Depends(get_db)):
+    """Quita el override de un nivel y vuelve al valor del Sheet. Idempotente."""
+    _validar_ticker(ticker, db)
+    if tipo not in niveles_analytics.TIPOS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"'{tipo}' no es un nivel: {' | '.join(niveles_analytics.TIPOS)}",
+        )
+    _, error = niveles_analytics.aplicar_cambios(db, ticker, {tipo: None})
+    if error:
+        raise HTTPException(status_code=422, detail=niveles_analytics.MENSAJE_ERROR[error])
+    return Response(status_code=204)
+
+
+@router.delete("/ticker/{ticker}/niveles", status_code=204)
+def borrar_niveles_ticker(ticker: str, db: Session = Depends(get_db)):
+    """Quita los dos overrides de una vez. Idempotente."""
+    _validar_ticker(ticker, db)
+    _, error = niveles_analytics.aplicar_cambios(
+        db, ticker, {t: None for t in niveles_analytics.TIPOS},
+    )
+    if error:
+        raise HTTPException(status_code=422, detail=niveles_analytics.MENSAJE_ERROR[error])
+    return Response(status_code=204)
 
 
 @router.get("/ticker/{ticker}/analysis", response_model=TickerAnalysisOut)

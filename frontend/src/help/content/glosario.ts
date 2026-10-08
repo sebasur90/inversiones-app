@@ -15,6 +15,7 @@ export type GlosarioKey =
   | 'pp'
   | 'objetivo'
   | 'stopLoss'
+  | 'nivel_origen'
   | 'rebalanceo'
   | 'drawdown'
   | 'maximoHistorico'
@@ -152,11 +153,23 @@ export const GLOSARIO_HELP: Record<GlosarioKey, HelpContent> = {
   },
   objetivo: {
     title: 'Precio Objetivo',
-    shortDescription: 'El precio al que te gustaría vender para tomar ganancias. Se define en el Sheet como % sobre tu precio promedio de compra o como precio fijo. Cuando el precio actual lo alcanza o supera, se marca como alcanzado.',
+    shortDescription: 'El precio al que te gustaría vender para tomar ganancias. Cuando el precio actual lo alcanza o supera, se marca como alcanzado.',
+    howItIsCalculated: 'Se puede definir de dos formas: como "% del precio de compra" (20 = un 20% por encima de tu precio promedio, así que el nivel se mueve si seguís comprando) o como "precio fijo" (un valor absoluto, que no se mueve). Se carga desde la app, en el detalle del ticker, o en las columnas Objetivo de la pestaña Instrumentos del Sheet.',
+    relatedTerms: ['nivel_origen', 'stopLoss'],
   },
   stopLoss: {
     title: 'Stop Loss',
-    shortDescription: 'El precio al que cortarías la pérdida y saldrías de la posición. Se define en el Sheet como % sobre tu precio promedio de compra o como precio fijo. Cuando el precio actual cae a ese nivel o por debajo, se marca como disparado.',
+    shortDescription: 'El precio al que cortarías la pérdida y saldrías de la posición. Cuando el precio actual cae a ese nivel o por debajo, se marca como disparado.',
+    howItIsCalculated: 'Igual que el objetivo, de dos formas: como "% del precio de compra" (se escribe negativo: -8 es un 8% por debajo de tu precio promedio) o como "precio fijo". Se carga desde la app, en el detalle del ticker, o en las columnas Stop Loss de la pestaña Instrumentos del Sheet.',
+    relatedTerms: ['nivel_origen', 'objetivo'],
+  },
+  nivel_origen: {
+    title: 'De dónde sale el nivel',
+    shortDescription: 'El stop loss y el objetivo de un ticker pueden venir de dos lados: del Sheet (pestaña Instrumentos) o de la app, si los fijaste en el detalle del ticker. Cuando están en los dos, gana el de la app.',
+    whyItMatters: 'Mover un stop desde el celular, justo cuando el precio se movió, es lo que hace que el nivel sirva. Abrir el Sheet y esperar una sincronización, no.',
+    howToInterpret: 'La tile del nivel dice "fijado acá" cuando el valor que estás viendo es el de la app. Al editarlo también se muestra el del Sheet como referencia, con un botón para volver a él.',
+    limitations: 'Lo que fijás en la app sobrevive a las sincronizaciones, pero no se escribe de vuelta en el Sheet: si después editás esa celda, el Sheet y la app van a decir cosas distintas, y la app es la que manda. El aviso al celular usa el nivel nuevo desde la próxima corrida (11, 13, 15, 17 y 18:30), no en el momento de guardar.',
+    relatedTerms: ['stopLoss', 'objetivo'],
   },
   rebalanceo: {
     title: 'Rebalanceo',

@@ -647,7 +647,15 @@ class RendimientoPorTickerItem(BaseModel):
     precio_stop_loss: Optional[float] = None
     pct_a_stop_loss: Optional[float] = None
     stop_loss_disparado: Optional[bool] = None
-
+    # De dónde sale el nivel vigente de arriba: "app" (lo fijó el usuario y pisa al Sheet),
+    # "sheet" o "ninguno". Los `*_sheet` son siempre los del Sheet, para mostrarlos como
+    # referencia y poder ofrecer "volver al valor del Sheet". Ver `services/niveles_analytics`.
+    objetivo_origen: str = "ninguno"
+    objetivo_modo_sheet: Optional[str] = None
+    objetivo_valor_sheet: Optional[float] = None
+    stop_loss_origen: str = "ninguno"
+    stop_loss_modo_sheet: Optional[str] = None
+    stop_loss_valor_sheet: Optional[float] = None
 
 
 # --- Watchlist ---
@@ -691,6 +699,39 @@ class WatchlistItemUpdate(BaseModel):
     """Edición: sólo lo que controla el usuario. El resto lo define el catálogo."""
     objetivo: Optional[float] = Field(default=None, gt=0)
     notas: Optional[str] = Field(default=None, max_length=500)
+
+
+class NivelOverrideIn(BaseModel):
+    """Un nivel fijado desde la app. Las reglas que dependen del tipo de nivel (el signo del
+    porcentaje, los rangos) las valida `niveles_analytics`, que es quien sabe de cuál se trata."""
+    modo: Literal["Porcentaje", "Fijo"]
+    valor: float
+
+
+class NivelesTickerIn(BaseModel):
+    """Edición de los niveles de un ticker, parcial como `WatchlistItemUpdate`.
+
+    Sólo las claves presentes se tocan (`model_dump(exclude_unset=True)` en el router): un PUT que
+    manda `stop_loss` no toca el objetivo. Un `null` explícito **borra** el override de ese nivel y
+    vuelve al valor del Sheet.
+    """
+    objetivo: Optional[NivelOverrideIn] = None
+    stop_loss: Optional[NivelOverrideIn] = None
+
+
+class NivelEfectivoOut(BaseModel):
+    modo: Optional[str] = None   # el nivel vigente
+    valor: Optional[float] = None
+    origen: str                  # "app" | "sheet" | "ninguno"
+    modo_sheet: Optional[str] = None   # referencia: lo que dice el Sheet
+    valor_sheet: Optional[float] = None
+    actualizado_en: Optional[datetime] = None  # sólo con origen "app"
+
+
+class NivelesTickerOut(BaseModel):
+    ticker: str
+    objetivo: NivelEfectivoOut
+    stop_loss: NivelEfectivoOut
 
 
 class RefrescoPreciosOut(BaseModel):
@@ -1745,6 +1786,15 @@ class TickerPositionOut(InversionesResumen):
     precio_stop_loss: Optional[float] = None
     pct_a_stop_loss: Optional[float] = None
     stop_loss_disparado: Optional[bool] = None
+    # De dónde sale el nivel vigente de arriba: "app" (lo fijó el usuario y pisa al Sheet),
+    # "sheet" o "ninguno". Los `*_sheet` son siempre los del Sheet, para mostrarlos como
+    # referencia y poder ofrecer "volver al valor del Sheet". Ver `services/niveles_analytics`.
+    objetivo_origen: str = "ninguno"
+    objetivo_modo_sheet: Optional[str] = None
+    objetivo_valor_sheet: Optional[float] = None
+    stop_loss_origen: str = "ninguno"
+    stop_loss_modo_sheet: Optional[str] = None
+    stop_loss_valor_sheet: Optional[float] = None
 
 
 class TickerPerformanceOut(PnlPorTickerItem):

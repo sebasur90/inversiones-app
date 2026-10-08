@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from typing import Iterable
 
 from sqlalchemy.orm import Session
 
@@ -230,6 +231,46 @@ def _guardar_aviso(
     fila.precio_disparo = alerta.precio
     fila.moneda = alerta.moneda
     fila.detalle = alertas_engine.contexto_a_detalle(alerta.nombre, alerta.contexto)
+
+
+def rearmar_por_cambio_de_nivel(db: Session, ticker: str, tipos: Iterable[str]) -> int:
+    """Vuelve a `armada` el estado de los niveles de `ticker` que el usuario acaba de cambiar.
+
+    Sin esto, mover un stop-loss lo dejaría silenciado por un cruce viejo: la fila sigue
+    `disparada` y el antirrebote no avisa del nivel nuevo hasta que el precio salga de la banda de
+    rearmado del nivel **anterior**.
+
+    El nivel es por ticker pero la alerta es por `(ticker, tipo, cartera)`: se tocan **todas** las
+    filas de ese ticker y tipo sin filtrar cartera, porque el nivel nuevo vale para todas. Las
+    filas de otros tipos no entran: el `compra_zona` de la watchlist y las señales de estrategia
+    tienen su propio nivel, que no es éste.
+
+    **No se borra la fila**: `nivel`, `precio_disparo`, `detalle` y `emitida_en` son el registro
+    del último aviso emitido, que es lo que lee `listar`. Un aviso que había quedado **pendiente de
+    entrega** sí se cancela (`entregada=1`, `emitida_en=NULL`, la misma convención que un aviso
+    silenciado): referencia un nivel que ya no existe, y mandarlo diría un número que el usuario
+    acaba de cambiar.
+
+    No commitea: lo hace `niveles_analytics.aplicar_cambios`, así el override y el estado de la
+    alerta entran en la misma transacción.
+    """
+    # Defensa explícita, no `alertas_engine.TIPOS`: ése incluye `compra_zona`, que es un nivel de
+    # la watchlist y no uno de los dos que se editan acá.
+    de_posicion = (alertas_engine.TIPO_STOP_LOSS, alertas_engine.TIPO_OBJETIVO)
+    tipos = [t for t in tipos if t in de_posicion]
+    if not tipos:
+        return 0
+    filas = (
+        db.query(AlertaPrecio)
+        .filter(AlertaPrecio.ticker == ticker, AlertaPrecio.tipo.in_(tipos))
+        .all()
+    )
+    for fila in filas:
+        if fila.estado == alertas_engine.ESTADO_DISPARADA and not fila.entregada:
+            fila.entregada = 1
+            fila.emitida_en = None
+        fila.estado = alertas_engine.ESTADO_ARMADA
+    return len(filas)
 
 
 def _purgar_senales_huerfanas(db: Session, ids_habilitados: set[int]) -> int:

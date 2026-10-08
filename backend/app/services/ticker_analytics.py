@@ -10,7 +10,7 @@ from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
 
 from ..database import MovimientoInversion, InstrumentoInversion
-from . import risk_engine
+from . import niveles_analytics, risk_engine
 from .inversiones_analytics import (
     _movimientos_ordenados,
     _precios_por_ticker,
@@ -51,7 +51,12 @@ def get_ticker_position(ticker: str, cartera: Optional[str], db: Session) -> dic
     """
     movs = _movimientos_ticker(db, cartera, ticker)
     if not movs:
-        # Ticker sin movimientos en esta cartera: devolver respuesta "vacía" pero válida
+        # Ticker sin movimientos en esta cartera: respuesta "vacía" pero válida. Los niveles sí
+        # viajan (son del instrumento, no de la tenencia): es la pantalla donde se editan, y sin
+        # ellos el formulario aparecería vacío y pisaría lo guardado. Lo que no puede calcularse
+        # sin precio promedio —el precio absoluto del nivel, la distancia y si está cruzado— queda
+        # en None.
+        nv = niveles_analytics.niveles_de_ticker(db, ticker)
         return {
             "ticker": ticker,
             "nombre": ticker,
@@ -66,16 +71,22 @@ def get_ticker_position(ticker: str, cartera: Optional[str], db: Session) -> dic
             "primera_fecha_movimiento": None,
             "ultima_fecha_movimiento": None,
             "posicion_cerrada": True,
-            "objetivo_modo": None,
-            "objetivo_valor": None,
+            "objetivo_modo": nv.objetivo.modo,
+            "objetivo_valor": nv.objetivo.valor,
             "precio_objetivo": None,
             "pct_a_objetivo": None,
             "objetivo_alcanzado": None,
-            "stop_loss_modo": None,
-            "stop_loss_valor": None,
+            "objetivo_origen": nv.objetivo.origen,
+            "objetivo_modo_sheet": nv.objetivo.modo_sheet,
+            "objetivo_valor_sheet": nv.objetivo.valor_sheet,
+            "stop_loss_modo": nv.stop_loss.modo,
+            "stop_loss_valor": nv.stop_loss.valor,
             "precio_stop_loss": None,
             "pct_a_stop_loss": None,
             "stop_loss_disparado": None,
+            "stop_loss_origen": nv.stop_loss.origen,
+            "stop_loss_modo_sheet": nv.stop_loss.modo_sheet,
+            "stop_loss_valor_sheet": nv.stop_loss.valor_sheet,
             # Herencia de InversionesResumen:
             "valor_actual_usd": 0.0,
             "valor_actual_ars": 0.0,
@@ -113,17 +124,18 @@ def get_ticker_position(ticker: str, cartera: Optional[str], db: Session) -> dic
     info = _precio_conocido(precios_por_ticker.get(ticker), hoy) if precios_por_ticker.get(ticker) else None
     precio_actual = info[1] if info else None  # Puede ser None sin descartar el bloque
 
-    # Objetivo y stop-loss
+    # Objetivo y stop-loss: el nivel vigente puede venir del Sheet o de la app (gana la app)
+    nv = niveles_analytics.niveles_de_ticker(db, ticker, instrumento)
     precio_objetivo, pct_a_objetivo, objetivo_alcanzado = _nivel_precio(
-        instrumento.objetivo_modo if instrumento else None,
-        instrumento.objetivo_valor if instrumento else None,
+        nv.objetivo.modo,
+        nv.objetivo.valor,
         precio_promedio,
         precio_actual if precio_actual is not None else precio_promedio,
         alcanzado_si_mayor=True,
     )
     precio_stop_loss, pct_a_stop_loss, stop_loss_disparado = _nivel_precio(
-        instrumento.stop_loss_modo if instrumento else None,
-        instrumento.stop_loss_valor if instrumento else None,
+        nv.stop_loss.modo,
+        nv.stop_loss.valor,
         precio_promedio,
         precio_actual if precio_actual is not None else precio_promedio,
         alcanzado_si_mayor=False,
@@ -144,16 +156,22 @@ def get_ticker_position(ticker: str, cartera: Optional[str], db: Session) -> dic
         "primera_fecha_movimiento": movs[0].fecha if movs else None,
         "ultima_fecha_movimiento": movs[-1].fecha if movs else None,
         "posicion_cerrada": abs(cantidad_actual) < EPS,
-        "objetivo_modo": instrumento.objetivo_modo if instrumento else None,
-        "objetivo_valor": float(instrumento.objetivo_valor) if instrumento and instrumento.objetivo_valor is not None else None,
+        "objetivo_modo": nv.objetivo.modo,
+        "objetivo_valor": nv.objetivo.valor,
         "precio_objetivo": round(precio_objetivo, 6) if precio_objetivo is not None else None,
         "pct_a_objetivo": round(pct_a_objetivo, 4) if pct_a_objetivo is not None else None,
         "objetivo_alcanzado": objetivo_alcanzado,
-        "stop_loss_modo": instrumento.stop_loss_modo if instrumento else None,
-        "stop_loss_valor": float(instrumento.stop_loss_valor) if instrumento and instrumento.stop_loss_valor is not None else None,
+        "objetivo_origen": nv.objetivo.origen,
+        "objetivo_modo_sheet": nv.objetivo.modo_sheet,
+        "objetivo_valor_sheet": nv.objetivo.valor_sheet,
+        "stop_loss_modo": nv.stop_loss.modo,
+        "stop_loss_valor": nv.stop_loss.valor,
         "precio_stop_loss": round(precio_stop_loss, 6) if precio_stop_loss is not None else None,
         "pct_a_stop_loss": round(pct_a_stop_loss, 4) if pct_a_stop_loss is not None else None,
         "stop_loss_disparado": stop_loss_disparado,
+        "stop_loss_origen": nv.stop_loss.origen,
+        "stop_loss_modo_sheet": nv.stop_loss.modo_sheet,
+        "stop_loss_valor_sheet": nv.stop_loss.valor_sheet,
     }
 
 

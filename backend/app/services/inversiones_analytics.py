@@ -6,7 +6,7 @@ from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from ..database import MovimientoInversion, InstrumentoInversion, PrecioInstrumento, IndiceMercado, RebalanceoObjetivo, ConfiguracionCartera
-from . import cotizacion_diaria, rebalanceo_engine
+from . import cotizacion_diaria, niveles_analytics, rebalanceo_engine
 from .cache import cache_por_sync
 
 DEFAULT_TOLERANCIA_PP = 2.0
@@ -1593,6 +1593,10 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
 
     precios_por_ticker = _precios_por_ticker(db)
     instrumentos = {i.ticker: i for i in db.query(InstrumentoInversion).all()}
+    # Niveles vigentes de todos los tickers (Sheet + overrides de la app) en una sola consulta,
+    # fuera del loop: esta función se llama varias veces por request y una vez por cartera en cada
+    # corrida de alertas, así que una consulta por ticker se notaría.
+    niveles = niveles_analytics.mapa_niveles_efectivos(db, instrumentos)
     mep_cache: dict = {}
     cer_cache: dict = {}
     hoy = date.today()
@@ -1693,16 +1697,17 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
         instrumento = instrumentos.get(ticker)
         nombre = instrumento.nombre if instrumento else ticker
 
+        nv = niveles.get(ticker) or niveles_analytics.VACIO
         precio_objetivo, pct_a_objetivo, objetivo_alcanzado = _nivel_precio(
-            instrumento.objetivo_modo if instrumento else None,
-            instrumento.objetivo_valor if instrumento else None,
+            nv.objetivo.modo,
+            nv.objetivo.valor,
             precio_promedio_compra,
             precio_actual,
             alcanzado_si_mayor=True,
         )
         precio_stop_loss, pct_a_stop_loss, stop_loss_disparado = _nivel_precio(
-            instrumento.stop_loss_modo if instrumento else None,
-            instrumento.stop_loss_valor if instrumento else None,
+            nv.stop_loss.modo,
+            nv.stop_loss.valor,
             precio_promedio_compra,
             precio_actual,
             alcanzado_si_mayor=False,
@@ -1731,16 +1736,24 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
             "rendimiento_simple_ars_real": round(rendimiento_simple_ars_real, 4) if rendimiento_simple_ars_real is not None else None,
             "precio_promedio_ars_ajustado_cer": round(precio_promedio_ars_ajustado_cer, 6) if precio_promedio_ars_ajustado_cer is not None else None,
             "precio_actual_ars_ajustado_cer": round(precio_actual_ars_ajustado_cer, 6) if precio_actual_ars_ajustado_cer is not None else None,
-            "objetivo_modo": instrumento.objetivo_modo if instrumento else None,
-            "objetivo_valor": float(instrumento.objetivo_valor) if instrumento and instrumento.objetivo_valor is not None else None,
+            # `*_modo`/`*_valor` son el nivel **vigente** (el de la app si hay override, el del
+            # Sheet si no); `*_origen` dice cuál de los dos y `*_sheet` queda como referencia.
+            "objetivo_modo": nv.objetivo.modo,
+            "objetivo_valor": nv.objetivo.valor,
             "precio_objetivo": round(precio_objetivo, 6) if precio_objetivo is not None else None,
             "pct_a_objetivo": round(pct_a_objetivo, 4) if pct_a_objetivo is not None else None,
             "objetivo_alcanzado": objetivo_alcanzado,
-            "stop_loss_modo": instrumento.stop_loss_modo if instrumento else None,
-            "stop_loss_valor": float(instrumento.stop_loss_valor) if instrumento and instrumento.stop_loss_valor is not None else None,
+            "objetivo_origen": nv.objetivo.origen,
+            "objetivo_modo_sheet": nv.objetivo.modo_sheet,
+            "objetivo_valor_sheet": nv.objetivo.valor_sheet,
+            "stop_loss_modo": nv.stop_loss.modo,
+            "stop_loss_valor": nv.stop_loss.valor,
             "precio_stop_loss": round(precio_stop_loss, 6) if precio_stop_loss is not None else None,
             "pct_a_stop_loss": round(pct_a_stop_loss, 4) if pct_a_stop_loss is not None else None,
             "stop_loss_disparado": stop_loss_disparado,
+            "stop_loss_origen": nv.stop_loss.origen,
+            "stop_loss_modo_sheet": nv.stop_loss.modo_sheet,
+            "stop_loss_valor_sheet": nv.stop_loss.valor_sheet,
         })
 
     return sorted(resultado, key=lambda x: -abs(x["valor_actual_usd"]))

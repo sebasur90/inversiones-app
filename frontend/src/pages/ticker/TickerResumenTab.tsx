@@ -1,19 +1,61 @@
-import { useQuery } from '@tanstack/react-query'
-import { getDescomposicionFxPorPosicion, getPreciosTicker, type PrecioPunto, type DescomposicionFxPosicionItem } from '../../api'
+import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  borrarNivelTicker, getDescomposicionFxPorPosicion, getPreciosTicker, guardarNivelesTicker,
+  type PrecioPunto, type DescomposicionFxPosicionItem, type NivelesTickerIn, type TipoNivel,
+} from '../../api'
 import { qk } from '../../api/queryClient'
 import { formatCantidad, formatPctRatio, formatPrecio } from '../../utils'
 import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import Sparkline from '../../components/charts/Sparkline'
 import MetricTile from '../../components/ui/MetricTile'
+import Modal from '../../components/ui/Modal'
+import Toast from '../../components/ui/Toast'
 import AlertaPrecioBadge from '../../components/inversiones/AlertaPrecioBadge'
+import EditarNiveles from '../../components/inversiones/EditarNiveles'
 import { estadoAlerta, pctDelEstado } from '../../utils/alertasPrecio'
 import { useInversionesContext } from '../../context/InversionesContext'
+import { parseApiError } from '../../help/errors/apiErrors'
 import { Icon } from '../../components/icons/Icons'
 import type { TickerPositionOut } from '../../api'
 
 export default function TickerResumenTab({ position, cartera, monedaSeleccionada }: { position: TickerPositionOut; cartera: string | null; monedaSeleccionada: 'ARS' | 'USD' }) {
   const { umbralProximidad } = useInversionesContext()
   const alerta = estadoAlerta(position, umbralProximidad)
+  const queryClient = useQueryClient()
+
+  const [editandoNiveles, setEditandoNiveles] = useState(false)
+  const [aviso, setAviso] = useState<{ texto: string; tono: 'success' | 'error' } | null>(null)
+  const [quitando, setQuitando] = useState<TipoNivel | null>(null)
+
+  // Los niveles los leen esta pantalla, Posiciones, el badge de la barra inferior y Resumen; el
+  // `staleTime: Infinity` del cliente obliga a invalidar a mano.
+  const refrescarNiveles = async () => {
+    await queryClient.invalidateQueries({ queryKey: qk.de('ticker-analisis', position.ticker, cartera) })
+    void queryClient.invalidateQueries({ queryKey: qk.rendimientoPorTicker(cartera) })
+    void queryClient.invalidateQueries({ queryKey: qk.diagnostico(cartera) })
+  }
+
+  const guardarNiveles = useMutation({
+    mutationFn: (cambios: NivelesTickerIn) => guardarNivelesTicker(position.ticker, cambios),
+    onSuccess: async () => {
+      await refrescarNiveles()
+      setEditandoNiveles(false)
+      setAviso({ texto: 'Niveles guardados', tono: 'success' })
+    },
+    onError: (err: unknown) => setAviso({ texto: parseApiError(err).message, tono: 'error' }),
+  })
+
+  const quitarNivel = useMutation({
+    mutationFn: (tipo: TipoNivel) => borrarNivelTicker(position.ticker, tipo),
+    onMutate: (tipo: TipoNivel) => setQuitando(tipo),
+    onSuccess: async () => {
+      await refrescarNiveles()
+      setAviso({ texto: 'Volvió al valor del Sheet', tono: 'success' })
+    },
+    onError: (err: unknown) => setAviso({ texto: parseApiError(err).message, tono: 'error' }),
+    onSettled: () => setQuitando(null),
+  })
 
   const preciosQuery = useQuery({
     queryKey: qk.de('precios-ticker', position.ticker),
@@ -88,25 +130,71 @@ export default function TickerResumenTab({ position, cartera, monedaSeleccionada
             />
           </>
         )}
-        {position.precio_objetivo != null && (
+        {/* Los dos niveles se muestran siempre, aunque no estén definidos: tocarlos es cómo se
+            fijan desde la app. Antes la tile desaparecía y no había nada que tocar. */}
+        <button type="button" onClick={() => setEditandoNiveles(true)} className="text-left">
           <MetricTile
             label="Precio Objetivo"
             infoTerm="objetivo"
-            value={formatPrecio(position.precio_objetivo)}
-            sub={position.pct_a_objetivo != null ? `${position.pct_a_objetivo >= 0 ? 'falta' : 'superado por'} ${(Math.abs(position.pct_a_objetivo) * 100).toFixed(2)}%` : undefined}
+            value={position.precio_objetivo != null ? formatPrecio(position.precio_objetivo) : '—'}
+            sub={subNivel(
+              position.precio_objetivo,
+              position.pct_a_objetivo,
+              position.objetivo_origen,
+              true,
+            )}
             tone={position.objetivo_alcanzado ? 'pos' : undefined}
           />
-        )}
-        {position.precio_stop_loss != null && (
+        </button>
+        <button type="button" onClick={() => setEditandoNiveles(true)} className="text-left">
           <MetricTile
             label="Stop Loss"
             infoTerm="stopLoss"
-            value={formatPrecio(position.precio_stop_loss)}
-            sub={position.pct_a_stop_loss != null ? `${position.pct_a_stop_loss <= 0 ? 'superado por' : 'falta'} ${(Math.abs(position.pct_a_stop_loss) * 100).toFixed(2)}%` : undefined}
+            value={position.precio_stop_loss != null ? formatPrecio(position.precio_stop_loss) : '—'}
+            sub={subNivel(
+              position.precio_stop_loss,
+              position.pct_a_stop_loss,
+              position.stop_loss_origen,
+              false,
+            )}
             tone={position.stop_loss_disparado ? 'neg' : undefined}
           />
-        )}
+        </button>
       </div>
+
+      {editandoNiveles && (
+        <Modal open onClose={() => setEditandoNiveles(false)} title={`Niveles de ${position.ticker}`}>
+          <EditarNiveles
+            position={position}
+            guardando={guardarNiveles.isPending}
+            quitando={quitando}
+            onGuardar={cambios => guardarNiveles.mutate(cambios)}
+            onQuitar={tipo => quitarNivel.mutate(tipo)}
+          />
+        </Modal>
+      )}
+
+      <Toast message={aviso?.texto ?? null} tone={aviso?.tono} onDone={() => setAviso(null)} />
     </div>
   )
+}
+
+/**
+ * Pie de la tile de un nivel: la distancia al precio de hoy, o la invitación a definirlo.
+ * "fijado acá" es la marca de que ese nivel pisa al del Sheet.
+ *
+ * `pct` es `(nivel - precio_actual) / precio_actual`, así que el objetivo (que se cruza hacia
+ * arriba) está superado con `pct < 0` y el stop-loss (hacia abajo) con `pct <= 0`.
+ */
+function subNivel(
+  precio: number | null,
+  pct: number | null,
+  origen: string,
+  cruzaHaciaArriba: boolean,
+): string {
+  if (precio == null) return 'Tocá para definirlo'
+  const marca = origen === 'app' ? ' · fijado acá' : ''
+  if (pct == null) return `Tocá para editarlo${marca}`
+  const cruzado = cruzaHaciaArriba ? pct < 0 : pct <= 0
+  return `${cruzado ? 'superado por' : 'falta'} ${(Math.abs(pct) * 100).toFixed(2)}%${marca}`
 }

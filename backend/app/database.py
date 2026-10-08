@@ -509,6 +509,45 @@ class AjustesAvisos(Base):
     fecha_actualizacion = Column(DateTime, nullable=False)
 
 
+class NivelPrecioOverride(Base):
+    """Stop-loss y objetivo fijados **desde la app**, que pisan los del Sheet.
+
+    Vive fuera de `instrumentos_inversion` porque esa tabla es un espejo del Sheet: el sync le
+    hace DELETE + INSERT completo en cada corrida (`inversiones_sync`), así que un nivel escrito
+    ahí duraría hasta el sync de las 18:30 del mismo día. Mismo criterio que `watchlist`,
+    `alertas_precio` y `objetivos_aporte_mensual`: lo que escribe el usuario no comparte tabla
+    con lo que escribe el Sheet.
+
+    **Una fila por `(ticker, tipo)`**, y la fila existe sólo si hay override: su presencia *es* el
+    override. Con una sola fila de cuatro columnas, un `objetivo_modo IS NULL` sería ambiguo
+    ("no hay override" vs. "override que anula el nivel del Sheet") y borrar un nivel dejaría
+    media fila viva. Además la clave queda igual a la de `alertas_precio` (`ticker`, `tipo`), que
+    es lo que permite re-armar la alerta exacta cuando se cambia un nivel.
+
+    El nivel sigue siendo **por ticker y global**, no por cartera: es una decisión sobre el
+    instrumento, igual que la del Sheet.
+
+    `modo`/`valor` son nullable aunque hoy la API los exija juntos: dejan lugar a un futuro
+    "override = sin nivel" (fila presente con los dos en NULL = ignorar el nivel del Sheet) sin
+    reconstruir la tabla, que es lo que costaría en SQLite sacar un NOT NULL.
+
+    Sin FK a `instrumentos_inversion.ticker` a propósito: el sync vacía esa tabla, y un ticker
+    que desaparece del Sheet un día no tiene que perder el nivel que el usuario eligió.
+    """
+    __tablename__ = "niveles_precio_override"
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String, nullable=False)
+    tipo = Column(String, nullable=False)  # "stop_loss" | "objetivo"
+    modo = Column(String, nullable=True)  # "Porcentaje" | "Fijo"
+    # Misma escala que las columnas del Sheet, así `_nivel_precio` recibe exactamente lo mismo:
+    # % sobre el precio promedio de compra (modo "Porcentaje") o precio absoluto (modo "Fijo").
+    valor = Column(Numeric(18, 6), nullable=True)
+    fecha_creacion = Column(DateTime, nullable=False)
+    fecha_actualizacion = Column(DateTime, nullable=False)
+
+    __table_args__ = (UniqueConstraint("ticker", "tipo", name="uq_nivel_precio_override"),)
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -519,6 +558,10 @@ def get_db():
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+
+    # `niveles_precio_override` no necesita migración: es una tabla nueva que crea `create_all` y
+    # una DB vieja arranca con cero filas, que es exactamente el comportamiento previo (el nivel
+    # del Sheet manda mientras no haya override). No la busques más abajo.
 
     # sqlite create_all no agrega columnas nuevas en tablas existentes.
     # aseguramos compatibilidad con DB antiguas que no tenían es_jubilacion.

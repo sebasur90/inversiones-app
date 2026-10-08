@@ -7,8 +7,8 @@ volver acá.
 
 | Aviso | De dónde sale el nivel / la regla |
 |---|---|
-| 🔴 **Stop-loss** de una posición | pestaña `Instrumentos` del Sheet (`stop_loss_modo` / `stop_loss_valor`) |
-| 🎯 **Objetivo** de una posición | pestaña `Instrumentos` del Sheet (`objetivo_modo` / `objetivo_valor`) |
+| 🔴 **Stop-loss** de una posición | el detalle del ticker en la app, o la pestaña `Instrumentos` del Sheet (`stop_loss_modo` / `stop_loss_valor`). Si está en los dos, gana el de la app |
+| 🎯 **Objetivo** de una posición | el detalle del ticker en la app, o la pestaña `Instrumentos` del Sheet (`objetivo_modo` / `objetivo_valor`). Si está en los dos, gana el de la app |
 | 🟢 **Zona de compra** de la watchlist | el precio de compra que le fijaste al ticker en la Watchlist |
 | 🟠 **Señal de venta** de una estrategia | una estrategia de Análisis técnico con "Ventas" prendido |
 | 🟢 **Señal de compra** de una estrategia | una estrategia de Análisis técnico con "Compras" prendido |

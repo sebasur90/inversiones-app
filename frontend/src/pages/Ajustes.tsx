@@ -242,7 +242,7 @@ export default function Ajustes() {
           siguiente. Antes las dos se llamaban "Alertas de precio". */}
       <Seccion
         titulo="Aviso de proximidad en la app"
-        ayuda="A qué distancia del stop-loss o del precio objetivo una posición empieza a marcarse en Posiciones y en la Watchlist. Los niveles de cada ticker se cargan desde la pestaña Instrumentos del Sheet; esto sólo cambia cuándo aparece el aviso previo."
+        ayuda="A qué distancia del stop-loss o del precio objetivo una posición empieza a marcarse en Posiciones y en la Watchlist. Los niveles de cada ticker se cargan en el detalle del ticker (o en la pestaña Instrumentos del Sheet); esto sólo cambia cuándo aparece el aviso previo."
       >
         <Segmented
           options={OPCIONES_PROXIMIDAD}

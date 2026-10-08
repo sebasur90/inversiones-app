@@ -283,6 +283,11 @@ export interface MovimientoInversion {
   comision: number
 }
 
+/** Los dos niveles de precio de una posición, tal como los nombra el backend. */
+export type TipoNivel = 'stop_loss' | 'objetivo'
+export type NivelOrigen = 'app' | 'sheet' | 'ninguno'
+export type ModoNivel = 'Porcentaje' | 'Fijo'
+
 export interface RendimientoPorTickerItem {
   ticker: string
   nombre: string
@@ -316,6 +321,17 @@ export interface RendimientoPorTickerItem {
   precio_stop_loss: number | null
   pct_a_stop_loss: number | null
   stop_loss_disparado: boolean | null
+  /**
+   * De dónde sale el nivel vigente: 'app' (lo fijó el usuario y pisa al Sheet), 'sheet' o
+   * 'ninguno'. Los `*_sheet` son siempre los del Sheet, para mostrarlos como referencia y poder
+   * ofrecer "volver al valor del Sheet".
+   */
+  objetivo_origen: NivelOrigen
+  objetivo_modo_sheet: string | null
+  objetivo_valor_sheet: number | null
+  stop_loss_origen: NivelOrigen
+  stop_loss_modo_sheet: string | null
+  stop_loss_valor_sheet: number | null
 }
 
 const carteraPath = (cartera: string | null) =>
@@ -1803,6 +1819,17 @@ export interface TickerPositionOut extends InversionesResumen {
   precio_stop_loss: number | null
   pct_a_stop_loss: number | null
   stop_loss_disparado: boolean | null
+  /**
+   * De dónde sale el nivel vigente: 'app' (lo fijó el usuario y pisa al Sheet), 'sheet' o
+   * 'ninguno'. Los `*_sheet` son siempre los del Sheet, para mostrarlos como referencia y poder
+   * ofrecer "volver al valor del Sheet".
+   */
+  objetivo_origen: NivelOrigen
+  objetivo_modo_sheet: string | null
+  objetivo_valor_sheet: number | null
+  stop_loss_origen: NivelOrigen
+  stop_loss_modo_sheet: string | null
+  stop_loss_valor_sheet: number | null
 }
 
 export interface TickerPerformanceOut extends PnlPorTickerItem {
@@ -1837,6 +1864,33 @@ export type TickerPerformanceRelativaOut = PerformanceRelativaOut
 
 export const getAnalisisTicker = (ticker: string, cartera: string | null = null) =>
   api.get<TickerAnalysisOut>(`/inversiones/ticker/${encodeURIComponent(ticker)}/analysis`, { params: cartera ? { cartera } : undefined }).then(r => r.data)
+
+export interface NivelEfectivoOut {
+  modo: ModoNivel | null
+  valor: number | null
+  origen: NivelOrigen
+  modo_sheet: string | null
+  valor_sheet: number | null
+  actualizado_en: string | null
+}
+
+export interface NivelesTickerOut {
+  ticker: string
+  objetivo: NivelEfectivoOut
+  stop_loss: NivelEfectivoOut
+}
+
+/** `null` en un nivel borra su override y vuelve al valor del Sheet. */
+export type NivelesTickerIn = Partial<Record<TipoNivel, { modo: ModoNivel; valor: number } | null>>
+
+export const getNivelesTicker = (ticker: string) =>
+  api.get<NivelesTickerOut>(`/inversiones/ticker/${encodeURIComponent(ticker)}/niveles`).then(r => r.data)
+
+export const guardarNivelesTicker = (ticker: string, body: NivelesTickerIn) =>
+  api.put<NivelesTickerOut>(`/inversiones/ticker/${encodeURIComponent(ticker)}/niveles`, body).then(r => r.data)
+
+export const borrarNivelTicker = (ticker: string, tipo: TipoNivel) =>
+  api.delete(`/inversiones/ticker/${encodeURIComponent(ticker)}/niveles/${tipo}`).then(() => undefined)
 
 export const getRiesgoTicker = (ticker: string, cartera: string | null = null, moneda: MonedaRiesgo = 'usd', benchmark: string | null = null) =>
   api.get<TickerRiesgoOut>(`/inversiones/ticker/${encodeURIComponent(ticker)}/riesgo`, { params: { ...(cartera && { cartera }), moneda, ...(benchmark && { benchmark }) } }).then(r => r.data)

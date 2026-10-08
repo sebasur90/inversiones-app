@@ -35,8 +35,11 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
       'El % de rendimiento compara el precio actual contra tu precio promedio de compra, no contra lo que pagaste en cada operación.',
       'Los filtros de arriba (Con alerta, Stop loss, Objetivo) muestran sólo lo que necesita una decisión tuya.',
     ],
-    queHacer: ['Tocá cualquier fila para ver el detalle completo de ese ticker.'],
-    terminos: ['posiciones_rendimiento_simple', 'stopLoss', 'objetivo'],
+    queHacer: [
+      'Tocá cualquier fila para ver el detalle completo de ese ticker.',
+      'Para poner o mover el stop loss y el objetivo, entrá al ticker y tocá esas dos tiles.',
+    ],
+    terminos: ['posiciones_rendimiento_simple', 'stopLoss', 'objetivo', 'nivel_origen'],
   },
 
   '/rendimiento': {
