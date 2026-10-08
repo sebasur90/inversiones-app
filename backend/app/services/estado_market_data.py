@@ -29,6 +29,8 @@ CAMPOS = (
     "moneda_subyacente",
     "resolucion_estado",
     "resolucion_intento",
+    "relleno_estado",
+    "relleno_intento",
 )
 
 

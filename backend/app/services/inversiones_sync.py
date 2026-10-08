@@ -18,6 +18,7 @@ from .validation.reglas_estructura import validar_estructura_tab
 from .validation import reglas_instrumentos, reglas_movimientos, reglas_precios, reglas_objetivos, reglas_rebalanceo, reglas_benchmarks, reglas_configuracion, reglas_tipos_cambio, reglas_cer
 from .validation.health_score import calcular_health_score
 from . import market_data
+from . import cotizacion_diaria
 from . import estado_market_data
 from . import ohlcv_analytics
 from . import splits_engine
@@ -461,10 +462,17 @@ def sync_from_sheet(db: Session) -> dict:
                 # data912 como red de contención para lo que IOL no cotizó. Sin `claves_excluir`
                 # (set()): IOL puede reclamar una fecha que el Sheet ya cubre —es la fuente primaria—,
                 # la precedencia final se resuelve más abajo al escribir en la DB.
+                cotizaciones_iol: dict = {}
                 precios_auto, issues_precios_auto = market_data_precios.fetch_precios_api(
                     instrumentos_validos, precios_validos, set(), db,
                     estado_por_ticker=estado_por_ticker, paneles_fn=paneles_fn, fci_fn=fci_fn,
+                    cotizaciones_out=cotizaciones_iol,
                 )
+                # Cierre anterior y variación del día de IOL: no cuesta llamadas (mismas respuestas).
+                cotizacion_diaria.guardar(
+                    db, cotizacion_diaria.construir_cotizaciones_dia(precios_auto, cotizaciones_iol),
+                )
+                cotizacion_diaria.purgar_antiguas(db, date.today())
                 issues.extend(issues_precios_auto)
                 for p in precios_auto:
                     (filas_iol if p["fuente"] == "iol" else filas_api).append(p)
@@ -513,6 +521,27 @@ def sync_from_sheet(db: Session) -> dict:
                 )
                 issues.extend(issues_backfill_iol)
                 filas_iol.extend(backfill_iol)
+
+                # Relleno de huecos internos/recientes (lo que el backfill no hace: sólo crece hacia
+                # atrás). Presupuesto de IOL estricto —una vez por ticker con hueco, tope chico por
+                # sync, sin cupo no corre—, ver `fetch_relleno_huecos_iol`. Va último para que el
+                # backfill se quede con las llamadas de la corrida si hacen falta.
+                fechas_conocidas: dict = {}
+                for p_s in precios_validos:
+                    fechas_conocidas.setdefault(p_s["ticker"], set()).add(p_s["fecha"])
+                for t, f in db.query(PrecioInstrumento.ticker, PrecioInstrumento.fecha).filter(
+                    PrecioInstrumento.fuente.in_(("iol", "api"))
+                ):
+                    fechas_conocidas.setdefault(t, set()).add(f)
+                for p_a in filas_iol + filas_api:
+                    fechas_conocidas.setdefault(p_a["ticker"], set()).add(p_a["fecha"])
+                relleno_iol, issues_relleno = market_data_precios.fetch_relleno_huecos_iol(
+                    instrumentos_validos, precios_validos, claves_sheet,
+                    primeras_fechas_mov, fechas_conocidas, db,
+                    estado_por_ticker=estado_por_ticker, barras_out=barras_ohlcv_out,
+                )
+                issues.extend(issues_relleno)
+                filas_iol.extend(relleno_iol)
 
             claves_iol: set = {(p["ticker"], p["fecha"]) for p in filas_iol}
 

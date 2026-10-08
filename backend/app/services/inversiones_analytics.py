@@ -6,7 +6,7 @@ from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from ..database import MovimientoInversion, InstrumentoInversion, PrecioInstrumento, IndiceMercado, RebalanceoObjetivo, ConfiguracionCartera
-from . import rebalanceo_engine
+from . import cotizacion_diaria, rebalanceo_engine
 from .cache import cache_por_sync
 
 DEFAULT_TOLERANCIA_PP = 2.0
@@ -288,23 +288,45 @@ def _precio_conocido(precios_sorted: list[tuple[date, float, str]], fecha: date)
     return precios_sorted[idx]
 
 
+# Cuánto puede distar el registro previo para seguir llamándose "variación diaria": cubre un fin de
+# semana largo (jueves -> martes con un feriado el lunes). Más allá, el historial tiene un hueco y
+# el número sería una variación de varias semanas con cara de variación del día.
+_MAX_DIAS_REGISTRO_PREVIO = 5
+
+
 def _variacion_diaria(
     precios_sorted: list[tuple[date, float, str]],
     fecha_precio: date,
     precio_actual: float,
     moneda: str,
+    cotizacion_iol: tuple[float | None, float | None] | None = None,
 ) -> tuple[float | None, float | None]:
-    """(variación absoluta, variación %) del precio contra el registro inmediato anterior.
+    """(variación absoluta, variación como ratio) del precio actual contra el día anterior.
 
-    "Anterior" es el último precio con fecha estrictamente menor a la del precio actual: si el
-    actual es del viernes, se compara con el jueves (o el último día con dato), no con el mismo
-    día. Sin precio previo, en otra moneda, o con previo <= 0, devuelve (None, None).
+    Prioridad:
+      1. `cotizacion_iol = (cierre_anterior, variacion_pct)` de IOL para esa fecha: es la variación
+         oficial del día, la que ve el usuario en IOL (`cotizacion_diaria`);
+      2. el último registro propio con fecha estrictamente menor, **sólo si es del día hábil
+         previo** (a lo sumo `_MAX_DIAS_REGISTRO_PREVIO` días antes) y en la misma moneda;
+      3. si no, `(None, None)`: sin dato antes que un número engañoso.
     """
+    if cotizacion_iol is not None:
+        cierre, pct = cotizacion_iol
+        if pct is not None and pct > -100.0:
+            ratio = pct / 100.0
+            if cierre is not None and cierre > 0:
+                return precio_actual - cierre, ratio
+            return precio_actual - precio_actual / (1.0 + ratio), ratio
+        if cierre is not None and cierre > 0:
+            return precio_actual - cierre, precio_actual / cierre - 1
+
     idx = bisect.bisect_left(precios_sorted, fecha_precio, key=lambda p: p[0]) - 1
     if idx < 0:
         return None, None
-    _f, previo, moneda_previo = precios_sorted[idx]
+    f_previo, previo, moneda_previo = precios_sorted[idx]
     if moneda_previo != moneda or previo <= 0:
+        return None, None
+    if (fecha_precio - f_previo).days > _MAX_DIAS_REGISTRO_PREVIO:
         return None, None
     return precio_actual - previo, precio_actual / previo - 1
 
@@ -1581,6 +1603,9 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
     for mov in movs:
         movimientos_por_ticker.setdefault(mov.ticker, []).append(mov)
 
+    # Variación del día que informó IOL (cierre anterior, %), por (ticker, fecha del precio).
+    cotizaciones_dia = cotizacion_diaria.cargar_por_clave(db, set(movimientos_por_ticker))
+
     resultado = []
 
     for ticker, movs_ticker in movimientos_por_ticker.items():
@@ -1629,7 +1654,9 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
             continue
 
         fecha_precio, precio_actual, moneda = precio_info
-        variacion_dia, variacion_dia_pct = _variacion_diaria(precios_sorted, fecha_precio, precio_actual, moneda)
+        variacion_dia, variacion_dia_pct = _variacion_diaria(
+            precios_sorted, fecha_precio, precio_actual, moneda, cotizaciones_dia.get((ticker, fecha_precio)),
+        )
 
         # Calcular valor actual
         valor_actual_usd = _to_usd(precio_actual * tenencia, moneda, hoy, db, mep_cache) or 0.0

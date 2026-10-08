@@ -34,7 +34,7 @@ from sqlalchemy.orm import Session
 from ..database import (
     BarraOHLCV, InstrumentoInversion, PrecioInstrumento, RefrescoPrecios,
 )
-from . import estado_market_data, ohlcv_analytics, watchlist_analytics
+from . import cotizacion_diaria, estado_market_data, ohlcv_analytics, watchlist_analytics
 from .market_data import precios as market_data_precios
 from .market_data import iol_auth
 from .market_data.client import use_external_apis
@@ -209,13 +209,18 @@ def refrescar(db: Session) -> dict:
 
     # `claves_excluir=set()`: IOL puede reclamar una fecha que el Sheet ya cubre (es la fuente
     # primaria); la precedencia se resuelve al escribir, igual que en el sync.
+    cotizaciones: dict = {}
     filas, issues = market_data_precios.fetch_precios_api(
         instrumentos, precios_manuales, set(), db,
         estado_por_ticker=estado_por_ticker, paneles_fn=paneles_fn, fci_fn=fci_fn,
+        cotizaciones_out=cotizaciones,
     )
 
     guardados = _upsert_precios(db, filas, claves_sheet)
     _espejo_ohlcv(db, filas)
+    # Cierre anterior y variación del día que informó IOL: vienen en las mismas respuestas.
+    cotizacion_diaria.guardar(db, cotizacion_diaria.construir_cotizaciones_dia(filas, cotizaciones))
+    cotizacion_diaria.purgar_antiguas(db, date.today())
 
     # Watchlist. Los que también están en cartera ya quedaron resueltos arriba: para esos
     # `get_watchlist` lee la serie de `precios_instrumento`.

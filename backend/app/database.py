@@ -97,6 +97,26 @@ class PrecioInstrumento(Base):
     __table_args__ = (UniqueConstraint("fecha", "ticker", name="uq_precio_instrumento"),)
 
 
+class CotizacionDiaria(Base):
+    """Lo que IOL informa del día de un ticker: cierre anterior y variación %.
+
+    Tabla aparte de `precios_instrumento` a propósito: el sync reescribe esa tabla (borra las filas
+    `fuente='sheet'` y reconcilia el resto), y este dato no tiene equivalente en el Sheet. Una fila
+    por `(ticker, fecha)` de la cotización a la que corresponde. `variacion_pct` está en puntos
+    porcentuales tal como lo manda IOL (1.26 = +1,26%); `cierre_anterior` ya viene en la escala del
+    precio guardado (calibrada igual que `precios_instrumento.precio`). Ambos pueden ser NULL.
+    """
+    __tablename__ = "cotizacion_diaria"
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String, nullable=False, index=True)
+    fecha = Column(Date, nullable=False)
+    cierre_anterior = Column(Numeric(18, 6), nullable=True)
+    variacion_pct = Column(Numeric(12, 6), nullable=True)
+    fuente = Column(String, nullable=False, default="iol", server_default="iol")
+
+    __table_args__ = (UniqueConstraint("ticker", "fecha", name="uq_cotizacion_diaria"),)
+
+
 class IndiceMercado(Base):
     __tablename__ = "indices_mercado"
     id = Column(Integer, primary_key=True, index=True)
@@ -214,6 +234,9 @@ class EstadoMarketDataTicker(Base):
         'sin_serie_iol' (tampoco lo cubre IOL, la última fuente) | 'completo' (la serie histórica
         ya no baja más). Ninguno de los tres vuelve a consumir cupo de backfill.
       - `backfill_intento`: fecha del último intento (para reintentar 'sin_serie' cada ~90 días).
+      - `relleno_estado` / `relleno_intento`: relleno de huecos internos del historial (una vez por
+        ticker, ver `precios.fetch_relleno_huecos_iol`). 'completo' = ya no tenía huecos o se
+        rellenó; `relleno_intento` = último intento, para no reintentar antes de ~30 días.
 
     Serie del subyacente en USD (análisis técnico, fuente yfinance):
       - `simbolo_local`: el símbolo con el que se pide la serie local del ticker a
@@ -247,6 +270,8 @@ class EstadoMarketDataTicker(Base):
     moneda_subyacente = Column(String, nullable=True)
     resolucion_estado = Column(String, nullable=True)
     resolucion_intento = Column(Date, nullable=True)
+    relleno_estado = Column(String, nullable=True)
+    relleno_intento = Column(Date, nullable=True)
 
 
 class WatchlistItem(Base):
@@ -545,6 +570,8 @@ def init_db():
             ("moneda_subyacente", "TEXT"),
             ("resolucion_estado", "TEXT"),
             ("resolucion_intento", "DATE"),
+            ("relleno_estado", "TEXT"),
+            ("relleno_intento", "DATE"),
         ):
             if columna not in cols:
                 conn.execute(text(f"ALTER TABLE estado_market_data_ticker ADD COLUMN {columna} {tipo}"))

@@ -25,7 +25,7 @@ from ..database import (
     PrecioWatchlist,
     WatchlistItem,
 )
-from . import catalogo_instrumentos
+from . import catalogo_instrumentos, cotizacion_diaria
 from .inversiones_analytics import (
     _holdings_por_cartera_ticker,
     _nivel_precio,
@@ -86,6 +86,7 @@ def get_watchlist(db: Session) -> list[dict]:
 
     solo_seguidos = [i.ticker for i in items if i.ticker not in tickers_instrumento]
     cierres = _cierres_barras(db, solo_seguidos)
+    cotizaciones_dia = cotizacion_diaria.cargar_por_clave(db, {i.ticker for i in items})
 
     resultado: list[dict] = []
     for item in items:
@@ -111,10 +112,14 @@ def get_watchlist(db: Session) -> list[dict]:
         if precio_actual is not None and fecha_precio is not None:
             if item.ticker in tickers_instrumento:
                 serie = precios_inst.get(item.ticker, [])
-                variacion_dia, variacion_dia_pct = _variacion_diaria(serie, fecha_precio, precio_actual, moneda_precio or "")
+                variacion_dia, variacion_dia_pct = _variacion_diaria(
+                    serie, fecha_precio, precio_actual, moneda_precio or "", cotizaciones_dia.get((item.ticker, fecha_precio)),
+                )
             else:
                 # Cierres de las velas: sin moneda guardada, así que se compara contra "".
-                variacion_dia, variacion_dia_pct = _variacion_diaria(cierres.get(item.ticker, []), fecha_precio, precio_actual, "")
+                variacion_dia, variacion_dia_pct = _variacion_diaria(
+                    cierres.get(item.ticker, []), fecha_precio, precio_actual, "", cotizaciones_dia.get((item.ticker, fecha_precio)),
+                )
 
         objetivo = float(item.objetivo) if item.objetivo is not None else None
         precio_objetivo, pct_a_objetivo, en_zona = _nivel_precio(
@@ -208,6 +213,9 @@ def refrescar_precios(
     **antes** de reescribir `instrumentos_inversion`, así que la tabla todavía tiene la foto de la
     corrida anterior; el endpoint lo omite y se lee de la DB, que ahí sí está al día.
 
+    Además del precio guarda el cierre anterior y la variación del día que informó IOL
+    (`cotizacion_diaria`), sin llamadas extra.
+
     No hace commit: lo hace el llamador (el endpoint, o la transacción del sync).
     Devuelve (cuántos precios se actualizaron, issues).
     """
@@ -232,10 +240,12 @@ def refrescar_precios(
         return 0, []
 
     extra = {} if max_simbolos_sueltos is None else {"max_simbolos_sueltos": max_simbolos_sueltos}
+    cotizaciones: dict = {}
     filas, issues = market_data_precios.fetch_precios_watchlist_catalogo(
         a_cotizar, db, paneles_fn=paneles_fn, fci_fn=fci_fn,
-        solo_simbolo_suelto=solo_simbolo_suelto, **extra,
+        solo_simbolo_suelto=solo_simbolo_suelto, cotizaciones_out=cotizaciones, **extra,
     )
+    cotizacion_diaria.guardar(db, cotizacion_diaria.construir_cotizaciones_dia(filas, cotizaciones))
     for fila in filas:
         existente = db.get(PrecioWatchlist, fila["ticker"])
         if existente is None:

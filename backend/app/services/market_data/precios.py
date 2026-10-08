@@ -35,6 +35,7 @@ from ..ohlcv_analytics import clave_serie
 from ..validation.types import Severity, ValidationIssue
 from . import analisistecnico, data912, yahoo
 from . import iol as iol_client
+from . import iol_auth
 from .ohlcv_types import BarraCruda
 
 # `tipo_instrumento` en el Sheet es texto libre; se matchea por familia, sin acentos ni mayúsculas.
@@ -65,6 +66,13 @@ _REINTENTO_SIN_SERIE_DIAS = 90            # A3: un ticker sin serie histórica s
 # ya se pide para valuación).
 _PISO_TECNICO = timedelta(days=366 * 2)
 _MAX_BACKFILL_OHLCV_POR_SYNC = 8
+
+# Relleno de huecos internos del historial (ver `fetch_relleno_huecos_iol`). Presupuesto a propósito
+# chico: es una pasada de una sola vez por ticker, no un gasto recurrente.
+_MAX_RELLENO_POR_SYNC = 5            # tickers (= llamadas a IOL) por sync
+_REINTENTO_RELLENO_DIAS = 30         # tras un intento, no se vuelve a pedir ese ticker antes de esto
+_HUECO_MIN_DIAS_HABILES = 4          # "hueco" = más de 3 días hábiles seguidos sin registro (tolera feriados)
+_UMBRAL_CUPO_MENSUAL_RELLENO = 0.70  # con más de este uso del cupo mensual de IOL, no se rellena
 
 # Watchlist: cuántos símbolos que los paneles NO cubren se piden de a uno a IOL por corrida
 # (`Titulos/{simbolo}/Cotizacion`, 1 llamada cada uno). Lo que queda afuera del tope se reintenta
@@ -628,6 +636,7 @@ def fetch_precios_api(
     estado_por_ticker: dict[str, dict] | None = None,
     paneles_fn=None,
     fci_fn=None,
+    cotizaciones_out: dict | None = None,
 ) -> tuple[list[dict], list[ValidationIssue]]:
     """Precio del día para renta fija + renta variable + FCI, IOL primero y data912 como
     respaldo (FCI no tiene respaldo público: si IOL no lo cotiza, no se carga). Punto de entrada
@@ -639,7 +648,11 @@ def fetch_precios_api(
     ver la docstring de `iol_auth`).
 
     `paneles_fn` / `fci_fn`: memos de las llamadas a IOL compartidos con otras rutas de la misma
-    corrida (ver `memo_paneles` / `memo_fci`). Si no se pasan, se arman propios."""
+    corrida (ver `memo_paneles` / `memo_fci`). Si no se pasan, se arman propios.
+
+    `cotizaciones_out`: si se pasa, se completa con `simbolo -> CotizacionIOL` de lo que IOL cotizó
+    (con el cierre anterior y la variación del día, si vinieron). Sale de los mismos memos que ya se
+    pidieron: no hace ninguna llamada extra (ver `cotizacion_diaria.construir_cotizaciones_dia`)."""
     hoy = hoy or date.today()
     filas: list[dict] = []
     issues: list[ValidationIssue] = []
@@ -684,6 +697,17 @@ def fetch_precios_api(
             filas.extend(f_fci or [])
             issues.extend(i_fci)
 
+    if cotizaciones_out is not None and any(f["fuente"] == "iol" for f in filas):
+        # Los memos ya están resueltos para toda familia que tenga instrumentos; sólo se leen los
+        # que se pidieron de verdad, porque invocar uno que no se usó sería una llamada nueva.
+        usa_paneles = any(
+            _es_renta_fija(i.get("tipo_instrumento", "")) or _es_renta_variable(i.get("tipo_instrumento", ""))
+            for i in instrumentos
+        )
+        for origen in (_paneles() if usa_paneles else None, _fci() if fci_objetivo else None):
+            for simbolo, cot in (origen or {}).items():
+                cotizaciones_out.setdefault(simbolo.upper().strip(), cot)
+
     return filas, issues
 
 
@@ -720,6 +744,7 @@ def fetch_precios_watchlist_catalogo(
     fci_fn=None,
     max_simbolos_sueltos: int = _MAX_SIMBOLOS_SUELTOS,
     solo_simbolo_suelto: bool = False,
+    cotizaciones_out: dict | None = None,
 ) -> tuple[list[dict], list[ValidationIssue]]:
     """Precio del día para los tickers de la watchlist (los que NO están en cartera).
 
@@ -745,6 +770,9 @@ def fetch_precios_watchlist_catalogo(
 
     Devuelve (filas, issues); las filas tienen la forma `{ticker, fecha, precio, moneda, fuente}`,
     lista para `PrecioWatchlist`.
+
+    `cotizaciones_out`: si se pasa, se completa con `simbolo -> CotizacionIOL` de cada cotización de
+    IOL usada (para guardar la variación del día; sin llamadas extra).
     """
     hoy = hoy or date.today()
     if not watchlist:
@@ -782,6 +810,8 @@ def fetch_precios_watchlist_catalogo(
                 pendientes.append(w)
                 continue
             precio, moneda = encontrado
+            if cotizaciones_out is not None:
+                cotizaciones_out[w["ticker"].upper().strip()] = encontrado
             filas.append({
                 "fecha": hoy, "ticker": w["ticker"], "precio": round(float(precio), 6),
                 "moneda": (moneda or w.get("moneda") or "ARS").strip().upper(), "fuente": "iol",
@@ -807,6 +837,8 @@ def fetch_precios_watchlist_catalogo(
                 sin_resolver.append(w)
                 continue
             precio, moneda = cotizacion
+            if cotizaciones_out is not None:
+                cotizaciones_out[ticker.upper().strip()] = cotizacion
             filas.append({
                 "fecha": hoy, "ticker": ticker, "precio": round(float(precio), 6),
                 "moneda": (moneda or w.get("moneda") or "ARS").strip().upper(), "fuente": "iol",
@@ -1038,6 +1070,184 @@ def fetch_backfill_iol(
         min_serie = min((b.fecha for b in serie_valuacion), default=None)
         if est_entry is not None and ya is not None and min_serie is not None and min_serie >= ya:
             est_entry["backfill_estado"] = "completo"
+
+    return filas, issues
+
+
+def _huecos_dias_habiles(
+    conocidas: set[date], desde: date, hasta: date, min_run: int = _HUECO_MIN_DIAS_HABILES,
+) -> list[tuple[date, date, int]]:
+    """Tramos de al menos `min_run` días hábiles (lun-vie) consecutivos sin ningún registro en
+    `[desde, hasta]`, como `(primer_dia, ultimo_dia, cantidad)`. Un feriado suelto no llega al
+    mínimo, así que no se confunde con un hueco; los fines de semana no cuentan ni cortan la racha."""
+    huecos: list[tuple[date, date, int]] = []
+    inicio: date | None = None
+    ultimo: date | None = None
+    n = 0
+    dia = desde
+    while dia <= hasta:
+        if dia.weekday() < 5:
+            if dia in conocidas:
+                if n >= min_run and inicio is not None and ultimo is not None:
+                    huecos.append((inicio, ultimo, n))
+                inicio, ultimo, n = None, None, 0
+            else:
+                if inicio is None:
+                    inicio = dia
+                ultimo = dia
+                n += 1
+        dia += timedelta(days=1)
+    if n >= min_run and inicio is not None and ultimo is not None:
+        huecos.append((inicio, ultimo, n))
+    return huecos
+
+
+def fetch_relleno_huecos_iol(
+    instrumentos: list[dict],
+    precios_sheet: list[dict],
+    claves_excluir: set[tuple[str, date]],
+    primeras_fechas_mov: dict[str, date],
+    fechas_conocidas_por_ticker: dict[str, set[date]],
+    db,
+    hoy: date | None = None,
+    estado_por_ticker: dict[str, dict] | None = None,
+    barras_out: list[dict] | None = None,
+    max_tickers: int = _MAX_RELLENO_POR_SYNC,
+) -> tuple[list[dict], list[ValidationIssue]]:
+    """Completa los huecos **internos y recientes** de la serie de precios con la serie histórica de
+    IOL. Es lo que `fetch_backfill_iol` no hace: ése sólo crece hacia atrás hasta el primer
+    movimiento, y una vez que llega ahí no vuelve a mirar, así que un Sheet cargado a mano cada
+    tanto deja la serie con agujeros (y la "variación diaria" termina comparando contra hace semanas).
+
+    Presupuesto de llamadas a IOL, deliberadamente estricto:
+      - sólo un ticker **con un hueco real** (`_huecos_dias_habiles`) gasta una llamada; sin hueco,
+        ninguna;
+      - una llamada por ticker (un solo rango, del primer al último hueco), y a lo sumo
+        `max_tickers` por sync, atendiendo primero a los de más días faltantes;
+      - tras cada intento (haya servido o no) el ticker queda en cooldown `_REINTENTO_RELLENO_DIAS`:
+        si IOL no tiene todos los días, no se insiste sync tras sync;
+      - no corre sin cupo (`iol_auth.cupo_disponible`) ni con más de
+        `_UMBRAL_CUPO_MENSUAL_RELLENO` del cupo mensual gastado, y respeta el tope por corrida.
+
+    Mismas reglas de escala y de precedencia que el backfill: calibra el factor contra el último
+    precio del Sheet (`_resolver_factor`) y **nunca** emite una fecha que el Sheet cubre
+    (`claves_excluir`) ni una que ya tiene registro. Con `barras_out` también aporta las velas de
+    ese rango (viajan en la misma respuesta, sin llamadas nuevas). Devuelve siempre una lista.
+    """
+    issues: list[ValidationIssue] = []
+    hoy = hoy or date.today()
+    ayer = hoy - timedelta(days=1)
+
+    objetivo = [
+        i for i in instrumentos
+        if _es_renta_variable(i.get("tipo_instrumento", "")) or _es_renta_fija(i.get("tipo_instrumento", ""))
+    ]
+    if not objetivo:
+        return [], issues
+
+    ultimo_sheet: dict[str, tuple[date, float, str]] = {}
+    for p in precios_sheet:
+        t, f, px = p["ticker"], p["fecha"], float(p["precio"])
+        if t not in ultimo_sheet or f > ultimo_sheet[t][0]:
+            ultimo_sheet[t] = (f, px, p.get("moneda") or "")
+
+    pendientes: list[tuple[int, dict, date, date]] = []
+    for inst in objetivo:
+        ticker = inst["ticker"]
+        piso = primeras_fechas_mov.get(ticker)
+        conocidas = fechas_conocidas_por_ticker.get(ticker)
+        if piso is None or not conocidas:
+            continue
+
+        est = estado_por_ticker.get(ticker) if estado_por_ticker is not None else None
+        intento = est.get("relleno_intento") if est else None
+        if intento is not None and (hoy - intento).days < _REINTENTO_RELLENO_DIAS:
+            continue
+
+        # Hacia atrás del primer registro conocido lo cubre el backfill; acá sólo lo de adentro.
+        desde = max(piso, hoy - _TOPE_BACKFILL, min(conocidas))
+        huecos = _huecos_dias_habiles(conocidas, desde, ayer)
+        if not huecos:
+            if est is not None:
+                est["relleno_estado"] = "completo"
+                est["relleno_intento"] = hoy
+            continue
+        faltantes = sum(n for _, _, n in huecos)
+        pendientes.append((faltantes, inst, huecos[0][0], huecos[-1][1]))
+
+    if not pendientes:
+        return [], issues
+
+    # Con el cupo mensual muy usado, esto es lo primero que se sacrifica.
+    limite = iol_auth.limite_mensual()
+    if limite > 0 and iol_auth.llamadas_mes(db) >= limite * _UMBRAL_CUPO_MENSUAL_RELLENO:
+        issues.append(ValidationIssue(
+            tab="Precios (API)", regla="relleno_huecos_omitido_por_cupo",
+            mensaje="Se omite el relleno de huecos del historial: el cupo mensual de IOL ya va por "
+                    f"encima del {int(_UMBRAL_CUPO_MENSUAL_RELLENO * 100)}%",
+            impacto="Los huecos se rellenan en una corrida posterior, cuando haya cupo de sobra",
+            severidad=Severity.INFO,
+        ))
+        return [], issues
+
+    pendientes.sort(key=lambda x: x[0], reverse=True)
+
+    filas: list[dict] = []
+    for _, inst, d_desde, d_hasta in pendientes[:max_tickers]:
+        if not iol_auth.cupo_disponible(db):
+            break
+        ticker = inst["ticker"]
+        est_entry = estado_por_ticker.setdefault(ticker, {}) if estado_por_ticker is not None else None
+        if est_entry is not None:
+            est_entry["relleno_intento"] = hoy  # se anota antes: haya servido o no, no se insiste
+
+        serie = iol_client.fetch_historico_ohlcv(db, ticker, d_desde, min(d_hasta, ayer))
+        if not serie:
+            continue
+
+        prev = ultimo_sheet.get(ticker)
+        if prev is None:
+            continue  # sin precio manual no hay con qué calibrar la escala (el backfill ya lo reporta)
+        f_sheet, px_sheet, moneda_sheet = prev
+        if px_sheet <= 0:
+            continue
+
+        px_ref = min(serie, key=lambda b: abs((b.fecha - f_sheet).days)).cierre
+        factor, _ = _resolver_factor(ticker, px_ref, px_sheet, f_sheet, estado_por_ticker)
+        if factor is None:
+            issues.append(ValidationIssue(
+                tab="Precios (API)", campo=ticker, regla="escala_desconocida",
+                mensaje=(f"{ticker}: IOL cotiza {px_ref:g} cerca del {f_sheet} y el Sheet "
+                         f"{px_sheet:g} (factor {px_ref / px_sheet:.2f}, fuera de ~1 o ~100)"),
+                impacto="No se rellenan los huecos de este instrumento",
+                severidad=Severity.ADVERTENCIA,
+            ))
+            continue
+
+        conocidas = fechas_conocidas_por_ticker.get(ticker, set())
+        moneda = (moneda_sheet or inst.get("moneda") or "ARS").strip().upper()
+        for b in serie:
+            if b.fecha >= hoy or b.fecha in conocidas or (ticker, b.fecha) in claves_excluir:
+                continue
+            filas.append({
+                "fecha": b.fecha, "ticker": ticker,
+                "precio": round(b.cierre * factor, 6), "moneda": moneda, "fuente": "iol",
+            })
+
+        if barras_out is not None:
+            for b in serie:
+                if b.fecha >= hoy:
+                    continue
+                escalada = _aplicar_factor_ohlcv(b, factor)
+                barras_out.append({
+                    "ticker": ticker, "fecha": escalada.fecha,
+                    "apertura": escalada.apertura, "maximo": escalada.maximo, "minimo": escalada.minimo,
+                    "cierre": escalada.cierre, "volumen": escalada.volumen,
+                    "moneda": moneda, "fuente": "iol",
+                })
+
+        if est_entry is not None:
+            est_entry["relleno_estado"] = "completo"
 
     return filas, issues
 

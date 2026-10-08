@@ -2,8 +2,23 @@ import { formatARSCrudo, formatPrecio, formatUSDCrudo } from '../../utils'
 import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import Card from '../../components/ui/Card'
 import Sparkline from '../../components/charts/Sparkline'
+import VariacionDia from '../../components/ui/VariacionDia'
 import InfoTooltip from '../../help/components/InfoTooltip'
 import type { TickerHistoricoOut } from '../../api'
+
+// Días que pueden separar dos registros para seguir llamando "diaria" a la variación entre ellos
+// (cubre un fin de semana largo). Con un hueco mayor la celda queda en "—" en vez de mentir.
+const MAX_DIAS_ENTRE_REGISTROS = 5
+
+function variacionContraAnterior(
+  actual: { fecha: string; precio_nominal: number | null },
+  anterior: { fecha: string; precio_nominal: number | null } | undefined,
+): number | null {
+  if (!anterior || !actual.precio_nominal || !anterior.precio_nominal || anterior.precio_nominal <= 0) return null
+  const dias = (Date.parse(actual.fecha) - Date.parse(anterior.fecha)) / 86_400_000
+  if (!(dias > 0) || dias > MAX_DIAS_ENTRE_REGISTROS) return null
+  return actual.precio_nominal / anterior.precio_nominal - 1
+}
 
 export default function TickerHistoricoTab({ historico, monedaSeleccionada }: { historico: TickerHistoricoOut; monedaSeleccionada: 'ARS' | 'USD' }) {
   const { puntos } = historico
@@ -43,6 +58,7 @@ export default function TickerHistoricoTab({ historico, monedaSeleccionada }: { 
                   <span>Precio USD</span>
                   <InfoTooltip term="mep" />
                 </th>
+                <th className="text-right py-2 px-2 text-app-text-dim font-semibold">Var. día</th>
                 {moneda && <th className="text-right py-2 px-2 text-app-text-dim font-semibold flex items-center justify-end gap-1.5">
                   <span>Precio CER</span>
                   <InfoTooltip term="cer" />
@@ -62,6 +78,9 @@ export default function TickerHistoricoTab({ historico, monedaSeleccionada }: { 
                   </td>
                   <td className="text-right py-2 px-2 font-mono font-semibold tabular-nums text-app-text">
                     {p.precio_usd != null ? formatUSDCrudo(p.precio_usd) : '—'}
+                  </td>
+                  <td className="text-right py-2 px-2">
+                    <VariacionDia pct={variacionContraAnterior(p, puntos[i - 1])} />
                   </td>
                   {moneda && (
                     <td className="text-right py-2 px-2 font-mono font-semibold tabular-nums text-app-text">

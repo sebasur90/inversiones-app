@@ -65,7 +65,44 @@ def _num(v) -> float | None:
         return None
 
 
-def _fetch_panel(db: Session, instrumento: str, panel: str, pais: str) -> dict[str, tuple[float, str]] | None:
+class CotizacionIOL(tuple):
+    """`(precio, moneda)` más, si IOL los mandó, el cierre anterior y la variación del día.
+
+    Es una tupla de dos elementos a propósito: todo lo que ya desempaqueta `(precio, moneda)` o
+    compara contra una tupla sigue andando igual. Los datos extra viajan como atributos, y quien
+    los quiera los lee con `getattr(cot, "variacion_pct", None)` (un `(precio, moneda)` plano, p.ej.
+    el de un test, simplemente no los tiene).
+    """
+    cierre_anterior: float | None
+    variacion_pct: float | None
+
+    def __new__(cls, precio: float, moneda: str, cierre_anterior: float | None = None,
+                variacion_pct: float | None = None):
+        obj = super().__new__(cls, (precio, moneda))
+        obj.cierre_anterior = cierre_anterior
+        obj.variacion_pct = variacion_pct
+        return obj
+
+
+# Nombres sin confirmar contra una cuenta real (ver docstring del módulo): se prueban varios alias y,
+# si ninguno aparece, el dato queda en None y la variación se calcula con el historial propio.
+_ALIAS_VARIACION = ("variacion", "variacionPorcentual", "variacionPorcentaje")
+_ALIAS_CIERRE_ANTERIOR = ("ultimoCierre", "cierreAnterior", "cierre_anterior")
+
+
+def _cotizacion(fila: dict, precio: float) -> CotizacionIOL:
+    """Arma la `CotizacionIOL` de una fila cruda de IOL. Valida el cierre anterior (> 0) y que la
+    variación sea un número finito razonable: un dato roto no tiene que pasar por "variación del día"."""
+    cierre = _primer_alias(fila, _ALIAS_CIERRE_ANTERIOR)
+    if cierre is not None and cierre <= 0:
+        cierre = None
+    variacion = _primer_alias(fila, _ALIAS_VARIACION)
+    if variacion is not None and not (-100.0 < variacion < 1000.0):
+        variacion = None
+    return CotizacionIOL(precio, _moneda(fila.get("moneda")), cierre, variacion)
+
+
+def _fetch_panel(db: Session, instrumento: str, panel: str, pais: str) -> dict[str, CotizacionIOL] | None:
     url = f"{iol_auth.BASE_URL}/Cotizaciones/{instrumento}/{panel}/{pais}"
     data = iol_auth.get_autenticado(db, url)
     if not isinstance(data, dict):
@@ -73,23 +110,23 @@ def _fetch_panel(db: Session, instrumento: str, panel: str, pais: str) -> dict[s
     titulos = data.get("titulos")
     if not isinstance(titulos, list):
         return None
-    out: dict[str, tuple[float, str]] = {}
+    out: dict[str, CotizacionIOL] = {}
     for fila in titulos:
         if not isinstance(fila, dict):
             continue
         simbolo = (fila.get("simbolo") or "").strip().upper()
         precio = _num(fila.get("ultimoPrecio"))
         if simbolo and precio is not None and precio > 0:
-            out[simbolo] = (precio, _moneda(fila.get("moneda")))
+            out[simbolo] = _cotizacion(fila, precio)
     return out
 
 
-def fetch_precios_paneles(db: Session) -> dict[str, tuple[float, str]] | None:
-    """`simbolo -> (ultimoPrecio, moneda)`, uniendo todos los paneles de `_PANELES` (una llamada
+def fetch_precios_paneles(db: Session) -> dict[str, CotizacionIOL] | None:
+    """`simbolo -> (ultimoPrecio, moneda)` (con `cierre_anterior`/`variacion_pct` si vinieron), uniendo todos los paneles de `_PANELES` (una llamada
     cada uno). Devuelve `None` sólo si NINGÚN panel respondió (mismo contrato que
     `data912._fetch_live`): así el llamador distingue "IOL está caída/sin cupo/deshabilitada" de
     "respondió pero sin ese ticker en particular"."""
-    out: dict[str, tuple[float, str]] = {}
+    out: dict[str, CotizacionIOL] = {}
     alguno_respondio = False
     for instrumento, panel, pais in _PANELES:
         fila = _fetch_panel(db, instrumento, panel, pais)
@@ -101,25 +138,25 @@ def fetch_precios_paneles(db: Session) -> dict[str, tuple[float, str]] | None:
     return out if alguno_respondio else None
 
 
-def fetch_precios_fci(db: Session) -> dict[str, tuple[float, str]] | None:
+def fetch_precios_fci(db: Session) -> dict[str, CotizacionIOL] | None:
     """`simbolo -> (valorCuotaparte, moneda)` para todos los FCI, en una sola llamada
     (`GET /Titulos/FCI`)."""
     url = f"{iol_auth.BASE_URL}/Titulos/FCI"
     data = iol_auth.get_autenticado(db, url)
     if not isinstance(data, list):
         return None
-    out: dict[str, tuple[float, str]] = {}
+    out: dict[str, CotizacionIOL] = {}
     for fila in data:
         if not isinstance(fila, dict):
             continue
         simbolo = (fila.get("simbolo") or "").strip().upper()
         precio = _num(fila.get("ultimoPrecio") or fila.get("valorCuotaparte"))
         if simbolo and precio is not None and precio > 0:
-            out[simbolo] = (precio, _moneda(fila.get("moneda")))
+            out[simbolo] = _cotizacion(fila, precio)
     return out
 
 
-def fetch_precio_simbolo(db: Session, simbolo: str, mercado: str = _MERCADO_DEFAULT) -> tuple[float, str] | None:
+def fetch_precio_simbolo(db: Session, simbolo: str, mercado: str = _MERCADO_DEFAULT) -> CotizacionIOL | None:
     """Cotización de un símbolo suelto (1 llamada).
 
     La usa la watchlist (`precios.fetch_precios_watchlist_catalogo`) para los símbolos que los
@@ -132,7 +169,7 @@ def fetch_precio_simbolo(db: Session, simbolo: str, mercado: str = _MERCADO_DEFA
     precio = _num(data.get("ultimoPrecio"))
     if precio is None or precio <= 0:
         return None
-    return precio, _moneda(data.get("moneda"))
+    return _cotizacion(data, precio)
 
 
 _ALIAS_APERTURA = ("apertura", "precioApertura", "open")
