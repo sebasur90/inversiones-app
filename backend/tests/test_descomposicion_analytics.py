@@ -113,7 +113,13 @@ def test_ticker_sin_ficha_cae_en_sin_clasificar_y_no_desaparece(db: Session):
     assert familias["Sin clasificar"]["porcentaje"] == pytest.approx(50.0, abs=0.01)
 
 
-def test_posicion_sin_precio_no_entra_al_arbol_pero_se_reporta(db: Session):
+def test_posicion_sin_precio_entra_al_arbol_valuada_al_costo(db: Session):
+    """Sin cotización, la posición se valúa al costo de compra y se avisa que es aproximada.
+
+    Mismo criterio que la pantalla principal (`_valuar_holdings`): antes desaparecía del
+    árbol, y el total de esta pantalla quedaba por debajo del patrimonio informado en el
+    Resumen sin que nada explicara la diferencia.
+    """
     _inst(db, "AAA", tipo="CEDEAR", sector="Tecnologia", pais="AR")
     _inst(db, "SINPRECIO", tipo="Bono", sector="Soberano", pais="AR")
     db.commit()
@@ -123,7 +129,9 @@ def test_posicion_sin_precio_no_entra_al_arbol_pero_se_reporta(db: Session):
     db.commit()
 
     descomp = get_descomposicion("test", db)
-    assert descomp["posiciones_sin_precio"] == ["SINPRECIO"]
+    assert descomp["avisos"]["aproximadas"] == ["SINPRECIO"]
+    assert descomp["avisos"]["sin_valuar"] == []
+    assert descomp["total_usd"] == pytest.approx(200.0, abs=0.01)
     todos_los_tickers = {
         t["etiqueta"]
         for fam in descomp["raiz"]
@@ -131,8 +139,7 @@ def test_posicion_sin_precio_no_entra_al_arbol_pero_se_reporta(db: Session):
         for sector in pais["hijos"]
         for t in sector["hijos"]
     }
-    assert "SINPRECIO" not in todos_los_tickers
-    assert "AAA" in todos_los_tickers
+    assert todos_los_tickers == {"AAA", "SINPRECIO"}
 
 
 def test_sin_posiciones_arbol_vacio(db: Session):

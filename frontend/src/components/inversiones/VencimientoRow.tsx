@@ -54,7 +54,11 @@ export default function VencimientoRow({ item, moneda }: { item: VencimientoItem
           </div>
         </div>
         <div className="text-right shrink-0">
-          <div className="font-mono text-caption font-bold text-app-text tabular-nums">{fmt.monto(valor)}</div>
+          <div className="font-mono text-caption font-bold text-app-text tabular-nums">
+            {fmt.monto(valor)}
+            {/* Sin cotización el valor es el costo de compra: se dice, no se disimula. */}
+            {item.valuado_al_costo && <span className="ml-1 font-sans font-normal text-app-text-faint">al costo</span>}
+          </div>
           <span className={`inline-block font-bold text-label tracking-wide px-1.5 py-0.5 rounded-[6px] mt-0.5 ${badgeClase(item)}`}>
             {badgeLabel(item)}
           </span>

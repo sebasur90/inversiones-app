@@ -14,6 +14,7 @@ import EmptyState from '../components/ui/EmptyState'
 import QueryBoundary from '../components/ui/QueryBoundary'
 import SkeletonPantalla from '../components/ui/Skeleton'
 import BotonExportarCsv from '../components/ui/BotonExportarCsv'
+import AvisosValuacion from '../components/inversiones/AvisosValuacion'
 import { Icon } from '../components/icons/Icons'
 import InfoTooltip from '../help/components/InfoTooltip'
 
@@ -202,18 +203,7 @@ export default function Descomposicion() {
               ))}
             </div>
 
-            {data.posiciones_sin_precio.length > 0 && (
-              <div className="mt-4 flex items-center gap-1.5 text-label text-app-text-faint">
-                <Icon name="alert" className="w-3.5 h-3.5 shrink-0" />
-                <span>
-                  {data.posiciones_sin_precio.length} posición{data.posiciones_sin_precio.length !== 1 ? 'es' : ''} sin
-                  precio no incluida{data.posiciones_sin_precio.length !== 1 ? 's' : ''} ({data.posiciones_sin_precio.join(', ')}).{' '}
-                  <button onClick={() => navigate('/calidad-datos')} className="font-semibold text-app-accent">
-                    Ver calidad de datos
-                  </button>
-                </span>
-              </div>
-            )}
+            <AvisosValuacion avisos={data.avisos} moneda={unidad === 'ars' ? 'ARS' : 'USD'} />
           </>
         )}
       </QueryBoundary>

@@ -263,6 +263,36 @@ class TestGenerarObservaciones:
         assert severidades == sorted(severidades, key=lambda s: salud_engine.RANK_SEVERIDAD[s])
         assert severidades[0] == "revisar"
 
+    def test_pais_dominante_ignora_el_bucket_sin_pais(self):
+        """El eje País trae el bucket residual, y puede venir primero por ser el de mayor valor.
+
+        "El 70% está concentrado en Sin país" no es concentración geográfica sino ficha
+        incompleta — eso ya lo reporta la observación de clasificación.
+        """
+        concentracion = [{"eje": "País", "estado": "ok", "n_componentes_reales": 2}]
+        obs = salud_engine.generar_observaciones(**self._base_kwargs(
+            concentracion=concentracion,
+            exposicion_pais=[
+                {"etiqueta": "Sin país", "porcentaje": 70.0, "valor_usd": 7000, "valor_ars": 7},
+                {"etiqueta": "US", "porcentaje": 20.0, "valor_usd": 2000, "valor_ars": 2},
+                {"etiqueta": "AR", "porcentaje": 10.0, "valor_usd": 1000, "valor_ars": 1},
+            ],
+        ))
+        assert [o for o in obs if o["id"] == "pais_dominante"] == []
+
+    def test_pais_dominante_se_reporta_sobre_el_primer_pais_real(self):
+        concentracion = [{"eje": "País", "estado": "ok", "n_componentes_reales": 2}]
+        obs = salud_engine.generar_observaciones(**self._base_kwargs(
+            concentracion=concentracion,
+            exposicion_pais=[
+                {"etiqueta": "Sin país", "porcentaje": 10.0, "valor_usd": 1000, "valor_ars": 1},
+                {"etiqueta": "US", "porcentaje": 80.0, "valor_usd": 8000, "valor_ars": 8},
+            ],
+        ))
+        item = next(o for o in obs if o["id"] == "pais_dominante")
+        assert "US" in item["titulo"]
+        assert item["valor"] == "80.0%"
+
     def test_vencimiento_proximo_apunta_a_flujo_caja(self):
         venc = [{"ticker": "AL30", "nombre": "AL30", "vencido": False, "dias_restantes": 30, "valor_actual_usd": 4500}]
         obs = salud_engine.generar_observaciones(**self._base_kwargs(vencimientos=venc))

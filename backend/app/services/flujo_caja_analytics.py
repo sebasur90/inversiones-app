@@ -111,6 +111,20 @@ def _n_cuotas_amort_total(amort_por_unidad: float | None) -> int | None:
     return n if 1 <= n <= 600 else None
 
 
+def _precio_de_mercado(val: dict | None) -> float | None:
+    """Precio de mercado de la posición, o None si no hay.
+
+    `get_rendimiento_por_ticker` valúa al costo de compra lo que no tiene cotización (para que
+    el patrimonio no quede incompleto), y lo marca con `valuado_al_costo`. Acá eso no sirve: la
+    TIR, la paridad y el capital al vencimiento son métricas **de mercado**, y calcularlas con
+    el precio que pagó el usuario daría un número con cara de dato y sin sentido.
+    """
+    if not val or val.get("valuado_al_costo"):
+        return None
+    precio = val.get("precio_actual")
+    return float(precio) if precio else None
+
+
 def _estimar_par(precio_actual: float | None, amort_por_unidad: float | None) -> tuple[float | None, bool]:
     """Escala del par contra la que está cargado el precio: 1.0 | 100.0, o None si no se puede
     determinar. El segundo valor es True cuando salió del orden de magnitud del precio (una
@@ -259,9 +273,10 @@ def _proyectar_cobros_ticker(
     else:
         # bullet: capital devuelto de una sola vez al vencimiento
         val = valuacion.get(ticker)
+        precio_mercado = _precio_de_mercado(val)
         capital_nativo = None
-        if val and val.get("precio_actual") and val.get("cantidad_actual"):
-            capital_nativo = float(val["precio_actual"]) * float(val["cantidad_actual"])
+        if precio_mercado is not None and val and val.get("cantidad_actual"):
+            capital_nativo = precio_mercado * float(val["cantidad_actual"])
         if capital_nativo is not None:
             metodo_capital = "bullet"
             notas.append(
@@ -546,7 +561,7 @@ def _metricas_renta_fija(
     moneda = proj["moneda"]
     cobros = sorted(proj["cobros"], key=lambda c: c["fecha"])
     metodo = proj["metodo_capital"]
-    precio_actual = float(val["precio_actual"]) if val and val.get("precio_actual") else None
+    precio_actual = _precio_de_mercado(val)
     cantidad = float(val["cantidad_actual"]) if val and val.get("cantidad_actual") else None
 
     out = {**vacio, "moneda_metricas": moneda, "metricas_estimadas": True}

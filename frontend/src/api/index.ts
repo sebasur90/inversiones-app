@@ -168,8 +168,22 @@ export interface ExposicionEje {
   items: ExposicionItem[]
 }
 
+/**
+ * Qué posiciones quedaron aproximadas o afuera al valuar la cartera. Lo devuelven las
+ * pantallas que muestran un total o pesos, para que el número coincida con el de la pantalla
+ * principal y, si algo no se pudo valuar a mercado, se vea cuál es.
+ */
+export interface ValuacionAvisos {
+  aproximadas: string[]    // valuadas al costo de compra (sin cotización)
+  sin_valuar: string[]     // fuera del total: ni cotización ni costo
+  sin_valor_usd: string[]
+  sin_valor_ars: string[]
+  sin_ficha: string[]      // sin ficha en la hoja Instrumentos
+}
+
 export interface ExposicionOut {
   ejes: ExposicionEje[]
+  avisos: ValuacionAvisos
 }
 
 export interface DescomposicionNodo {
@@ -193,7 +207,7 @@ export interface DescomposicionOut {
   total_ars: number
   instrumentos: number
   raiz: DescomposicionNodo[]
-  posiciones_sin_precio: string[]
+  avisos: ValuacionAvisos
 }
 
 export interface RebalanceoItem {
@@ -219,6 +233,7 @@ export interface RebalanceoEje {
 
 export interface RebalanceoOut {
   ejes: RebalanceoEje[]
+  avisos: ValuacionAvisos
 }
 
 export interface ConfiguracionCartera {
@@ -300,12 +315,16 @@ export interface RendimientoPorTickerItem {
   precio_promedio: number
   precio_actual: number
   fecha_precio?: string | null
+  /** Sin cotización: `precio_actual` es el costo promedio de compra, no un precio de mercado. */
+  valuado_al_costo?: boolean
   variacion_dia?: number | null
   variacion_dia_pct?: number | null
   valor_invertido_usd: number
   valor_actual_usd: number
   valor_invertido_ars: number
   valor_actual_ars: number
+  /** Falta el tipo de cambio de algún movimiento: lo invertido es parcial y no hay rendimiento. */
+  costo_incompleto?: boolean
   rendimiento_simple_usd: number | null
   rendimiento_simple_ars: number | null
   rendimiento_simple_ars_real: number | null
@@ -567,9 +586,11 @@ export interface VencimientoItem {
   dias_restantes: number
   vencido: boolean
   cantidad_actual: number
-  // null si el instrumento no tiene cotización cargada
+  // null si no hay con qué valuar la posición
   valor_actual_usd: number | null
   valor_actual_ars: number | null
+  /** Sin cotización: el valor de arriba es el costo de compra, no un precio de mercado. */
+  valuado_al_costo?: boolean
   moneda: string
   // Métricas de bono estimadas sobre el flujo de caja inferido. null si falta historial/precio.
   tir_vencimiento: number | null      // TIR anual (decimal) al vencimiento

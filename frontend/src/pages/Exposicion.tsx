@@ -8,6 +8,7 @@ import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import Donut from '../components/charts/Donut'
 import EmptyState from '../components/ui/EmptyState'
+import AvisosValuacion from '../components/inversiones/AvisosValuacion'
 import { Icon } from '../components/icons/Icons'
 import InfoTooltip from '../help/components/InfoTooltip'
 import SkeletonPantalla from '../components/ui/Skeleton'
@@ -119,6 +120,8 @@ export default function Exposicion() {
               </div>
             ))}
           </div>
+
+          <AvisosValuacion avisos={exposicion.avisos} moneda={esARS ? 'ARS' : 'USD'} />
         </>
       )}
     </div>

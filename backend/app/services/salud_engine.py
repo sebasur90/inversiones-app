@@ -10,6 +10,7 @@ declara la regla numérica exacta que lo produjo (`regla`) y de dónde sale el d
 """
 from datetime import date
 
+from .etiquetas import SIN_PAIS
 from .diagnostico_engine import (
     UMBRAL_DRAWDOWN_ADVERTENCIA,
     UMBRAL_DRAWDOWN_CRITICO,
@@ -445,15 +446,22 @@ def _obs_clasificacion(inventario: list[dict]) -> list[dict]:
 
 def _obs_pais(concentracion: list[dict], exposicion_pais: list[dict]) -> list[dict]:
     """País dominante: usa el HHI de `concentracion` (con su bucket residual "Sin país") para
-    decidir si hay al menos 2 países reales etiquetados, y el % del eje "País" de `get_exposicion`
-    (que ya excluye los sin etiquetar) para el valor mostrado."""
+    decidir si hay al menos 2 países reales etiquetados, y el % del eje "País" de
+    `get_exposicion` para el valor mostrado.
+
+    El eje trae el bucket "Sin país" y puede venir primero (es el de mayor valor): hay que
+    saltearlo, porque "el 60% está concentrado en Sin país" no es una observación de
+    concentración sino de ficha incompleta, y eso ya lo dice `_obs_clasificacion`.
+    """
     item = next((c for c in concentracion if c.get("eje") == "País"), None)
     if not item or item.get("estado") != "ok" or not exposicion_pais:
         return []
     n_reales = item.get("n_componentes_reales", item.get("n_componentes"))
     if n_reales is not None and n_reales < 2:
         return []
-    top = exposicion_pais[0]
+    top = next((it for it in exposicion_pais if it["etiqueta"] != SIN_PAIS), None)
+    if top is None:
+        return []
     pct = top["porcentaje"]
     if pct < UMBRAL_PAIS_ATENCION_PCT:
         return []

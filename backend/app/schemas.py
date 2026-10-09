@@ -238,8 +238,23 @@ class ExposicionEje(BaseModel):
     items: list[ExposicionItem]
 
 
+class ValuacionAvisos(BaseModel):
+    """Qué posiciones quedaron aproximadas o afuera al valuar la cartera.
+
+    Lo comparten las pantallas que muestran un total o pesos (Exposición, Rebalanceo,
+    Descomposición) para que el número coincida con el de la pantalla principal y, cuando
+    algo no se pudo valuar a mercado, se vea cuál es en vez de desaparecer en silencio.
+    """
+    aproximadas: list[str] = Field(default_factory=list)    # valuadas al costo de compra
+    sin_valuar: list[str] = Field(default_factory=list)     # fuera del total (ni precio ni costo)
+    sin_valor_usd: list[str] = Field(default_factory=list)
+    sin_valor_ars: list[str] = Field(default_factory=list)
+    sin_ficha: list[str] = Field(default_factory=list)      # sin ficha en Instrumentos
+
+
 class ExposicionOut(BaseModel):
     ejes: list[ExposicionEje]
+    avisos: ValuacionAvisos = Field(default_factory=ValuacionAvisos)
 
 
 # --- Descomposición de cartera (árbol Familia → País → Sector → Ticker) ---
@@ -265,7 +280,7 @@ class DescomposicionOut(BaseModel):
     total_ars: float
     instrumentos: int
     raiz: list[DescomposicionNodo]
-    posiciones_sin_precio: list[str] = Field(default_factory=list)
+    avisos: ValuacionAvisos = Field(default_factory=ValuacionAvisos)
 
 
 class RebalanceoItem(BaseModel):
@@ -291,6 +306,7 @@ class RebalanceoEje(BaseModel):
 
 class RebalanceoOut(BaseModel):
     ejes: list[RebalanceoEje]
+    avisos: ValuacionAvisos = Field(default_factory=ValuacionAvisos)
 
 
 class ConfiguracionCarteraOut(BaseModel):
@@ -626,12 +642,18 @@ class RendimientoPorTickerItem(BaseModel):
     precio_promedio: float
     precio_actual: float
     fecha_precio: Optional[date] = None
+    # True = sin cotización conocida: `precio_actual` es el costo promedio de compra y el
+    # rendimiento de la posición queda en cero hasta que entre un precio de mercado.
+    valuado_al_costo: bool = False
     variacion_dia: Optional[float] = None       # precio_actual - precio del registro anterior
     variacion_dia_pct: Optional[float] = None   # ratio (0.012 = +1,2%)
     valor_invertido_usd: float
     valor_actual_usd: float
     valor_invertido_ars: float
     valor_actual_ars: float
+    # True = falta el tipo de cambio de la fecha de algún movimiento: `valor_invertido_*` es
+    # parcial y por eso los rendimientos de abajo vienen en None.
+    costo_incompleto: bool = False
     rendimiento_simple_usd: Optional[float] = None
     rendimiento_simple_ars: Optional[float] = None
     rendimiento_simple_ars_real: Optional[float] = None
@@ -844,9 +866,11 @@ class VencimientoItem(BaseModel):
     dias_restantes: int
     vencido: bool
     cantidad_actual: float
-    # None cuando el instrumento no tiene cotización cargada: el vencimiento igual se informa.
+    # None cuando no hay con qué valuar la posición: el vencimiento igual se informa.
     valor_actual_usd: float | None = None
     valor_actual_ars: float | None = None
+    # True = sin cotización, el valor de arriba es el costo de compra (ver RendimientoPorTickerItem).
+    valuado_al_costo: bool = False
     moneda: str
     # Métricas de bono estimadas sobre el flujo de caja inferido (ver flujo_caja_analytics).
     # Todas None si no hay cupones cobrados de los que inferir, o si falta precio.

@@ -10,12 +10,11 @@ usa el resto del repo para no duplicar criterio —
 `market_data.precios._es_renta_fija/_es_renta_variable/_es_fci` y
 `salud_engine.SECTORES_LIQUIDOS`. No se inventa ninguna clasificación nueva.
 """
+from .etiquetas import SIN_CLASIFICAR
 from .market_data.precios import _es_fci, _es_renta_fija, _es_renta_variable
 from .salud_engine import SECTORES_LIQUIDOS
 
 NIVELES = ("Familia", "País", "Sector", "Ticker")
-
-SIN_CLASIFICAR = "Sin clasificar"
 
 # Orden fijo del nivel 1: el árbol se lee siempre igual, sin importar cuánto pese cada familia
 # hoy. Cualquier familia no contemplada (no debería pasar, ver `familia_de`) cae después de

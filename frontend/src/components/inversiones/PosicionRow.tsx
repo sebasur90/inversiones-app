@@ -66,7 +66,12 @@ export default function PosicionRow({
           <span className="font-mono text-app-text-dim tabular-nums">
             {item.moneda === 'ARS' ? formatARSCrudo(item.precio_actual) : item.moneda === 'USD' ? formatUSDCrudo(item.precio_actual) : formatPrecio(item.precio_actual)}
           </span>
-          <VariacionDia pct={item.variacion_dia_pct} />
+          {/* Sin cotización: el precio de arriba es el costo de compra, no un precio de mercado. */}
+          {item.valuado_al_costo ? (
+            <span className="text-app-text-faint">al costo</span>
+          ) : (
+            <VariacionDia pct={item.variacion_dia_pct} />
+          )}
         </div>
       </div>
       <div className="text-right shrink-0">

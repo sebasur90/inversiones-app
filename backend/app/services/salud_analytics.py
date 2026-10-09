@@ -1,9 +1,9 @@
 """Adaptador entre datos reales (Session/DB) y el motor puro `salud_engine`.
 
 Orquesta los analytics existentes (patrimonio, riesgo, concentración, exposición, rebalanceo,
-vencimientos, comisiones, calidad de datos) y les agrega un inventario de posiciones que sí
-incluye lo que `get_exposicion` descarta en silencio (sin precio, sin ficha) — porque eso es
-justamente lo que esta pantalla tiene que señalar. Mismo patrón que `diagnostico_analytics.py`.
+vencimientos, comisiones, calidad de datos) y les agrega un inventario de posiciones que
+distingue las que no tienen precio de mercado o ficha cargada — porque eso es justamente lo que
+esta pantalla tiene que señalar. Mismo patrón que `diagnostico_analytics.py`.
 """
 from datetime import date
 from sqlalchemy.orm import Session
@@ -47,9 +47,12 @@ def _ultimo_precio_por_ticker(db: Session) -> dict[str, str]:
 
 def _inventario_posiciones(cartera: str | None, db: Session) -> list[dict]:
     """Tenencias de hoy con su clasificación (tipo/sector/país/moneda/vencimiento) y estado de
-    precio. A diferencia de `get_exposicion`/`_clasificados_valorizados`, **no descarta** las
-    posiciones sin precio conocido o sin ficha en `Instrumentos`: son justamente las que hay que
-    mostrar en "Calidad de datos" y en las observaciones.
+    precio.
+
+    A diferencia de `_clasificados_valorizados`, que valúa al costo lo que no tiene cotización,
+    acá `valor_usd` queda en None: esta pantalla mide la **calidad del dato**, así que necesita
+    distinguir "no tengo precio de mercado" de "lo estimé", y los pesos que calcula son sobre lo
+    que sí está valuado a mercado.
     """
     hoy = date.today()
     movs = _movimientos_ordenados(db, cartera)

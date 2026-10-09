@@ -10,8 +10,10 @@ from sqlalchemy.orm import Session
 
 from ..database import InstrumentoInversion
 from . import contribucion_engine
+from .etiquetas import SIN_CLASIFICAR, SIN_PAIS, SIN_SECTOR
 from .inversiones_analytics import (
     EPS,
+    _atributo,
     _movimientos_ordenados,
     _precios_por_ticker,
     _precio_conocido,
@@ -145,7 +147,7 @@ def get_contribucion(cartera: str | None, db: Session) -> dict:
         ejes.append({"eje": nombre_eje, "items": items})
 
     _rollup("Tipo de instrumento", "tipo_instrumento")
-    _rollup("Sector", "sector", bucket_sin_dato="Sin sector")
+    _rollup("Sector", "sector", bucket_sin_dato=SIN_SECTOR)
     _rollup("Mercado", "mercado")
 
     return {"contribucion": ejes, "concentracion": get_concentracion(cartera, db)}
@@ -154,11 +156,10 @@ def get_contribucion(cartera: str | None, db: Session) -> dict:
 # ── Concentración (HHI) ──────────────────────────────────────────────────────
 
 def get_concentracion(cartera: str | None, db: Session) -> list[dict]:
-    _valores, clasificados, instrumentos = _clasificados_valorizados(cartera, db)
-    if not clasificados:
+    pos = _clasificados_valorizados(cartera, db)
+    valores, instrumentos = pos.valores, pos.instrumentos
+    if not valores:
         return []
-
-    total_usd = sum(v_usd for _, _, v_usd, _ in clasificados)
 
     def _con_hhi(eje: str, items: list[dict]) -> dict:
         pesos = [it["porcentaje"] for it in items]
@@ -171,39 +172,25 @@ def get_concentracion(cartera: str | None, db: Session) -> list[dict]:
         d["n_componentes_reales"] = sum(1 for it in items if it["etiqueta"] != bucket_residual)
         return d
 
+    def _items(attr: str, sin_dato: str) -> list[dict]:
+        return _agrupar(
+            [(_atributo(instrumentos, t, attr), v_usd, v_ars) for _, t, v_usd, v_ars in valores],
+            sin_dato=sin_dato,
+        )
+
     resultado = []
 
-    ticker_items = _agrupar([(t, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados])
+    ticker_items = _agrupar([(t, v_usd, v_ars) for _, t, v_usd, v_ars in valores])
     resultado.append(_con_hhi("Ticker", ticker_items))
 
-    tipo_items = _agrupar([(instrumentos[t].tipo_instrumento, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados])
-    resultado.append(_con_hhi("Tipo de instrumento", tipo_items))
-
-    mercado_items = _agrupar([(instrumentos[t].mercado, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados])
-    resultado.append(_con_hhi("Mercado", mercado_items))
-
-    moneda_items = _agrupar([(instrumentos[t].moneda, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados])
-    resultado.append(_con_hhi("Moneda", moneda_items))
-
-    # A diferencia de get_exposicion, el eje Sector pasa `total_usd` a `_agrupar` y usa un bucket
-    # explícito "Sin sector": el HHI necesita que los pesos sumen el 100% real de la cartera,
-    # no el subtotal de lo etiquetado (si no, una cartera con muchos tickers sin clasificar
-    # parecería artificialmente diversificada).
-    sector_entries = [
-        (instrumentos[t].sector if instrumentos[t].sector else "Sin sector", v_usd, v_ars)
-        for _, t, v_usd, v_ars in clasificados
-    ]
-    sector_items = _agrupar(sector_entries, total_usd)
-    resultado.append(_con_hhi_residual("Sector", sector_items, "Sin sector"))
-
-    # Igual que Sector: bucket explícito "Sin país" para que los pesos sumen el 100% real
-    # (si no, una cartera mayormente sin país etiquetado parecería diversificada).
-    pais_entries = [
-        (instrumentos[t].pais if instrumentos[t].pais else "Sin país", v_usd, v_ars)
-        for _, t, v_usd, v_ars in clasificados
-    ]
-    pais_items = _agrupar(pais_entries, total_usd)
-    resultado.append(_con_hhi_residual("País", pais_items, "Sin país"))
+    # Todos los ejes usan bucket residual: el HHI necesita que los pesos sumen el 100% real de
+    # la cartera, no el subtotal de lo etiquetado (si no, una cartera con muchos tickers sin
+    # clasificar parecería artificialmente diversificada).
+    resultado.append(_con_hhi_residual("Tipo de instrumento", _items("tipo_instrumento", SIN_CLASIFICAR), SIN_CLASIFICAR))
+    resultado.append(_con_hhi_residual("Mercado", _items("mercado", SIN_CLASIFICAR), SIN_CLASIFICAR))
+    resultado.append(_con_hhi_residual("Moneda", _items("moneda", SIN_CLASIFICAR), SIN_CLASIFICAR))
+    resultado.append(_con_hhi_residual("Sector", _items("sector", SIN_SECTOR), SIN_SECTOR))
+    resultado.append(_con_hhi_residual("País", _items("pais", SIN_PAIS), SIN_PAIS))
 
     return resultado
 

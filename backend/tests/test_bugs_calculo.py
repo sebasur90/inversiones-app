@@ -167,7 +167,11 @@ def test_precio_promedio_cer_pondera_cada_compra(db: Session):
 # ── A4: los vencimientos no dependen de que haya precio ──────────────────────
 
 def test_vencimiento_aparece_sin_precio_cargado(db: Session):
-    """Un bono con tenencia y vencimiento se informa aunque no tenga cotización."""
+    """Un bono con tenencia y vencimiento se informa aunque no tenga cotización.
+
+    Su valor es el costo de compra, marcado con `valuado_al_costo` — mismo criterio que la
+    pantalla principal, para que la suma por año no quede por debajo del patrimonio.
+    """
     vence = date.today() + timedelta(days=90)
     _instrumento(db, ticker="BONOX", tipo_instrumento="Bono", fecha_vencimiento=vence)
     _mov(db, date(2024, 1, 1), "compra", 100.0, 10.0, ticker="BONOX")
@@ -178,7 +182,8 @@ def test_vencimiento_aparece_sin_precio_cargado(db: Session):
     assert len(items) == 1
     assert items[0]["ticker"] == "BONOX"
     assert items[0]["cantidad_actual"] == pytest.approx(100.0)
-    assert items[0]["valor_actual_usd"] is None
+    assert items[0]["valor_actual_usd"] == pytest.approx(1000.0)
+    assert items[0]["valuado_al_costo"] is True
     assert items[0]["dias_restantes"] == 90
 
 
@@ -219,20 +224,31 @@ def test_twr_no_inventa_perdida_con_una_compra_de_hoy(db: Session):
     assert resumen["valor_actual_usd"] == pytest.approx(1000.0)
 
 
-# ── A6: sin cotización en ARS la posición no suma 0 ──────────────────────────
+# ── A6: sin cotización en ARS la posición cuenta en USD y se avisa ───────────
 
-def test_posicion_sin_mep_no_se_reporta_con_ars_cero(db: Session):
-    """Sin MEP la posición en USD no se puede pasar a pesos: se descarta, no se informa en 0."""
+def test_posicion_sin_mep_cuenta_en_usd_y_se_avisa(db: Session):
+    """Sin MEP la posición no se puede pasar a pesos, pero sí vale en dólares.
+
+    Criterio unificado con la pantalla principal: `get_resumen` cuenta esta posición en
+    `valor_actual_usd` y la omite de `valor_actual_ars`. Antes Exposición descartaba la
+    posición entera para no hundir el total en pesos, y con eso el total en dólares quedaba
+    por debajo del patrimonio de la pantalla principal. Ahora cuenta donde se puede valuar y
+    el faltante se informa en `avisos`, en vez de desaparecer en silencio.
+    """
     _instrumento(db, ticker="USDSTOCK", moneda="USD")
     _mov(db, date(2024, 1, 1), "compra", 10.0, 100.0, ticker="USDSTOCK", moneda="USD")
     _precio(db, date(2024, 1, 1), 100.0, ticker="USDSTOCK", moneda="USD")
     # sin IndiceMercado a propósito: no hay tipo de cambio para convertir a ARS
 
-    ejes = get_exposicion("test", db)["ejes"]
+    exposicion = get_exposicion("test", db)
+    ejes = {e["eje"]: e["items"] for e in exposicion["ejes"]}
+    ticker = next(it for it in ejes["Ticker"] if it["etiqueta"] == "USDSTOCK")
+    resumen = get_resumen("test", db)
 
-    # Antes se informaba USDSTOCK con valor_usd=1000 y valor_ars=0, hundiendo el total en pesos
-    todos = [it for eje in ejes for it in eje["items"]]
-    assert not any(it["valor_usd"] > 0 and it["valor_ars"] == 0 for it in todos)
+    assert ticker["valor_usd"] == pytest.approx(resumen["valor_actual_usd"])
+    assert ticker["valor_usd"] == pytest.approx(1000.0)
+    assert ticker["valor_ars"] == 0.0
+    assert exposicion["avisos"]["sin_valor_ars"] == ["USDSTOCK"]
 
 
 def test_posicion_con_mep_se_valua_en_ambas_monedas(db: Session):

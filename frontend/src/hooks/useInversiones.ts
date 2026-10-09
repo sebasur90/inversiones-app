@@ -29,8 +29,9 @@ import {
   usePreferencia,
 } from './usePreferencia'
 
-const EXPOSICION_VACIA: ExposicionOut = { ejes: [] }
-const REBALANCEO_VACIO: RebalanceoOut = { ejes: [] }
+const AVISOS_VACIOS = { aproximadas: [], sin_valuar: [], sin_valor_usd: [], sin_valor_ars: [], sin_ficha: [] }
+const EXPOSICION_VACIA: ExposicionOut = { ejes: [], avisos: AVISOS_VACIOS }
+const REBALANCEO_VACIO: RebalanceoOut = { ejes: [], avisos: AVISOS_VACIOS }
 const MOVIMIENTOS_VACIOS: MovimientoInversion[] = []
 const RENDIMIENTO_VACIO: RendimientoPorTickerItem[] = []
 const WATCHLIST_VACIA: WatchlistItemOut[] = []

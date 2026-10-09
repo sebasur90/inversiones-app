@@ -23,12 +23,14 @@ def construir_snapshot(
     Returns:
         PortfolioSnapshot listo para simular.
     """
-    # Obtener posiciones valorizadas
-    valores, clasificados, instrumentos = _clasificados_valorizados(cartera, db)
+    # Posiciones valorizadas con el mismo criterio que la pantalla principal, para que la
+    # proyección arranque del patrimonio real y no de un total recortado.
+    pos = _clasificados_valorizados(cartera, db)
+    instrumentos = pos.instrumentos
 
     # Construir lista de posiciones
     posiciones = []
-    for _cart, ticker, valor_usd, _valor_ars in clasificados:
+    for _cart, ticker, valor_usd, _valor_ars in pos.valores:
         if valor_usd <= 0:
             continue
         instrumento = instrumentos.get(ticker)

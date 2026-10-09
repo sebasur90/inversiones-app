@@ -161,8 +161,8 @@ def _retornos_por_boundaries(
 
 def _tickers_por_defecto(cartera: str | None, db: Session, tope: int = MAX_TICKERS) -> list[str]:
     """Tenencias vivas de hoy, ordenadas por valor USD actual descendente. No usa
-    `_clasificados_valorizados` porque ése exige ficha en `InstrumentoInversion`; acá alcanza
-    con tener precio conocido."""
+    `_clasificados_valorizados` porque acá hace falta tener **precio de mercado** (una posición
+    valuada al costo no tiene serie con la que correlacionar)."""
     movs = _movimientos_ordenados(db, cartera)
     if not movs:
         return []

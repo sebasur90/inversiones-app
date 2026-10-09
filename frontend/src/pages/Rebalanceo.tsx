@@ -16,6 +16,7 @@ import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import { Icon } from '../components/icons/Icons'
 import RebalanceoRow from '../components/inversiones/RebalanceoRow'
+import AvisosValuacion from '../components/inversiones/AvisosValuacion'
 import PropuestaRebalanceoRow from '../components/inversiones/PropuestaRebalanceoRow'
 import QueryBoundary from '../components/ui/QueryBoundary'
 import { qk } from '../api/queryClient'
@@ -132,6 +133,8 @@ export default function Rebalanceo() {
                   </div>
                 </>
               )}
+
+              <AvisosValuacion avisos={rebalanceo.avisos} moneda={esARS ? 'ARS' : 'USD'} />
 
               {eje.items.length > 0 && (
                 <div className="mt-6">

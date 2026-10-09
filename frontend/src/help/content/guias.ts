@@ -33,6 +33,7 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
     comoLeerla: [
       'Cada fila es un ticker: cantidad, precio promedio de compra y precio actual.',
       'El % de rendimiento compara el precio actual contra tu precio promedio de compra, no contra lo que pagaste en cada operación.',
+      'Si una posición dice "al costo", todavía no entró una cotización: se valúa a lo que pagaste, así que su rendimiento figura en cero hasta que haya precio.',
       'Los filtros de arriba (Con alerta, Stop loss, Objetivo) muestran sólo lo que necesita una decisión tuya.',
     ],
     queHacer: [

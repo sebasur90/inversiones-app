@@ -13,6 +13,8 @@ export const EXPOSICION_HELP: Record<ExposicionHelpKey, HelpContent> = {
     title: 'Exposición',
     shortDescription: 'Vista agregada de cuál es tu inversión actual distribuida según diferentes dimensiones (Ticker, Sector, País, etc.). Te muestra dónde está concentrado tu dinero y cuál es el peso % de cada componente.',
     whyItMatters: 'Entender tu exposición es fundamental para evaluar si tu cartera está diversificada, si está muy concentrada en un sector, país o instrumento específico, y si se alinea con tu estrategia de inversión.',
+    howItIsCalculated: 'Cada posición se valúa con el mismo criterio que la pantalla principal: al último precio conocido, o al costo de compra si todavía no hay cotización cargada. Por eso el total del donut es el mismo valor de cartera que ves en la pantalla principal, en cualquier eje que elijas.',
+    limitations: 'Si un instrumento no tiene ficha en la hoja Instrumentos, o le falta el Sector/País/Vencimiento, igual cuenta en el total: aparece agrupado como "Sin clasificar", "Sin sector", "Sin país" o "Sin vencimiento". La app nunca adivina esa clasificación. Al pie se avisa qué posiciones están valuadas al costo.',
     relatedTerms: ['correlacion', 'concentracion'],
   },
   exposicion_eje: {
@@ -22,7 +24,7 @@ export const EXPOSICION_HELP: Record<ExposicionHelpKey, HelpContent> = {
   },
   exposicion_porcentaje: {
     title: 'Porcentaje de exposición',
-    shortDescription: 'El peso relativo de cada componente (Ticker, Sector, País, etc.) sobre el total de tu cartera. Se suma sobre 100% en cada eje. Junto con el valor absoluto en USD/ARS, te da una idea clara de la importancia relativa de cada inversión.',
+    shortDescription: 'El peso relativo de cada componente (Ticker, Sector, País, etc.) sobre el total de tu cartera. Suma 100% en cada eje, y ese 100% es siempre la cartera completa: nunca el subtotal de lo que está clasificado. Junto con el valor absoluto en USD/ARS, te da una idea clara de la importancia relativa de cada inversión.',
     whyItMatters: 'El porcentaje es más importante que el valor absoluto para entender concentración: una posición de USD 10k es diferente si tu cartera es USD 50k (20%) vs USD 500k (2%). Monitorear % de exposición te ayuda a detectar cuando una posición se vuelve demasiado grande.',
   },
   exposicion_ticker_top10: {

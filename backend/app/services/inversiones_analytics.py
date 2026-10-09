@@ -1,6 +1,7 @@
 """Valuación, XIRR, TWR, exposición y benchmarks para la página de Inversiones."""
 import bisect
 import calendar
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from sqlalchemy import event
 from sqlalchemy.orm import Session
@@ -8,6 +9,10 @@ from sqlalchemy.orm import Session
 from ..database import MovimientoInversion, InstrumentoInversion, PrecioInstrumento, IndiceMercado, RebalanceoObjetivo, ConfiguracionCartera
 from . import cotizacion_diaria, niveles_analytics, rebalanceo_engine
 from .cache import cache_por_sync
+# Etiquetas de los buckets residuales de los ejes: una posición sin ficha en Instrumentos, o sin
+# el atributo que agrupa el eje (sector/país/vencimiento son opcionales), entra al eje con una de
+# ellas en vez de desaparecer, para que cualquier eje sume el patrimonio completo.
+from .etiquetas import SIN_CLASIFICAR, SIN_PAIS, SIN_SECTOR, SIN_VENCIMIENTO
 
 DEFAULT_TOLERANCIA_PP = 2.0
 
@@ -1096,21 +1101,29 @@ def _holdings_por_cartera_ticker(movs: list[MovimientoInversion], hasta: date) -
     return result
 
 
-def _agrupar(entries: list[tuple[str, float, float]], total_usd: float | None = None) -> list[dict]:
-    """Agrupa entradas (etiqueta, valor_usd, valor_ars) y calcula porcentajes.
+def _agrupar(
+    entries: list[tuple[str | None, float, float]],
+    sin_dato: str | None = None,
+) -> list[dict]:
+    """Agrupa entradas (etiqueta, valor_usd, valor_ars) y calcula el % de cada grupo.
 
-    Por defecto el % es sobre la suma de las entradas. Con `total_usd` se calcula sobre ese
-    total: hace falta en los ejes donde algunas entradas no tienen etiqueta (Sector es
-    opcional) y el peso debe reflejar el total real de la cartera, no el subtotal etiquetado.
+    Con `sin_dato`, las entradas sin etiqueta caen en ese bucket en vez de descartarse: es lo
+    que hace que el total de un eje sea el patrimonio completo aunque el atributo que agrupa
+    sea opcional (sector/país/vencimiento) o la posición no tenga ficha en Instrumentos. Sin
+    `sin_dato` se descartan, para los pocos cálculos que sólo miran lo etiquetado.
+
+    El % es siempre sobre la suma de las entradas consideradas, así que suma 100%.
     """
     grupos_usd: dict[str, float] = {}
     grupos_ars: dict[str, float] = {}
     for etiqueta, valor_usd, valor_ars in entries:
         if etiqueta is None:
-            continue
+            if sin_dato is None:
+                continue
+            etiqueta = sin_dato
         grupos_usd[etiqueta] = grupos_usd.get(etiqueta, 0.0) + valor_usd
         grupos_ars[etiqueta] = grupos_ars.get(etiqueta, 0.0) + valor_ars
-    total = sum(grupos_usd.values()) if total_usd is None else total_usd
+    total = sum(grupos_usd.values())
     if total <= EPS:
         return []
     return [
@@ -1133,13 +1146,78 @@ def _bucket_vencimiento(fecha_venc: date, hoy: date) -> str:
     return "Largo (>3 años)"
 
 
-def _clasificados_valorizados(cartera: str | None, db: Session) -> tuple[list[tuple], list[tuple], dict]:
+@dataclass
+class PosicionesValorizadas:
+    """Tenencias de hoy valuadas con el mismo criterio que `get_resumen`, más la señal de qué
+    quedó aproximado o afuera.
+
+    `valores` son tuplas `(cartera, ticker, valor_usd, valor_ars)`. Una moneda que no se pudo
+    calcular va en 0.0 y el ticker queda listado en `sin_valor_usd`/`sin_valor_ars`: así el
+    total de cada moneda coincide exactamente con el `valor_actual_usd`/`valor_actual_ars` de
+    la pantalla principal (que también omite esa posición de ese total), en vez de descartar la
+    posición entera y perderla también en la moneda que sí se podía valuar.
+    """
+    valores: list[tuple[str, str, float, float]]
+    instrumentos: dict[str, InstrumentoInversion]
+    # Valuadas al costo promedio de compra porque no hay cotización conocida (igual que el
+    # Resumen, que las marca con `tiene_precios_desactualizados`).
+    aproximadas: list[str] = field(default_factory=list)
+    # Sin cotización y sin costo con el que valuarlas: no entran a ningún total.
+    sin_valuar: list[str] = field(default_factory=list)
+    sin_valor_usd: list[str] = field(default_factory=list)
+    sin_valor_ars: list[str] = field(default_factory=list)
+    # Con tenencia pero sin ficha en Instrumentos: entran al total, en el bucket residual del eje.
+    sin_ficha: list[str] = field(default_factory=list)
+
+    def avisos(self) -> dict:
+        """Lo que las pantallas muestran al pie, para que nada quede excluido en silencio."""
+        return {
+            "aproximadas": sorted(set(self.aproximadas)),
+            "sin_valuar": sorted(set(self.sin_valuar)),
+            "sin_valor_usd": sorted(set(self.sin_valor_usd)),
+            "sin_valor_ars": sorted(set(self.sin_valor_ars)),
+            "sin_ficha": sorted(set(self.sin_ficha)),
+        }
+
+    def total_usd(self) -> float:
+        return sum(v_usd for _, _, v_usd, _ in self.valores)
+
+    def total_ars(self) -> float:
+        return sum(v_ars for _, _, _, v_ars in self.valores)
+
+
+def _holdings_y_costos(movs: list[MovimientoInversion], hasta: date) -> tuple[dict, dict]:
+    """Tenencia y costo promedio de compra por (cartera, ticker) a `hasta`.
+
+    Corre un `_HoldingsTracker` por cartera en vez de reimplementar el acumulado: así el costo
+    promedio que sirve de fallback de valuación sigue exactamente la misma convención que usa
+    `get_resumen` (ponderado por cantidad, sin recalcular al vender).
+    """
+    por_cartera: dict[str, list[MovimientoInversion]] = {}
+    for mov in movs:
+        por_cartera.setdefault(mov.cartera, []).append(mov)
+
+    tenencias: dict[tuple[str, str], float] = {}
+    costos: dict[tuple[str, str], tuple[float, str]] = {}
+    for cart, movs_cart in por_cartera.items():
+        tracker = _HoldingsTracker(movs_cart)
+        tracker.avanzar_a(hasta)
+        for ticker, cantidad in tracker.snapshot().items():
+            tenencias[(cart, ticker)] = cantidad
+        for ticker, costo in tracker.costo_snapshot().items():
+            costos[(cart, ticker)] = costo
+    return tenencias, costos
+
+
+def _clasificados_valorizados(cartera: str | None, db: Session) -> PosicionesValorizadas:
     """Holdings valorizados hoy, en el alcance pedido (una cartera o todas si cartera=None).
 
-    Devuelve (valores, clasificados, instrumentos):
-    - valores: [(cartera, ticker, valor_usd, valor_ars)] para todo holding con precio conocido.
-    - clasificados: igual, restringido a tickers con ficha en Instrumentos.
-    - instrumentos: {ticker: InstrumentoInversion}.
+    Valúa con el mismo criterio que `_valuar_holdings` (el de la pantalla principal): sin
+    cotización conocida se usa el costo promedio de compra en vez de descartar la posición.
+    Antes acá se descartaba, y eso era justamente lo que hacía que el total de Exposición,
+    Descomposición, Rebalanceo y Contribución fuera menor al patrimonio de la pantalla
+    principal, y que los pesos (y las propuestas de rebalanceo) salieran sobre un total
+    recortado.
     """
     movs = _movimientos_ordenados(db, None)  # necesitamos todas las carteras para el eje "por cartera"
     precios_por_ticker = _precios_por_ticker(db)
@@ -1147,9 +1225,9 @@ def _clasificados_valorizados(cartera: str | None, db: Session) -> tuple[list[tu
     mep_cache: dict = {}
     hoy = date.today()
 
-    holdings = _holdings_por_cartera_ticker(movs, hoy)
+    holdings, costos = _holdings_y_costos(movs, hoy)
 
-    valores: list[tuple[str, str, float, float]] = []  # (cartera, ticker, valor_usd, valor_ars)
+    pos = PosicionesValorizadas(valores=[], instrumentos=instrumentos)
     for (cart, ticker), cantidad in holdings.items():
         if abs(cantidad) < EPS:
             continue
@@ -1157,61 +1235,82 @@ def _clasificados_valorizados(cartera: str | None, db: Session) -> tuple[list[tu
             continue
         precios_sorted = precios_por_ticker.get(ticker)
         info = _precio_conocido(precios_sorted, hoy) if precios_sorted else None
-        if info is None:
-            continue
-        _fecha_precio, precio, moneda = info
+        al_costo = info is None
+        if al_costo:
+            costo = costos.get((cart, ticker))
+            if costo is None:
+                pos.sin_valuar.append(ticker)
+                continue
+            precio, moneda = costo
+        else:
+            _fecha_precio, precio, moneda = info
+
         usd = _to_usd(precio * cantidad, moneda, hoy, db, mep_cache)
-        if usd is None:
-            continue
         ars = _convertir(precio * cantidad, moneda, "ARS", hoy, db, mep_cache)
-        if ars is None:
-            # Mismo criterio que en USD: se descarta la posición entera. Contarla con ars=0
-            # la dejaba sumando en USD pero aportando nada en ARS, hundiendo los totales en
-            # pesos de Exposición y Rebalanceo sin ninguna señal.
+        if usd is None and ars is None:
+            # Ni en dólares ni en pesos: no hay total al que sumarla. Se avisa sólo acá, para
+            # que un mismo ticker no figure a la vez como aproximado y como sin valuar.
+            pos.sin_valuar.append(ticker)
             continue
-        valores.append((cart, ticker, usd, ars))
+        if al_costo:
+            pos.aproximadas.append(ticker)
+        if usd is None:
+            pos.sin_valor_usd.append(ticker)
+        if ars is None:
+            pos.sin_valor_ars.append(ticker)
+        if ticker not in instrumentos:
+            pos.sin_ficha.append(ticker)
+        pos.valores.append((cart, ticker, usd or 0.0, ars or 0.0))
 
-    clasificados = [(cart, ticker, valor_usd, valor_ars) for cart, ticker, valor_usd, valor_ars in valores if ticker in instrumentos]
+    return pos
 
-    return valores, clasificados, instrumentos
+
+def _atributo(instrumentos: dict, ticker: str, attr: str):
+    """Atributo de la ficha del ticker, o None si no tiene ficha (o el campo está vacío)."""
+    inst = instrumentos.get(ticker)
+    return getattr(inst, attr) if inst is not None else None
 
 
 @cache_por_sync
 def get_exposicion(cartera: str | None, db: Session) -> dict:
-    valores, clasificados, instrumentos = _clasificados_valorizados(cartera, db)
+    """Exposición por eje. Todos los ejes se arman sobre las mismas posiciones, así que todos
+    suman el patrimonio de la pantalla principal: lo que no tiene ficha o no tiene el atributo
+    del eje cae en el bucket residual (`Sin clasificar`/`Sin sector`/...) en vez de quedar
+    fuera del donut.
+    """
+    pos = _clasificados_valorizados(cartera, db)
+    valores, instrumentos = pos.valores, pos.instrumentos
     hoy = date.today()
 
-    ejes = []
+    def _eje(nombre: str, attr: str, sin_dato: str) -> None:
+        items = _agrupar(
+            [(_atributo(instrumentos, t, attr), v_usd, v_ars) for _, t, v_usd, v_ars in valores],
+            sin_dato=sin_dato,
+        )
+        if items:
+            ejes.append({"eje": nombre, "items": items})
 
-    mercado = _agrupar([(instrumentos[t].mercado, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados])
-    if mercado:
-        ejes.append({"eje": "Mercado", "items": mercado})
+    ejes: list[dict] = []
 
-    moneda = _agrupar([(instrumentos[t].moneda, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados])
-    if moneda:
-        ejes.append({"eje": "Moneda", "items": moneda})
+    _eje("Mercado", "mercado", SIN_CLASIFICAR)
+    _eje("Moneda", "moneda", SIN_CLASIFICAR)
+    _eje("Tipo de instrumento", "tipo_instrumento", SIN_CLASIFICAR)
 
-    tipo = _agrupar([(instrumentos[t].tipo_instrumento, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados])
-    if tipo:
-        ejes.append({"eje": "Tipo de instrumento", "items": tipo})
-
-    ticker_eje = _agrupar([(t, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados])
+    ticker_eje = _agrupar([(t, v_usd, v_ars) for _, t, v_usd, v_ars in valores])
     if ticker_eje:
         ejes.append({"eje": "Ticker", "items": ticker_eje})
 
-    sector = _agrupar([(instrumentos[t].sector, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados if instrumentos[t].sector])
-    if sector:
-        ejes.append({"eje": "Sector", "items": sector})
+    _eje("Sector", "sector", SIN_SECTOR)
+    _eje("País", "pais", SIN_PAIS)
 
-    pais = _agrupar([(instrumentos[t].pais, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados if instrumentos[t].pais])
-    if pais:
-        ejes.append({"eje": "País", "items": pais})
+    def _bucket_venc(ticker: str) -> str | None:
+        fecha_venc = _atributo(instrumentos, ticker, "fecha_vencimiento")
+        return _bucket_vencimiento(fecha_venc, hoy) if fecha_venc else None
 
-    vencimiento = _agrupar([
-        (_bucket_vencimiento(instrumentos[t].fecha_vencimiento, hoy), v_usd, v_ars)
-        for _, t, v_usd, v_ars in clasificados
-        if instrumentos[t].fecha_vencimiento
-    ])
+    vencimiento = _agrupar(
+        [(_bucket_venc(t), v_usd, v_ars) for _, t, v_usd, v_ars in valores],
+        sin_dato=SIN_VENCIMIENTO,
+    )
     if vencimiento:
         ejes.append({"eje": "Vencimiento", "items": vencimiento})
 
@@ -1220,7 +1319,7 @@ def get_exposicion(cartera: str | None, db: Session) -> dict:
         if por_cartera:
             ejes.append({"eje": "Cartera", "items": por_cartera})
 
-    return {"ejes": ejes}
+    return {"ejes": ejes, "avisos": pos.avisos()}
 
 
 def _construir_eje_rebalanceo(
@@ -1285,42 +1384,48 @@ def _targets_por_eje(eje: str, cartera: str | None, objetivos: list[RebalanceoOb
 
 @cache_por_sync
 def get_rebalanceo(cartera: str | None, db: Session) -> dict:
-    valores, clasificados, instrumentos = _clasificados_valorizados(cartera, db)
+    """Actual vs. objetivo por eje. El total de cada eje es el patrimonio completo (el de la
+    pantalla principal): si los pesos actuales se midieran contra un total recortado, la
+    desviación contra el objetivo —y la plata que hay que mover— saldrían mal.
+    """
+    pos = _clasificados_valorizados(cartera, db)
+    valores, instrumentos = pos.valores, pos.instrumentos
 
-    total_usd = sum(v_usd for _, _, v_usd, _ in clasificados)
-    total_ars = sum(v_ars for _, _, _, v_ars in clasificados)
+    total_usd = pos.total_usd()
+    total_ars = pos.total_ars()
 
     objetivos = db.query(RebalanceoObjetivo).all()
 
     ejes = []
 
     if cartera is None:
-        total_usd_global = sum(v_usd for _, _, v_usd, _ in valores)
-        total_ars_global = sum(v_ars for _, _, _, v_ars in valores)
         por_cartera = _agrupar([(cart, v_usd, v_ars) for cart, _, v_usd, v_ars in valores])
-        eje_cartera = _construir_eje_rebalanceo("Cartera", por_cartera, _targets_por_eje("Cartera", cartera, objetivos), total_usd_global, total_ars_global)
+        eje_cartera = _construir_eje_rebalanceo("Cartera", por_cartera, _targets_por_eje("Cartera", cartera, objetivos), total_usd, total_ars)
         if eje_cartera:
             ejes.append(eje_cartera)
 
-    tipo = _agrupar([(instrumentos[t].tipo_instrumento, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados])
+    tipo = _agrupar(
+        [(_atributo(instrumentos, t, "tipo_instrumento"), v_usd, v_ars) for _, t, v_usd, v_ars in valores],
+        sin_dato=SIN_CLASIFICAR,
+    )
     eje_tipo = _construir_eje_rebalanceo("Tipo", tipo, _targets_por_eje("Tipo", cartera, objetivos), total_usd, total_ars)
     if eje_tipo:
         ejes.append(eje_tipo)
 
     sector = _agrupar(
-        [(instrumentos[t].sector, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados],
-        total_usd,
+        [(_atributo(instrumentos, t, "sector"), v_usd, v_ars) for _, t, v_usd, v_ars in valores],
+        sin_dato=SIN_SECTOR,
     )
     eje_sector = _construir_eje_rebalanceo("Sector", sector, _targets_por_eje("Sector", cartera, objetivos), total_usd, total_ars)
     if eje_sector:
         ejes.append(eje_sector)
 
-    ticker = _agrupar([(t, v_usd, v_ars) for _, t, v_usd, v_ars in clasificados])
+    ticker = _agrupar([(t, v_usd, v_ars) for _, t, v_usd, v_ars in valores])
     eje_ticker = _construir_eje_rebalanceo("Ticker", ticker, _targets_por_eje("Ticker", cartera, objetivos), total_usd, total_ars)
     if eje_ticker:
         ejes.append(eje_ticker)
 
-    return {"ejes": ejes}
+    return {"ejes": ejes, "avisos": pos.avisos()}
 
 
 def get_configuracion_cartera(cartera: str | None, db: Session) -> dict:
@@ -1371,17 +1476,18 @@ def _tasa_comision_promedio(cartera: str | None, db: Session) -> float | None:
 
 
 def _categoria_para_eje(eje: str, cart: str, ticker: str, instrumentos: dict) -> str | None:
+    """Etiqueta del ticker en el eje. Las posiciones sin ficha (o sin sector cargado) caen en
+    el bucket residual: el motor las deja en "mantener" por no tener objetivo, pero siguen
+    contando en el total contra el que se miden los pesos de las demás.
+    """
     if eje == "Cartera":
         return cart
     if eje == "Ticker":
         return ticker
-    inst = instrumentos.get(ticker)
-    if inst is None:
-        return None
     if eje == "Tipo":
-        return inst.tipo_instrumento
+        return _atributo(instrumentos, ticker, "tipo_instrumento") or SIN_CLASIFICAR
     if eje == "Sector":
-        return inst.sector
+        return _atributo(instrumentos, ticker, "sector") or SIN_SECTOR
     return None
 
 
@@ -1395,12 +1501,12 @@ def simular_rebalanceo(
 ) -> dict:
     """Genera la propuesta de compra/venta para un eje de rebalanceo. No persiste nada: es
     puro cálculo sobre las posiciones actuales y los objetivos ya cargados."""
-    valores, clasificados, instrumentos = _clasificados_valorizados(cartera, db)
-    entradas = valores if eje == "Cartera" else clasificados
-    total_usd = sum(v_usd for _, _, v_usd, _ in entradas)
+    pos = _clasificados_valorizados(cartera, db)
+    instrumentos = pos.instrumentos
+    total_usd = pos.total_usd()
 
     posiciones = []
-    for cart, ticker, v_usd, _ in entradas:
+    for cart, ticker, v_usd, _ in pos.valores:
         categoria = _categoria_para_eje(eje, cart, ticker, instrumentos)
         if categoria is None:
             continue
@@ -1492,7 +1598,7 @@ class _RecorridoTicker:
         "cantidad_held", "costo_usd", "costo_ars", "costo_ars_real",
         "realizado_usd", "realizado_ars", "realizado_ars_real",
         "ingresos_usd", "ingresos_ars", "ingresos_ars_real",
-        "ars_real_valido",
+        "ars_real_valido", "costo_incompleto",
     )
 
     def __init__(self, ars_real_valido: bool):
@@ -1501,6 +1607,9 @@ class _RecorridoTicker:
         self.realizado_usd = self.realizado_ars = self.realizado_ars_real = 0.0
         self.ingresos_usd = self.ingresos_ars = self.ingresos_ars_real = 0.0
         self.ars_real_valido = ars_real_valido
+        # True si hubo que saltear algún movimiento por no poder ubicarlo en USD (falta el MEP
+        # de esa fecha): el costo acumulado es parcial y no sirve para medir rendimiento.
+        self.costo_incompleto = False
 
 
 def _recorrer_movs_ticker(
@@ -1529,7 +1638,11 @@ def _recorrer_movs_ticker(
     for mov in movs_ticker:
         monto_usd = _monto_usd(mov, db, mep_cache)
         if monto_usd is None:
-            continue  # mismo criterio que get_resumen: sin conversión a USD no se puede ubicar el flujo
+            # Mismo criterio que get_resumen: sin conversión a USD no se puede ubicar el flujo.
+            # La tenencia, en cambio, no depende del tipo de cambio: la cuenta quien la necesite
+            # (ver `get_rendimiento_por_ticker`), así que acá sólo se marca el costo como parcial.
+            est.costo_incompleto = True
+            continue
         monto_ars = _monto_ars(mov, db, mep_cache)
         monto_ars_real = (
             _monto_ars_real(mov, db, cer_cache, mep_cache, cer_hoy) if est.ars_real_valido else None
@@ -1616,9 +1729,16 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
         # Costo remanente (neto de ventas y amortizaciones) + ingresos, con la misma
         # convención de costo promedio que get_pnl_realizado_no_realizado.
         est = _recorrer_movs_ticker(movs_ticker, db, mep_cache, cer_cache, cer_hoy)
-        tenencia = est.cantidad_held
         inversion_total_usd = est.costo_usd
         inversion_total_ars = est.costo_ars
+
+        # La tenencia sale del mismo tracker que usa la pantalla principal, no de `est`: así una
+        # posición existe acá siempre que exista allá. `_recorrer_movs_ticker` saltea los
+        # movimientos que no puede expresar en USD (falta el MEP de esa fecha) y con eso perdía
+        # la cuenta de las unidades, haciendo desaparecer la fila entera de esta pantalla.
+        tracker_ticker = _HoldingsTracker(movs_ticker)
+        tracker_ticker.avanzar_a(hoy)
+        tenencia = tracker_ticker.snapshot().get(ticker, 0.0)
 
         # Precio promedio de compra ponderado por cantidad, y su versión deflactada por CER
         # (cada compra se ajusta con el CER de *su* fecha, no con el de la primera).
@@ -1655,27 +1775,41 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
         precios_sorted = precios_por_ticker.get(ticker)
         precio_info = _precio_conocido(precios_sorted, hoy) if precios_sorted else None
         if precio_info is None:
-            continue
+            # Sin cotización conocida se valúa al costo promedio de compra, igual que
+            # `_valuar_holdings` en la pantalla principal, y la fila queda marcada con
+            # `valuado_al_costo`. Antes la posición desaparecía de Posiciones aunque su costo
+            # siguiera contando en el total invertido de la cartera.
+            costo = tracker_ticker.costo_snapshot().get(ticker)
+            if costo is None:
+                continue
+            precio_actual, moneda = costo
+            fecha_precio = None
+            variacion_dia = variacion_dia_pct = None
+            valuado_al_costo = True
+        else:
+            fecha_precio, precio_actual, moneda = precio_info
+            variacion_dia, variacion_dia_pct = _variacion_diaria(
+                precios_sorted, fecha_precio, precio_actual, moneda, cotizaciones_dia.get((ticker, fecha_precio)),
+            )
+            valuado_al_costo = False
 
-        fecha_precio, precio_actual, moneda = precio_info
-        variacion_dia, variacion_dia_pct = _variacion_diaria(
-            precios_sorted, fecha_precio, precio_actual, moneda, cotizaciones_dia.get((ticker, fecha_precio)),
-        )
-
-        # Calcular valor actual
+        # Valor actual. La moneda que no se pueda calcular cuenta 0 en su total, mismo criterio
+        # que `get_resumen` (que omite la posición de ese total) y que `_clasificados_valorizados`.
         valor_actual_usd = _to_usd(precio_actual * tenencia, moneda, hoy, db, mep_cache) or 0.0
         valor_actual_ars = _convertir(precio_actual * tenencia, moneda, "ARS", hoy, db, mep_cache) or 0.0
 
         # Rendimiento simple sobre el costo remanente, incluyendo los ingresos cobrados
-        # (dividendos/cupones), igual que get_resumen a nivel cartera.
+        # (dividendos/cupones), igual que get_resumen a nivel cartera. Con el costo parcial
+        # (algún movimiento sin tipo de cambio para su fecha) queda en None: compararlo contra
+        # un capital incompleto daría un rendimiento inflado con cara de dato.
         rendimiento_simple_usd = None
-        if abs(inversion_total_usd) > EPS:
+        if abs(inversion_total_usd) > EPS and not est.costo_incompleto:
             rendimiento_simple_usd = (
                 valor_actual_usd + est.ingresos_usd - inversion_total_usd
             ) / inversion_total_usd
 
         rendimiento_simple_ars = None
-        if abs(inversion_total_ars) > EPS:
+        if abs(inversion_total_ars) > EPS and not est.costo_incompleto:
             rendimiento_simple_ars = (
                 valor_actual_ars + est.ingresos_ars - inversion_total_ars
             ) / inversion_total_ars
@@ -1725,8 +1859,13 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
             "precio_promedio": round(precio_promedio_compra, 6),
             "precio_actual": round(precio_actual, 6),
             "fecha_precio": fecha_precio,
+            # True = no hay cotización y el "precio actual" es el costo promedio de compra.
+            "valuado_al_costo": valuado_al_costo,
             "variacion_dia": round(variacion_dia, 6) if variacion_dia is not None else None,
             "variacion_dia_pct": round(variacion_dia_pct, 4) if variacion_dia_pct is not None else None,
+            # True = algún movimiento no se pudo expresar en USD (falta el MEP de su fecha), así
+            # que `valor_invertido_*` es parcial y los rendimientos quedan sin calcular.
+            "costo_incompleto": est.costo_incompleto,
             "valor_invertido_usd": round(inversion_total_usd, 2),
             "valor_actual_usd": round(valor_actual_usd, 2),
             "valor_invertido_ars": round(inversion_total_ars, 2),
@@ -2307,10 +2446,11 @@ def get_vencimientos(
 ) -> list[dict]:
     """Instrumentos con tenencia activa y fecha de vencimiento, ordenados por proximidad.
 
-    La lista se arma desde las tenencias, no desde `get_rendimiento_por_ticker`: esa función
-    descarta los tickers sin cotización, y un bono sin precio cargado igual tiene que aparecer
-    acá — la fecha de vencimiento no depende del precio. El rendimiento sólo enriquece
-    `valor_actual_*`, que queda en None cuando no hay con qué valuar.
+    La lista se arma desde las tenencias, no desde `get_rendimiento_por_ticker`: la fecha de
+    vencimiento no depende del precio, así que un bono tiene que aparecer acá aunque no se lo
+    pueda valuar. El rendimiento sólo enriquece `valor_actual_*`, que queda en None cuando no
+    hay con qué valuar, y `valuado_al_costo` avisa si el valor es el costo de compra en vez de
+    un precio de mercado.
 
     `rendimientos` permite reutilizar una salida de `get_rendimiento_por_ticker` ya calculada.
     """
@@ -2351,6 +2491,7 @@ def get_vencimientos(
             "cantidad_actual": round(cantidad, 8),
             "valor_actual_usd": item["valor_actual_usd"] if item else None,
             "valor_actual_ars": item["valor_actual_ars"] if item else None,
+            "valuado_al_costo": bool(item["valuado_al_costo"]) if item else False,
             "moneda": item["moneda"] if item else instrumento.moneda,
         })
 
