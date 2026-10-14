@@ -82,10 +82,13 @@ export default function ResumenZonas({
           {otraSerie.length === 2 ? 'Las dos zonas están' : 'Esta zona está'} medida
           {otraSerie.length === 2 ? 's' : ''} sobre la serie{' '}
           {otraSerie[0].zona!.variante === 'subyacente' ? 'del subyacente' : 'local'}
-          {otraSerie[0].zona!.moneda ? ` (${otraSerie[0].zona!.moneda})` : ''}. Estás viendo la{' '}
-          {variante === 'subyacente' ? 'del subyacente' : 'local'}
-          {moneda ? ` (${moneda})` : ''}: si guardás desde acá, la zona pasa a medirse sobre esta
-          serie.
+          {otraSerie[0].zona!.moneda ? ` (${otraSerie[0].zona!.moneda})` : ''}, así que no se
+          dibuja{otraSerie.length === 2 ? 'n' : ''} en este gráfico, que está en{' '}
+          {variante === 'subyacente' ? 'la serie del subyacente' : 'la serie local'}
+          {moneda ? ` (${moneda})` : ''} — son dos instrumentos, no el mismo precio en dos monedas.
+          Cambiá de serie con el selector de arriba para verla
+          {otraSerie.length === 2 ? 's' : ''}, o dibujá una nueva acá: al guardar, la zona pasa a
+          medirse sobre esta serie.
         </div>
       )}
     </div>

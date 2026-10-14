@@ -8,6 +8,7 @@ import {
   backtestEstrategia, sembrarPresetsEstrategia, getZonasTicker, guardarZonasTicker,
   type CategoriaPreset, type EstrategiaDsl, type EstrategiaOut, type BacktestOut,
   type PresetEstrategiaOut, type VarianteSerie, type TipoZona, type ZonaPrecioIn,
+  type ZonaPrecioOut,
 } from '../api'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
@@ -155,21 +156,42 @@ export default function AnalisisTecnico() {
     onError: (e) => setErrorZonas(parseApiError(e).message),
   })
 
+  /** ¿Esta zona se dibuja sobre la serie que se está viendo?
+   *
+   * Sólo si fue medida sobre **esta** serie. Una zona local está en pesos (26.000) y la del
+   * subyacente en dólares (170): dibujar la primera sobre el gráfico de la segunda metía ese
+   * 26.000 en la escala vertical y aplastaba las velas contra el borde inferior. Son dos
+   * instrumentos, no el mismo precio en dos monedas.
+   */
+  const zonaDeEstaSerie = (zona: ZonaPrecioOut | null | undefined): ZonaPrecioOut | null =>
+    zona && zona.activa && zona.variante === variante ? zona : null
+
+  // Los niveles de la posición (stop-loss y objetivo) salen del Sheet o de un porcentaje sobre el
+  // precio promedio de compra: están siempre en la moneda local, así que sobre la serie del
+  // subyacente no significan nada.
+  const nivelesDeLaPosicion = variante === 'local'
+    ? { stopLoss: zonasGuardadas?.nivel_stop_loss, objetivo: zonasGuardadas?.nivel_objetivo }
+    : { stopLoss: null, objetivo: null }
+
   /** Lo que el gráfico dibuja: el borrador mientras se edita, lo guardado si no. */
   const zonasDibujo: ZonasDibujo | undefined = borrador
-    ? borradorADibujo(borrador, zonasGuardadas?.nivel_stop_loss, zonasGuardadas?.nivel_objetivo)
+    ? borradorADibujo(borrador, nivelesDeLaPosicion.stopLoss, nivelesDeLaPosicion.objetivo)
     : zonasGuardadas
       ? {
-          compra: zonasGuardadas.compra?.activa ? zonasGuardadas.compra : null,
-          venta: zonasGuardadas.venta?.activa ? zonasGuardadas.venta : null,
-          stopLoss: zonasGuardadas.nivel_stop_loss,
-          objetivo: zonasGuardadas.nivel_objetivo,
+          compra: zonaDeEstaSerie(zonasGuardadas.compra),
+          venta: zonaDeEstaSerie(zonasGuardadas.venta),
+          ...nivelesDeLaPosicion,
         }
       : undefined
 
   function empezarAEditarZonas() {
     setErrorZonas(null)
-    setBorrador(borradorDesdeOut(zonasGuardadas?.compra, zonasGuardadas?.venta))
+    // Se siembra sólo con las zonas de **esta** serie: arrancar la edición en dólares con los
+    // números en pesos de la zona local dibujaría la banda fuera de escala y, al guardar,
+    // convertiría la zona a esta serie con valores de la otra.
+    setBorrador(borradorDesdeOut(
+      zonaDeEstaSerie(zonasGuardadas?.compra), zonaDeEstaSerie(zonasGuardadas?.venta),
+    ))
   }
 
   /** Arrastrar un borde escribe el borrador, no la DB: el guardado es explícito. Se redondea a dos
