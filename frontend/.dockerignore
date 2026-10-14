@@ -1,0 +1,8 @@
+# node_modules del host NUNCA entra al build: `COPY . .` lo pisaría sobre el que instaló
+# `npm install` en la imagen (arquitectura/musl distintos) y además manda cientos de MB de
+# contexto al daemon. Lo mismo con el dist ya compilado y el .git.
+node_modules
+dist
+.git
+.gitignore
+*.log
