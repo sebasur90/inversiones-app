@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.database import (
     AlertaPrecio, Base, InstrumentoInversion, MovimientoInversion, PrecioInstrumento,
-    PrecioWatchlist, WatchlistItem,
+    PrecioWatchlist, WatchlistItem, ZonaPrecio,
 )
 from app.services import alertas_analytics, alertas_engine, avisos_config
 from app.services.notificaciones import telegram
@@ -57,14 +57,23 @@ def _posicion(db, *, stop_loss=None, objetivo=None, precio_actual=100.0, ticker=
     db.commit()
 
 
-def _watchlist(db, *, objetivo, precio_actual, ticker="MSFT"):
+def _watchlist(db, *, objetivo, precio_actual, ticker="MSFT", piso=None):
+    """`objetivo` es el **techo de la zona de compra**: el nivel dejó de ser un escalar en
+    `watchlist` y vive en `zonas_precio` (ver `services/zonas_precio.py`)."""
     db.add(WatchlistItem(
         ticker=ticker, nombre="Microsoft", tipo_instrumento="CEDEAR", mercado="BCBA",
-        moneda="ARS", objetivo=objetivo,
+        moneda="ARS",
     ))
     db.add(PrecioWatchlist(
         ticker=ticker, fecha=date.today(), precio=precio_actual, moneda="ARS", fuente="iol",
     ))
+    if objetivo is not None:
+        ahora = datetime.now()
+        db.add(ZonaPrecio(
+            ticker=ticker, tipo="compra", variante="local", moneda="ARS",
+            piso=piso, techo=objetivo, activa=1,
+            fecha_creacion=ahora, fecha_actualizacion=ahora,
+        ))
     db.commit()
 
 

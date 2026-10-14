@@ -250,6 +250,12 @@ class EstadoMarketDataTicker(Base):
       - `resolucion_estado`: None | 'ok' | 'sin_subyacente' (no se pudo resolver un subyacente
         USD) | 'ticker_no_apto' (renta fija u otro instrumento sin subyacente posible).
       - `resolucion_intento`: fecha del último probe (cooldown de 180 días para 'sin_subyacente').
+
+    Serie **local** profunda vía yfinance (`TICKER.BA`, ver
+    `precios.fetch_backfill_ohlcv_local_yahoo`):
+      - `yahoo_local_estado`: None | 'completo' | 'sin_serie' (Yahoo no tiene el símbolo local) |
+        'escala_desconocida' (la serie no concuerda con el precio observado, así que no se carga).
+      - `yahoo_local_intento`: fecha del último intento (cooldown para no reintentar cada sync).
     """
     __tablename__ = "estado_market_data_ticker"
     ticker = Column(String, primary_key=True)
@@ -270,6 +276,11 @@ class EstadoMarketDataTicker(Base):
     moneda_subyacente = Column(String, nullable=True)
     resolucion_estado = Column(String, nullable=True)
     resolucion_intento = Column(Date, nullable=True)
+    # Serie local profunda vía yfinance (`TICKER.BA`) — ver docstring. Estado propio y no
+    # `ohlcv_estado`: ese lo comparten los backfills de analisistecnico/IOL, y un tercer escritor
+    # ahí haría que un 'completo' de una fuente frene a las otras.
+    yahoo_local_estado = Column(String, nullable=True)
+    yahoo_local_intento = Column(Date, nullable=True)
     relleno_estado = Column(String, nullable=True)
     relleno_intento = Column(Date, nullable=True)
 
@@ -322,6 +333,33 @@ class PrecioWatchlist(Base):
     fuente = Column(String, nullable=False)  # "iol" | "api"
 
 
+class PrecioSubyacente(Base):
+    """Último precio conocido del **subyacente en USD** de un ticker (la acción en EE.UU. detrás de
+    un CEDEAR o de un ADR). Una sola fila por ticker, como `PrecioWatchlist`.
+
+    Para qué existe: una zona de precio puede estar medida sobre la serie del subyacente
+    (`ZonaPrecio.variante == "subyacente"`), y entonces la alerta tiene que comparar contra el
+    precio de **esa** serie, no contra el del CEDEAR en pesos. Pero la serie `TICKER@SUB` de
+    `serie_ohlcv` sólo se refresca en el sync de la tarde, así que una zona cruzada al mediodía
+    avisaría a la noche o al día siguiente. Esto lo refresca el job liviano de precios, que corre
+    varias veces durante la rueda.
+
+    **No se escribe en `serie_ohlcv` a propósito**, por dos razones: esa serie alimenta los
+    indicadores y los backtests (es la guarda G4 del diseño del subyacente, ver
+    `market_data.precios`), y además `debe_reemplazar_barra` no dejaría que un precio close-only
+    pise la vela que yfinance ya trajo del día en curso.
+
+    `moneda` se guarda y no se asume: el consumidor exige USD antes de comparar. Un precio en otra
+    moneda contra una zona en dólares es un aviso falso.
+    """
+    __tablename__ = "precios_subyacente"
+    ticker = Column(String, primary_key=True)   # el ticker **local**, no el símbolo de Yahoo
+    fecha = Column(Date, nullable=False)
+    precio = Column(Numeric(18, 6), nullable=False)
+    moneda = Column(String, nullable=False)
+    fuente = Column(String, nullable=False)     # "yahoo"
+
+
 class RefrescoPrecios(Base):
     """Última corrida del job liviano de precios (`services/refresco_precios.py`). Una sola fila.
 
@@ -341,6 +379,7 @@ class RefrescoPrecios(Base):
     duration_ms = Column(Integer, nullable=False, default=0)
     precios_actualizados = Column(Integer, nullable=False, default=0)
     precios_watchlist = Column(Integer, nullable=False, default=0)
+    precios_subyacente = Column(Integer, nullable=False, default=0, server_default="0")
     iol_llamadas = Column(Integer, nullable=False, default=0)
     resultado = Column(String, nullable=False, default="ok")  # "ok" | "sin_fuentes" | "error"
     detalle = Column(JSON, nullable=True)
@@ -506,6 +545,7 @@ class AjustesAvisos(Base):
     avisar_stop_loss = Column(Integer, nullable=False, default=1, server_default="1")
     avisar_objetivo = Column(Integer, nullable=False, default=1, server_default="1")
     avisar_compra_zona = Column(Integer, nullable=False, default=1, server_default="1")
+    avisar_venta_zona = Column(Integer, nullable=False, default=1, server_default="1")
     fecha_actualizacion = Column(DateTime, nullable=False)
 
 
@@ -548,12 +588,91 @@ class NivelPrecioOverride(Base):
     __table_args__ = (UniqueConstraint("ticker", "tipo", name="uq_nivel_precio_override"),)
 
 
+class ZonaPrecio(Base):
+    """Zona de compra y zona de venta de un ticker: el rango de precios en el que el usuario
+    quiere entrar o salir, dibujado y arrastrado sobre el gráfico de análisis técnico.
+
+    Reemplaza al escalar `WatchlistItem.objetivo`, que era un único precio de compra. Un rango dice
+    algo que un número no: "entre 1150 y 1250 compro", y se lee de un vistazo como banda sobre las
+    velas. La migración de `objetivo` está más abajo, en el bloque de compatibilidad.
+
+    **Una fila por `(ticker, tipo)`**, con `variante` como atributo y no como parte de la clave:
+    una sola zona de compra por ticker, en la serie que el usuario elija. Si la variante entrara en
+    la clave, un ticker podría tener una zona de compra en ARS y otra en USD y avisaría dos veces
+    del mismo motivo.
+
+    `variante` es sobre **qué serie** se mide: `"local"` el precio tal como cotiza acá, o
+    `"subyacente"` la serie del instrumento en EE.UU. en USD nativo (la clave `TICKER@SUB` de
+    `serie_ohlcv`, ver `ohlcv_analytics`). No hay conversión de moneda en ningún caso: son dos
+    instrumentos, y una zona se compara siempre contra el precio de su propia serie. `moneda` es la
+    de esa serie al momento de guardar, para poder mostrarla y escribirla en el aviso.
+
+    Bordes: **cualquiera de los dos puede ser NULL** (zona abierta de un lado). El que dispara es
+    el `techo` para una zona de compra (el precio baja y entra) y el `piso` para una de venta (el
+    precio sube y entra); el borde opuesto es informativo y, cuando está, define cuándo la alerta
+    vuelve a armarse. Que los dos sean NULL no es una zona: lo rechaza `services/zonas_precio.py`.
+
+    Vale para cualquier ticker del universo técnico (cartera ∪ watchlist), no sólo para la
+    watchlist: planear la salida de algo que ya se tiene es tan válido como planear la entrada. No
+    reemplaza al stop-loss/objetivo de una posición (`NivelPrecioOverride`), que son porcentajes
+    sobre el precio promedio de compra y vienen del Sheet: son dos cosas distintas y conviven.
+
+    Sin FK al ticker, igual que `NivelPrecioOverride`: el sync vacía `instrumentos_inversion` y un
+    ticker que desaparece del Sheet un día no tiene que perder la zona que el usuario dibujó.
+    """
+    __tablename__ = "zonas_precio"
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String, nullable=False)
+    tipo = Column(String, nullable=False)  # "compra" | "venta"
+    variante = Column(String, nullable=False, default="local")  # "local" | "subyacente"
+    moneda = Column(String, nullable=False, default="")
+    piso = Column(Numeric(18, 6), nullable=True)
+    techo = Column(Numeric(18, 6), nullable=True)
+    # Apagar una zona sin perder los números: el gráfico la deja de dibujar y las alertas de
+    # evaluarla, pero volver a prenderla no obliga a re-dibujarla.
+    activa = Column(Integer, nullable=False, default=1, server_default="1")
+    notas = Column(String, nullable=True)
+    fecha_creacion = Column(DateTime, nullable=False)
+    fecha_actualizacion = Column(DateTime, nullable=False)
+
+    __table_args__ = (UniqueConstraint("ticker", "tipo", name="uq_zona_precio_ticker_tipo"),)
+
+
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+
+
+def migrar_objetivo_watchlist_a_zonas(conn) -> None:
+    """El `Objetivo` escalar de la watchlist (un único precio de compra) pasa a ser el **techo** de
+    una zona de compra, que es lo que se dibuja y se arrastra en el gráfico (ver `ZonaPrecio`).
+
+    Después de migrar se **vacía la columna**: dejarla con valor haría que borrar una zona a
+    propósito la resucite en el próximo arranque. La columna no se borra (sacarla en SQLite obliga
+    a reconstruir la tabla, y el endpoint de alta todavía acepta `objetivo` como atajo), queda sin
+    lectores y sin datos.
+
+    Idempotente: no pisa una zona de compra que ya exista, y una segunda corrida no encuentra nada
+    que migrar. Función aparte de `init_db` para poder ejercitarla en un test sin tocar la DB real.
+    """
+    conn.execute(text("""
+        INSERT INTO zonas_precio
+            (ticker, tipo, variante, moneda, piso, techo, activa,
+             fecha_creacion, fecha_actualizacion)
+        SELECT w.ticker, 'compra', 'local', COALESCE(w.moneda, ''), NULL, w.objetivo, 1,
+               datetime('now'), datetime('now')
+          FROM watchlist w
+         WHERE w.objetivo IS NOT NULL
+           AND NOT EXISTS (
+               SELECT 1 FROM zonas_precio z
+                WHERE z.ticker = w.ticker AND z.tipo = 'compra'
+           )
+    """))
+    conn.execute(text("UPDATE watchlist SET objetivo = NULL WHERE objetivo IS NOT NULL"))
+    conn.commit()
 
 
 def init_db():
@@ -613,6 +732,8 @@ def init_db():
             ("moneda_subyacente", "TEXT"),
             ("resolucion_estado", "TEXT"),
             ("resolucion_intento", "DATE"),
+            ("yahoo_local_estado", "TEXT"),
+            ("yahoo_local_intento", "DATE"),
             ("relleno_estado", "TEXT"),
             ("relleno_intento", "DATE"),
         ):
@@ -648,6 +769,29 @@ def init_db():
             conn.execute(text("ALTER TABLE watchlist ADD COLUMN agregado_en DATE"))
             conn.execute(text("DELETE FROM watchlist"))
             conn.execute(text("DELETE FROM precios_watchlist"))
+            conn.commit()
+
+        migrar_objetivo_watchlist_a_zonas(conn)
+
+        # Interruptor de la zona de venta. Default 1 como los otros tres: dibujar la zona ya es la
+        # decisión de querer el aviso. **Un tipo de nivel sin su interruptor queda silenciado**
+        # (`avisos_config.tipos_habilitados` lo deriva de `CAMPO_POR_TIPO`), así que agregar un
+        # tipo a `alertas_engine.TIPOS` obliga a agregar su columna acá.
+        # Conteo de precios del subyacente refrescados por el job liviano.
+        result = conn.execute(text("PRAGMA table_info(refresco_precios)"))
+        cols = [row[1] for row in result.fetchall()]
+        if 'precios_subyacente' not in cols:
+            conn.execute(text(
+                "ALTER TABLE refresco_precios ADD COLUMN precios_subyacente INTEGER NOT NULL DEFAULT 0"
+            ))
+            conn.commit()
+
+        result = conn.execute(text("PRAGMA table_info(ajustes_avisos)"))
+        cols = [row[1] for row in result.fetchall()]
+        if 'avisar_venta_zona' not in cols:
+            conn.execute(text(
+                "ALTER TABLE ajustes_avisos ADD COLUMN avisar_venta_zona INTEGER NOT NULL DEFAULT 1"
+            ))
             conn.commit()
 
     # El nombre identifica a una estrategia (ver `estrategias_analytics.normalizar_nombre`): las

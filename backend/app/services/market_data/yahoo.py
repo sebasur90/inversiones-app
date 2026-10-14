@@ -123,6 +123,42 @@ def fetch_historico_ohlcv(ticker: str, desde: date, hasta: date) -> list[BarraCr
     return out
 
 
+def fetch_ultimo_precio(ticker: str) -> dict | None:
+    """`{"precio", "moneda"}` del último precio conocido de `ticker`, o `None` si no se pudo.
+
+    Sale de `fast_info` (la misma vía barata que `fetch_info`), que durante la rueda devuelve el
+    precio **intradía**. Eso es justamente para qué existe: la serie `TICKER@SUB` sólo se refresca
+    en el sync de la tarde, así que una zona en dólares cruzada al mediodía avisaría recién a la
+    noche. El job liviano de precios llama a esto.
+
+    La moneda viaja y no se asume: una zona en dólares que se comparara contra un precio en otra
+    moneda daría un aviso falso. Quien la consume exige `USD`.
+
+    Nunca lanza: cualquier fallo es `None` y el job sigue con los demás tickers.
+    """
+    try:
+        import yfinance as yf
+    except ImportError:  # pragma: no cover
+        return None
+
+    try:
+        t = yf.Ticker(ticker)
+        fi = t.fast_info
+        # yfinance cambió el nombre de esta clave entre versiones y `fast_info` no es un dict
+        # común: se prueban las dos grafías antes de darla por perdida.
+        precio = _num(fi.get("last_price") if hasattr(fi, "get") else None)
+        if precio is None:
+            precio = _num(getattr(fi, "last_price", None))
+        moneda = _texto(fi.get("currency") if hasattr(fi, "get") else None).upper()
+    except Exception as exc:
+        logger.warning("yahoo: fast_info falló para %s: %s", ticker, exc)
+        return None
+
+    if precio is None or precio <= 0:
+        return None
+    return {"precio": precio, "moneda": moneda}
+
+
 def fetch_info(ticker: str) -> dict | None:
     """`{"moneda", "mercado", "nombre"}` del símbolo en Yahoo.
 

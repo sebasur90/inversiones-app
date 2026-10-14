@@ -1,7 +1,7 @@
 """Endpoints de análisis técnico: universo de tickers, serie de barras + indicadores, backtest y
 CRUD de estrategias guardadas.
 """
-from datetime import date, timedelta
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -14,15 +14,16 @@ from ..schemas import (
     EstrategiaGuardarRequest, EstrategiaOut, SiembraPresetsOut,
     ScreenerRequest, ScreenerOut,
     ComparadorRequest, ComparadorOut,
+    ZonasTickerIn, ZonasTickerOut,
 )
 from ..services import ohlcv_analytics, estrategias_analytics, screener_analytics, estrategias_seed
 from ..services import indicadores_engine, estrategia_engine
 from ..services import comparador_estrategias_analytics, comparador_estrategias_engine
+from ..services import ticker_analytics, zonas_precio
 
 router = APIRouter(prefix="/api/inversiones", tags=["tecnico"])
 
 _MAX_INDICADORES = 8
-_RANGO_DEFAULT_DIAS = 365
 _VARIANTES = ("local", "subyacente")
 
 
@@ -137,7 +138,11 @@ def serie_tecnica(
         raise HTTPException(status_code=422, detail=f"máximo {_MAX_INDICADORES} indicadores por pedido")
 
     hasta = hasta or date.today()
-    desde = desde or (hasta - timedelta(days=_RANGO_DEFAULT_DIAS))
+    # Sin `desde` se sirve toda la serie disponible, acotada por `max_barras`. Antes se rellenaba
+    # con un año, y eso hacía que el botón "ALL" del selector de período (que manda `desde` vacío,
+    # ver `calcularDesde` en el frontend) mostrara 12 meses en vez de todo el histórico -- justo
+    # donde se nota la profundidad extra de la serie del subyacente.
+    desde = desde or date.min
 
     especificaciones: list[tuple[str, str, dict]] = []  # (clave_original, nombre, params)
     for clave_raw in indicadores:
@@ -175,6 +180,59 @@ def serie_tecnica(
         "indice_desde": serie["indice_desde"], "barras": serie["barras"],
         "indicadores": resultado_indicadores, "advertencias": serie["advertencias"],
     }
+
+
+# ─── Zonas de compra / venta ──────────────────────────────────────────────────
+#
+# Viven en este router y no en `inversiones.py` porque el universo es cartera ∪ watchlist (es acá
+# donde está `_validar_ticker_tecnico`): se puede planear la entrada de algo que no se tiene y la
+# salida de algo que sí. Los endpoints de `inversiones.py/ticker/{ticker}/niveles` exigen un
+# instrumento del Sheet y devolverían 404 para un ticker de watchlist.
+
+
+def _zonas_out(ticker: str, db: Session) -> dict:
+    """Las zonas del ticker más los niveles de la posición resueltos a precio absoluto.
+
+    Los niveles salen de `ticker_analytics.get_ticker_position` con `cartera=None` (todas las
+    carteras sumadas): es el mismo cálculo que muestra el detalle del ticker, así que el gráfico no
+    puede dibujar un stop-loss distinto del que informa esa pantalla. Un ticker sin movimientos
+    devuelve el caso vacío de esa función y los dos niveles quedan en `None`.
+    """
+    salida = zonas_precio.a_dict(ticker, zonas_precio.zonas_de_ticker(db, ticker))
+    posicion = ticker_analytics.get_ticker_position(ticker, None, db)
+    salida["nivel_stop_loss"] = posicion.get("precio_stop_loss")
+    salida["nivel_objetivo"] = posicion.get("precio_objetivo")
+    return salida
+
+
+@router.get("/tecnico/{ticker}/zonas", response_model=ZonasTickerOut)
+def leer_zonas(ticker: str, db: Session = Depends(get_db)):
+    _validar_ticker_tecnico(ticker, db)
+    return _zonas_out(ticker, db)
+
+
+@router.put("/tecnico/{ticker}/zonas", response_model=ZonasTickerOut)
+def guardar_zonas(ticker: str, body: ZonasTickerIn, db: Session = Depends(get_db)):
+    """Cambio parcial: sólo las zonas presentes en el body se tocan, y un `null` explícito borra
+    esa zona. `zonas_precio.aplicar_cambios` valida todo antes de escribir, re-arma la alerta de la
+    zona que cambió y commitea."""
+    _validar_ticker_tecnico(ticker, db)
+    cambios = body.model_dump(exclude_unset=True)
+    _, error = zonas_precio.aplicar_cambios(db, ticker, cambios)
+    if error:
+        raise HTTPException(status_code=422, detail=zonas_precio.MENSAJE_ERROR[error])
+    return _zonas_out(ticker, db)
+
+
+@router.delete("/tecnico/{ticker}/zonas/{tipo}", response_model=ZonasTickerOut)
+def borrar_zona(ticker: str, tipo: str, db: Session = Depends(get_db)):
+    _validar_ticker_tecnico(ticker, db)
+    if tipo not in zonas_precio.TIPOS:
+        raise HTTPException(status_code=422, detail=zonas_precio.MENSAJE_ERROR["tipo_invalido"])
+    _, error = zonas_precio.aplicar_cambios(db, ticker, {tipo: None})
+    if error:
+        raise HTTPException(status_code=422, detail=zonas_precio.MENSAJE_ERROR[error])
+    return _zonas_out(ticker, db)
 
 
 # ─── Backtest ─────────────────────────────────────────────────────────────────

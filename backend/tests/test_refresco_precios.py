@@ -304,3 +304,131 @@ def test_ultimo_despues_de_una_corrida(db, monkeypatch):
     assert ultimo is not None
     assert ultimo["precios_actualizados"] == 1
     assert ultimo["resultado"] == "ok"
+
+
+# ── Precio intradía del subyacente en USD ────────────────────────────────────
+#
+# Para qué: la serie `TICKER@SUB` sólo se refresca en el sync de la tarde, así que una zona de
+# precio medida en dólares y cruzada a media rueda avisaría a la noche. Este job la pone al día.
+
+def _con_zona_subyacente(db, ticker="MSFT", simbolo="MSFT"):
+    from datetime import datetime
+
+    from app.database import ZonaPrecio
+
+    db.add(WatchlistItem(ticker=ticker, nombre="Microsoft", tipo_instrumento="CEDEAR",
+                         mercado="BCBA", moneda="ARS", agregado_en=HOY))
+    db.add(EstadoMarketDataTicker(
+        ticker=ticker, simbolo_subyacente=simbolo, mercado_subyacente="NMS",
+        moneda_subyacente="USD", resolucion_estado="ok",
+    ))
+    ahora = datetime.now()
+    db.add(ZonaPrecio(ticker=ticker, tipo="compra", variante="subyacente", moneda="USD",
+                      piso=None, techo=180.0, activa=1,
+                      fecha_creacion=ahora, fecha_actualizacion=ahora))
+    db.commit()
+
+
+def _stub_ultimo_precio(monkeypatch, por_simbolo):
+    pedidos: list[str] = []
+
+    def falso(simbolo):
+        pedidos.append(simbolo)
+        return por_simbolo.get(simbolo)
+
+    monkeypatch.setattr(refresco_precios.yahoo, "fetch_ultimo_precio", falso)
+    return pedidos
+
+
+def test_refresca_el_subyacente_de_los_tickers_con_zona_en_usd(db, monkeypatch):
+    from app.database import PrecioSubyacente
+
+    _con_zona_subyacente(db)
+    _stub_fetch(monkeypatch, [])
+    pedidos = _stub_ultimo_precio(monkeypatch, {"MSFT": {"precio": 173.4, "moneda": "USD"}})
+
+    resumen = refresco_precios.refrescar(db)
+
+    assert pedidos == ["MSFT"]              # el símbolo de Yahoo, no el ticker local
+    assert resumen["precios_subyacente"] == 1
+    fila = db.query(PrecioSubyacente).one()
+    assert fila.ticker == "MSFT" and float(fila.precio) == 173.4 and fila.moneda == "USD"
+    assert db.get(RefrescoPrecios, 1).precios_subyacente == 1
+
+
+def test_no_pide_nada_sin_zonas_medidas_sobre_el_subyacente(db, monkeypatch):
+    """Bajar el precio de todos los subyacentes resueltos sería gastar llamadas en series que
+    nadie está vigilando."""
+    db.add(WatchlistItem(ticker="MSFT", nombre="Microsoft", tipo_instrumento="CEDEAR",
+                         mercado="BCBA", moneda="ARS", agregado_en=HOY))
+    db.add(EstadoMarketDataTicker(
+        ticker="MSFT", simbolo_subyacente="MSFT", mercado_subyacente="NMS",
+        moneda_subyacente="USD", resolucion_estado="ok",
+    ))
+    db.commit()
+    _stub_fetch(monkeypatch, [])
+    pedidos = _stub_ultimo_precio(monkeypatch, {"MSFT": {"precio": 173.4, "moneda": "USD"}})
+
+    assert refresco_precios.refrescar(db)["precios_subyacente"] == 0
+    assert pedidos == []
+
+
+def test_una_zona_local_no_pide_el_subyacente(db, monkeypatch):
+    from datetime import datetime
+
+    from app.database import ZonaPrecio
+
+    _con_zona_subyacente(db)
+    db.query(ZonaPrecio).update({"variante": "local"})
+    db.commit()
+    _stub_fetch(monkeypatch, [])
+    pedidos = _stub_ultimo_precio(monkeypatch, {"MSFT": {"precio": 173.4, "moneda": "USD"}})
+
+    assert refresco_precios.refrescar(db)["precios_subyacente"] == 0
+    assert pedidos == []
+
+
+def test_un_precio_que_no_viene_en_usd_no_se_guarda(db, monkeypatch):
+    """Comparar una zona en dólares contra un precio en otra moneda es un aviso falso: es más
+    seguro no tener precio que tener uno equivocado."""
+    from app.database import PrecioSubyacente
+
+    _con_zona_subyacente(db)
+    _stub_fetch(monkeypatch, [])
+    _stub_ultimo_precio(monkeypatch, {"MSFT": {"precio": 173.4, "moneda": "EUR"}})
+
+    assert refresco_precios.refrescar(db)["precios_subyacente"] == 0
+    assert db.query(PrecioSubyacente).count() == 0
+
+
+def test_un_fallo_de_yahoo_no_rompe_la_corrida(db, monkeypatch):
+    _con_zona_subyacente(db)
+    _stub_fetch(monkeypatch, [])
+    _stub_ultimo_precio(monkeypatch, {})    # devuelve None
+
+    resumen = refresco_precios.refrescar(db)
+    assert resumen["resultado"] == "ok"
+    assert resumen["precios_subyacente"] == 0
+
+
+def test_un_subyacente_sin_resolver_no_se_pide(db, monkeypatch):
+    """Sin `resolucion_estado == "ok"` no hay un subyacente en USD confirmado."""
+    _con_zona_subyacente(db)
+    db.query(EstadoMarketDataTicker).update({"resolucion_estado": "sin_subyacente"})
+    db.commit()
+    _stub_fetch(monkeypatch, [])
+    pedidos = _stub_ultimo_precio(monkeypatch, {"MSFT": {"precio": 173.4, "moneda": "USD"}})
+
+    assert refresco_precios.refrescar(db)["precios_subyacente"] == 0
+    assert pedidos == []
+
+
+def test_el_precio_del_subyacente_no_entra_en_la_serie_ohlcv(db, monkeypatch):
+    """`serie_ohlcv` alimenta indicadores y backtests: un close-only intradía no puede degradar la
+    vela que yfinance ya trajo del día en curso (es la guarda G4 del diseño del subyacente)."""
+    _con_zona_subyacente(db)
+    _stub_fetch(monkeypatch, [])
+    _stub_ultimo_precio(monkeypatch, {"MSFT": {"precio": 173.4, "moneda": "USD"}})
+
+    refresco_precios.refrescar(db)
+    assert db.query(BarraOHLCV).filter(BarraOHLCV.ticker.like("%@SUB")).count() == 0

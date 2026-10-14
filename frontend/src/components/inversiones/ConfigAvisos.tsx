@@ -57,12 +57,17 @@ const TIPOS_DE_NIVEL: { campo: keyof AvisosConfigIn; etiqueta: string; ayuda: st
   {
     campo: 'avisar_compra_zona',
     etiqueta: 'Zona de compra',
-    ayuda: 'Cuando un ticker de la watchlist baja al precio de compra que le fijaste.',
+    ayuda: 'Cuando el precio baja y entra en la zona de compra que dibujaste en el gráfico.',
+  },
+  {
+    campo: 'avisar_venta_zona',
+    etiqueta: 'Zona de venta',
+    ayuda: 'Cuando el precio sube y entra en la zona de venta que dibujaste en el gráfico.',
   },
 ]
 
 /**
- * Qué avisa por Telegram: los tres tipos de nivel y, por estrategia, si avisa sus compras, sus
+ * Qué avisa por Telegram: los tipos de nivel y, por estrategia, si avisa sus compras, sus
  * ventas o ninguna.
  *
  * Las estrategias arrancan todas apagadas a propósito: los 16 presets del catálogo se siembran

@@ -13,7 +13,9 @@ Qué hace este job, entonces:
    escala y el conteo del cupo mensual son exactamente los del sync, no una copia;
 3. hace upsert de esas filas en `precios_instrumento` y su espejo close-only en `serie_ohlcv`;
 4. re-cotiza la watchlist (`watchlist_analytics.refrescar_precios`);
-5. deja registro en `refresco_precios` (una fila, no un `SyncRun` -- ver el modelo).
+5. refresca el último precio en USD del subyacente de los tickers que tienen una zona medida sobre
+   esa serie (`_refrescar_subyacentes`);
+6. deja registro en `refresco_precios` (una fila, no un `SyncRun` -- ver el modelo).
 
 Qué **no** hace, y por eso es liviano: no lee el Sheet, no valida pestañas, no hace backfill
 histórico, no toca CER/MEP/benchmarks, no purga huérfanos y no escribe en el historial de calidad
@@ -32,11 +34,15 @@ from datetime import date, datetime
 from sqlalchemy.orm import Session
 
 from ..database import (
-    BarraOHLCV, InstrumentoInversion, PrecioInstrumento, RefrescoPrecios,
+    BarraOHLCV, EstadoMarketDataTicker, InstrumentoInversion, PrecioInstrumento,
+    PrecioSubyacente, RefrescoPrecios, ZonaPrecio,
 )
-from . import cotizacion_diaria, estado_market_data, ohlcv_analytics, watchlist_analytics
+from . import (
+    cotizacion_diaria, estado_market_data, ohlcv_analytics, watchlist_analytics, zonas_precio,
+)
 from .market_data import precios as market_data_precios
 from .market_data import iol_auth
+from .market_data import yahoo
 from .market_data.client import use_external_apis
 
 logger = logging.getLogger("refresco_precios")
@@ -172,6 +178,72 @@ def _espejo_ohlcv(db: Session, filas: list[dict]) -> None:
     db.flush()
 
 
+#: Tope de llamadas a yfinance por corrida. Cada una es un GET secuencial: con cuatro corridas
+#: diarias y una zona en dólares por instrumento, 20 alcanza de sobra y acota el tiempo de pared.
+_MAX_SUBYACENTES_POR_CORRIDA = 20
+
+
+def _refrescar_subyacentes(db: Session) -> int:
+    """Último precio en USD del subyacente de los tickers con una zona medida sobre esa serie.
+
+    Sólo esos tickers: bajar el precio de todos los subyacentes resueltos sería gastar llamadas en
+    series que nadie está vigilando. La serie `TICKER@SUB` se sigue refrescando en el sync; esto es
+    para que una zona en dólares cruzada a media rueda avise el mismo día y no a la noche.
+
+    Se exige `resolucion_estado == "ok"` (hay un subyacente confirmado en USD) y que yfinance
+    devuelva `moneda == "USD"`: comparar una zona en dólares contra un precio en otra moneda es un
+    aviso falso, y es más seguro no tener precio que tener uno equivocado.
+
+    No commitea: lo hace `refrescar`. Nunca lanza por red (`yahoo.fetch_ultimo_precio` devuelve
+    `None` ante cualquier fallo).
+    """
+    tickers_con_zona = {
+        fila.ticker
+        for fila in db.query(ZonaPrecio).filter(
+            ZonaPrecio.variante == zonas_precio.VARIANTE_SUBYACENTE,
+            ZonaPrecio.activa == 1,
+        )
+    }
+    if not tickers_con_zona:
+        return 0
+
+    simbolos = {
+        fila.ticker: fila.simbolo_subyacente
+        for fila in db.query(EstadoMarketDataTicker).filter(
+            EstadoMarketDataTicker.ticker.in_(tickers_con_zona),
+            EstadoMarketDataTicker.resolucion_estado == "ok",
+        )
+        if fila.simbolo_subyacente
+    }
+    if not simbolos:
+        return 0
+
+    hoy = date.today()
+    actualizados = 0
+    for ticker in sorted(simbolos)[:_MAX_SUBYACENTES_POR_CORRIDA]:
+        dato = yahoo.fetch_ultimo_precio(simbolos[ticker])
+        if dato is None:
+            continue
+        if (dato.get("moneda") or "").upper() != "USD":
+            logger.warning(
+                "refresco: %s (%s) devolvió %s en vez de USD; no se guarda",
+                ticker, simbolos[ticker], dato.get("moneda") or "sin moneda",
+            )
+            continue
+
+        fila = db.get(PrecioSubyacente, ticker)
+        if fila is None:
+            db.add(PrecioSubyacente(
+                ticker=ticker, fecha=hoy, precio=dato["precio"], moneda="USD", fuente="yahoo",
+            ))
+        else:
+            fila.fecha, fila.precio, fila.moneda, fila.fuente = hoy, dato["precio"], "USD", "yahoo"
+        actualizados += 1
+
+    db.flush()
+    return actualizados
+
+
 def _registrar(db: Session, **campos) -> None:
     """Deja la marca de la corrida en la fila única de `refresco_precios`."""
     fila = db.get(RefrescoPrecios, 1)
@@ -193,10 +265,10 @@ def refrescar(db: Session) -> dict:
     if not use_external_apis():
         logger.info("refresco: USE_EXTERNAL_APIS está apagado, no se pide nada")
         _registrar(db, duration_ms=0, precios_actualizados=0, precios_watchlist=0,
-                   iol_llamadas=0, resultado="sin_fuentes", detalle=None)
+                   precios_subyacente=0, iol_llamadas=0, resultado="sin_fuentes", detalle=None)
         db.commit()
         return {"resultado": "sin_fuentes", "precios_actualizados": 0, "precios_watchlist": 0,
-                "iol_llamadas": 0, "issues": 0}
+                "precios_subyacente": 0, "iol_llamadas": 0, "issues": 0}
 
     iol_auth.iniciar_corrida()
     instrumentos = _instrumentos_desde_db(db)
@@ -236,6 +308,9 @@ def refrescar(db: Session) -> dict:
             )
             issues.extend(issues_wl)
 
+    # Subyacentes en USD de las zonas que se miden sobre esa serie (yfinance, sin cupo de IOL).
+    subyacentes = _refrescar_subyacentes(db)
+
     estado_market_data.persistir(db, estado_por_ticker)
 
     llamadas = iol_auth.finalizar_corrida()
@@ -249,19 +324,22 @@ def refrescar(db: Session) -> dict:
 
     _registrar(
         db, duration_ms=duracion, precios_actualizados=guardados, precios_watchlist=wl_count,
+        precios_subyacente=subyacentes,
         iol_llamadas=llamadas, resultado="ok", detalle={"issues": por_regla} if por_regla else None,
     )
     db.commit()
 
     logger.info(
-        "refresco: %d precio(s) de cartera, %d de watchlist, %d llamada(s) a IOL, %d ms%s",
-        guardados, wl_count, llamadas, duracion,
+        "refresco: %d precio(s) de cartera, %d de watchlist, %d de subyacentes, "
+        "%d llamada(s) a IOL, %d ms%s",
+        guardados, wl_count, subyacentes, llamadas, duracion,
         f", issues: {por_regla}" if por_regla else "",
     )
     return {
         "resultado": "ok",
         "precios_actualizados": guardados,
         "precios_watchlist": wl_count,
+        "precios_subyacente": subyacentes,
         "iol_llamadas": llamadas,
         "issues": len(issues),
     }
@@ -277,6 +355,7 @@ def ultimo(db: Session) -> dict | None:
         "duration_ms": fila.duration_ms,
         "precios_actualizados": fila.precios_actualizados,
         "precios_watchlist": fila.precios_watchlist,
+        "precios_subyacente": fila.precios_subyacente or 0,
         "iol_llamadas": fila.iol_llamadas,
         "resultado": fila.resultado,
     }

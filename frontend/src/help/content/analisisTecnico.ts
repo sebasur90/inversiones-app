@@ -9,6 +9,7 @@ export type AnalisisTecnicoHelpKey =
   | 'analisis_tecnico_precio_ejecucion'
   | 'analisis_tecnico_extremos'
   | 'analisis_tecnico_percentil'
+  | 'zonas_precio'
   | 'screener_titulo'
   | 'screener_universo'
   | 'screener_distancia'
@@ -20,6 +21,14 @@ export type AnalisisTecnicoHelpKey =
   | 'screener_grafico_gatillo'
 
 export const ANALISISTECNICO_HELP: Record<AnalisisTecnicoHelpKey, HelpContent> = {
+  zonas_precio: {
+    title: 'Zonas de compra y de venta',
+    shortDescription: 'El rango de precios en el que querés entrar o salir de un instrumento, dibujado sobre el gráfico. Cuando el precio entra en la zona, llega el aviso al celular.',
+    whyItMatters: 'Decidir el rango con el gráfico a la vista —y no en el momento en que el precio se mueve— es la diferencia entre una compra planeada y una reacción. El rango además dice algo que un precio solo no dice: entre cuánto y cuánto te parece buena la entrada.',
+    howToInterpret: 'De los dos bordes, uno dispara el aviso y el otro es referencia. En una zona de compra dispara el techo (el precio baja y cruza hacia adentro); en una de venta dispara el piso (sube y cruza). El borde que dispara se dibuja con línea llena y el otro punteado. Cualquiera de los dos puede quedar vacío: una zona de compra sin piso es simplemente "comprar por debajo de X".',
+    limitations: 'Hay una sola zona de compra y una sola de venta por instrumento, y cada una se mide sobre la serie en la que la dibujaste: la local en pesos o la del subyacente en dólares. No hay conversión de moneda entre una y otra — son dos instrumentos distintos, no el mismo precio en dos monedas. Las zonas son independientes del stop-loss y el objetivo de una posición, que se editan en el detalle del ticker y acá se dibujan sólo como referencia.',
+    relatedTerms: ['watchlist_zona_compra', 'stopLoss', 'objetivo'],
+  },
   analisis_tecnico_titulo: {
     title: 'Análisis técnico',
     shortDescription: 'Velas (donde la fuente las provee) o línea de cierres, con indicadores clásicos activables y estrategias propias backtesteables, sobre los tickers de tu cartera y tu watchlist.',

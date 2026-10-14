@@ -105,6 +105,8 @@ export interface WatchlistItemOut {
   precio_objetivo: number | null
   pct_a_objetivo: number | null
   en_zona: boolean | null
+  zona_compra: ZonaPrecioOut | null
+  zona_venta: ZonaPrecioOut | null
   en_cartera: boolean
   notas: string | null
   agregado_en: string | null
@@ -2161,6 +2163,56 @@ export const getSerieTecnica = (
 ) =>
   api.get<SerieTecnicaOut>(`/inversiones/tecnico/${encodeURIComponent(ticker)}/serie`, { params }).then(r => r.data)
 
+// --- Zonas de compra / venta (se dibujan y se arrastran en el gráfico) ---
+
+export type TipoZona = 'compra' | 'venta'
+
+/** Una zona es un rango con los dos bordes opcionales. El que dispara el aviso es el `techo` en
+ * una zona de compra (el precio baja y entra) y el `piso` en una de venta. `variante` dice sobre
+ * qué serie se mide: nunca se convierte de moneda. */
+export interface ZonaPrecioOut {
+  variante: VarianteSerie
+  moneda: string
+  piso: number | null
+  techo: number | null
+  activa: boolean
+  notas: string | null
+  actualizado_en: string | null
+}
+
+export interface ZonasTickerOut {
+  ticker: string
+  compra: ZonaPrecioOut | null
+  venta: ZonaPrecioOut | null
+  /** Niveles de la **posición** (`niveles_precio_override` / Sheet), ya resueltos a precio
+   * absoluto. Se dibujan pero no se editan acá: eso vive en el detalle del ticker. */
+  nivel_stop_loss: number | null
+  nivel_objetivo: number | null
+}
+
+export interface ZonaPrecioIn {
+  variante?: VarianteSerie
+  moneda?: string | null
+  piso?: number | null
+  techo?: number | null
+  activa?: boolean
+  notas?: string | null
+}
+
+export const getZonasTicker = (ticker: string) =>
+  api.get<ZonasTickerOut>(`/inversiones/tecnico/${encodeURIComponent(ticker)}/zonas`).then(r => r.data)
+
+/** Cambio parcial: las claves ausentes no se tocan, y `null` explícito borra esa zona. */
+export const guardarZonasTicker = (
+  ticker: string, cambios: { compra?: ZonaPrecioIn | null; venta?: ZonaPrecioIn | null },
+) =>
+  api.put<ZonasTickerOut>(`/inversiones/tecnico/${encodeURIComponent(ticker)}/zonas`, cambios).then(r => r.data)
+
+export const borrarZonaTicker = (ticker: string, tipo: TipoZona) =>
+  api.delete<ZonasTickerOut>(
+    `/inversiones/tecnico/${encodeURIComponent(ticker)}/zonas/${tipo}`,
+  ).then(r => r.data)
+
 // --- Estrategias: DSL ---
 
 export type OperandoDsl =
@@ -2590,6 +2642,7 @@ export interface AvisosConfigOut {
   avisar_stop_loss: boolean
   avisar_objetivo: boolean
   avisar_compra_zona: boolean
+  avisar_venta_zona: boolean
   estrategias: AvisoEstrategiaOut[]
 }
 
@@ -2598,6 +2651,7 @@ export interface AvisosConfigIn {
   avisar_stop_loss?: boolean
   avisar_objetivo?: boolean
   avisar_compra_zona?: boolean
+  avisar_venta_zona?: boolean
 }
 
 export interface AvisoEstrategiaIn {
@@ -2648,6 +2702,8 @@ export interface RefrescoCotizacionesOut {
   resultado: 'ok' | 'sin_fuentes' | 'error'
   precios_actualizados: number
   precios_watchlist: number
+  /** Subyacentes en USD puestos al día (sólo los de tickers con una zona medida sobre esa serie). */
+  precios_subyacente?: number
   iol_llamadas: number
   issues: number
   timestamp: string | null

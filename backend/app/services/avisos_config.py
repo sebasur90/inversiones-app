@@ -1,4 +1,4 @@
-"""Qué avisos salen por Telegram: los tres interruptores de nivel y el estado por estrategia.
+"""Qué avisos salen por Telegram: un interruptor por tipo de nivel y el estado por estrategia.
 
 Separado de `alertas_analytics` (que decide y manda) porque es configuración, no evaluación: la
 app la lee y la escribe desde Ajustes, y el job sólo la consulta.
@@ -21,7 +21,13 @@ CAMPO_POR_TIPO = {
     alertas_engine.TIPO_STOP_LOSS: "avisar_stop_loss",
     alertas_engine.TIPO_OBJETIVO: "avisar_objetivo",
     alertas_engine.TIPO_COMPRA_ZONA: "avisar_compra_zona",
+    alertas_engine.TIPO_VENTA_ZONA: "avisar_venta_zona",
 }
+
+#: Invariante: **todo** tipo de `alertas_engine.TIPOS` tiene que tener su campo acá. Un tipo que
+#: falte no aparece en `tipos_habilitados`, así que sus cruces se guardan silenciados y el usuario
+#: no tiene forma de prenderlos.
+assert set(CAMPO_POR_TIPO) == set(alertas_engine.TIPOS)
 
 _FILA = 1
 
@@ -46,6 +52,7 @@ def actualizar(
     avisar_stop_loss: bool | None = None,
     avisar_objetivo: bool | None = None,
     avisar_compra_zona: bool | None = None,
+    avisar_venta_zona: bool | None = None,
 ) -> AjustesAvisos:
     """Cambia los interruptores pasados; `None` es "no tocar"."""
     fila = obtener(db)
@@ -53,6 +60,7 @@ def actualizar(
         ("avisar_stop_loss", avisar_stop_loss),
         ("avisar_objetivo", avisar_objetivo),
         ("avisar_compra_zona", avisar_compra_zona),
+        ("avisar_venta_zona", avisar_venta_zona),
     ):
         if valor is not None:
             setattr(fila, campo, 1 if valor else 0)
@@ -96,7 +104,7 @@ def lados_por_estrategia(db: Session) -> dict[int, set[str]]:
 
 
 def estado(db: Session) -> dict:
-    """Lo que consume la pantalla de Ajustes: los tres interruptores y el detalle por estrategia."""
+    """Lo que consume la pantalla de Ajustes: los interruptores y el detalle por estrategia."""
     fila = obtener(db)
     estrategias = (
         db.query(EstrategiaTecnica).order_by(EstrategiaTecnica.nombre).all()
@@ -105,6 +113,7 @@ def estado(db: Session) -> dict:
         "avisar_stop_loss": bool(fila.avisar_stop_loss),
         "avisar_objetivo": bool(fila.avisar_objetivo),
         "avisar_compra_zona": bool(fila.avisar_compra_zona),
+        "avisar_venta_zona": bool(fila.avisar_venta_zona),
         "estrategias": [
             {
                 "id": e.id,

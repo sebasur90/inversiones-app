@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { qk } from '../api/queryClient'
 import {
   getTickersTecnicos, getSerieTecnica, getPresetsEstrategia, listarEstrategias,
   guardarEstrategia, actualizarEstrategia, duplicarEstrategia, eliminarEstrategiaTecnica,
-  backtestEstrategia, sembrarPresetsEstrategia,
+  backtestEstrategia, sembrarPresetsEstrategia, getZonasTicker, guardarZonasTicker,
   type CategoriaPreset, type EstrategiaDsl, type EstrategiaOut, type BacktestOut,
-  type PresetEstrategiaOut, type VarianteSerie,
+  type PresetEstrategiaOut, type VarianteSerie, type TipoZona, type ZonaPrecioIn,
 } from '../api'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
@@ -25,6 +26,12 @@ import SelectorIndicadores from '../components/tecnico/SelectorIndicadores'
 import GraficoTecnico from '../components/tecnico/GraficoTecnico'
 import GraficoFullscreen from '../components/tecnico/GraficoFullscreen'
 import EditorEstrategia from '../components/tecnico/EditorEstrategia'
+import EditorZonas, {
+  borradorADibujo, borradorDesdeOut, borradorInvalido, parsearBorde,
+  type BorradorZonas,
+} from '../components/tecnico/EditorZonas'
+import ResumenZonas from '../components/tecnico/ResumenZonas'
+import type { BordeZona, ZonasDibujo } from '../components/tecnico/ZonasPrecio'
 import EstrategiaAvanzadaJson from '../components/tecnico/EstrategiaAvanzadaJson'
 import ResultadoBacktest from '../components/tecnico/ResultadoBacktest'
 import FichaEstrategia from '../components/tecnico/FichaEstrategia'
@@ -52,6 +59,11 @@ const PERIODOS: PeriodoEvolucion[] = ['1M', '3M', '6M', '1Y', '3Y', 'YTD', 'ALL'
 let proximoIdIndicador = 1
 
 export default function AnalisisTecnico() {
+  // El ticker puede llegar en la URL (`/analisis-tecnico?ticker=AL30`): es como entra la watchlist.
+  // Se deriva sin `useEffect` de sincronización: la elección de esta sesión manda sobre el
+  // parámetro, el parámetro sobre el primero del universo, y un ticker que no está en el universo
+  // (se dejó de seguir, se vendió) cae al default en vez de pedir una serie que daría 404.
+  const [searchParams, setSearchParams] = useSearchParams()
   const [tickerSel, setTickerSel] = useState<string | null>(null)
   const [periodo, setPeriodo] = useState<PeriodoEvolucion>('1Y')
   // Lista y no mapa por tipo: se permiten varias instancias del mismo indicador con distintos
@@ -63,10 +75,30 @@ export default function AnalisisTecnico() {
   // Preferencia de variante; la efectiva se deriva contra las variantes reales del ticker actual
   // (sin useEffect, para que no haya flash al cambiar de ticker).
   const [varianteSel, setVarianteSel] = useState<VarianteSerie | null>(null)
+  // `null` = no se está editando. El borrador vive acá y no en el editor para que el gráfico pueda
+  // dibujarlo mientras se arrastra: son dos vistas del mismo valor.
+  const [borrador, setBorrador] = useState<BorradorZonas | null>(null)
+  const [errorZonas, setErrorZonas] = useState<string | null>(null)
 
+  const queryClient = useQueryClient()
   const tickersQuery = useQuery({ queryKey: qk.de('tecnico-tickers'), queryFn: getTickersTecnicos })
   const tickers = tickersQuery.data ?? []
-  const ticker = tickerSel ?? tickers[0]?.ticker ?? null
+  const tickerPedido = tickerSel ?? searchParams.get('ticker')
+  const ticker =
+    tickerPedido && tickers.some(t => t.ticker === tickerPedido)
+      ? tickerPedido
+      : tickers[0]?.ticker ?? null
+
+  /** Elegir un ticker lo refleja en la URL, así el gráfico se puede compartir y sobrevive a un
+   * refresco. `replace` para no llenar el historial de atrás con cada ticker mirado. */
+  function elegirTicker(nuevo: string) {
+    setTickerSel(nuevo)
+    setBorrador(null)   // el borrador era de otro instrumento
+    setErrorZonas(null)
+    const params = new URLSearchParams(searchParams)
+    params.set('ticker', nuevo)
+    setSearchParams(params, { replace: true })
+  }
   const tickerMeta = tickers.find(t => t.ticker === ticker)
   const seriesDisponibles = tickerMeta?.series ?? []
   const variante: VarianteSerie =
@@ -84,10 +116,12 @@ export default function AnalisisTecnico() {
 
   // Con `ventana === 0` (EXTREMOS/PERCENTIL en modo histórico acumulado) hay que traer toda la
   // serie disponible: si no, el "máximo histórico" sería el de las últimas 750 ruedas y la
-  // etiqueta engañaría. Entra en la clave de react-query para que el cambio dispare refetch.
+  // etiqueta engañaría. Lo mismo con el período `ALL`: ahí `desde` va vacío y el backend sirve
+  // todo lo que tenga, pero el tope de 750 barras lo recortaría a ~3 años. Entra en la clave de
+  // react-query para que el cambio dispare refetch.
   const maxBarras = useMemo(
-    () => (activos.some(a => a.params.ventana === 0) ? 3000 : undefined),
-    [activos],
+    () => (periodo === 'ALL' || activos.some(a => a.params.ventana === 0) ? 3000 : undefined),
+    [activos, periodo],
   )
 
   const serieQuery = useQuery({
@@ -97,6 +131,70 @@ export default function AnalisisTecnico() {
   })
   const serie = serieQuery.data
   const monedaMostrada = serie?.moneda || monedaSerie
+
+  const zonasQuery = useQuery({
+    queryKey: qk.de('tecnico-zonas', ticker),
+    queryFn: () => getZonasTicker(ticker as string),
+    enabled: ticker !== null,
+  })
+  const zonasGuardadas = zonasQuery.data
+
+  const guardarZonasMut = useMutation({
+    mutationFn: (cambios: { compra?: ZonaPrecioIn | null; venta?: ZonaPrecioIn | null }) =>
+      guardarZonasTicker(ticker as string, cambios),
+    onSuccess: async () => {
+      // La watchlist muestra la zona de compra en su badge: si no se invalida, queda mostrando el
+      // valor anterior hasta el próximo refetch.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: qk.de('tecnico-zonas', ticker) }),
+        queryClient.invalidateQueries({ queryKey: qk.watchlist }),
+      ])
+      setBorrador(null)
+      setErrorZonas(null)
+    },
+    onError: (e) => setErrorZonas(parseApiError(e).message),
+  })
+
+  /** Lo que el gráfico dibuja: el borrador mientras se edita, lo guardado si no. */
+  const zonasDibujo: ZonasDibujo | undefined = borrador
+    ? borradorADibujo(borrador, zonasGuardadas?.nivel_stop_loss, zonasGuardadas?.nivel_objetivo)
+    : zonasGuardadas
+      ? {
+          compra: zonasGuardadas.compra?.activa ? zonasGuardadas.compra : null,
+          venta: zonasGuardadas.venta?.activa ? zonasGuardadas.venta : null,
+          stopLoss: zonasGuardadas.nivel_stop_loss,
+          objetivo: zonasGuardadas.nivel_objetivo,
+        }
+      : undefined
+
+  function empezarAEditarZonas() {
+    setErrorZonas(null)
+    setBorrador(borradorDesdeOut(zonasGuardadas?.compra, zonasGuardadas?.venta))
+  }
+
+  /** Arrastrar un borde escribe el borrador, no la DB: el guardado es explícito. Se redondea a dos
+   * decimales porque el píxel da una precisión falsa; el número exacto se escribe en el input. */
+  function arrastrarZona(tipo: TipoZona, borde: BordeZona, valor: number) {
+    setBorrador(prev => {
+      if (!prev) return prev
+      const actual = prev[tipo]
+      if (!actual) return prev
+      return { ...prev, [tipo]: { ...actual, [borde]: valor.toFixed(2) } }
+    })
+  }
+
+  function guardarZonas() {
+    if (!borrador || borradorInvalido(borrador)) return
+    const una = (tipo: TipoZona): ZonaPrecioIn | null => {
+      const z = borrador[tipo]
+      if (!z) return null
+      return {
+        variante, moneda: monedaMostrada || null,
+        piso: parsearBorde(z.piso), techo: parsearBorde(z.techo), activa: true,
+      }
+    }
+    guardarZonasMut.mutate({ compra: una('compra'), venta: una('venta') })
+  }
 
   function agregarIndicador(tipo: string) {
     setActivos(prev => (
@@ -152,7 +250,7 @@ export default function AnalisisTecnico() {
       <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 mb-3 -mx-4 px-4">
         {tickers.map(t => (
           <button
-            key={t.ticker} onClick={() => setTickerSel(t.ticker)}
+            key={t.ticker} onClick={() => elegirTicker(t.ticker)}
             className={`shrink-0 font-semibold text-caption px-3 py-1.5 rounded-[10px] border transition-colors ${
               t.ticker === ticker ? 'bg-app-accent-soft border-app-accent text-app-accent' : 'bg-app-surface border-app-border text-app-text-dim'
             }`}
@@ -173,7 +271,7 @@ export default function AnalisisTecnico() {
                   label: s.variante === 'local' ? `Local (${s.moneda})` : `Subyacente (${s.moneda})`,
                 }))}
                 value={variante}
-                onChange={v => setVarianteSel(v as VarianteSerie)}
+                onChange={v => { setVarianteSel(v as VarianteSerie); setBorrador(null) }}
               />
             )}
             {monedaMostrada && (
@@ -204,7 +302,9 @@ export default function AnalisisTecnico() {
                 description={
                   serie.advertencias.includes('un_solo_punto')
                     ? 'Este ticker recién se agregó: todavía tiene un solo precio registrado, no alcanza para graficar.'
-                    : 'Todavía no hay datos históricos para este ticker.'
+                    : // El backend agrega el motivo concreto (sin fuente, escala descartada…) cuando
+                      // lo tiene anotado; si no, queda el texto genérico de `sin_serie`.
+                      textosAdvertenciasSerie(serie.advertencias).join(' ')
                 }
               />
             ) : serie ? (
@@ -213,6 +313,8 @@ export default function AnalisisTecnico() {
                 tieneVelas={serie.tiene_velas} tieneVolumen={serie.tiene_volumen}
                 moneda={monedaMostrada}
                 onToggleFullscreen={() => setFullscreen(true)}
+                zonas={zonasDibujo} editandoZonas={borrador !== null}
+                onArrastrarZona={arrastrarZona}
                 hoverIndex={hoverIndex} onHover={setHoverIndex}
               />
             ) : null}
@@ -224,6 +326,29 @@ export default function AnalisisTecnico() {
                 <li key={texto}>{texto}</li>
               ))}
             </ul>
+          )}
+
+          {/* Las zonas se dibujan sobre el precio, así que el editor vive junto al gráfico y no en
+              una pantalla aparte: arrastrar el borde y escribir el número son dos vistas de lo
+              mismo. Sólo con serie: una zona sobre un gráfico vacío no se puede ubicar. */}
+          {ticker && tieneGrafico && (
+            <div className="mt-3">
+              {borrador ? (
+                <EditorZonas
+                  borrador={borrador} moneda={monedaMostrada} variante={variante}
+                  onCambiar={setBorrador}
+                  onGuardar={guardarZonas}
+                  onCancelar={() => { setBorrador(null); setErrorZonas(null) }}
+                  guardando={guardarZonasMut.isPending}
+                  error={errorZonas}
+                />
+              ) : (
+                <ResumenZonas
+                  zonas={zonasGuardadas} variante={variante} moneda={monedaMostrada}
+                  onEditar={empezarAEditarZonas}
+                />
+              )}
+            </div>
           )}
         </>
       ) : (
@@ -246,6 +371,8 @@ export default function AnalisisTecnico() {
             tieneVelas={serie.tiene_velas} tieneVolumen={serie.tiene_volumen}
             moneda={monedaMostrada}
             fullscreen onToggleFullscreen={() => setFullscreen(false)}
+            zonas={zonasDibujo} editandoZonas={borrador !== null}
+            onArrastrarZona={arrastrarZona}
             hoverIndex={hoverIndex} onHover={setHoverIndex}
           />
         </GraficoFullscreen>

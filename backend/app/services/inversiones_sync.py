@@ -672,6 +672,27 @@ def sync_from_sheet(db: Session) -> dict:
             issues.extend(issues_sub)
             barras_ohlcv_out.extend(filas_sub)
 
+            # Serie **local** profunda (`TICKER.BA`) vía yfinance, para renta variable. Cubre el
+            # hueco que dejaban analisistecnico e IOL: sin cupo de IOL un CEDEAR podía quedarse sin
+            # historia local mientras su subyacente en USD mostraba cinco años. Sólo escribe velas,
+            # nunca `precios_instrumento` (la serie de Yahoo viene ajustada por dividendos y eso
+            # falsearía la valuación histórica) — ver la docstring de la función.
+            referencia_local: dict[str, dict] = {}
+            for tabla in (PrecioInstrumento, PrecioWatchlist):
+                for t, f, px, m in (
+                    db.query(tabla.ticker, tabla.fecha, tabla.precio, tabla.moneda)
+                    .order_by(tabla.fecha)
+                ):
+                    referencia_local[t] = {
+                        "ticker": t, "fecha": f, "precio": float(px), "moneda": m,
+                    }
+            filas_local_yahoo, issues_local_yahoo = market_data_precios.fetch_backfill_ohlcv_local_yahoo(
+                activos_rv, list(referencia_local.values()), ohlcv_existentes,
+                estado_por_ticker=estado_por_ticker,
+            )
+            issues.extend(issues_local_yahoo)
+            barras_ohlcv_out.extend(filas_local_yahoo)
+
         # Precios huérfanos de tickers que salieron de la watchlist. `watchlist_analytics.eliminar`
         # ya los borra en el momento de la baja; esto es red de seguridad para lo que haya quedado
         # colgado de una versión anterior.

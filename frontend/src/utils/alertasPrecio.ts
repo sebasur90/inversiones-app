@@ -156,7 +156,7 @@ export function contarAlertas(items: NivelesPrecio[], umbralProximidad: number):
 }
 
 /**
- * El estado de alerta de un ítem de la Watchlist, o `null` si no tiene objetivo/precio cargado
+ * El estado de alerta de un ítem de la Watchlist, o `null` si no tiene zona de compra ni precio
  * o el precio está lejos de la zona de compra. Mismo contrato que `estadoAlerta`, aplicado a
  * `en_zona`/`pct_a_objetivo` en vez de a los cuatro campos de posiciones.
  */

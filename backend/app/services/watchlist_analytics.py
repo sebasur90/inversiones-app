@@ -1,9 +1,15 @@
 """Watchlist: instrumentos a seguir y su distancia a la zona de compra.
 
 La diferencia con las alertas de precio de `Posiciones` es la dirección: el `Objetivo` de un
-instrumento en cartera es un precio de **venta** (se cruza hacia arriba), mientras que el de la
-watchlist es un precio de **compra** (se cruza hacia abajo). Por eso `_nivel_precio` se invoca acá
-con `alcanzado_si_mayor=False`, igual que el stop-loss.
+instrumento en cartera es un precio de **venta** (se cruza hacia arriba), mientras que la zona de
+compra de la watchlist se cruza hacia **abajo**.
+
+El nivel ya no vive en esta tabla: desde que las zonas se dibujan sobre el gráfico, el precio de
+compra es el **techo de la zona de compra** (`services/zonas_precio.py`, tabla `zonas_precio`), y
+la columna `watchlist.objetivo` quedó vacía y sin lectores (ver la migración en `database.py`).
+Los campos `precio_objetivo`/`pct_a_objetivo`/`en_zona` de la salida se mantienen con el mismo
+nombre y el mismo criterio: son el contrato del badge de la pantalla, de `alertas_engine` y de
+Oportunidades de compra del Resumen.
 
 La detección de "cerca" (el umbral de proximidad) vive en el frontend, como la de posiciones: es
 una preferencia del usuario guardada en localStorage y se aplica sobre `pct_a_objetivo` sin
@@ -24,11 +30,11 @@ from ..database import (
     MovimientoInversion,
     PrecioWatchlist,
     WatchlistItem,
+    ZonaPrecio,
 )
-from . import catalogo_instrumentos, cotizacion_diaria
+from . import catalogo_instrumentos, cotizacion_diaria, zonas_precio
 from .inversiones_analytics import (
     _holdings_por_cartera_ticker,
-    _nivel_precio,
     _precio_conocido,
     _precios_por_ticker,
     _variacion_diaria,
@@ -71,8 +77,13 @@ def get_watchlist(db: Session) -> list[dict]:
     también existe en `Instrumentos` -- ahí hay historia real --, y de `precios_watchlist` cuando
     es un ticker que sólo se está siguiendo.
 
-    Ordena por urgencia: primero lo que ya está en zona, después lo más cerca del objetivo, y al
-    final lo que no tiene objetivo o precio.
+    El nivel sale del techo de la zona de compra, y **sólo si la zona es de variante `local`**: una
+    zona dibujada sobre la serie del subyacente está en USD del mercado de origen y compararla
+    contra este precio (el CEDEAR en ARS) daría una distancia sin sentido. La zona viaja igual en
+    la salida para dibujarla; quien la evalúa en su propia moneda es la corrida de alertas.
+
+    Ordena por urgencia: primero lo que ya está en zona, después lo más cerca del borde, y al
+    final lo que no tiene zona o no tiene precio.
     """
     items = db.query(WatchlistItem).order_by(WatchlistItem.ticker).all()
     if not items:
@@ -87,6 +98,7 @@ def get_watchlist(db: Session) -> list[dict]:
     solo_seguidos = [i.ticker for i in items if i.ticker not in tickers_instrumento]
     cierres = _cierres_barras(db, solo_seguidos)
     cotizaciones_dia = cotizacion_diaria.cargar_por_clave(db, {i.ticker for i in items})
+    zonas = zonas_precio.mapa_zonas(db)   # una sola consulta para toda la lista
 
     resultado: list[dict] = []
     for item in items:
@@ -121,13 +133,16 @@ def get_watchlist(db: Session) -> list[dict]:
                     cierres.get(item.ticker, []), fecha_precio, precio_actual, "", cotizaciones_dia.get((item.ticker, fecha_precio)),
                 )
 
-        objetivo = float(item.objetivo) if item.objetivo is not None else None
-        precio_objetivo, pct_a_objetivo, en_zona = _nivel_precio(
-            "Fijo" if objetivo is not None else None,
-            objetivo,
-            0.0,  # sin precio promedio de compra: el modo "Fijo" no lo usa
-            precio_actual if precio_actual is not None else 0.0,
-            alcanzado_si_mayor=False,
+        del_ticker = zonas.get(item.ticker, zonas_precio.VACIO)
+        zonas_dict = zonas_precio.a_dict(item.ticker, del_ticker)
+        zona_compra = del_ticker.compra
+        comparable = (
+            zona_compra
+            if zona_compra is not None and zona_compra.variante == zonas_precio.VARIANTE_LOCAL
+            else None
+        )
+        precio_objetivo, pct_a_objetivo, en_zona = zonas_precio.estado_de_zona(
+            comparable, precio_actual,
         )
 
         resultado.append({
@@ -147,6 +162,8 @@ def get_watchlist(db: Session) -> list[dict]:
             "precio_objetivo": precio_objetivo,
             "pct_a_objetivo": pct_a_objetivo,
             "en_zona": en_zona,
+            "zona_compra": zonas_dict["compra"],
+            "zona_venta": zonas_dict["venta"],
             "en_cartera": item.ticker in en_cartera,
             "notas": item.notas,
             "agregado_en": item.agregado_en,
@@ -186,7 +203,6 @@ def _item_a_dict(item: WatchlistItem) -> dict:
         "moneda": item.moneda,
         "pais": item.pais,
         "sector": item.sector,
-        "objetivo": float(item.objetivo) if item.objetivo is not None else None,
     }
 
 
@@ -270,6 +286,10 @@ def agregar(
     La cotización es **best effort**: si IOL no responde o no cotiza el símbolo, el ítem se crea
     igual (sin precio) y el motivo vuelve en `issues`. El alta no puede depender de que una API de
     terceros esté arriba.
+
+    `objetivo` (opcional, por compatibilidad del endpoint de alta) se guarda como el **techo** de
+    la zona de compra, abierta hacia abajo: es exactamente lo que significaba cuando era un escalar.
+    La zona se puede ajustar después arrastrándola en el gráfico.
     """
     entrada = catalogo_instrumentos.obtener(simbolo)
     if entrada is None:
@@ -287,16 +307,35 @@ def agregar(
         moneda=entrada["moneda"],
         pais="argentina",
         sector=None,
-        objetivo=objetivo,
         notas=(notas or "").strip() or None,
         agregado_en=date.today(),
     )
     db.add(item)
     db.flush()
 
+    if objetivo is not None:
+        _guardar_zona_compra(db, ticker, objetivo, entrada["moneda"])
+
     # Una sola llamada a IOL: el endpoint por símbolo, sin bajar los paneles enteros.
     _, issues = refrescar_precios(db, [ticker], max_simbolos_sueltos=1, solo_simbolo_suelto=True)
     return item, None, issues
+
+
+def _guardar_zona_compra(db: Session, ticker: str, techo: float | None, moneda: str) -> None:
+    """Traduce el escalar `objetivo` de la API de watchlist a la zona de compra: techo = objetivo,
+    piso abierto. `None` borra la zona.
+
+    Pasa por `zonas_precio.aplicar_cambios` y no escribe la tabla a mano para no duplicar la
+    validación ni el re-armado de la alerta. Esa función commitea, igual que los endpoints de
+    niveles: es el final de la operación en los dos llamadores (alta y edición).
+    """
+    cambios = {zonas_precio.TIPO_COMPRA: None} if techo is None else {
+        zonas_precio.TIPO_COMPRA: {
+            "variante": zonas_precio.VARIANTE_LOCAL, "moneda": moneda,
+            "piso": None, "techo": techo, "activa": True,
+        }
+    }
+    zonas_precio.aplicar_cambios(db, ticker, cambios)
 
 
 def actualizar(db: Session, ticker: str, cambios: dict) -> WatchlistItem | None:
@@ -305,15 +344,19 @@ def actualizar(db: Session, ticker: str, cambios: dict) -> WatchlistItem | None:
 
     `cambios` trae **sólo las claves que el request mandó** (`exclude_unset`), así un PUT parcial
     con `{"objetivo": 1300}` no borra las notas. Mandar `null` explícito sí limpia el campo.
+
+    `objetivo` escribe el **techo de la zona de compra**: la columna `watchlist.objetivo` ya no se
+    lee. Se mantiene en la API porque es el camino simple ("comprar por debajo de X") y no todo el
+    mundo quiere dibujar un rango; el editor del gráfico usa los endpoints de zonas.
     """
     item = db.get(WatchlistItem, ticker)
     if item is None:
         return None
-    if "objetivo" in cambios:
-        item.objetivo = cambios["objetivo"]
     if "notas" in cambios:
         item.notas = (cambios["notas"] or "").strip() or None
     db.flush()
+    if "objetivo" in cambios:
+        _guardar_zona_compra(db, ticker, cambios["objetivo"], item.moneda)
     return item
 
 
@@ -331,6 +374,13 @@ def eliminar(db: Session, ticker: str) -> bool:
     precio = db.get(PrecioWatchlist, ticker)
     if precio is not None:
         db.delete(precio)
+
+    # Las zonas se van con el ticker **sólo** si no está en cartera: si lo está, siguen siendo las
+    # de la posición (el gráfico las sigue dibujando desde análisis técnico).
+    if db.query(InstrumentoInversion).filter(
+        InstrumentoInversion.ticker == ticker
+    ).first() is None:
+        db.query(ZonaPrecio).filter(ZonaPrecio.ticker == ticker).delete(synchronize_session=False)
 
     # Por `ticker`, no con `db.get`: la PK de `InstrumentoInversion` es `id`.
     en_cartera = db.query(InstrumentoInversion).filter(

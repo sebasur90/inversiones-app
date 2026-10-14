@@ -3,6 +3,8 @@ import { useEscalaX } from './useEscalaX'
 import { useVentanaVisible } from './useVentanaVisible'
 import { useAnchoContenedor } from './useAnchoContenedor'
 import PanelPrecio, { type OverlayPrecio } from './PanelPrecio'
+import type { BordeZona, ZonasDibujo } from './ZonasPrecio'
+import type { TipoZona } from '../../api'
 import PanelIndicador from './PanelIndicador'
 import PanelVolumen from './PanelVolumen'
 import { ESPEC_POR_TIPO, claveIndicador, colorIndicador, type IndicadorActivo } from './indicadoresConfig'
@@ -14,7 +16,7 @@ import { Icon } from '../icons/Icons'
  * pantalla completa sin reiniciar estado. */
 export default function GraficoTecnico({
   barras, indicadores, activos, tieneVelas, tieneVolumen, senales, primeraBarraEvaluable,
-  moneda, fullscreen, onToggleFullscreen, hoverIndex, onHover,
+  moneda, fullscreen, onToggleFullscreen, zonas, editandoZonas, onArrastrarZona, hoverIndex, onHover,
 }: {
   barras: BarraOut[]
   indicadores: Record<string, Record<string, (number | null)[]>>
@@ -26,6 +28,10 @@ export default function GraficoTecnico({
   moneda?: string
   fullscreen?: boolean
   onToggleFullscreen?: () => void
+  /** Zonas de compra/venta y niveles de la posición, a dibujar sobre el precio. */
+  zonas?: ZonasDibujo
+  editandoZonas?: boolean
+  onArrastrarZona?: (tipo: TipoZona, borde: BordeZona, valor: number) => void
   hoverIndex: number | null
   onHover: (i: number | null) => void
 }) {
@@ -79,16 +85,19 @@ export default function GraficoTecnico({
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <button
-            type="button" onClick={() => controles.zoom(1 / 1.5)} disabled={controles.completa}
+            type="button" onClick={() => controles.zoom(1 / 1.5)}
+            disabled={controles.completa || editandoZonas}
             aria-label="Alejar" title="Alejar"
             className="w-7 h-7 rounded flex items-center justify-center bg-app-surface-2 text-app-text-dim disabled:opacity-40"
           >−</button>
           <button
-            type="button" onClick={() => controles.zoom(1.5)} aria-label="Acercar" title="Acercar"
-            className="w-7 h-7 rounded flex items-center justify-center bg-app-surface-2 text-app-text-dim"
+            type="button" onClick={() => controles.zoom(1.5)} disabled={editandoZonas}
+            aria-label="Acercar" title="Acercar"
+            className="w-7 h-7 rounded flex items-center justify-center bg-app-surface-2 text-app-text-dim disabled:opacity-40"
           >+</button>
           <button
-            type="button" onClick={controles.reset} disabled={controles.completa}
+            type="button" onClick={controles.reset}
+            disabled={controles.completa || editandoZonas}
             aria-label="Ver todo el período" title="Ver todo el período"
             className="w-7 h-7 rounded flex items-center justify-center bg-app-surface-2 text-app-text-dim disabled:opacity-40"
           >⤢</button>
@@ -116,11 +125,15 @@ export default function GraficoTecnico({
         </div>
       )}
 
-      <div className={controles.arrastrando ? 'cursor-grabbing' : 'cursor-grab'} {...controles.handlers}>
+      <div
+        className={editandoZonas ? '' : controles.arrastrando ? 'cursor-grabbing' : 'cursor-grab'}
+        {...(editandoZonas ? {} : controles.handlers)}
+      >
 
       <PanelPrecio
         barras={barras} escalaX={escalaX} alto={altoPrecio} tieneVelas={tieneVelas} moneda={moneda}
         overlays={overlaysPrecio} senales={senales} primeraBarraEvaluable={primeraBarraEvaluable}
+        zonas={zonas} editandoZonas={editandoZonas} onArrastrarZona={onArrastrarZona}
         hoverIndex={hoverIndex} onHover={onHover}
       />
 
@@ -147,7 +160,9 @@ export default function GraficoTecnico({
         {barras.length > 0 && (
           <>
             {escalaX.visibles} de {barras.length} ruedas · {barras[escalaX.inicio]?.fecha} → {barras[escalaX.fin]?.fecha}
-            {!controles.completa && ' · doble clic para ver todo'}
+            {editandoZonas
+              ? ' · zoom y desplazamiento en pausa mientras editás'
+              : !controles.completa && ' · doble clic para ver todo'}
           </>
         )}
       </div>

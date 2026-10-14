@@ -306,12 +306,35 @@ Las señales técnicas (`estrategias_analytics.senales_recientes`) viajan por la
   —la misma señal aparece durante dos ruedas y sólo la primera avisa— y la secuencia
   compra → venta → compra del mismo par, donde cada señal cae en una barra distinta.
 
-### Qué avisa y qué no: tres interruptores y dos casillas por estrategia
+### Qué avisa y qué no: un interruptor por tipo de nivel y dos casillas por estrategia
 
-- Los tipos de nivel se prenden en la tabla singleton `ajustes_avisos` (los tres arrancan en 1 =
-  el comportamiento previo). Un tipo apagado **se sigue igual**: el cruce se guarda con
-  `entregada=1` y `emitida_en=NULL`, así que prenderlo meses después no manda de golpe todo lo que
-  pasó mientras estaba apagado.
+- Los tipos de nivel se prenden en la tabla singleton `ajustes_avisos` (todos arrancan en 1 =
+  el comportamiento previo). Hoy son cuatro: stop-loss, objetivo, zona de compra y zona de venta.
+  Un tipo apagado **se sigue igual**: el cruce se guarda con `entregada=1` y `emitida_en=NULL`,
+  así que prenderlo meses después no manda de golpe todo lo que pasó mientras estaba apagado.
+- **Agregar un tipo a `alertas_engine.TIPOS` obliga a agregar su columna** en `ajustes_avisos` y su
+  entrada en `avisos_config.CAMPO_POR_TIPO`: sin el interruptor, `tipos_habilitados` no lo incluye
+  y sus cruces se guardarían silenciados para siempre, sin forma de prenderlos. Hay un `assert` en
+  `avisos_config` que lo hace fallar al importar en vez de en producción.
+
+### Zonas de precio: cada una se mide sobre su propia serie
+
+- Una `ZonaPrecio` lleva `variante` (`local` | `subyacente`) y se compara **siempre** contra el
+  precio de esa serie: el cotizado acá, o el del instrumento en EE.UU. en USD nativo. **Nunca se
+  convierte de moneda** — son dos instrumentos, no el mismo precio en dos monedas (mismo criterio
+  que `ohlcv_analytics`). Una zona cuya serie no tiene precio no genera candidata.
+- El precio del subyacente sale de `precios_subyacente` (lo refresca el job liviano desde yfinance,
+  sin cupo de IOL), con el último cierre de `TICKER@SUB` como respaldo. **No** se escribe en
+  `serie_ohlcv`: esa serie alimenta indicadores y backtests, y `debe_reemplazar_barra` no dejaría
+  que un close-only intradía pise la vela del día en curso.
+- `cruzado` es "el precio cruzó el **borde de disparo**" (el techo en una zona de compra, el piso
+  en una de venta), no "está dentro del rango": en una zona de compra de 1150-1250, un precio de
+  900 está *más* adentro de la oportunidad. Consecuencia directa: el borde opuesto **no** puede
+  re-armar la alerta (si a 900 sigue cruzada, salir por abajo no es un evento), así que el
+  antirrebote sigue siendo la banda porcentual sobre el borde de disparo.
+- La `cartera` de una alerta de zona es siempre `""`: la zona es una decisión sobre el
+  **instrumento**. Si la cartera entrara en la clave, el mismo ticker con tenencia en dos carteras
+  avisaría dos veces de la misma zona.
 - Cada estrategia tiene `notificar_compra` y `notificar_venta` por separado: confiar en las
   entradas de una estrategia no obliga a confiar en sus salidas. **Arrancan en 0**: el catálogo
   siembra 16 presets reusables sobre todo el universo, y prenderlos todos serían decenas de
@@ -350,7 +373,7 @@ Tres cosas a tener en cuenta si se toca:
 | GET | `/api/inversiones/alertas/estado` | si están habilitadas/configuradas y el último aviso |
 | POST | `/api/inversiones/alertas/probar` | mensaje de prueba, para verificar la configuración |
 | POST | `/api/inversiones/alertas/evaluar` | evaluar ahora (`?notificar=false` siembra el estado sin avisar) |
-| GET | `/api/inversiones/alertas/config` | los tres interruptores + las casillas de cada estrategia |
+| GET | `/api/inversiones/alertas/config` | los interruptores por tipo + las casillas de cada estrategia |
 | PUT | `/api/inversiones/alertas/config` | prender/apagar tipos de nivel (parcial: `null` no toca) |
 | PUT | `/api/inversiones/alertas/config/estrategias/{id}` | prender/apagar compras y ventas de una estrategia |
 

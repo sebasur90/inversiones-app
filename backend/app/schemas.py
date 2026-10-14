@@ -47,6 +47,8 @@ class RefrescoCotizacionesOut(BaseModel):
     resultado: str          # "ok" | "sin_fuentes" | "error"
     precios_actualizados: int = 0
     precios_watchlist: int = 0
+    #: Subyacentes en USD refrescados (sólo los de tickers con una zona medida sobre esa serie).
+    precios_subyacente: int = 0
     iol_llamadas: int = 0
     issues: int = 0
     timestamp: Optional[datetime] = None
@@ -124,10 +126,11 @@ class AvisoEstrategiaOut(BaseModel):
 
 
 class AvisosConfigOut(BaseModel):
-    """Qué avisa por Telegram: los tres tipos de nivel y el detalle por estrategia."""
+    """Qué avisa por Telegram: un interruptor por tipo de nivel y el detalle por estrategia."""
     avisar_stop_loss: bool
     avisar_objetivo: bool
     avisar_compra_zona: bool
+    avisar_venta_zona: bool = True
     estrategias: list[AvisoEstrategiaOut] = Field(default_factory=list)
 
 
@@ -136,6 +139,7 @@ class AvisosConfigIn(BaseModel):
     avisar_stop_loss: Optional[bool] = None
     avisar_objetivo: Optional[bool] = None
     avisar_compra_zona: Optional[bool] = None
+    avisar_venta_zona: Optional[bool] = None
 
 
 class AvisoEstrategiaIn(BaseModel):
@@ -680,14 +684,74 @@ class RendimientoPorTickerItem(BaseModel):
     stop_loss_valor_sheet: Optional[float] = None
 
 
+
+# --- Zonas de compra / venta (se dibujan y se arrastran en el gráfico) ---
+
+class ZonaPrecioIn(BaseModel):
+    """Una zona que el usuario acaba de dibujar. Las reglas que dependen del lado (qué borde
+    dispara, piso < techo, al menos un borde) las valida `services/zonas_precio.py`.
+
+    Los dos bordes son opcionales por separado: una zona abierta hacia abajo ("compro por debajo
+    de 1250, sin piso") es legítima, y es exactamente lo que era el `Objetivo` escalar de la
+    watchlist antes de que esto existiera.
+    """
+    variante: Literal["local", "subyacente"] = "local"
+    #: La moneda de la serie sobre la que se dibujó, para mostrarla y escribirla en el aviso. No
+    #: participa de la comparación: eso lo decide `variante`.
+    moneda: Optional[str] = Field(default=None, max_length=10)
+    piso: Optional[float] = Field(default=None, gt=0)
+    techo: Optional[float] = Field(default=None, gt=0)
+    activa: bool = True
+    notas: Optional[str] = Field(default=None, max_length=500)
+
+
+class ZonasTickerIn(BaseModel):
+    """Edición parcial, como `NivelesTickerIn`: sólo las claves presentes se tocan y un `null`
+    explícito **borra** esa zona."""
+    compra: Optional[ZonaPrecioIn] = None
+    venta: Optional[ZonaPrecioIn] = None
+
+
+class ZonaPrecioOut(BaseModel):
+    variante: str
+    moneda: str
+    piso: Optional[float] = None
+    techo: Optional[float] = None
+    activa: bool = True
+    notas: Optional[str] = None
+    actualizado_en: Optional[datetime] = None
+
+
+class ZonasTickerOut(BaseModel):
+    """Las zonas de un ticker más los niveles de la **posición**, si la hay.
+
+    Los niveles viajan ya resueltos a precio absoluto (el stop-loss del Sheet suele ser un
+    porcentaje sobre el precio promedio de compra) porque el gráfico los dibuja, no los edita: se
+    editan en el detalle del ticker. Están acá para que la zona de venta no se dibuje a ciegas
+    encima del objetivo de la posición.
+    """
+    ticker: str
+    compra: Optional[ZonaPrecioOut] = None
+    venta: Optional[ZonaPrecioOut] = None
+    nivel_stop_loss: Optional[float] = None
+    nivel_objetivo: Optional[float] = None
+
+
 # --- Watchlist ---
 
 class WatchlistItemOut(BaseModel):
     """Un instrumento seguido y su distancia a la zona de compra.
 
-    `pct_a_objetivo` es `(objetivo - precio_actual) / precio_actual`, el mismo criterio que
-    `pct_a_stop_loss`: negativo mientras el precio esté por encima del objetivo (todavía caro),
-    cero o positivo una vez que entró en zona. El frontend usa el valor absoluto como distancia.
+    `precio_objetivo` / `pct_a_objetivo` / `en_zona` salen del **techo de la zona de compra**
+    (`zona_compra`), que es el borde cuyo cruce dispara el aviso. Conservan el nombre y el criterio
+    que tenían cuando el nivel era un escalar: `(objetivo - precio_actual) / precio_actual`,
+    negativo mientras el precio esté por encima del techo (todavía caro), cero o positivo una vez
+    que entró en zona. El frontend usa el valor absoluto como distancia.
+
+    Sólo una zona de variante `local` alimenta esos tres campos: `precio_actual` es el precio
+    cotizado acá, y una zona dibujada sobre la serie del subyacente está en USD del mercado de
+    origen. Esa zona viaja igual en `zona_compra`, para dibujarla y mostrarla, pero no se compara
+    contra este precio.
     """
     ticker: str
     nombre: str
@@ -705,6 +769,8 @@ class WatchlistItemOut(BaseModel):
     precio_objetivo: Optional[float] = None
     pct_a_objetivo: Optional[float] = None
     en_zona: Optional[bool] = None
+    zona_compra: Optional[ZonaPrecioOut] = None
+    zona_venta: Optional[ZonaPrecioOut] = None
     en_cartera: bool = False
     notas: Optional[str] = None
     agregado_en: Optional[date] = None

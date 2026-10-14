@@ -322,7 +322,7 @@ export default function Ajustes() {
         <div className="text-caption text-app-text-dim">
           {refresco === null
             ? 'Todavía no corrió ningún refresco automático de precios.'
-            : `Último refresco: ${fechaHora(refresco.timestamp)} · ${refresco.precios_actualizados} precio${refresco.precios_actualizados === 1 ? '' : 's'} de cartera, ${refresco.precios_watchlist} de watchlist`}
+            : `Último refresco: ${fechaHora(refresco.timestamp)} · ${refresco.precios_actualizados} precio${refresco.precios_actualizados === 1 ? '' : 's'} de cartera, ${refresco.precios_watchlist} de watchlist${refresco.precios_subyacente ? `, ${refresco.precios_subyacente} en USD` : ''}`}
         </div>
         {refresco?.resultado === 'sin_fuentes' && (
           <div className="text-caption text-app-text-dim mt-1">

@@ -828,3 +828,75 @@ def test_estado_de_resolucion_sobrevive_dos_syncs(monkeypatch):
     finally:
         sync_module.fetch_sheet_data = original_fetch
         db.close()
+
+
+# --- Serie local profunda (`TICKER.BA`) vía yfinance dentro del sync -----------------------------
+
+def test_sync_baja_la_serie_local_de_yahoo_y_no_toca_precios_instrumento(monkeypatch):
+    """Un CEDEAR cuya serie local no cubre el piso recibe velas de `TICKER.BA`, bajo la clave
+    local (no `@SUB`) y con fuente `yahoo`. Es el caso que antes quedaba vacío: sin cupo de IOL la
+    variante `subyacente` mostraba cinco años y la `local` nada."""
+    db = _make_db()
+    _sembrar_watchlist(db, "MSFT", "CEDEAR", 26000.0)
+    original_fetch = sync_module.fetch_sheet_data
+    sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_cedear_watchlist())
+    _mockear_apis_ohlcv(monkeypatch, {})   # analisistecnico e IOL no tienen nada
+
+    yh = sync_module.market_data_precios.yahoo
+    bc = sync_module.market_data_precios.BarraCruda
+    local = [
+        bc(fecha=date(2026, 8, 27), cierre=26000.0, apertura=25900.0, maximo=26100.0,
+           minimo=25800.0, volumen=1e5),
+        bc(fecha=date(2026, 8, 28), cierre=26500.0, apertura=26000.0, maximo=26600.0,
+           minimo=25900.0, volumen=1e5),
+    ]
+    monkeypatch.setattr(yh, "fetch_info", lambda t: None)   # sin subyacente resuelto
+    monkeypatch.setattr(yh, "fetch_historico_ohlcv",
+                        lambda sym, d, h: local if sym == "MSFT.BA" else None)
+
+    try:
+        sync_from_sheet(db)
+
+        barras = db.query(BarraOHLCV).filter(BarraOHLCV.ticker == "MSFT").all()
+        assert len(barras) >= 2
+        de_yahoo = [b for b in barras if b.fuente == "yahoo"]
+        assert len(de_yahoo) == 2
+        assert all(b.moneda == "ARS" for b in de_yahoo)
+        # Verbatim: el factor contra el precio observado (26000) es 1.
+        assert {round(float(b.cierre)) for b in de_yahoo} == {26000, 26500}
+        # Velas completas, no close-only.
+        assert all(b.apertura is not None and b.maximo is not None for b in de_yahoo)
+
+        # La serie de Yahoo viene ajustada por dividendos: no puede entrar en la valuación.
+        assert db.query(PrecioInstrumento).filter(PrecioInstrumento.ticker == "MSFT").count() == 0
+
+        # Queda el intento registrado, pero **no** "completo": la serie del fake son dos barras y
+        # no llega al piso de 5 años, así que el próximo sync tiene que volver a pedir.
+        est = db.get(EstadoMarketDataTicker, "MSFT")
+        assert est.yahoo_local_intento is not None
+        assert est.yahoo_local_estado != "completo"
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
+def test_sync_no_pide_yahoo_local_para_renta_fija(monkeypatch):
+    """Para la renta fija la correspondencia de símbolos en Yahoo no es confiable; analisistecnico
+    ya la cubre."""
+    db = _make_db()
+    original_fetch = sync_module.fetch_sheet_data
+    sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_bono_y_movimiento())
+    _mockear_apis_ohlcv(monkeypatch, {})
+
+    pedidos: list[str] = []
+    yh = sync_module.market_data_precios.yahoo
+    monkeypatch.setattr(yh, "fetch_info", lambda t: None)
+    monkeypatch.setattr(yh, "fetch_historico_ohlcv",
+                        lambda sym, d, h: pedidos.append(sym) or None)
+
+    try:
+        sync_from_sheet(db)
+        assert not any(s.endswith(".BA") for s in pedidos)
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()

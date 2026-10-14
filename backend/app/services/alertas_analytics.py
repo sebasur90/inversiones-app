@@ -23,10 +23,10 @@ from typing import Iterable
 
 from sqlalchemy.orm import Session
 
-from ..database import AlertaPrecio
+from ..database import AlertaPrecio, BarraOHLCV, EstadoMarketDataTicker, PrecioSubyacente
 from . import (
     alertas_engine, avisos_config, estrategias_analytics, inversiones_analytics,
-    watchlist_analytics,
+    ohlcv_analytics, watchlist_analytics, zonas_precio,
 )
 from .notificaciones import telegram
 
@@ -49,10 +49,13 @@ class _Universo:
     candidatas: list[alertas_engine.Candidata] = field(default_factory=list)
     posiciones_por_ticker: dict[str, list[tuple[str, dict]]] = field(default_factory=dict)
     watchlist_por_ticker: dict[str, dict] = field(default_factory=dict)
+    #: Mercado del subyacente por ticker (`"NMS"`, `"NYQ"`), para que el aviso de una zona en
+    #: dólares diga sobre qué serie se midió.
+    mercado_subyacente: dict[str, str] = field(default_factory=dict)
 
 
 def _universo(db: Session) -> _Universo:
-    """Todos los niveles vigentes: stop-loss y objetivo por cartera, más la watchlist.
+    """Todos los niveles vigentes: stop-loss y objetivo por cartera, más las zonas de precio.
 
     Se recorre cartera por cartera (y no el consolidado) para que el aviso pueda decir de qué
     cartera es la posición, y porque el mismo ticker puede tener tenencia en más de una.
@@ -68,10 +71,182 @@ def _universo(db: Session) -> _Universo:
                 (cartera, fila)
             )
 
+    # La watchlist ya no aporta candidatas por sí misma: su nivel de compra es una zona, y las
+    # zonas se evalúan todas juntas abajo (cartera y watchlist). Se sigue leyendo porque es de
+    # donde sale el precio local y el contexto de los tickers que sólo se siguen.
     watchlist = watchlist_analytics.get_watchlist(db)
-    universo.candidatas.extend(alertas_engine.candidatas_de_watchlist(watchlist))
     universo.watchlist_por_ticker = {item.get("ticker", ""): item for item in watchlist}
+    universo.mercado_subyacente = {
+        fila.ticker: fila.mercado_subyacente
+        for fila in db.query(EstadoMarketDataTicker).filter(
+            EstadoMarketDataTicker.mercado_subyacente.isnot(None)
+        )
+    }
+    universo.candidatas.extend(_candidatas_de_zonas(db, universo))
     return universo
+
+
+# ─── Zonas de precio ─────────────────────────────────────────────────────────
+
+def _precio_local(universo: _Universo, ticker: str) -> tuple[float, str] | None:
+    """Precio local del ticker y su moneda: el de la posición más grande, o el de la watchlist.
+
+    Se prefiere el de cartera porque ahí hay serie real con carry-forward
+    (`precios_instrumento`), mientras que un ticker que sólo se sigue tiene una única fila en
+    `precios_watchlist`. Una posición **valuada al costo** (sin cotización) no sirve: avisar de una
+    zona contra el propio precio de compra es un aviso falso.
+    """
+    posiciones = universo.posiciones_por_ticker.get(ticker) or []
+    candidatas = [
+        (cartera, fila) for cartera, fila in posiciones
+        if fila.get("precio_actual") is not None and not fila.get("valuado_al_costo")
+    ]
+    if candidatas:
+        _, fila = max(candidatas, key=lambda par: abs(par[1].get("valor_actual_usd") or 0.0))
+        return float(fila["precio_actual"]), fila.get("moneda") or ""
+
+    item = universo.watchlist_por_ticker.get(ticker)
+    if item is not None and item.get("precio_actual") is not None:
+        return float(item["precio_actual"]), item.get("moneda_precio") or item.get("moneda") or ""
+    return None
+
+
+def _precios_subyacente(db: Session, tickers: set[str]) -> dict[str, float]:
+    """Último precio en USD del subyacente de cada ticker, de las dos fuentes que lo tienen.
+
+    `precios_subyacente` lo refresca el job liviano varias veces por rueda; la serie `TICKER@SUB`
+    la completa el sync de la tarde. **Gana el más fresco por fecha**, y no una fuente fija: si el
+    job dejó de correr hace días, su precio es más viejo que el último cierre de la serie, y al
+    revés durante la rueda. Comparar la zona contra un precio de la semana pasada cuando hay uno
+    de hoy sería no avisar de un cruce real.
+
+    Tener sólo el cierre de ayer igual sirve: la alternativa es que una zona en dólares no se
+    evalúe nunca hasta el primer refresco.
+    """
+    if not tickers:
+        return {}
+
+    mejor: dict[str, tuple[date, float]] = {}
+
+    def _considerar(ticker: str, fecha: date, precio: float) -> None:
+        actual = mejor.get(ticker)
+        if actual is None or fecha >= actual[0]:
+            mejor[ticker] = (fecha, precio)
+
+    claves = {ohlcv_analytics.clave_serie(t, "subyacente"): t for t in tickers}
+    for clave, fecha, cierre in (
+        db.query(BarraOHLCV.ticker, BarraOHLCV.fecha, BarraOHLCV.cierre)
+        .filter(BarraOHLCV.ticker.in_(claves))
+    ):
+        _considerar(claves[clave], fecha, float(cierre))
+
+    for fila in db.query(PrecioSubyacente).filter(PrecioSubyacente.ticker.in_(tickers)):
+        # La moneda se validó al guardar (sólo USD); acá se respeta por si una fila vieja difiere.
+        if (fila.moneda or "").upper() == "USD":
+            _considerar(fila.ticker, fila.fecha, float(fila.precio))
+
+    return {ticker: precio for ticker, (_, precio) in mejor.items()}
+
+
+def _contexto_de_zona(universo: _Universo, ticker: str) -> dict:
+    """Origen y tenencia del ticker, para que el aviso de la zona diga de dónde sale."""
+    posiciones = universo.posiciones_por_ticker.get(ticker) or []
+    con_tenencia = [par for par in posiciones if (par[1].get("cantidad_actual") or 0) > 0]
+    if con_tenencia:
+        cartera, fila = max(
+            con_tenencia, key=lambda par: abs(par[1].get("valor_actual_usd") or 0.0)
+        )
+        moneda = fila.get("moneda") or ""
+        resultado = (
+            fila.get("rendimiento_simple_ars") if moneda == "ARS"
+            else fila.get("rendimiento_simple_usd")
+        )
+        return {
+            "origen": alertas_engine.ORIGEN_CARTERA,
+            "cartera_nombre": cartera,
+            "carteras_extra": len(con_tenencia) - 1,
+            "cantidad": fila.get("cantidad_actual"),
+            "precio_promedio": fila.get("precio_promedio"),
+            "resultado_pct": alertas_engine.pct_desde_fraccion(resultado),
+            "en_cartera": True,
+            "nombre": fila.get("nombre") or ticker,
+        }
+
+    item = universo.watchlist_por_ticker.get(ticker)
+    if item is not None:
+        return {
+            "origen": alertas_engine.ORIGEN_WATCHLIST,
+            "en_cartera": item.get("en_cartera"),
+            "nombre": item.get("nombre") or ticker,
+        }
+    # Un ticker que salió de la cartera y de la watchlist pero conserva su zona: igual se vigila
+    # (la zona es del instrumento), sólo que sin contexto que agregar.
+    return {"origen": alertas_engine.ORIGEN_WATCHLIST, "nombre": ticker}
+
+
+def _candidatas_de_zonas(db: Session, universo: _Universo) -> list[alertas_engine.Candidata]:
+    """Zonas de compra y de venta, con el precio de **su propia serie**.
+
+    Una zona `local` se compara contra el precio cotizado acá; una `subyacente`, contra el precio
+    del instrumento en EE.UU. en USD nativo. No hay conversión de moneda en ningún caso, y una zona
+    cuya serie no tiene precio **no genera candidata**: no avisar es mejor que avisar contra el
+    número equivocado.
+    """
+    zonas = zonas_precio.mapa_zonas(db)
+    if not zonas:
+        return []
+
+    con_subyacente: set[str] = set()
+    for ticker, del_ticker in zonas.items():
+        for tipo in zonas_precio.TIPOS:
+            zona = del_ticker.de_tipo(tipo)
+            if zona is not None and zona.activa and zona.variante == zonas_precio.VARIANTE_SUBYACENTE:
+                con_subyacente.add(ticker)
+    precios_sub = _precios_subyacente(db, con_subyacente)
+
+    filas: list[dict] = []
+    for ticker in sorted(zonas):
+        contexto = _contexto_de_zona(universo, ticker)
+        for tipo in zonas_precio.TIPOS:
+            zona = zonas[ticker].de_tipo(tipo)
+            if zona is None or not zona.activa:
+                continue
+
+            if zona.variante == zonas_precio.VARIANTE_SUBYACENTE:
+                precio = precios_sub.get(ticker)
+                moneda = "USD"
+                mercado = universo.mercado_subyacente.get(ticker)
+            else:
+                local = _precio_local(universo, ticker)
+                if local is None:
+                    continue
+                precio, moneda = local
+                mercado = None
+            if precio is None:
+                continue
+
+            nivel, _, en_zona = zonas_precio.estado_de_zona(zona, precio)
+            if nivel is None or en_zona is None:
+                continue
+
+            filas.append({
+                **contexto,
+                "ticker": ticker,
+                "tipo": tipo,
+                "nivel": nivel,
+                "precio": precio,
+                # La moneda del **precio que se está comparando**, no la etiqueta guardada en la
+                # zona: si no coincidieran (una zona `subyacente` guardada con moneda "ARS" por un
+                # PUT a mano), el aviso mostraría "ARS 173,40" sobre un precio en dólares.
+                "moneda": moneda or zona.moneda,
+                "variante": zona.variante,
+                "mercado": mercado,
+                "cruzado": en_zona,
+                "zona_piso": zona.piso,
+                "zona_techo": zona.techo,
+            })
+
+    return alertas_engine.candidatas_de_zonas(filas)
 
 
 # ─── Estado guardado ─────────────────────────────────────────────────────────
@@ -241,9 +416,12 @@ def rearmar_por_cambio_de_nivel(db: Session, ticker: str, tipos: Iterable[str]) 
     rearmado del nivel **anterior**.
 
     El nivel es por ticker pero la alerta es por `(ticker, tipo, cartera)`: se tocan **todas** las
-    filas de ese ticker y tipo sin filtrar cartera, porque el nivel nuevo vale para todas. Las
-    filas de otros tipos no entran: el `compra_zona` de la watchlist y las señales de estrategia
-    tienen su propio nivel, que no es éste.
+    filas de ese ticker y tipo sin filtrar cartera, porque el nivel nuevo vale para todas. Los
+    tipos que el llamador no pide no se tocan, y las señales de estrategia nunca entran: no tienen
+    nivel, deduplican por la barra de la señal.
+
+    Dos llamadores: `niveles_analytics.aplicar_cambios` (stop-loss y objetivo de una posición) y
+    `zonas_precio.aplicar_cambios` (zona de compra y de venta). Cada uno pasa sus propios tipos.
 
     **No se borra la fila**: `nivel`, `precio_disparo`, `detalle` y `emitida_en` son el registro
     del último aviso emitido, que es lo que lee `listar`. Un aviso que había quedado **pendiente de
@@ -254,10 +432,9 @@ def rearmar_por_cambio_de_nivel(db: Session, ticker: str, tipos: Iterable[str]) 
     No commitea: lo hace `niveles_analytics.aplicar_cambios`, así el override y el estado de la
     alerta entran en la misma transacción.
     """
-    # Defensa explícita, no `alertas_engine.TIPOS`: ése incluye `compra_zona`, que es un nivel de
-    # la watchlist y no uno de los dos que se editan acá.
-    de_posicion = (alertas_engine.TIPO_STOP_LOSS, alertas_engine.TIPO_OBJETIVO)
-    tipos = [t for t in tipos if t in de_posicion]
+    # Se aceptan los tipos de **nivel de precio**, no un string arbitrario: la defensa que importa
+    # es que una señal de estrategia (`estrategia:<id>`) nunca se re-arme por acá.
+    tipos = [t for t in tipos if t in alertas_engine.TIPOS]
     if not tipos:
         return 0
     filas = (

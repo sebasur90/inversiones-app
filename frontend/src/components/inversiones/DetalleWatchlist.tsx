@@ -3,13 +3,19 @@ import type { WatchlistItemOut } from '../../api'
 import { Icon } from '../icons/Icons'
 import Button from '../ui/Button'
 import InfoTooltip from '../../help/components/InfoTooltip'
+import { cabeEnUnInput, textoZona } from '../../utils/zonas'
 
 /**
- * Contenido del modal de un instrumento seguido: editar el precio objetivo y las notas, refrescar
+ * Contenido del modal de un instrumento seguido: ajustar la zona de compra y las notas, refrescar
  * el precio, o dejar de seguirlo.
  *
- * El objetivo se escribe en la misma unidad en la que se muestra el precio de mercado (el que
- * cotiza IOL para ese símbolo), así que no hay nada que reconciliar: el ticker sale del catálogo.
+ * El precio se escribe en la misma unidad en la que se muestra el precio de mercado (el que cotiza
+ * IOL para ese símbolo), así que no hay nada que reconciliar: el ticker sale del catálogo.
+ *
+ * El input único es un **atajo**: escribe el techo de la zona de compra, que es "comprar por
+ * debajo de X". Una zona con los dos bordes, o medida sobre la serie del subyacente en dólares, no
+ * cabe en un solo número: esas se muestran en modo lectura y se editan arrastrándolas en el
+ * gráfico, que es donde se dibujaron.
  */
 export default function DetalleWatchlist({
   item,
@@ -18,16 +24,21 @@ export default function DetalleWatchlist({
   onRefrescar,
   onEliminar,
   onVerTecnico,
+  onVerPosicion,
   guardando,
   refrescando,
   eliminando,
 }: {
   item: WatchlistItemOut
   formatMoneda: (valor: number, moneda: string) => string
-  onGuardar: (cambios: { objetivo: number | null; notas: string | null }) => void
+  onGuardar: (cambios: { objetivo?: number | null; notas: string | null }) => void
   onRefrescar: () => void
   onEliminar: () => void
   onVerTecnico: () => void
+  /** Sólo se ofrece si el ticker está en cartera: `/ticker/:ticker` es la pantalla de la
+   * **posición** y sin tenencia no tiene nada que mostrar. El análisis técnico, en cambio, sale de
+   * la serie del ticker y existe para cualquier instrumento seguido. */
+  onVerPosicion: () => void
   guardando?: boolean
   refrescando?: boolean
   eliminando?: boolean
@@ -36,11 +47,16 @@ export default function DetalleWatchlist({
   const [notas, setNotas] = useState('')
   const [confirmandoBaja, setConfirmandoBaja] = useState(false)
 
+  // El input representa el **techo** de la zona de compra (ver la docstring): se siembra de ahí y
+  // no de `precio_objetivo`, que queda en `null` cuando la zona se mide sobre otra serie.
+  const techoZona = item.zona_compra?.techo ?? null
+  const simple = cabeEnUnInput(item.zona_compra)
+
   // Re-sincroniza con el ítem: tras guardar o refrescar llega una versión nueva del servidor.
   useEffect(() => {
-    setObjetivo(item.precio_objetivo != null ? String(item.precio_objetivo) : '')
+    setObjetivo(techoZona != null ? String(techoZona) : '')
     setNotas(item.notas ?? '')
-  }, [item.ticker, item.precio_objetivo, item.notas])
+  }, [item.ticker, techoZona, item.notas])
 
   const parseado = objetivo.trim() === '' ? null : Number(objetivo.replace(',', '.'))
   const objetivoInvalido = parseado !== null && (!Number.isFinite(parseado) || parseado <= 0)
@@ -66,24 +82,60 @@ export default function DetalleWatchlist({
         </div>
       </div>
 
-      <label className="flex flex-col gap-1.5">
-        <span className="inline-flex items-center gap-1 text-label font-bold text-app-text-dim">
-          Precio objetivo de compra
-          <InfoTooltip term="watchlist_precio_objetivo" />
-        </span>
-        <input
-          inputMode="decimal"
-          value={objetivo}
-          onChange={e => setObjetivo(e.target.value)}
-          placeholder="Ej. 1200"
-          className={`h-11 px-3 rounded-2xl bg-app-surface-2 border text-body text-app-text tabular-nums outline-none ${
-            objetivoInvalido ? 'border-app-neg' : 'border-app-border'
-          }`}
-        />
-        {objetivoInvalido && (
-          <span className="text-label text-app-neg">Tiene que ser un número mayor que cero.</span>
-        )}
-      </label>
+      {simple ? (
+        <label className="flex flex-col gap-1.5">
+          <span className="inline-flex items-center gap-1 text-label font-bold text-app-text-dim">
+            Comprar por debajo de
+            <InfoTooltip term="watchlist_precio_objetivo" />
+          </span>
+          <input
+            inputMode="decimal"
+            value={objetivo}
+            onChange={e => setObjetivo(e.target.value)}
+            placeholder="Ej. 1200"
+            className={`h-11 px-3 rounded-2xl bg-app-surface-2 border text-body text-app-text tabular-nums outline-none ${
+              objetivoInvalido ? 'border-app-neg' : 'border-app-border'
+            }`}
+          />
+          {objetivoInvalido && (
+            <span className="text-label text-app-neg">Tiene que ser un número mayor que cero.</span>
+          )}
+          <span className="text-label text-app-text-faint">
+            Para un rango con piso y techo, dibujalo en el gráfico.
+          </span>
+        </label>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          <span className="inline-flex items-center gap-1 text-label font-bold text-app-text-dim">
+            Zona de compra
+            <InfoTooltip term="zonas_precio" />
+          </span>
+          <span className="font-mono text-body text-app-text tabular-nums">
+            {textoZona(item.zona_compra, formatMoneda)}
+            {item.zona_compra?.variante === 'subyacente' && (
+              <span className="ml-1.5 text-label text-app-text-dim">sobre el subyacente</span>
+            )}
+          </span>
+          <span className="text-label text-app-text-faint">
+            Esta zona se ajusta arrastrándola en el gráfico.
+          </span>
+        </div>
+      )}
+
+      {item.zona_venta && (
+        <div className="flex flex-col gap-1.5">
+          <span className="inline-flex items-center gap-1 text-label font-bold text-app-text-dim">
+            Zona de venta
+            <InfoTooltip term="zonas_precio" />
+          </span>
+          <span className="font-mono text-body text-app-text tabular-nums">
+            {textoZona(item.zona_venta, formatMoneda)}
+            {item.zona_venta.variante === 'subyacente' && (
+              <span className="ml-1.5 text-label text-app-text-dim">sobre el subyacente</span>
+            )}
+          </span>
+        </div>
+      )}
 
       <label className="flex flex-col gap-1.5">
         <span className="text-label font-bold text-app-text-dim">Notas</span>
@@ -102,7 +154,13 @@ export default function DetalleWatchlist({
           className="flex-1"
           disabled={objetivoInvalido}
           loading={guardando}
-          onClick={() => onGuardar({ objetivo: parseado, notas: notas.trim() || null })}
+          onClick={() => onGuardar(
+            simple
+              ? { objetivo: parseado, notas: notas.trim() || null }
+              // Sin `objetivo`: mandarlo convertiría el rango en "por debajo de X" y perdería el
+              // piso o la serie sobre la que está medido.
+              : { notas: notas.trim() || null },
+          )}
         >
           Guardar
         </Button>
@@ -116,16 +174,20 @@ export default function DetalleWatchlist({
         </Button>
       </div>
 
-      <div className="flex gap-2 pt-1 border-t border-app-border-soft">
-        {item.en_cartera && (
+      <div className="flex flex-col gap-2 pt-1 border-t border-app-border-soft">
+        <div className="flex gap-2">
           <Button variant="ghost" className="flex-1" onClick={onVerTecnico}>
             Ver análisis técnico
           </Button>
-        )}
+          {item.en_cartera && (
+            <Button variant="ghost" className="flex-1" onClick={onVerPosicion}>
+              Ver posición
+            </Button>
+          )}
+        </div>
         {confirmandoBaja ? (
           <Button
             variant="danger"
-            className="flex-1"
             loading={eliminando}
             onClick={onEliminar}
             icon={<Icon name="trash" className="w-4 h-4" />}
@@ -135,7 +197,6 @@ export default function DetalleWatchlist({
         ) : (
           <Button
             variant="ghost"
-            className="flex-1"
             onClick={() => setConfirmandoBaja(true)}
             icon={<Icon name="trash" className="w-4 h-4" />}
           >

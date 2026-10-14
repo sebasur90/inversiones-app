@@ -4,6 +4,8 @@ import type { EscalaX } from './useEscalaX'
 import { manejadoresPuntero } from './crosshair'
 import { trazoDeSerie, valoresVisibles } from './trazo'
 import { COLOR_MOTIVO, GLIFO_MOTIVO } from './motivosSalida'
+import ZonasPrecio, { valoresDeZonas, type BordeZona, type ZonasDibujo } from './ZonasPrecio'
+import type { TipoZona } from '../../api'
 
 export interface OverlayPrecio {
   clave: string
@@ -55,7 +57,7 @@ function salidasGraficables(o: OverlayPrecio): [string, (number | null)[]][] {
  * motor de backtest y viajan en la respuesta: dibujarlos re-derivándolos acá daría una línea que
  * no es la que efectivamente disparó la salida. */
 export default function PanelPrecio({
-  barras, escalaX, alto, tieneVelas, overlays, senales, operaciones, primeraBarraEvaluable, moneda, gatillo, hoverIndex, onHover,
+  barras, escalaX, alto, tieneVelas, overlays, senales, operaciones, primeraBarraEvaluable, moneda, gatillo, zonas, editandoZonas, onArrastrarZona, hoverIndex, onHover,
 }: {
   barras: BarraOut[]
   escalaX: EscalaX
@@ -68,6 +70,10 @@ export default function PanelPrecio({
   moneda?: string
   /** Nivel de disparo del screener a marcar sobre la última barra (ver `GatilloPrecio`). */
   gatillo?: GatilloPrecio
+  /** Zonas de compra/venta y niveles de la posición (ver `ZonasPrecio`). */
+  zonas?: ZonasDibujo
+  editandoZonas?: boolean
+  onArrastrarZona?: (tipo: TipoZona, borde: BordeZona, valor: number) => void
   hoverIndex: number | null
   onHover: (i: number | null) => void
 }) {
@@ -85,13 +91,19 @@ export default function PanelPrecio({
   const valoresSenales = (senales ?? []).filter(s => escalaX.visible(s.indice)).map(s => s.precio)
   const ultimaBarraVisible = escalaX.visible(barras.length - 1)
   const valoresGatillo = gatillo && ultimaBarraVisible ? [gatillo.precio, gatillo.precioActual] : []
-  const todos = [...valoresBase, ...valoresOverlay, ...valoresSenales, ...valoresGatillo]
+  // Una zona es un nivel vigente, no histórico: entra en el dominio Y sólo si la última barra está
+  // a la vista (igual que el gatillo), porque con zoom sobre un tramo viejo aplastaría las velas
+  // contra el borde. En modo edición entra siempre: no se puede arrastrar lo que no se ve.
+  const valoresZonas = editandoZonas || ultimaBarraVisible ? valoresDeZonas(zonas) : []
+  const todos = [...valoresBase, ...valoresOverlay, ...valoresSenales, ...valoresGatillo, ...valoresZonas]
   const minV = todos.length ? Math.min(...todos) : 0
   const maxV = todos.length ? Math.max(...todos) : 1
   const pad = (maxV - minV) * 0.08 || Math.abs(maxV) * 0.05 || 1
   const y0 = minV - pad
   const y1 = maxV + pad
   const yDeValor = (v: number) => alto - ((v - y0) / (y1 - y0 || 1)) * alto
+  /** Inversa de `yDeValor`: la usa el arrastre de los bordes de zona. */
+  const valorDeY = (y: number) => y0 + ((alto - y) / (alto || 1)) * (y1 - y0)
 
   const anchoVela = Math.max(1, escalaX.pasoX * 0.62)
   const ultimoIndice = barras.length - 1
@@ -175,6 +187,14 @@ export default function PanelPrecio({
           opacity={salida === 'superior' || salida === 'inferior' ? 0.7 : 1}
         />
       )))}
+
+      {zonas && (editandoZonas || ultimaBarraVisible) && (
+        <ZonasPrecio
+          zonas={zonas} ancho={escalaX.ancho} alto={alto}
+          yDeValor={yDeValor} valorDeY={valorDeY} svgRef={svgRef}
+          editando={editandoZonas} onArrastrar={onArrastrarZona}
+        />
+      )}
 
       {/* Niveles de riesgo por operación: stop loss y take profit son constantes; el trailing es
           una escalera que sólo sube. */}

@@ -353,3 +353,81 @@ def test_senales_rechaza_demasiados_tickers(client):
     r = client.get("/api/inversiones/tecnico/senales",
                    params={"tickers": [f"T{i}" for i in range(201)]})
     assert r.status_code == 422
+
+
+# ── Período "ALL": sin `desde` se sirve toda la serie ────────────────────────
+
+@pytest.fixture
+def client_serie_larga():
+    """Un ticker con ~3 años de historia, para verificar que "ALL" no se recorta a 12 meses."""
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    TestingSession = sessionmaker(bind=engine)
+
+    db = TestingSession()
+    db.add(InstrumentoInversion(ticker="LARGO", nombre="Serie larga", tipo_instrumento="Accion",
+                                mercado="BCBA", moneda="ARS"))
+    base = date.today() - timedelta(days=1000)
+    for i in range(0, 1000, 2):
+        db.add(BarraOHLCV(ticker="LARGO", fecha=base + timedelta(days=i), apertura=100.0,
+                          maximo=101.0, minimo=99.0, cierre=100.0 + i * 0.01, volumen=10.0,
+                          moneda="ARS", fuente="yahoo"))
+    db.commit()
+    db.close()
+
+    def override():
+        s = TestingSession()
+        try:
+            yield s
+        finally:
+            s.close()
+
+    app.dependency_overrides[get_db] = override
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+def test_serie_sin_desde_trae_todo_el_historial(client_serie_larga):
+    """El botón `ALL` del selector manda `desde` vacío. Antes el endpoint lo rellenaba con un año,
+    así que "ALL" mostraba 12 meses -- justo donde se compara la profundidad de la serie local
+    contra la del subyacente."""
+    r = client_serie_larga.get("/api/inversiones/tecnico/LARGO/serie?max_barras=3000")
+    assert r.status_code == 200
+    barras = r.json()["barras"]
+    primera = date.fromisoformat(barras[0]["fecha"])
+    assert (date.today() - primera).days > 900
+
+
+def test_serie_con_desde_sigue_acotando(client_serie_larga):
+    desde = (date.today() - timedelta(days=200)).isoformat()
+    r = client_serie_larga.get(f"/api/inversiones/tecnico/LARGO/serie?desde={desde}")
+    assert r.status_code == 200
+    primera = date.fromisoformat(r.json()["barras"][0]["fecha"])
+    assert (date.today() - primera).days <= 210
+
+
+# ── Por qué la serie está vacía ──────────────────────────────────────────────
+
+def test_serie_vacia_dice_que_ninguna_fuente_tiene_el_historico(client):
+    """"Todavía no hay datos históricos" no distingue un problema que se arregla solo de uno que
+    necesita una acción. El motivo lo deja anotado el pipeline de market data."""
+    r = client.get("/api/inversiones/tecnico/GGAL/serie")
+    assert r.status_code == 200
+    assert r.json()["barras"] == []
+    assert "sin_fuente_historica" not in r.json()["advertencias"]  # sin estado anotado todavía
+
+
+def test_serie_vacia_reporta_el_motivo_anotado(client):
+    from app.database import get_db as _get_db
+    gen = app.dependency_overrides[_get_db]()
+    db = next(gen)
+    db.add(EstadoMarketDataTicker(ticker="GGAL", ohlcv_estado="sin_serie_iol",
+                                  yahoo_local_estado="escala_desconocida"))
+    db.commit()
+
+    r = client.get("/api/inversiones/tecnico/GGAL/serie")
+    assert r.status_code == 200
+    advertencias = r.json()["advertencias"]
+    assert "sin_serie" in advertencias
+    assert "sin_fuente_historica" in advertencias
+    assert "escala_desconocida" in advertencias

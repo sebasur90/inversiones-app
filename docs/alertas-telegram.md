@@ -9,11 +9,21 @@ volver acá.
 |---|---|
 | 🔴 **Stop-loss** de una posición | el detalle del ticker en la app, o la pestaña `Instrumentos` del Sheet (`stop_loss_modo` / `stop_loss_valor`). Si está en los dos, gana el de la app |
 | 🎯 **Objetivo** de una posición | el detalle del ticker en la app, o la pestaña `Instrumentos` del Sheet (`objetivo_modo` / `objetivo_valor`). Si está en los dos, gana el de la app |
-| 🟢 **Zona de compra** de la watchlist | el precio de compra que le fijaste al ticker en la Watchlist |
+| 🟢 **Zona de compra** | la zona que dibujaste en el gráfico de Análisis técnico (o el atajo "comprar por debajo de" de la Watchlist). Dispara el **techo**: el precio baja y entra |
+| 🔵 **Zona de venta** | la zona que dibujaste en el gráfico de Análisis técnico. Dispara el **piso**: el precio sube y entra |
 | 🟠 **Señal de venta** de una estrategia | una estrategia de Análisis técnico con "Ventas" prendido |
 | 🟢 **Señal de compra** de una estrategia | una estrategia de Análisis técnico con "Compras" prendido |
 
-Los tres primeros vienen prendidos; las estrategias arrancan **todas apagadas** (ver el paso 6).
+Los cuatro tipos de nivel vienen prendidos; las estrategias arrancan **todas apagadas** (ver el
+paso 6). Una zona se compara siempre contra el precio de **su propia serie**: si la dibujaste sobre
+el subyacente en dólares, el aviso mira ese precio y no el del CEDEAR en pesos, y el mensaje lo
+aclara (`subyacente en NMS`). Para que esas zonas avisen el mismo día, el job liviano de precios
+pone al día el último precio en USD de esos tickers desde yfinance (tabla `precios_subyacente`,
+sin cupo de IOL); si todavía no corrió, se usa el último cierre de la serie `TICKER@SUB`.
+
+Una zona cuya serie **no tiene precio no se evalúa**: no avisar es mejor que avisar comparando
+pesos contra dólares. Lo mismo con una posición sin cotización, que se valúa al costo promedio:
+disparar contra el propio precio de compra sería un aviso inventado.
 Todo se configura en **Ajustes → Qué avisar**.
 
 ## Cómo se lee un aviso

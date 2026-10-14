@@ -151,23 +151,67 @@ def test_posicion_sin_precio_no_genera_candidatas():
     assert ae.candidatas_de_posiciones([item], "Principal") == []
 
 
-def test_candidatas_de_watchlist_cruzan_hacia_abajo():
-    """El objetivo de la watchlist es un precio de compra: `en_zona` es precio <= objetivo."""
-    item = {
-        "ticker": "MSFT", "nombre": "Microsoft", "precio_actual": 24000.0,
-        "precio_objetivo": 25000.0, "en_zona": True, "moneda_precio": "ARS",
+def _fila_zona(**extra):
+    """Una fila de zona como la arma `alertas_analytics._candidatas_de_zonas` (ya resuelta: qué
+    precio corresponde depende de la serie, y eso lo decide el adaptador, no el motor)."""
+    base = {
+        "ticker": "MSFT", "nombre": "Microsoft", "tipo": "compra",
+        "nivel": 25000.0, "precio": 24000.0, "moneda": "ARS",
+        "variante": "local", "mercado": None, "cruzado": True,
+        "origen": ae.ORIGEN_WATCHLIST, "zona_piso": None, "zona_techo": 25000.0,
     }
-    cands = ae.candidatas_de_watchlist([item])
+    base.update(extra)
+    return base
+
+
+def test_zona_de_compra_cruza_hacia_abajo():
+    """La zona de compra es un precio de entrada: `cruzado` es precio <= techo."""
+    cands = ae.candidatas_de_zonas([_fila_zona()])
     assert len(cands) == 1
     assert cands[0].tipo == ae.TIPO_COMPRA_ZONA
-    assert cands[0].cartera == ae.SIN_CARTERA
+    assert cands[0].cartera == ae.SIN_CARTERA   # una zona es del instrumento, no de una tenencia
     assert cands[0].cruzado is True
 
 
-def test_watchlist_sin_objetivo_no_genera_candidatas():
-    item = {"ticker": "MSFT", "nombre": "Microsoft", "precio_actual": 24000.0,
-            "precio_objetivo": None, "en_zona": None}
-    assert ae.candidatas_de_watchlist([item]) == []
+def test_zona_de_venta_cruza_hacia_arriba():
+    cands = ae.candidatas_de_zonas([_fila_zona(
+        tipo="venta", nivel=30000.0, precio=31000.0, zona_piso=30000.0, zona_techo=None,
+    )])
+    assert cands[0].tipo == ae.TIPO_VENTA_ZONA
+    assert cands[0].tipo not in ae._DISPARA_HACIA_ABAJO
+
+
+def test_fila_de_zona_sin_precio_o_sin_nivel_no_genera_candidata():
+    """Sin precio de su propia serie no se evalúa: avisar contra el número equivocado es peor que
+    no avisar."""
+    assert ae.candidatas_de_zonas([_fila_zona(precio=None)]) == []
+    assert ae.candidatas_de_zonas([_fila_zona(nivel=None)]) == []
+    assert ae.candidatas_de_zonas([_fila_zona(tipo="lateral")]) == []
+
+
+def test_la_zona_lleva_su_rango_y_su_serie():
+    cand = ae.candidatas_de_zonas([_fila_zona(
+        zona_piso=23000.0, variante="subyacente", mercado="NMS",
+    )])[0]
+    assert cand.contexto.variante == "subyacente"
+    assert cand.contexto.mercado == "NMS"
+    assert cand.contexto.zona_piso == 23000.0
+
+
+# --- Antirrebote de una zona -------------------------------------------------------------------
+
+def test_la_zona_se_rearma_al_volver_por_arriba_del_borde_que_dispara():
+    """El borde opuesto **no** re-arma: con `cruzado = precio <= techo`, un precio por debajo del
+    piso sigue en zona (está más barato, no afuera). Lo único que re-arma es volver por arriba del
+    techo, y para eso alcanza el antirrebote de siempre."""
+    zona = _fila_zona(cruzado=False, zona_piso=23000.0)
+    estados = {("MSFT", ae.TIPO_COMPRA_ZONA, ""): ae.ESTADO_DISPARADA}
+
+    cerca = ae.evaluar(ae.candidatas_de_zonas([{**zona, "precio": 25100.0}]), estados)
+    assert cerca.a_rearmar == []           # +0,4 % sobre el techo: ruido intradiario
+
+    lejos = ae.evaluar(ae.candidatas_de_zonas([{**zona, "precio": 26000.0}]), estados)
+    assert lejos.a_rearmar == [("MSFT", ae.TIPO_COMPRA_ZONA, "")]
 
 
 # --- Texto del mensaje -------------------------------------------------------------------------
@@ -180,7 +224,12 @@ def _alertas_de_los_tres_tipos():
     return [
         ae.Alerta("AL30", "Bono AL30", ae.TIPO_STOP_LOSS, "Principal", 96.0, 95.5, "USD"),
         ae.Alerta("GGAL", "Galicia", ae.TIPO_OBJETIVO, "Principal", 7000.0, 7200.0, "ARS"),
-        ae.Alerta("MSFT", "Microsoft", ae.TIPO_COMPRA_ZONA, "", 25000.0, 24000.0, "ARS"),
+        ae.Alerta(
+            "MSFT", "Microsoft", ae.TIPO_COMPRA_ZONA, "", 25000.0, 24000.0, "ARS",
+            # El origen viaja en el contexto y no se deduce del tipo: desde que las zonas valen
+            # para cartera y watchlist, una zona de compra puede ser de algo que ya se posee.
+            contexto=ae.Contexto(origen=ae.ORIGEN_WATCHLIST, zona_techo=25000.0),
+        ),
     ]
 
 
@@ -195,6 +244,8 @@ def test_texto_agrupa_por_tipo_y_usa_el_comparador_correcto():
     # Stop-loss y zona de compra se cruzan hacia abajo; el objetivo, hacia arriba.
     assert "<code>USD 95,50</code> ≤ stop <code>USD 96,00</code>" in texto
     assert "<code>ARS 7.200,00</code> ≥ objetivo <code>ARS 7.000,00</code>" in texto
+    # Una zona dice "zona" y no "objetivo": el sustantivo distingue un rango de un nivel suelto.
+    assert "<code>ARS 24.000,00</code> ≤ zona <code>ARS 25.000,00</code>" in texto
     # La cartera se nombra cuando la hay; la watchlist se nombra como tal.
     assert "<b>AL30</b> (Bono AL30) · cartera Principal" in texto
     assert "<b>MSFT</b> (Microsoft) · watchlist" in texto
@@ -472,15 +523,24 @@ def test_candidatas_de_posiciones_llenan_el_contexto():
     assert ctx.distancia_pct == ae.distancia_pct(95.0, 96.0)
 
 
-def test_candidatas_de_watchlist_llenan_el_contexto():
-    item = {
-        "ticker": "MSFT", "nombre": "Microsoft", "precio_actual": 24000.0,
-        "precio_objetivo": 25000.0, "en_zona": True, "moneda_precio": "ARS", "en_cartera": True,
-    }
-    ctx = ae.candidatas_de_watchlist([item])[0].contexto
+def test_candidatas_de_zonas_llenan_el_contexto():
+    ctx = ae.candidatas_de_zonas([_fila_zona(en_cartera=True)])[0].contexto
     assert ctx.origen == ae.ORIGEN_WATCHLIST
     assert ctx.en_cartera is True
-    assert ctx.cantidad is None  # la watchlist no sabe de tenencias
+    assert ctx.cantidad is None            # un ticker que sólo se sigue no tiene tenencia
+    assert ctx.distancia_pct == ae.distancia_pct(24000.0, 25000.0)
+
+
+def test_una_zona_de_un_ticker_en_cartera_informa_la_tenencia():
+    """Una zona vale para cartera y watchlist: si hay posición, el aviso la dice."""
+    ctx = ae.candidatas_de_zonas([_fila_zona(
+        origen=ae.ORIGEN_CARTERA, cartera_nombre="Principal", en_cartera=True,
+        cantidad=10.0, precio_promedio=22000.0, resultado_pct=9.1, carteras_extra=1,
+    )])[0].contexto
+    assert ctx.origen == ae.ORIGEN_CARTERA
+    assert ctx.cartera_nombre == "Principal"
+    assert ctx.cantidad == 10.0
+    assert ctx.carteras_extra == 1
 
 
 def test_pct_desde_fraccion():

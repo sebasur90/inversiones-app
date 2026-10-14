@@ -2,14 +2,14 @@
 
 El CRUD (alta desde el catálogo, edición, baja) está en `test_watchlist_crud.py`.
 """
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.database import (
     Base, InstrumentoInversion, MovimientoInversion, PrecioInstrumento, PrecioWatchlist,
-    WatchlistItem,
+    WatchlistItem, ZonaPrecio,
 )
 from backend.app.services.inversiones_sync import sync_from_sheet
 from backend.app.services.market_data import precios as market_data_precios
@@ -26,8 +26,10 @@ def _db():
 def _item(db, ticker="AAPL", objetivo=4900.0, tipo="CEDEAR"):
     db.add(WatchlistItem(ticker=ticker, nombre="Aple", tipo_instrumento=tipo,
                          mercado="BCBA", moneda="ARS", pais="argentina",
-                         objetivo=objetivo, agregado_en=date.today()))
+                         agregado_en=date.today()))
     db.commit()
+    if objetivo is not None:
+        _zona_compra(db, ticker, objetivo)
 
 
 # ── Sync: la watchlist ya no sale del Sheet ───────────────────────────────────
@@ -263,14 +265,25 @@ def test_precios_watchlist_reporta_el_que_nadie_cotiza(monkeypatch):
 
 # ── Analytics ─────────────────────────────────────────────────────────────────
 
+def _zona_compra(db, ticker, techo, piso=None, variante="local", moneda="ARS"):
+    """El nivel de compra vive en `zonas_precio`, no en `watchlist.objetivo` (que quedó vacía): el
+    techo de la zona es el borde que dispara, o sea lo que antes era el escalar `Objetivo`."""
+    ahora = datetime.now()
+    db.add(ZonaPrecio(ticker=ticker, tipo="compra", variante=variante, moneda=moneda,
+                      piso=piso, techo=techo, activa=1,
+                      fecha_creacion=ahora, fecha_actualizacion=ahora))
+    db.commit()
+
+
 def _seed_watchlist(db, objetivo=4900.0, precio=None):
     db.add(WatchlistItem(ticker="AAPL", nombre="Aple", tipo_instrumento="CEDEAR",
-                         mercado="Global", moneda="ARS", pais="AR", sector="Tecnologia",
-                         objetivo=objetivo))
+                         mercado="Global", moneda="ARS", pais="AR", sector="Tecnologia"))
     if precio is not None:
         db.add(PrecioWatchlist(ticker="AAPL", fecha=date.today(), precio=precio,
                                moneda="ARS", fuente="api"))
     db.commit()
+    if objetivo is not None:
+        _zona_compra(db, "AAPL", objetivo)
 
 
 def test_get_watchlist_precio_por_encima_del_objetivo():
@@ -333,10 +346,14 @@ def test_get_watchlist_ordena_zona_primero_y_luego_cercania():
         ("SINDATO", None, None),
     ):
         db.add(WatchlistItem(ticker=ticker, nombre=ticker, tipo_instrumento="CEDEAR",
-                             mercado="Global", moneda="ARS", objetivo=objetivo))
+                             mercado="Global", moneda="ARS"))
         if precio is not None:
             db.add(PrecioWatchlist(ticker=ticker, fecha=date.today(), precio=precio,
                                    moneda="ARS", fuente="api"))
     db.commit()
+    for ticker, objetivo, _ in (
+        ("LEJOS", 100.0, None), ("CERCA", 100.0, None), ("ZONA", 100.0, None),
+    ):
+        _zona_compra(db, ticker, objetivo)
 
     assert [f["ticker"] for f in get_watchlist(db)] == ["ZONA", "CERCA", "LEJOS", "SINDATO"]

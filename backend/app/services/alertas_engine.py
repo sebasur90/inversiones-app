@@ -37,15 +37,20 @@ from dataclasses import dataclass, replace
 
 TIPO_STOP_LOSS = "stop_loss"
 TIPO_OBJETIVO = "objetivo"
+#: Zona de compra (`services/zonas_precio.py`). Conserva el nombre que tenía cuando el nivel era el
+#: `Objetivo` escalar de la watchlist: así las filas de `alertas_precio` ya emitidas siguen siendo
+#: las mismas y el interruptor `avisar_compra_zona` no cambia de significado.
 TIPO_COMPRA_ZONA = "compra_zona"
+#: Zona de venta: el precio sube y entra en el rango en el que el usuario quiere salir.
+TIPO_VENTA_ZONA = "venta_zona"
 
 #: Tipos de **nivel de precio**. Las señales de estrategia no están acá: su `tipo` se construye
 #: con `tipo_senal()` y lleva el id de la estrategia adentro (ver más abajo).
-TIPOS = (TIPO_STOP_LOSS, TIPO_OBJETIVO, TIPO_COMPRA_ZONA)
+TIPOS = (TIPO_STOP_LOSS, TIPO_OBJETIVO, TIPO_COMPRA_ZONA, TIPO_VENTA_ZONA)
 
-# Hacia dónde tiene que moverse el precio para disparar. El objetivo de una posición es un precio
-# de **venta** (se cruza hacia arriba); el stop-loss y el objetivo de la watchlist son precios de
-# **compra**/salida (se cruzan hacia abajo). Misma asimetría que documenta `database.WatchlistItem`.
+# Hacia dónde tiene que moverse el precio para disparar. El objetivo de una posición y la zona de
+# venta son precios de **venta** (se cruzan hacia arriba); el stop-loss y la zona de compra se
+# cruzan hacia **abajo**. Misma asimetría que documenta `database.WatchlistItem`.
 _DISPARA_HACIA_ABAJO = frozenset({TIPO_STOP_LOSS, TIPO_COMPRA_ZONA})
 
 ESTADO_ARMADA = "armada"
@@ -62,6 +67,7 @@ ETIQUETA_TIPO = {
     TIPO_STOP_LOSS: "Stop-loss disparado",
     TIPO_OBJETIVO: "Objetivo alcanzado",
     TIPO_COMPRA_ZONA: "Zona de compra",
+    TIPO_VENTA_ZONA: "Zona de venta",
 }
 
 # `cartera` vacía = la alerta no pertenece a ninguna cartera (watchlist, o señal de estrategia).
@@ -139,6 +145,12 @@ class Contexto:
     senal_motivo: str | None = None
     variante: str | None = None             # "local" | "subyacente"
     barras_desde: int | None = None
+    # Zonas: los dos bordes y el mercado de la serie. Van al mensaje porque un aviso que dice
+    # "entró en la zona 170-180 USD (subyacente, NMS)" se entiende solo, y uno que dice "≤ 180"
+    # sobre un CEDEAR hace pensar en pesos.
+    zona_piso: float | None = None
+    zona_techo: float | None = None
+    mercado: str | None = None
 
 
 @dataclass(frozen=True)
@@ -259,7 +271,14 @@ def nombre_de_detalle(detalle: dict | None, ticker: str) -> str:
 # ─── Decisión: niveles ───────────────────────────────────────────────────────
 
 def _lejos_del_nivel(candidata: Candidata, banda_pct: float) -> bool:
-    """`True` si el precio está del lado normal del nivel y además a más de `banda_pct` de él."""
+    """`True` si el precio está del lado normal del nivel y además a más de `banda_pct` de él.
+
+    Vale igual para una zona, y el borde opuesto **no** interviene: para una zona de compra de
+    1150-1250, el estado "cruzado" es `precio <= 1250` (un precio de 900 está *más* adentro de la
+    oportunidad, no afuera — ver `zonas_precio.estado_de_zona`). Salir por abajo del piso no es
+    dejar de estar en zona, así que lo único que puede re-armar el aviso es volver por arriba del
+    techo, que es exactamente lo que mide la banda.
+    """
     if candidata.nivel == 0:
         return False
     margen = abs(candidata.nivel) * (banda_pct / 100.0)
@@ -409,26 +428,56 @@ def candidatas_de_posiciones(rendimiento_por_ticker: list[dict], cartera: str) -
     return salida
 
 
-def candidatas_de_watchlist(watchlist: list[dict]) -> list[Candidata]:
-    """Niveles de precio de compra de la watchlist.
+#: Tipo de alerta de cada lado de una zona. Mismo mapeo que `zonas_precio.TIPO_ALERTA`, duplicado
+#: acá para que este módulo siga siendo puro (no importa servicios con `Session`).
+TIPO_ALERTA_ZONA = {"compra": TIPO_COMPRA_ZONA, "venta": TIPO_VENTA_ZONA}
 
-    Entra tal cual lo devuelve `watchlist_analytics.get_watchlist`.
+
+def candidatas_de_zonas(zonas: list[dict]) -> list[Candidata]:
+    """Zonas de compra y de venta, de cartera y de watchlist.
+
+    Cada fila la arma `alertas_analytics` ya resuelta, porque qué precio corresponde depende de la
+    serie sobre la que está medida la zona (`variante`): el precio local cotizado acá, o el del
+    subyacente en USD. **Nunca se convierte de moneda**: una zona se compara contra el precio de su
+    propia serie, y si ese precio no está, no hay candidata (es mejor no avisar que avisar con el
+    número equivocado).
+
+    Claves de cada fila: `ticker`, `nombre`, `tipo` (`"compra"`/`"venta"`), `nivel` (el borde que
+    dispara), `precio`, `moneda`, `variante`, `mercado`, `cruzado`, y el contexto de origen
+    (`origen`, `cartera_nombre`, `en_cartera`, `cantidad`, `precio_promedio`, `carteras_extra`,
+    `zona_piso`, `zona_techo`). El borde que no dispara viaja sólo como `zona_piso`/`zona_techo`,
+    para el texto del aviso: no participa de la decisión (ver `_lejos_del_nivel`).
+
+    `cartera` siempre vacía: una zona es una decisión sobre el **instrumento**, no sobre una
+    tenencia (igual que los niveles de la watchlist y que las señales). Si la cartera entrara en la
+    clave, el mismo ticker en dos carteras avisaría dos veces de la misma zona.
     """
     salida: list[Candidata] = []
-    for item in watchlist:
-        precio = item.get("precio_actual")
-        nivel = item.get("precio_objetivo")
-        en_zona = item.get("en_zona")
-        if precio is None or nivel is None or en_zona is None:
+    for fila in zonas:
+        tipo_zona = fila.get("tipo") or ""
+        tipo = TIPO_ALERTA_ZONA.get(tipo_zona)
+        precio = fila.get("precio")
+        nivel = fila.get("nivel")
+        if tipo is None or precio is None or nivel is None:
             continue
+        precio, nivel = float(precio), float(nivel)
         salida.append(Candidata(
-            ticker=item.get("ticker", ""), nombre=item.get("nombre") or item.get("ticker", ""),
-            tipo=TIPO_COMPRA_ZONA, cartera=SIN_CARTERA, nivel=float(nivel), precio=float(precio),
-            moneda=item.get("moneda_precio") or item.get("moneda") or "", cruzado=bool(en_zona),
+            ticker=fila.get("ticker", ""), nombre=fila.get("nombre") or fila.get("ticker", ""),
+            tipo=tipo, cartera=SIN_CARTERA, nivel=nivel, precio=precio,
+            moneda=fila.get("moneda") or "", cruzado=bool(fila.get("cruzado")),
             contexto=Contexto(
-                origen=ORIGEN_WATCHLIST,
-                distancia_pct=distancia_pct(float(precio), float(nivel)),
-                en_cartera=item.get("en_cartera"),
+                origen=fila.get("origen") or ORIGEN_WATCHLIST,
+                cartera_nombre=fila.get("cartera_nombre"),
+                distancia_pct=distancia_pct(precio, nivel),
+                en_cartera=fila.get("en_cartera"),
+                cantidad=fila.get("cantidad"),
+                precio_promedio=fila.get("precio_promedio"),
+                resultado_pct=fila.get("resultado_pct"),
+                carteras_extra=fila.get("carteras_extra") or 0,
+                variante=fila.get("variante") or "local",
+                mercado=fila.get("mercado"),
+                zona_piso=fila.get("zona_piso"),
+                zona_techo=fila.get("zona_techo"),
             ),
         ))
     return salida
@@ -461,6 +510,7 @@ ORDEN_BLOQUES = (
     TIPO_STOP_LOSS,
     BLOQUE_SENAL_VENTA,
     TIPO_OBJETIVO,
+    TIPO_VENTA_ZONA,
     TIPO_COMPRA_ZONA,
     BLOQUE_SENAL_COMPRA,
 )
@@ -480,6 +530,8 @@ BLOQUES = {
     BLOQUE_SENAL_VENTA: _Bloque("🟠", "SEÑAL DE VENTA", "revisar salida", ACCION_VENTA, "señales"),
     TIPO_OBJETIVO: _Bloque(
         "🎯", "OBJETIVO ALCANZADO", "revisar toma de ganancia", ACCION_REVISAR, "posiciones"),
+    TIPO_VENTA_ZONA: _Bloque(
+        "🔵", "ZONA DE VENTA", "revisar salida", ACCION_VENTA, "tickers"),
     TIPO_COMPRA_ZONA: _Bloque(
         "🟢", "OPORTUNIDAD DE COMPRA", "en zona", ACCION_COMPRA, "tickers"),
     BLOQUE_SENAL_COMPRA: _Bloque("🟢", "SEÑAL DE COMPRA", "", ACCION_COMPRA, "señales"),
@@ -611,7 +663,7 @@ def _linea_identidad(alerta: Alerta) -> str:
         origen = f"cartera {escapar_html(cartera)}"
         if ctx.carteras_extra:
             origen += f" (+{ctx.carteras_extra})"
-    elif ctx.origen == ORIGEN_WATCHLIST or alerta.tipo == TIPO_COMPRA_ZONA:
+    elif ctx.origen == ORIGEN_WATCHLIST:
         origen = "watchlist"
     else:
         origen = ""
@@ -624,8 +676,40 @@ def _linea_identidad(alerta: Alerta) -> str:
     return " · ".join(trozos)
 
 
+#: Tipos de nivel que son una zona (tienen rango y serie propia).
+_TIPOS_ZONA = frozenset({TIPO_COMPRA_ZONA, TIPO_VENTA_ZONA})
+
+
+def _sufijo_serie(alerta: Alerta) -> str:
+    """Sobre qué serie se midió, cuando no es la local.
+
+    Es imprescindible en una zona en dólares: sin esto, "entró en zona ≤ 180" sobre un CEDEAR que
+    cotiza a 26.000 pesos se lee como un error de la app.
+    """
+    if (alerta.contexto.variante or "local") == "local":
+        return ""
+    mercado = escapar_html(alerta.contexto.mercado or "")
+    return f" · subyacente{f' en {mercado}' if mercado else ''}"
+
+
 def _linea_nivel(alerta: Alerta) -> str:
     comparador = "≤" if alerta.tipo in _DISPARA_HACIA_ABAJO else "≥"
+
+    if alerta.tipo in _TIPOS_ZONA:
+        ctx = alerta.contexto
+        piso, techo = ctx.zona_piso, ctx.zona_techo
+        # El comparador va una sola vez, antes del sustantivo, como en "≤ stop 96,00": el borde
+        # que disparó ya queda implícito ahí.
+        if piso is not None and techo is not None:
+            zona = f"zona {_monto(alerta.moneda, piso)}–{_monto(alerta.moneda, techo)}"
+        else:
+            zona = f"zona {_monto(alerta.moneda, alerta.nivel)}"
+        linea = f"{_monto(alerta.moneda, alerta.precio)} {comparador} {zona}"
+        dist = _fmt_pct(ctx.distancia_pct)
+        if dist:
+            linea += f" ({dist})"
+        return linea + _sufijo_serie(alerta)
+
     sustantivo = "stop" if alerta.tipo == TIPO_STOP_LOSS else "objetivo"
     linea = (
         f"{_monto(alerta.moneda, alerta.precio)} {comparador} "
@@ -677,17 +761,20 @@ def _lineas(alerta: Alerta, nivel_detalle: str) -> list[str]:
         cartera = alerta.cartera or alerta.contexto.cartera_nombre
         if cartera:
             trozos.append(escapar_html(cartera))
-        elif alerta.contexto.origen == ORIGEN_WATCHLIST or alerta.tipo == TIPO_COMPRA_ZONA:
+        elif alerta.contexto.origen == ORIGEN_WATCHLIST:
             trozos.append("watchlist")
         if es_senal:
             trozos.append(escapar_html(alerta.contexto.estrategia_nombre or "Estrategia"))
             trozos.append(_monto(alerta.moneda, alerta.precio))
         else:
             comparador = "≤" if alerta.tipo in _DISPARA_HACIA_ABAJO else "≥"
-            trozos.append(
+            nivel = (
                 f"{_monto(alerta.moneda, alerta.precio)} {comparador} "
                 f"{_monto(alerta.moneda, alerta.nivel)}"
             )
+            # Hasta en el modo compacto la serie tiene que aparecer: dos monedas distintas sin
+            # aclarar cuál es cuál es peor que un mensaje más largo.
+            trozos.append(nivel + _sufijo_serie(alerta))
         if alerta.contexto.resultado_pct is not None:
             trozos.append(f"<b>{_fmt_pct(alerta.contexto.resultado_pct)}</b>")
         return [" · ".join(trozos)]

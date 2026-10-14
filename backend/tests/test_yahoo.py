@@ -133,3 +133,48 @@ def test_fetch_info_nombre_degrada_a_none_si_info_falla(monkeypatch):
     ))
     info = yahoo.fetch_info("AAPL")
     assert info["moneda"] == "USD" and info["mercado"] == "NYQ" and info["nombre"] is None
+
+
+# ── fetch_ultimo_precio: el precio intradía del subyacente ───────────────────
+
+def test_ultimo_precio_desde_fast_info(monkeypatch):
+    _instalar_yf(monkeypatch, _FakeTicker(fast_info={"last_price": 173.45, "currency": "usd"}))
+    assert yahoo.fetch_ultimo_precio("MSFT") == {"precio": 173.45, "moneda": "USD"}
+
+
+def test_ultimo_precio_acepta_el_atributo_en_vez_de_la_clave(monkeypatch):
+    """`fast_info` no es un dict común y yfinance cambió la grafía entre versiones: se prueban las
+    dos antes de dar el precio por perdido."""
+    class _FastInfo(dict):
+        last_price = 99.5
+
+    fi = _FastInfo(currency="USD")
+    _instalar_yf(monkeypatch, _FakeTicker(fast_info=fi))
+    assert yahoo.fetch_ultimo_precio("MSFT") == {"precio": 99.5, "moneda": "USD"}
+
+
+def test_ultimo_precio_sin_dato_es_none(monkeypatch):
+    _instalar_yf(monkeypatch, _FakeTicker(fast_info={"currency": "USD"}))
+    assert yahoo.fetch_ultimo_precio("MSFT") is None
+
+
+def test_ultimo_precio_no_positivo_es_none(monkeypatch):
+    _instalar_yf(monkeypatch, _FakeTicker(fast_info={"last_price": 0, "currency": "USD"}))
+    assert yahoo.fetch_ultimo_precio("MSFT") is None
+
+
+def test_ultimo_precio_informa_la_moneda_que_vino(monkeypatch):
+    """La moneda viaja y no se asume: quien la consume exige USD, porque comparar una zona en
+    dólares contra un precio en otra moneda es un aviso falso."""
+    _instalar_yf(monkeypatch, _FakeTicker(fast_info={"last_price": 10.0, "currency": "EUR"}))
+    assert yahoo.fetch_ultimo_precio("ASML.AS") == {"precio": 10.0, "moneda": "EUR"}
+
+
+def test_ultimo_precio_no_lanza_si_falla_la_red(monkeypatch):
+    class _Explota:
+        @property
+        def fast_info(self):
+            raise RuntimeError("sin red")
+
+    _instalar_yf(monkeypatch, _Explota())
+    assert yahoo.fetch_ultimo_precio("MSFT") is None

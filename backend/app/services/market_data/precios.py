@@ -67,6 +67,15 @@ _REINTENTO_SIN_SERIE_DIAS = 90            # A3: un ticker sin serie histórica s
 _PISO_TECNICO = timedelta(days=366 * 2)
 _MAX_BACKFILL_OHLCV_POR_SYNC = 8
 
+# Serie local profunda vía yfinance (`TICKER.BA`). Piso de 5 años y no de 2 como el resto del
+# pipeline local: yfinance trae todo el rango en una sola llamada, así que la profundidad extra es
+# gratis. Cupo propio porque son llamadas HTTP nuevas (igual que el backfill del subyacente).
+_PISO_LOCAL_YAHOO = timedelta(days=366 * 5)
+_TOLERANCIA_PISO_LOCAL_YAHOO_DIAS = 40
+_MAX_BACKFILL_LOCAL_YAHOO_POR_SYNC = 12
+_REINTENTO_YAHOO_LOCAL_DIAS = 90
+_SUFIJO_YAHOO_LOCAL = ".BA"
+
 # Relleno de huecos internos del historial (ver `fetch_relleno_huecos_iol`). Presupuesto a propósito
 # chico: es una pasada de una sola vez por ticker, no un gasto recurrente.
 _MAX_RELLENO_POR_SYNC = 5            # tickers (= llamadas a IOL) por sync
@@ -1438,6 +1447,168 @@ def fetch_backfill_ohlcv_watchlist(
         min_serie = min((b.fecha for b in serie), default=None)
         if est_entry is not None and ya is not None and min_serie is not None and min_serie >= ya:
             est_entry["ohlcv_estado"] = "completo"
+
+    return filas, issues
+
+
+def fetch_backfill_ohlcv_local_yahoo(
+    activos: list[dict],
+    precios_referencia: list[dict],
+    ohlcv_existentes: dict[str, date],
+    estado_por_ticker: dict[str, dict] | None = None,
+    hoy: date | None = None,
+) -> tuple[list[dict], list[ValidationIssue]]:
+    """Backfill de la serie **local** (ARS) de renta variable desde yfinance, con el sufijo `.BA`
+    que en Yahoo identifica al listado en BYMA (`"AAPL.BA"` es el CEDEAR, `"AAPL"` la acción del
+    NASDAQ — ver la convención en `yahoo`).
+
+    Para qué existe: hasta acá la serie local de un CEDEAR salía de analisistecnico (con el símbolo
+    `TICKER:CEDEAR`) o de IOL, que gasta cupo mensual y sin cupo no devuelve nada. Resultado: la
+    variante `subyacente` mostraba cinco años de historia y la `local` podía estar vacía, aunque es
+    el **mismo instrumento** mirado desde otro mercado. Yahoo cubre el listado local gratis y sin
+    auth, igual que el subyacente, así que llena ese hueco sin tocar el cupo de IOL.
+
+    **No reconstruye la serie local convirtiendo el subyacente por el dólar.** Esa cuenta
+    (`CEDEAR_ARS ~= subyacente_USD * CCL / ratio`) es cierta pero no se puede hacer con lo que hay:
+    no existe serie histórica de CCL (sólo MEP, del Sheet y con huecos) ni el ratio del CEDEAR ni
+    su historial de cambios. Metería la volatilidad del dólar dentro del RSI y de las bandas de
+    Bollinger. Esto trae el precio local **real**, cotizado.
+
+    Escribe **sólo velas** (`serie_ohlcv`), nunca `precios_instrumento`: yfinance devuelve la serie
+    con `auto_adjust=True`, o sea ajustada por splits y dividendos, y un precio ajustado no es lo
+    que el instrumento valía ese día. Para indicadores y backtests la serie ajustada es la correcta
+    (no tiene escalones falsos por split); para valuar el patrimonio histórico sería un error.
+    Mismo criterio de aislamiento que la guarda G4 de la serie del subyacente.
+
+    `"yahoo"` gana el upsert sobre `"iol"` y `"api"` (`ohlcv_analytics._PRIORIDAD_FUENTE`), así que
+    la ventana que esta función cubre converge a una serie homogénea en vez de quedar mezclando
+    barras ajustadas y sin ajustar, que es lo que produce los escalones que
+    `splits_engine.detectar_saltos` detecta. La única barra que queda de otra fuente es el
+    close-only del día en curso, que el próximo backfill promueve.
+
+    Sólo renta variable (acciones y CEDEARs): para la renta fija local la correspondencia de
+    símbolos en Yahoo no es confiable y el pipeline de analisistecnico ya la cubre.
+
+    `precios_referencia`: `{ticker, fecha, precio, moneda}` observados en la unidad correcta
+    (`precios_instrumento` para cartera, `precios_watchlist` para los seguidos). Se exige que la
+    serie de Yahoo concuerde con ese precio a factor **1.0** — a diferencia del resto del módulo no
+    se admite el 1/100 de la lámina de renta fija, y tampoco se reusa ni se persiste el factor
+    calibrado de la ruta *live* (`_resolver_factor`): el `.BA` cotiza por unidad igual que IOL, así
+    que cualquier otro ratio significa que el símbolo no es el que se cree (moneda USD, otro
+    instrumento) y entonces no se carga nada.
+
+    Devuelve siempre una lista (nunca None): un fallo puntual se reintenta el próximo sync.
+    """
+    issues: list[ValidationIssue] = []
+    hoy = hoy or date.today()
+    ayer = hoy - timedelta(days=1)
+
+    objetivo = [a for a in activos if _es_renta_variable(a.get("tipo_instrumento", ""))]
+    if not objetivo:
+        return [], issues
+
+    referencia: dict[str, tuple[date, float, str]] = {}
+    for p in precios_referencia:
+        t, f, px = p["ticker"], p["fecha"], float(p["precio"])
+        if t not in referencia or f > referencia[t][0]:
+            referencia[t] = (f, px, p.get("moneda") or "")
+
+    piso = hoy - _PISO_LOCAL_YAHOO
+
+    pendientes: list[tuple[int, dict]] = []
+    vistos: set[str] = set()
+    for act in objetivo:
+        ticker = act["ticker"]
+        if ticker in vistos:
+            continue  # un ticker puede venir en cartera y en watchlist a la vez
+        vistos.add(ticker)
+
+        ya = ohlcv_existentes.get(ticker)
+        if ya is not None and ya <= piso + timedelta(days=_TOLERANCIA_PISO_LOCAL_YAHOO_DIAS):
+            continue  # la serie local ya cubre hasta ~el piso
+
+        est = estado_por_ticker.get(ticker) if estado_por_ticker is not None else None
+        if est is not None:
+            ye = est.get("yahoo_local_estado")
+            if ye == "completo":
+                continue
+            if ye in ("sin_serie", "escala_desconocida"):
+                intento = est.get("yahoo_local_intento")
+                if intento is None or (hoy - intento).days < _REINTENTO_YAHOO_LOCAL_DIAS:
+                    continue
+
+        hueco = (ya - piso).days if ya is not None else 10 ** 6
+        pendientes.append((hueco, act))
+
+    pendientes.sort(key=lambda x: x[0], reverse=True)
+
+    filas: list[dict] = []
+    for _, act in pendientes[:_MAX_BACKFILL_LOCAL_YAHOO_POR_SYNC]:
+        ticker = act["ticker"]
+        ya = ohlcv_existentes.get(ticker)
+        est_entry = estado_por_ticker.setdefault(ticker, {}) if estado_por_ticker is not None else None
+
+        serie = yahoo.fetch_historico_ohlcv(f"{ticker}{_SUFIJO_YAHOO_LOCAL}", piso, ayer)
+
+        if serie is None:
+            ya_reportado = est_entry is not None and est_entry.get("yahoo_local_estado") == "sin_serie"
+            if est_entry is not None:
+                est_entry["yahoo_local_estado"] = "sin_serie"
+                est_entry["yahoo_local_intento"] = hoy
+            if not ya_reportado:
+                issues.append(ValidationIssue(
+                    tab="Series (Yahoo)", campo=ticker, regla="sin_historico_local_yahoo",
+                    mensaje=f"{ticker}: Yahoo no tiene serie para el símbolo local {ticker}.BA",
+                    impacto="La serie local de este ticker sigue dependiendo de analisistecnico o de IOL",
+                    severidad=Severity.INFO,
+                ))
+            continue
+
+        if est_entry is not None:
+            est_entry["yahoo_local_intento"] = hoy
+            if est_entry.get("yahoo_local_estado") in ("sin_serie", "escala_desconocida"):
+                est_entry["yahoo_local_estado"] = None
+        if not serie:
+            continue
+
+        prev = referencia.get(ticker)
+        if prev is None:
+            continue  # sin precio observado no hay con qué validar la unidad de la serie
+
+        f_ref, px_ref_obs, moneda_obs = prev
+        if px_ref_obs <= 0:
+            continue
+        px_ref = min(serie, key=lambda b: abs((b.fecha - f_ref).days)).cierre
+        if _factor_escala(px_ref, px_ref_obs) != 1.0:
+            if est_entry is not None:
+                est_entry["yahoo_local_estado"] = "escala_desconocida"
+            issues.append(ValidationIssue(
+                tab="Series (Yahoo)", campo=ticker, regla="escala_desconocida",
+                mensaje=(f"{ticker}: {ticker}.BA cotiza {px_ref:g} cerca del {f_ref} y el precio "
+                         f"observado es {px_ref_obs:g} (factor {px_ref / px_ref_obs:.2f}, se "
+                         "esperaba ~1)"),
+                impacto=("No se cargan velas de Yahoo para este ticker: el gráfico quedaría en otra "
+                         "unidad que el precio de la pantalla"),
+                severidad=Severity.ADVERTENCIA,
+            ))
+            continue
+
+        moneda = (moneda_obs or act.get("moneda") or "ARS").strip().upper()
+        for b in serie:
+            if b.fecha >= hoy:
+                continue
+            filas.append({
+                "ticker": ticker, "fecha": b.fecha,
+                "apertura": b.apertura, "maximo": b.maximo, "minimo": b.minimo,
+                "cierre": b.cierre, "volumen": b.volumen,
+                "moneda": moneda, "fuente": "yahoo",
+            })
+
+        min_serie = min((b.fecha for b in serie), default=None)
+        if est_entry is not None and min_serie is not None:
+            llego_al_piso = min_serie <= piso + timedelta(days=_TOLERANCIA_PISO_LOCAL_YAHOO_DIAS)
+            if llego_al_piso or (ya is not None and min_serie >= ya):
+                est_entry["yahoo_local_estado"] = "completo"
 
     return filas, issues
 

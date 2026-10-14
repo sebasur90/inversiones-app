@@ -29,6 +29,7 @@ import { Icon } from '../components/icons/Icons'
 import VariacionDia from '../components/ui/VariacionDia'
 import { formatARSCrudo, formatUSDCrudo, formatPrecio } from '../utils'
 import { estadoWatchlist, type EstadoAlerta } from '../utils/alertasPrecio'
+import { textoZona } from '../utils/zonas'
 
 type Filtro = 'todas' | 'con_alerta'
 
@@ -104,7 +105,7 @@ export default function Watchlist() {
   })
 
   const guardarMut = useMutation({
-    mutationFn: ({ ticker, ...cambios }: { ticker: string; objetivo: number | null; notas: string | null }) =>
+    mutationFn: ({ ticker, ...cambios }: { ticker: string; objetivo?: number | null; notas: string | null }) =>
       actualizarWatchlist(ticker, cambios),
     onSuccess: async () => {
       await refrescarLista()
@@ -238,7 +239,8 @@ export default function Watchlist() {
                     </div>
                     <div className="flex items-center justify-end gap-0.5 text-label text-app-text-dim mt-0.5 tabular-nums">
                       <span className="inline-flex items-center gap-0.5">
-                        Obj. {item.precio_objetivo != null ? formatMoneda(item.precio_objetivo, item.moneda) : '—'}
+                        {item.zona_compra ? 'Compra ' : 'Sin zona'}
+                        {item.zona_compra && textoZona(item.zona_compra, formatMoneda)}
                         <InfoTooltip term="watchlist_precio_objetivo" />
                       </span>
                     </div>
@@ -274,7 +276,8 @@ export default function Watchlist() {
             onGuardar={cambios => guardarMut.mutate({ ticker: itemAbierto.ticker, ...cambios })}
             onRefrescar={() => refrescarMut.mutate(itemAbierto.ticker)}
             onEliminar={() => eliminarMut.mutate(itemAbierto.ticker)}
-            onVerTecnico={() => navigate(`/ticker/${encodeURIComponent(itemAbierto.ticker)}`)}
+            onVerTecnico={() => navigate(`/analisis-tecnico?ticker=${encodeURIComponent(itemAbierto.ticker)}`)}
+            onVerPosicion={() => navigate(`/ticker/${encodeURIComponent(itemAbierto.ticker)}`)}
           />
         )}
       </Modal>

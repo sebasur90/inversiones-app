@@ -172,14 +172,43 @@ def _fila_a_barra(fecha, cierre, apertura=None, maximo=None, minimo=None, volume
 
 def _serie_vacia(
     ticker: str, nombre: str, moneda: str, origen: str | None, motivo: str,
-    variante: str = "local", mercado: str = "",
+    variante: str = "local", mercado: str = "", motivos_extra: list[str] | None = None,
 ) -> dict:
     return {
         "ticker": ticker, "nombre": nombre, "moneda": moneda, "origen": origen,
         "variante": variante, "mercado": mercado,
         "fuente_serie": "sin_datos", "tiene_velas": False, "tiene_volumen": False,
-        "indice_desde": 0, "barras": [], "advertencias": [motivo],
+        "indice_desde": 0, "barras": [], "advertencias": [motivo, *(motivos_extra or [])],
     }
+
+
+def _motivos_sin_serie(db: Session, ticker: str, variante: str) -> list[str]:
+    """Por qué la serie de este ticker está vacía, según lo que dejó anotado el pipeline de market
+    data (`EstadoMarketDataTicker`).
+
+    Sin esto la pantalla dice "todavía no hay datos históricos" y el usuario no puede distinguir
+    "el cupo mensual de IOL se agotó" de "ninguna fuente tiene este símbolo" o de "la serie vino en
+    otra unidad que el precio de la pantalla y se descartó" — tres situaciones con tres acciones
+    distintas.
+    """
+    estado = (
+        db.query(EstadoMarketDataTicker)
+        .filter(EstadoMarketDataTicker.ticker == ticker).first()
+    )
+    if estado is None:
+        return []
+
+    motivos: list[str] = []
+    if variante == "subyacente":
+        if estado.resolucion_estado in ("sin_subyacente", "ticker_no_apto"):
+            motivos.append(f"subyacente_{estado.resolucion_estado}")
+        return motivos
+
+    if estado.ohlcv_estado == "sin_serie_iol":
+        motivos.append("sin_fuente_historica")
+    if estado.yahoo_local_estado == "escala_desconocida":
+        motivos.append("escala_desconocida")
+    return motivos
 
 
 @cache_por_sync
@@ -239,13 +268,19 @@ def get_serie_barras(
     fechas_ordenadas = sorted(barras_por_fecha.keys())
     if len(fechas_ordenadas) < MIN_PUNTOS_SERIE:
         motivo = "un_solo_punto" if fechas_ordenadas else "sin_serie"
-        return _serie_vacia(ticker, nombre, moneda_serie, origen, motivo, variante, mercado_serie)
+        return _serie_vacia(
+            ticker, nombre, moneda_serie, origen, motivo, variante, mercado_serie,
+            _motivos_sin_serie(db, ticker, variante),
+        )
 
     idx_desde = next((i for i, f in enumerate(fechas_ordenadas) if f >= desde), len(fechas_ordenadas))
     idx_inicio = max(0, idx_desde - barras_previas)
     fechas_ventana = fechas_ordenadas[idx_inicio:]
     if len(fechas_ventana) < MIN_PUNTOS_SERIE:
-        return _serie_vacia(ticker, nombre, moneda_serie, origen, "sin_serie", variante, mercado_serie)
+        return _serie_vacia(
+            ticker, nombre, moneda_serie, origen, "sin_serie", variante, mercado_serie,
+            _motivos_sin_serie(db, ticker, variante),
+        )
 
     barras = [barras_por_fecha[f] for f in fechas_ventana]
     origenes = [origen_por_fecha[f] for f in fechas_ventana]
