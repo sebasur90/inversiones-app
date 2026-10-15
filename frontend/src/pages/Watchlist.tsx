@@ -84,8 +84,16 @@ export default function Watchlist() {
     return mapa
   }, [senalesQuery.data])
 
-  // Sólo se invalida la watchlist: la lista no alimenta ningún otro cálculo de la app.
-  const refrescarLista = () => queryClient.invalidateQueries({ queryKey: qk.watchlist })
+  // Además de la watchlist se invalidan las vistas de análisis técnico: su universo de tickers es
+  // cartera ∪ watchlist, y con `staleTime` infinito un ticker recién agregado no aparecía en el
+  // gráfico hasta el próximo sync. El alta y el botón "Precio" también bajan la serie en USD de un
+  // CEDEAR, así que la serie, el listado de series y la referencia cambian.
+  const refrescarLista = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: qk.watchlist }),
+    queryClient.invalidateQueries({ queryKey: qk.de('tecnico-tickers') }),
+    queryClient.invalidateQueries({ queryKey: qk.de('tecnico-serie') }),
+    queryClient.invalidateQueries({ queryKey: qk.de('tecnico-zonas') }),
+  ])
 
   const agregarMut = useMutation({
     mutationFn: (instrumento: CatalogoInstrumentoOut) =>
