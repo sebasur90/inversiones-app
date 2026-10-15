@@ -1,14 +1,27 @@
-import type { VarianteSerie, ZonasTickerOut } from '../../api'
+import type { TipoZona, VarianteSerie, ZonaPrecioOut, ZonasTickerOut } from '../../api'
 import Button from '../ui/Button'
 import InfoTooltip from '../../help/components/InfoTooltip'
 import { COLOR_ZONA_COMPRA, COLOR_ZONA_VENTA } from './ZonasPrecio'
+import { formatoPct, formatoPrecio } from './formatoEjes'
 
 function rango(piso: number | null, techo: number | null, moneda: string): string {
   const m = moneda ? `${moneda} ` : ''
-  if (piso != null && techo != null) return `${m}${piso} – ${techo}`
-  if (techo != null) return `por debajo de ${m}${techo}`
-  if (piso != null) return `por encima de ${m}${piso}`
+  if (piso != null && techo != null) return `${m}${formatoPrecio(piso)} – ${formatoPrecio(techo)}`
+  if (techo != null) return `por debajo de ${m}${formatoPrecio(techo)}`
+  if (piso != null) return `por encima de ${m}${formatoPrecio(piso)}`
   return '—'
+}
+
+/** Dónde está el último cierre respecto de la zona: adentro, o cuánto tiene que moverse para
+ * llegar al borde que dispara (techo en compra, piso en venta; ver `ZonasPrecio`). */
+function distancia(tipo: TipoZona, zona: ZonaPrecioOut, cierre: number): { texto: string; adentro: boolean } | null {
+  const { piso, techo } = zona
+  const adentro = (piso == null || cierre >= piso) && (techo == null || cierre <= techo)
+  if (adentro) return { texto: 'el precio está adentro', adentro: true }
+  // Con un solo borde, ese borde es el que manda aunque no sea "el que dispara".
+  const borde = tipo === 'compra' ? techo ?? piso : piso ?? techo
+  if (borde == null) return null
+  return { texto: `a ${formatoPct((borde / cierre - 1) * 100)}`, adentro: false }
 }
 
 /**
@@ -20,11 +33,13 @@ function rango(piso: number | null, techo: number | null, moneda: string): strin
  * reemplazando su zona en dólares sin darse cuenta.
  */
 export default function ResumenZonas({
-  zonas, variante, moneda, onEditar,
+  zonas, variante, moneda, ultimoCierre, onEditar,
 }: {
   zonas: ZonasTickerOut | undefined
   variante: VarianteSerie
   moneda: string
+  /** Último cierre de la serie que se está viendo: sólo se compara con zonas de esa serie. */
+  ultimoCierre?: number | null
   onEditar: () => void
 }) {
   const lados = [
@@ -72,9 +87,16 @@ export default function ResumenZonas({
                 )}
                 {zona.vencida ? (
                   <span className="text-label text-app-text-faint">· vencida</span>
-                ) : !zona.activa && (
+                ) : !zona.activa ? (
                   <span className="text-label text-app-text-faint">· pausada</span>
-                )}
+                ) : zona.variante === variante && ultimoCierre != null && (() => {
+                  const d = distancia(tipo, zona, ultimoCierre)
+                  return d && (
+                    <span className={`text-label ${d.adentro ? 'font-semibold' : 'text-app-text-faint font-mono tabular-nums'}`} style={d.adentro ? { color } : undefined}>
+                      · {d.texto}
+                    </span>
+                  )
+                })()}
               </div>
             ) : null
           ))}

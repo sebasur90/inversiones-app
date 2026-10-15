@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { qk } from '../api/queryClient'
@@ -28,11 +28,12 @@ import GraficoTecnico from '../components/tecnico/GraficoTecnico'
 import GraficoFullscreen from '../components/tecnico/GraficoFullscreen'
 import EditorEstrategia from '../components/tecnico/EditorEstrategia'
 import EditorZonas, {
-  borradorADibujo, borradorDesdeOut, borradorInvalido, parsearBorde,
+  borradorADibujo, borradorDesdeOut, borradorInvalido, parsearBorde, zonaSugerida,
   type BorradorZonas,
 } from '../components/tecnico/EditorZonas'
 import ResumenZonas from '../components/tecnico/ResumenZonas'
 import type { BordeZona, ZonasDibujo } from '../components/tecnico/ZonasPrecio'
+import { textoBorde } from '../components/tecnico/formatoEjes'
 import EstrategiaAvanzadaJson from '../components/tecnico/EstrategiaAvanzadaJson'
 import ResultadoBacktest from '../components/tecnico/ResultadoBacktest'
 import FichaEstrategia from '../components/tecnico/FichaEstrategia'
@@ -80,6 +81,7 @@ export default function AnalisisTecnico() {
   // dibujarlo mientras se arrastra: son dos vistas del mismo valor.
   const [borrador, setBorrador] = useState<BorradorZonas | null>(null)
   const [errorZonas, setErrorZonas] = useState<string | null>(null)
+  const graficoRef = useRef<HTMLDivElement>(null)
 
   const queryClient = useQueryClient()
   const tickersQuery = useQuery({ queryKey: qk.de('tecnico-tickers'), queryFn: getTickersTecnicos })
@@ -135,6 +137,7 @@ export default function AnalisisTecnico() {
     enabled: ticker !== null,
   })
   const serie = serieQuery.data
+  const ultimoCierre = serie?.barras[serie.barras.length - 1]?.cierre ?? null
   const monedaMostrada = serie?.moneda || monedaSerie
 
   const zonasQuery = useQuery({
@@ -193,20 +196,33 @@ export default function AnalisisTecnico() {
     // Se siembra sólo con las zonas de **esta** serie: arrancar la edición en dólares con los
     // números en pesos de la zona local dibujaría la banda fuera de escala y, al guardar,
     // convertiría la zona a esta serie con valores de la otra.
-    setBorrador(borradorDesdeOut(
+    const inicial = borradorDesdeOut(
       zonaDeEstaSerie(zonasGuardadas?.compra), zonaDeEstaSerie(zonasGuardadas?.venta),
-    ))
+    )
+    // "Dibujar zona" sin ninguna zona: arranca con una de compra a la vista para arrastrarla, en
+    // vez de un editor vacío con un gráfico sin nada que mover.
+    if (!inicial.compra && !inicial.venta) inicial.compra = zonaSugerida('compra', ultimoCierre)
+    setBorrador(inicial)
+    // El botón está debajo del gráfico: en el celular el gráfico puede haber quedado fuera de la
+    // pantalla, y lo que se edita es lo que está dibujado ahí.
+    requestAnimationFrame(() => graficoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }
 
-  /** Arrastrar un borde escribe el borrador, no la DB: el guardado es explícito. Se redondea a dos
-   * decimales porque el píxel da una precisión falsa; el número exacto se escribe en el input. */
+  /** Arrastrar un borde escribe el borrador, no la DB: el guardado es explícito. `ZonasPrecio` ya
+   * redondea a un paso acorde a la escala (el píxel da una precisión falsa); el número exacto se
+   * escribe en el input. */
   function arrastrarZona(tipo: TipoZona, borde: BordeZona, valor: number) {
     setBorrador(prev => {
       if (!prev) return prev
       const actual = prev[tipo]
       if (!actual) return prev
-      return { ...prev, [tipo]: { ...actual, [borde]: valor.toFixed(2) } }
+      return { ...prev, [tipo]: { ...actual, [borde]: textoBorde(valor) } }
     })
+  }
+
+  function cancelarZonas() {
+    setBorrador(null)
+    setErrorZonas(null)
   }
 
   function guardarZonas() {
@@ -237,6 +253,13 @@ export default function AnalisisTecnico() {
   }
   function cambiarParamIndicador(id: number, nombre: string, valor: number) {
     setActivos(prev => prev.map(a => (a.id === id ? { ...a, params: { ...a.params, [nombre]: valor } } : a)))
+  }
+
+  const edicionZonas = {
+    onGuardar: guardarZonas,
+    onCancelar: cancelarZonas,
+    guardando: guardarZonasMut.isPending,
+    problema: borrador ? borradorInvalido(borrador) ?? errorZonas : null,
   }
 
   if (tickersQuery.isLoading || tickersQuery.error) {
@@ -347,17 +370,45 @@ export default function AnalisisTecnico() {
                 }
               />
             ) : serie ? (
-              <GraficoTecnico
-                barras={serie.barras} indicadores={serie.indicadores} activos={activos}
-                tieneVelas={serie.tiene_velas} tieneVolumen={serie.tiene_volumen}
-                moneda={monedaMostrada}
-                onToggleFullscreen={() => setFullscreen(true)}
-                zonas={zonasDibujo} editandoZonas={borrador !== null}
-                onArrastrarZona={arrastrarZona}
-                hoverIndex={hoverIndex} onHover={setHoverIndex}
-              />
+              <div ref={graficoRef} className="scroll-mt-16">
+                <GraficoTecnico
+                  barras={serie.barras} indicadores={serie.indicadores} activos={activos}
+                  tieneVelas={serie.tiene_velas} tieneVolumen={serie.tiene_volumen}
+                  moneda={monedaMostrada}
+                  onToggleFullscreen={() => setFullscreen(true)}
+                  zonas={zonasDibujo} editandoZonas={borrador !== null}
+                  onArrastrarZona={arrastrarZona} edicionZonas={edicionZonas}
+                  hoverIndex={hoverIndex} onHover={setHoverIndex}
+                />
+              </div>
             ) : null}
           </QueryBoundary>
+
+          {/* Las zonas se dibujan sobre el precio, así que el editor vive junto al gráfico y no en
+              una pantalla aparte: arrastrar el borde y escribir el número son dos vistas de lo
+              mismo. Sólo con serie: una zona sobre un gráfico vacío no se puede ubicar. Va pegado
+              al gráfico (antes de los avisos de la serie) para que en el celular quede a mano. */}
+          {ticker && tieneGrafico && (
+            <div className="mt-3">
+              {borrador ? (
+                <EditorZonas
+                  borrador={borrador} moneda={monedaMostrada} variante={variante}
+                  precioReferencia={ultimoCierre}
+                  onCambiar={setBorrador}
+                  onGuardar={guardarZonas}
+                  onCancelar={cancelarZonas}
+                  guardando={guardarZonasMut.isPending}
+                  error={errorZonas}
+                />
+              ) : (
+                <ResumenZonas
+                  zonas={zonasGuardadas} variante={variante} moneda={monedaMostrada}
+                  ultimoCierre={ultimoCierre}
+                  onEditar={empezarAEditarZonas}
+                />
+              )}
+            </div>
+          )}
 
           {variante === 'subyacente'
             && (zonasGuardadas?.nivel_stop_loss != null || zonasGuardadas?.nivel_objetivo != null) && (
@@ -376,28 +427,6 @@ export default function AnalisisTecnico() {
             </ul>
           )}
 
-          {/* Las zonas se dibujan sobre el precio, así que el editor vive junto al gráfico y no en
-              una pantalla aparte: arrastrar el borde y escribir el número son dos vistas de lo
-              mismo. Sólo con serie: una zona sobre un gráfico vacío no se puede ubicar. */}
-          {ticker && tieneGrafico && (
-            <div className="mt-3">
-              {borrador ? (
-                <EditorZonas
-                  borrador={borrador} moneda={monedaMostrada} variante={variante}
-                  onCambiar={setBorrador}
-                  onGuardar={guardarZonas}
-                  onCancelar={() => { setBorrador(null); setErrorZonas(null) }}
-                  guardando={guardarZonasMut.isPending}
-                  error={errorZonas}
-                />
-              ) : (
-                <ResumenZonas
-                  zonas={zonasGuardadas} variante={variante} moneda={monedaMostrada}
-                  onEditar={empezarAEditarZonas}
-                />
-              )}
-            </div>
-          )}
         </>
       ) : (
         ticker && (
@@ -421,7 +450,7 @@ export default function AnalisisTecnico() {
             moneda={monedaMostrada}
             fullscreen onToggleFullscreen={() => setFullscreen(false)}
             zonas={zonasDibujo} editandoZonas={borrador !== null}
-            onArrastrarZona={arrastrarZona}
+            onArrastrarZona={arrastrarZona} edicionZonas={edicionZonas}
             hoverIndex={hoverIndex} onHover={setHoverIndex}
           />
         </GraficoFullscreen>

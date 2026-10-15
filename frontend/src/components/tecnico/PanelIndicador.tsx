@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import type { EscalaX } from './useEscalaX'
 import { manejadoresPuntero } from './crosshair'
 import { trazoDeSerie, valoresVisibles } from './trazo'
+import { formatoValor } from './formatoEjes'
 
 const PALETA_SUBSERIE: Record<string, string> = {
   valor: '#8b5cf6', k: '#f59e0b', d: '#3b82f6',
@@ -9,6 +10,7 @@ const PALETA_SUBSERIE: Record<string, string> = {
 }
 const COLOR_GRID = '#1c1f2a'
 const COLOR_EJE = '#94a3b8'
+const COLOR_HALO = '#121621'
 
 /** Panel oscilador genérico (RSI, MACD, Estocástico, ATR): una escala propia, no la de precio.
  * RSI/Estocástico usan dominio fijo [0,100] con líneas de referencia de sobrecompra/sobreventa;
@@ -46,12 +48,34 @@ export default function PanelIndicador({
 
   const anchoBarra = Math.max(1, escalaX.pasoX * 0.6)
 
+  // Valor de cada salida en la vela de la cruz o, sin cruz, en la última: el título del panel es
+  // la única forma de leer el número en el celular (no hay hover).
+  const indiceValor = hoverIndex ?? escalaX.n - 1
+  const valoresTitulo = Object.entries(series).map(([salida, vals]) => ({ salida, valor: vals[indiceValor] }))
+
   return (
     <div>
-      <div className="text-label text-app-text-faint px-1 mb-0.5 font-mono">{clave}</div>
-      <svg ref={svgRef} width={escalaX.ancho} height={alto} className="block touch-none select-none" {...handlers}>
+      <div className="flex items-baseline gap-x-2 flex-wrap text-label text-app-text-faint px-1 mb-0.5 font-mono tabular-nums">
+        <span>{clave}</span>
+        {valoresTitulo.map(({ salida, valor }) => (
+          <span key={salida} style={{ color: salida === 'histograma' ? COLOR_EJE : PALETA_SUBSERIE[salida] ?? '#3b82f6' }}>
+            {valoresTitulo.length > 1 && <span className="text-app-text-faint">{salida} </span>}
+            {formatoValor(valor)}
+          </span>
+        ))}
+      </div>
+      <svg ref={svgRef} width={escalaX.ancho} height={alto} className="block select-none" {...handlers}>
         {lineasReferencia.map(v => (
-          <line key={v} x1={0} x2={escalaX.ancho} y1={yDeValor(v)} y2={yDeValor(v)} stroke={COLOR_GRID} strokeDasharray="3 3" />
+          <g key={v}>
+            <line x1={0} x2={escalaX.ancho} y1={yDeValor(v)} y2={yDeValor(v)} stroke={COLOR_GRID} strokeDasharray="3 3" />
+            <text
+              x={escalaX.ancho - 3} y={yDeValor(v) - 2} fontSize={9} textAnchor="end"
+              fill={COLOR_EJE} fillOpacity={0.8} stroke={COLOR_HALO} strokeWidth={3} paintOrder="stroke"
+              className="font-mono" pointerEvents="none"
+            >
+              {v}
+            </text>
+          </g>
         ))}
 
         {tipo === 'MACD' && series.histograma?.map((v, i) => {

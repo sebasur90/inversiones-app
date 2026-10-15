@@ -2,6 +2,7 @@ import type { TipoZona, VarianteSerie, ZonaPrecioOut } from '../../api'
 import Button from '../ui/Button'
 import InfoTooltip from '../../help/components/InfoTooltip'
 import { COLOR_ZONA_COMPRA, COLOR_ZONA_VENTA, type ZonasDibujo } from './ZonasPrecio'
+import { redondearA, textoBorde } from './formatoEjes'
 
 /** El borrador guarda strings y no números: mientras se tipea, un input controlado por número
  * pelea con el usuario (borrar el último dígito de "4900" no puede dejar `NaN`). Se parsea al
@@ -17,6 +18,26 @@ export interface BorradorZonas {
 }
 
 export const ZONA_VACIA: BorradorZona = { piso: '', techo: '' }
+
+/** Rango con el que arranca una zona nueva, relativo al último cierre. No pretende ser un buen
+ * nivel: es un punto de partida **visible**. Una zona vacía no se dibuja y en el celular no habría
+ * nada que arrastrar hasta tipear un número. La de compra queda apenas debajo del precio y la de
+ * venta apenas arriba, así arrancan del lado correcto y no disparan un aviso en cuanto se guardan. */
+const SUGERENCIA: Record<TipoZona, { piso: number; techo: number }> = {
+  compra: { piso: 0.92, techo: 0.97 },
+  venta: { piso: 1.05, techo: 1.12 },
+}
+
+export function zonaSugerida(tipo: TipoZona, precio: number | null | undefined): BorradorZona {
+  if (precio == null || !(precio > 0)) return ZONA_VACIA
+  // Tres cifras significativas: 164,9 → 165; 25.217 → 25.200.
+  const paso = Math.pow(10, Math.floor(Math.log10(precio)) - 2)
+  const { piso, techo } = SUGERENCIA[tipo]
+  return {
+    piso: textoBorde(redondearA(precio * piso, paso)),
+    techo: textoBorde(redondearA(precio * techo, paso)),
+  }
+}
 
 export function parsearBorde(texto: string): number | null {
   const limpio = texto.trim().replace(',', '.')
@@ -104,9 +125,11 @@ const ETIQUETA: Record<TipoZona, { titulo: string; color: string; dispara: strin
  * celular y un roce accidental no debería cambiar cuándo llega.
  */
 export default function EditorZonas({
-  borrador, moneda, variante, onCambiar, onGuardar, onCancelar, guardando, error,
+  borrador, moneda, variante, precioReferencia, onCambiar, onGuardar, onCancelar, guardando, error,
 }: {
   borrador: BorradorZonas
+  /** Último cierre de la serie: de ahí sale el rango inicial de una zona nueva. */
+  precioReferencia?: number | null
   moneda: string
   variante: VarianteSerie
   onCambiar: (b: BorradorZonas) => void
@@ -130,7 +153,8 @@ export default function EditorZonas({
       </div>
 
       <p className="text-label text-app-text-dim">
-        Arrastrá los bordes en el gráfico o escribí los precios acá. Se miden sobre la serie{' '}
+        Arrastrá las manijas ↕ del gráfico o escribí los precios acá; podés acercar y desplazar el
+        gráfico mientras editás. Se miden sobre la serie{' '}
         <strong>{variante === 'subyacente' ? 'del subyacente' : 'local'}</strong>
         {moneda ? ` (${moneda})` : ''}, sin convertir de moneda.
       </p>
@@ -152,7 +176,7 @@ export default function EditorZonas({
               {zona === null ? (
                 <button
                   type="button"
-                  onClick={() => onCambiar({ ...borrador, [tipo]: ZONA_VACIA })}
+                  onClick={() => onCambiar({ ...borrador, [tipo]: zonaSugerida(tipo, precioReferencia) })}
                   className="text-label font-semibold text-app-accent"
                 >
                   Agregar

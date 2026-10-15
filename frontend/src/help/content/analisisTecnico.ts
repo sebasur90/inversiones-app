@@ -11,6 +11,7 @@ export type AnalisisTecnicoHelpKey =
   | 'analisis_tecnico_percentil'
   | 'zonas_precio'
   | 'serie_referencia'
+  | 'grafico_gestos'
   | 'screener_titulo'
   | 'screener_universo'
   | 'screener_distancia'
@@ -22,6 +23,13 @@ export type AnalisisTecnicoHelpKey =
   | 'screener_grafico_gatillo'
 
 export const ANALISISTECNICO_HELP: Record<AnalisisTecnicoHelpKey, HelpContent> = {
+  grafico_gestos: {
+    title: 'Cómo moverse por el gráfico',
+    shortDescription: 'En el celular: deslizá de costado para recorrer la historia, pellizcá para acercar o alejar y tocá una vela para ver sus números. Deslizar hacia arriba o abajo mueve la pantalla, no el gráfico.',
+    howToInterpret: 'Tocar una vela fija la cruz y arriba aparecen su fecha, el cierre, la variación contra la rueda anterior, apertura, máximo, mínimo y volumen; la leyenda y cada panel muestran el valor de sus indicadores en esa vela. Tocar la misma vela (o la ✕) la quita. Mantené apretado un instante y arrastrá para recorrer vela por vela sin mover el gráfico. Doble toque vuelve a todo el período. En la computadora: la rueda del mouse acerca y aleja, arrastrar desplaza y doble clic vuelve a todo. En el gráfico de una estrategia, la ficha dice además si esa rueda hubo compra o venta (y por qué motivo), o si la estrategia estaba comprada, con el resultado hasta ahí y sus niveles de stop loss, take profit y trailing.',
+    limitations: 'El zoom navega la serie que ya está cargada: para ver más historia, cambiá el período arriba del gráfico. Con muchas ruedas en poco ancho las velas se dibujan como una línea de cierres hasta que acercás. En pantalla completa, "Girar" pone el teléfono en horizontal donde el navegador lo permite (Android); en iPhone basta con girarlo.',
+    relatedTerms: ['analisis_tecnico_indicadores', 'analisis_tecnico_riesgo'],
+  },
   serie_referencia: {
     title: 'Serie de referencia',
     shortDescription: 'Para un CEDEAR, el precio que sirve para decidir es el de la acción en EE.UU. en dólares, no el del CEDEAR en pesos. La app lo toma como referencia automáticamente.',
@@ -34,7 +42,7 @@ export const ANALISISTECNICO_HELP: Record<AnalisisTecnicoHelpKey, HelpContent> =
     title: 'Zonas de compra y de venta',
     shortDescription: 'El rango de precios en el que querés entrar o salir de un instrumento, dibujado sobre el gráfico. Cuando el precio entra en la zona, llega el aviso al celular.',
     whyItMatters: 'Decidir el rango con el gráfico a la vista —y no en el momento en que el precio se mueve— es la diferencia entre una compra planeada y una reacción. El rango además dice algo que un precio solo no dice: entre cuánto y cuánto te parece buena la entrada.',
-    howToInterpret: 'De los dos bordes, uno dispara el aviso y el otro es referencia. En una zona de compra dispara el techo (el precio baja y cruza hacia adentro); en una de venta dispara el piso (sube y cruza). El borde que dispara se dibuja con línea llena y el otro punteado. Cualquiera de los dos puede quedar vacío: una zona de compra sin piso es simplemente "comprar por debajo de X".',
+    howToInterpret: 'De los dos bordes, uno dispara el aviso y el otro es referencia. En una zona de compra dispara el techo (el precio baja y cruza hacia adentro); en una de venta dispara el piso (sube y cruza). El borde que dispara se dibuja con línea llena y el otro punteado. Cualquiera de los dos puede quedar vacío: una zona de compra sin piso es simplemente "comprar por debajo de X". Para dibujarla, tocá "Dibujar zona" o "Editar zonas": la zona nueva arranca cerca del precio actual y cada borde tiene una manija ↕ con su precio a la izquierda del gráfico. Arrastrala para moverlo (va de a pasos redondos según la escala) o escribí el número exacto en el editor. Mientras editás podés acercar y desplazar el gráfico. Nada se guarda hasta tocar Guardar. Debajo del gráfico, el resumen te dice a qué distancia está el precio de cada zona.',
     limitations: 'Hay una sola zona de compra y una sola de venta por instrumento, y cada una se mide sobre la serie en la que la dibujaste: la local en pesos o la del subyacente en dólares (para un CEDEAR, la de referencia es la de dólares). No hay conversión de moneda entre una y otra — son dos instrumentos distintos, no el mismo precio en dos monedas. Las zonas son independientes del stop-loss y el objetivo de una posición, que se editan en el detalle del ticker y acá se dibujan sólo como referencia.',
     relatedTerms: ['serie_referencia', 'watchlist_zona_compra', 'stopLoss', 'objetivo'],
   },

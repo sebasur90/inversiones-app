@@ -1,14 +1,19 @@
+import { useRef } from 'react'
 import type { BarraOut, SenalOut } from '../../api'
 import { useEscalaX } from './useEscalaX'
-import { useVentanaVisible } from './useVentanaVisible'
+import { estiloContenedorGestos, useVentanaVisible } from './useVentanaVisible'
 import { useAnchoContenedor } from './useAnchoContenedor'
-import PanelPrecio, { type OverlayPrecio } from './PanelPrecio'
+import { useAltosGrafico } from './useAltosGrafico'
+import PanelPrecio, { salidasGraficables, type OverlayPrecio } from './PanelPrecio'
 import type { BordeZona, ZonasDibujo } from './ZonasPrecio'
 import type { TipoZona } from '../../api'
 import PanelIndicador from './PanelIndicador'
 import PanelVolumen from './PanelVolumen'
+import EjeFechas from './EjeFechas'
+import FichaBarra from './FichaBarra'
+import { BotonesGrafico, PieGrafico } from './ControlesGrafico'
+import { formatoValor } from './formatoEjes'
 import { ESPEC_POR_TIPO, claveIndicador, colorIndicador, type IndicadorActivo } from './indicadoresConfig'
-import { Icon } from '../icons/Icons'
 
 /** Orquesta precio + paneles de osciladores + volumen sobre una escala X compartida
  * (`useEscalaX`), con el ancho medido del contenedor (`useAnchoContenedor`). El hover/crosshair
@@ -16,7 +21,8 @@ import { Icon } from '../icons/Icons'
  * pantalla completa sin reiniciar estado. */
 export default function GraficoTecnico({
   barras, indicadores, activos, tieneVelas, tieneVolumen, senales, primeraBarraEvaluable,
-  moneda, fullscreen, onToggleFullscreen, zonas, editandoZonas, onArrastrarZona, hoverIndex, onHover,
+  moneda, fullscreen, onToggleFullscreen, zonas, editandoZonas, onArrastrarZona, edicionZonas,
+  hoverIndex, onHover,
 }: {
   barras: BarraOut[]
   indicadores: Record<string, Record<string, (number | null)[]>>
@@ -32,13 +38,26 @@ export default function GraficoTecnico({
   zonas?: ZonasDibujo
   editandoZonas?: boolean
   onArrastrarZona?: (tipo: TipoZona, borde: BordeZona, valor: number) => void
+  /** Guardar/cancelar la edición desde el propio gráfico: en el celular el editor queda abajo,
+   * fuera de la pantalla, y en pantalla completa no está. */
+  edicionZonas?: { onGuardar: () => void; onCancelar: () => void; guardando?: boolean; problema?: string | null }
   hoverIndex: number | null
   onHover: (i: number | null) => void
 }) {
   const [containerRef, ancho] = useAnchoContenedor<HTMLDivElement>(280)
-  // Zoom con la rueda, desplazamiento arrastrando y doble clic para volver a todo el período:
-  // el selector de período recarga la serie del backend, esto navega la que ya está en pantalla.
-  const controles = useVentanaVisible(barras.length, ancho)
+  const gestosRef = useRef<HTMLDivElement>(null)
+  // Gestos (desplazar, pellizcar, rueda, doble toque/clic) sobre la serie que ya está en pantalla:
+  // el selector de período recarga la serie del backend, esto navega la que ya está.
+  // Editando zonas el gráfico sigue navegable: las manijas se marcan como gesto propio y el hook no
+  // las toma (ver `ZonasPrecio`).
+  const controles = useVentanaVisible(barras.length, ancho, gestosRef, {
+    activo: true,
+    // Tocar la vela que ya tiene la cruz la quita: en el celular no hay "sacar el mouse".
+    onToque: i => onHover(hoverIndex === i ? null : i),
+    onCruz: onHover,
+    serie: barras,
+    onCambioSerie: () => onHover(null),
+  })
   const escalaX = useEscalaX(barras.length, ancho, controles.ventana)
 
   const overlaysPrecio: OverlayPrecio[] = []
@@ -60,112 +79,93 @@ export default function GraficoTecnico({
     else if (espec.destino === 'volumen') overlaysVolumen.push({ clave, color, series })
     else panelesOsciladores.push({ tipo: a.tipo, clave, series })
   }
-  const leyenda = [...overlaysPrecio, ...overlaysVolumen]
+  // La leyenda lleva el valor de cada overlay en la vela de la cruz (o la última): con dos medias
+  // del mismo tipo el color es lo único que las distingue, y el número es lo que no se ve a ojo.
+  const indiceLeyenda = hoverIndex ?? barras.length - 1
+  const leyenda = [
+    ...overlaysPrecio.map(o => ({ clave: o.clave, color: o.color, valores: salidasGraficables(o).map(([, s]) => s[indiceLeyenda]) })),
+    ...overlaysVolumen.map(o => ({ clave: o.clave, color: o.color, valores: Object.values(o.series).map(s => s[indiceLeyenda]) })),
+  ]
 
-  const altoPrecio = fullscreen ? 380 : 240
-  const altoOscilador = fullscreen ? 130 : 90
-  const altoVolumen = fullscreen ? 110 : 70
-
-  const barraHover = hoverIndex != null ? barras[hoverIndex] : undefined
+  const alto = useAltosGrafico(!!fullscreen, {
+    osciladores: panelesOsciladores.length, equity: false, volumen: tieneVolumen,
+  })
 
   return (
     <div ref={containerRef} className="w-full">
-      <div className="flex items-center justify-between mb-1.5 gap-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-        {moneda && (
-          <span className="shrink-0 text-label font-semibold px-1.5 py-0.5 rounded border border-app-border text-app-text-dim">
-            {moneda}
-          </span>
-        )}
-        <div className="text-label text-app-text-dim font-mono tabular-nums h-4 truncate">
-          {barraHover
-            ? `${barraHover.fecha} · ${moneda ? moneda + ' ' : ''}O ${barraHover.apertura?.toFixed(2) ?? '—'} A ${barraHover.maximo?.toFixed(2) ?? '—'} B ${barraHover.minimo?.toFixed(2) ?? '—'} C ${barraHover.cierre.toFixed(2)}${barraHover.volumen != null ? ` · Vol ${Math.round(barraHover.volumen).toLocaleString('es-AR')}` : ''}`
-            : ' '}
-        </div>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            type="button" onClick={() => controles.zoom(1 / 1.5)}
-            disabled={controles.completa || editandoZonas}
-            aria-label="Alejar" title="Alejar"
-            className="w-7 h-7 rounded flex items-center justify-center bg-app-surface-2 text-app-text-dim disabled:opacity-40"
-          >−</button>
-          <button
-            type="button" onClick={() => controles.zoom(1.5)} disabled={editandoZonas}
-            aria-label="Acercar" title="Acercar"
-            className="w-7 h-7 rounded flex items-center justify-center bg-app-surface-2 text-app-text-dim disabled:opacity-40"
-          >+</button>
-          <button
-            type="button" onClick={controles.reset}
-            disabled={controles.completa || editandoZonas}
-            aria-label="Ver todo el período" title="Ver todo el período"
-            className="w-7 h-7 rounded flex items-center justify-center bg-app-surface-2 text-app-text-dim disabled:opacity-40"
-          >⤢</button>
-          {onToggleFullscreen && (
-            <button
-              onClick={onToggleFullscreen} className="text-app-text-dim shrink-0 w-7 h-7 flex items-center justify-center"
-              aria-label={fullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
-            >
-              {fullscreen ? <Icon name="close" className="w-4 h-4" /> : <span className="text-body leading-none">⛶</span>}
-            </button>
-          )}
-        </div>
-      </div>
+      <FichaBarra
+        barras={barras} indice={hoverIndex} moneda={moneda} onQuitar={() => onHover(null)}
+        acciones={
+          <BotonesGrafico controles={controles} fullscreen={fullscreen} onToggleFullscreen={onToggleFullscreen} />
+        }
+      />
 
-      {/* Leyenda de los overlays sobre precio/volumen: con dos medias del mismo tipo el color es
-          lo único que las distingue. Los osciladores ya llevan su clave como título del panel. */}
       {leyenda.length > 0 && (
-        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-1 text-label text-app-text-dim font-mono">
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-1 text-label text-app-text-dim font-mono tabular-nums">
           {leyenda.map(o => (
             <span key={o.clave} className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full shrink-0" style={{ background: o.color }} />
               {o.clave}
+              <span style={{ color: o.color }}>{o.valores.map(v => formatoValor(v)).join(' / ')}</span>
             </span>
           ))}
         </div>
       )}
 
-      <div
-        className={editandoZonas ? '' : controles.arrastrando ? 'cursor-grabbing' : 'cursor-grab'}
-        {...(editandoZonas ? {} : controles.handlers)}
-      >
-
-      <PanelPrecio
-        barras={barras} escalaX={escalaX} alto={altoPrecio} tieneVelas={tieneVelas} moneda={moneda}
-        overlays={overlaysPrecio} senales={senales} primeraBarraEvaluable={primeraBarraEvaluable}
-        zonas={zonas} editandoZonas={editandoZonas} onArrastrarZona={onArrastrarZona}
-        hoverIndex={hoverIndex} onHover={onHover}
-      />
-
-      {panelesOsciladores.map(p => (
-        <div key={p.clave} className="mt-2">
-          <PanelIndicador
-            tipo={p.tipo} clave={p.clave} series={p.series} escalaX={escalaX}
-            alto={altoOscilador} hoverIndex={hoverIndex} onHover={onHover}
-          />
-        </div>
-      ))}
-
-      {tieneVolumen && (
-        <div className="mt-2">
-          <PanelVolumen
-            barras={barras} overlays={overlaysVolumen} escalaX={escalaX}
-            alto={altoVolumen} hoverIndex={hoverIndex} onHover={onHover}
-          />
+      {editandoZonas && edicionZonas && (
+        <div className="mb-1.5 flex items-center gap-2 rounded-xl bg-app-accent-soft px-2.5 py-1.5">
+          <span className={`min-w-0 flex-1 text-label ${edicionZonas.problema ? 'text-app-neg' : 'text-app-text-dim'}`}>
+            {edicionZonas.problema ?? 'Arrastrá las manijas ↕ para mover los bordes.'}
+          </span>
+          <button
+            type="button" onClick={edicionZonas.onCancelar}
+            className="shrink-0 h-9 px-3 rounded-lg text-caption font-semibold text-app-text-dim"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button" onClick={edicionZonas.onGuardar}
+            disabled={!!edicionZonas.problema || edicionZonas.guardando}
+            className="shrink-0 h-9 px-3 rounded-lg bg-app-accent text-caption font-semibold text-white disabled:opacity-40"
+          >
+            {edicionZonas.guardando ? 'Guardando…' : 'Guardar'}
+          </button>
         </div>
       )}
-      </div>
 
-      <div className="mt-1 text-label text-app-text-faint font-mono tabular-nums">
-        {barras.length > 0 && (
-          <>
-            {escalaX.visibles} de {barras.length} ruedas · {barras[escalaX.inicio]?.fecha} → {barras[escalaX.fin]?.fecha}
-            {editandoZonas
-              ? ' · zoom y desplazamiento en pausa mientras editás'
-              : !controles.completa && ' · doble clic para ver todo'}
-          </>
+      <div
+        ref={gestosRef}
+        className={controles.arrastrando ? 'cursor-grabbing' : 'cursor-grab'}
+        style={estiloContenedorGestos()}
+      >
+        <PanelPrecio
+          barras={barras} escalaX={escalaX} alto={alto.precio} tieneVelas={tieneVelas} moneda={moneda}
+          overlays={overlaysPrecio} senales={senales} primeraBarraEvaluable={primeraBarraEvaluable}
+          zonas={zonas} editandoZonas={editandoZonas} onArrastrarZona={onArrastrarZona}
+          hoverIndex={hoverIndex} onHover={onHover}
+        />
+        <EjeFechas barras={barras} escalaX={escalaX} />
+
+        {panelesOsciladores.map(p => (
+          <div key={p.clave} className="mt-1.5">
+            <PanelIndicador
+              tipo={p.tipo} clave={p.clave} series={p.series} escalaX={escalaX}
+              alto={alto.oscilador} hoverIndex={hoverIndex} onHover={onHover}
+            />
+          </div>
+        ))}
+
+        {tieneVolumen && (
+          <div className="mt-1.5">
+            <PanelVolumen
+              barras={barras} overlays={overlaysVolumen} escalaX={escalaX}
+              alto={alto.volumen} hoverIndex={hoverIndex} onHover={onHover}
+            />
+          </div>
         )}
       </div>
+
+      <PieGrafico barras={barras} escalaX={escalaX} completa={controles.completa} />
     </div>
   )
 }

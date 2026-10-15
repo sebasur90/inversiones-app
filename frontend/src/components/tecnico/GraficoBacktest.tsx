@@ -1,16 +1,20 @@
 import { useRef, useState } from 'react'
 import type { BarraOut, CurvaPuntoOut, IndicadorDsl, OperacionOut, SenalOut } from '../../api'
 import { useEscalaX } from './useEscalaX'
-import { useVentanaVisible } from './useVentanaVisible'
+import { estiloContenedorGestos, useVentanaVisible } from './useVentanaVisible'
 import { useAnchoContenedor } from './useAnchoContenedor'
+import { useAltosGrafico } from './useAltosGrafico'
 import { manejadoresPuntero } from './crosshair'
 import { trazoDeSerie, valoresVisibles } from './trazo'
-import PanelPrecio, { type GatilloPrecio, type OverlayPrecio } from './PanelPrecio'
+import PanelPrecio, { salidasGraficables, type GatilloPrecio, type OverlayPrecio } from './PanelPrecio'
 import PanelIndicador from './PanelIndicador'
 import PanelVolumen from './PanelVolumen'
+import EjeFechas from './EjeFechas'
+import FichaBarra from './FichaBarra'
+import { BotonesGrafico, PieGrafico } from './ControlesGrafico'
+import { formatoValor } from './formatoEjes'
 import { ESPEC_POR_TIPO, claveIndicador } from './indicadoresConfig'
 import { COLOR_MOTIVO, ETIQUETA_MOTIVO, GLIFO_MOTIVO } from './motivosSalida'
-import { Icon } from '../icons/Icons'
 
 /** Colores para distinguir varios overlays del mismo tipo sobre el precio (p.ej. las dos medias
  * del cruce de medias, que en `indicadoresConfig` comparten color). */
@@ -19,11 +23,6 @@ const COLOR_ESTRATEGIA = '#3b82f6'
 const COLOR_BUYHOLD = '#94a3b8'
 const COLOR_GRID = '#1c1f2a'
 const COLOR_EJE = '#94a3b8'
-
-const ALTOS = {
-  normal: { precio: 240, oscilador: 90, equity: 110, volumen: 70 },
-  fullscreen: { precio: 400, oscilador: 130, equity: 150, volumen: 100 },
-}
 
 /**
  * Gráfico del resultado de un backtest: velas del precio + indicadores de la estrategia (medias,
@@ -90,10 +89,17 @@ export default function GraficoBacktest({
   const pbe = primeraBarraEvaluable != null && primeraBarraEvaluable > off ? primeraBarraEvaluable - off : undefined
 
   const [containerRef, ancho] = useAnchoContenedor<HTMLDivElement>(280)
-  const controles = useVentanaVisible(barras.length, ancho)
-  const escalaX = useEscalaX(barras.length, ancho, controles.ventana)
+  const gestosRef = useRef<HTMLDivElement>(null)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
-  const alto = fullscreen ? ALTOS.fullscreen : ALTOS.normal
+  const controles = useVentanaVisible(barras.length, ancho, gestosRef, {
+    activo: true,
+    onToque: i => setHoverIndex(hoverIndex === i ? null : i),
+    onCruz: setHoverIndex,
+    // `barrasRaw` y no `barras`: ésta es un `.slice()` nuevo en cada render.
+    serie: barrasRaw,
+    onCambioSerie: () => setHoverIndex(null),
+  })
+  const escalaX = useEscalaX(barras.length, ancho, controles.ventana)
 
   const overlaysPrecio: OverlayPrecio[] = []
   const overlaysVolumen: { clave: string; color: string; series: Record<string, (number | null)[]> }[] = []
@@ -113,9 +119,14 @@ export default function GraficoBacktest({
     }
   })
 
-  const barraHover = hoverIndex != null ? barras[hoverIndex] : undefined
-  const equityHover = hoverIndex != null ? curvaEquity[hoverIndex]?.valor : undefined
-  const buyHoldHover = hoverIndex != null ? curvaBuyHold[hoverIndex]?.valor : undefined
+  const alto = useAltosGrafico(fullscreen, {
+    osciladores: panelesOsciladores.length, equity: mostrarEquity, volumen: tieneVolumen,
+  })
+
+  // Valores de la vela de la cruz o, sin cruz, de la última: en el celular no hay hover.
+  const indiceValores = hoverIndex ?? barras.length - 1
+  const equityHover = curvaEquity[indiceValores]?.valor
+  const buyHoldHover = curvaBuyHold[indiceValores]?.valor
 
   // Motivos efectivamente presentes: una leyenda con los cinco siempre sería ruido en una
   // estrategia que sólo sale por regla.
@@ -123,33 +134,20 @@ export default function GraficoBacktest({
 
   return (
     <div ref={containerRef} className="w-full">
-      <div className="flex items-center justify-between gap-2 mb-1">
-        <div className="text-label text-app-text-dim font-mono tabular-nums h-4 truncate">
-          {barraHover
-            ? `${barraHover.fecha} · ${moneda ? moneda + ' ' : ''}O ${barraHover.apertura?.toFixed(2) ?? '—'} A ${barraHover.maximo?.toFixed(2) ?? '—'} B ${barraHover.minimo?.toFixed(2) ?? '—'} C ${barraHover.cierre.toFixed(2)}`
-            : ' '}
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <BotonControl label="Alejar" onClick={() => controles.zoom(1 / 1.5)} disabled={controles.completa}>−</BotonControl>
-          <BotonControl label="Acercar" onClick={() => controles.zoom(1.5)}>+</BotonControl>
-          <BotonControl label="Ver todo el período" onClick={controles.reset} disabled={controles.completa}>⤢</BotonControl>
-          {onToggleFullscreen && (
-            <button
-              type="button" onClick={onToggleFullscreen}
-              aria-label={fullscreen ? 'Salir de pantalla completa' : 'Ver en pantalla completa'}
-              className="w-7 h-7 rounded flex items-center justify-center bg-app-surface-2 text-app-text-dim"
-            >
-              {fullscreen ? <Icon name="close" className="w-3.5 h-3.5" /> : <span className="text-body leading-none">⛶</span>}
-            </button>
-          )}
-        </div>
-      </div>
+      <FichaBarra
+        barras={barras} indice={hoverIndex} moneda={moneda} senales={senales} operaciones={operaciones}
+        conSenales onQuitar={() => setHoverIndex(null)}
+        acciones={<BotonesGrafico controles={controles} fullscreen={fullscreen} onToggleFullscreen={onToggleFullscreen} />}
+      />
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1.5 text-label text-app-text-dim">
         {overlaysPrecio.map(o => (
           <span key={o.clave} className="inline-flex items-center gap-1">
             <span className="inline-block w-3 h-0.5 rounded" style={{ background: o.color }} />
             {o.clave}
+            <span className="font-mono tabular-nums" style={{ color: o.color }}>
+              {salidasGraficables(o).map(([, s]) => formatoValor(s[indiceValores])).join(' / ')}
+            </span>
           </span>
         ))}
         {senales.length > 0 && (
@@ -170,8 +168,9 @@ export default function GraficoBacktest({
       </div>
 
       <div
+        ref={gestosRef}
         className={controles.arrastrando ? 'cursor-grabbing' : 'cursor-grab'}
-        {...controles.handlers}
+        style={estiloContenedorGestos()}
       >
         <PanelPrecio
           barras={barras} escalaX={escalaX} alto={alto.precio} tieneVelas={tieneVelas} moneda={moneda}
@@ -179,9 +178,10 @@ export default function GraficoBacktest({
           gatillo={gatillo}
           hoverIndex={hoverIndex} onHover={setHoverIndex}
         />
+        <EjeFechas barras={barras} escalaX={escalaX} />
 
         {panelesOsciladores.map(p => (
-          <div key={p.clave} className="mt-2">
+          <div key={p.clave} className="mt-1.5">
             <PanelIndicador
               tipo={p.tipo} clave={p.clave} series={p.series} escalaX={escalaX}
               alto={alto.oscilador} hoverIndex={hoverIndex} onHover={setHoverIndex}
@@ -190,13 +190,17 @@ export default function GraficoBacktest({
         ))}
 
         {mostrarEquity && (
-          <div className="mt-2">
-            <div className="flex items-center justify-between text-label text-app-text-faint px-1 mb-0.5">
-              <span>Rendimiento vs. buy &amp; hold (base 100)</span>
-              <span className="font-mono tabular-nums">
-                {equityHover != null
-                  ? `Estrategia ${equityHover.toFixed(1)} · B&H ${buyHoldHover?.toFixed(1) ?? '—'}`
-                  : ''}
+          <div className="mt-1.5">
+            <div className="flex items-center justify-between gap-2 text-label text-app-text-faint px-1 mb-0.5">
+              <span className="min-w-0 truncate">Rendimiento vs. buy &amp; hold (base 100)</span>
+              <span className="shrink-0 font-mono tabular-nums">
+                {equityHover != null && (
+                  <>
+                    <span style={{ color: COLOR_ESTRATEGIA }}>{equityHover.toFixed(1)}</span>
+                    {' · '}
+                    <span>B&amp;H {buyHoldHover?.toFixed(1) ?? '—'}</span>
+                  </>
+                )}
               </span>
             </div>
             <PanelEquity
@@ -207,7 +211,7 @@ export default function GraficoBacktest({
         )}
 
         {tieneVolumen && (
-          <div className="mt-2">
+          <div className="mt-1.5">
             <PanelVolumen
               barras={barras} overlays={overlaysVolumen} escalaX={escalaX}
               alto={alto.volumen} hoverIndex={hoverIndex} onHover={setHoverIndex}
@@ -216,33 +220,8 @@ export default function GraficoBacktest({
         )}
       </div>
 
-      <div className="mt-1 text-label text-app-text-faint font-mono tabular-nums">
-        {barras.length > 0 && (
-          <>
-            {escalaX.visibles} de {barras.length} ruedas · {barras[escalaX.inicio]?.fecha} → {barras[escalaX.fin]?.fecha}
-            {!controles.completa && ' · doble clic para ver todo'}
-          </>
-        )}
-      </div>
+      <PieGrafico barras={barras} escalaX={escalaX} completa={controles.completa} />
     </div>
-  )
-}
-
-function BotonControl({
-  children, label, onClick, disabled,
-}: {
-  children: React.ReactNode
-  label: string
-  onClick: () => void
-  disabled?: boolean
-}) {
-  return (
-    <button
-      type="button" onClick={onClick} disabled={disabled} aria-label={label} title={label}
-      className="w-7 h-7 rounded flex items-center justify-center bg-app-surface-2 text-app-text-dim disabled:opacity-40"
-    >
-      {children}
-    </button>
   )
 }
 
@@ -270,7 +249,7 @@ function PanelEquity({
   const yDeValor = (v: number) => alto - ((v - y0) / (y1 - y0 || 1)) * alto
 
   return (
-    <svg ref={svgRef} width={escalaX.ancho} height={alto} className="block touch-none select-none" {...handlers}>
+    <svg ref={svgRef} width={escalaX.ancho} height={alto} className="block select-none" {...handlers}>
       <line x1={0} x2={escalaX.ancho} y1={yDeValor(100)} y2={yDeValor(100)} stroke={COLOR_GRID} strokeDasharray="3 3" />
       <path d={trazoDeSerie(bh, escalaX, yDeValor)} fill="none" stroke={COLOR_BUYHOLD} strokeWidth={1.5} strokeDasharray="4 3" />
       <path d={trazoDeSerie(est, escalaX, yDeValor)} fill="none" stroke={COLOR_ESTRATEGIA} strokeWidth={2} />

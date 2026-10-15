@@ -1,8 +1,9 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import type { BarraOut, OperacionOut, SenalOut } from '../../api'
 import type { EscalaX } from './useEscalaX'
 import { manejadoresPuntero } from './crosshair'
 import { trazoDeSerie, valoresVisibles } from './trazo'
+import { formatoPrecio } from './formatoEjes'
 import { COLOR_MOTIVO, GLIFO_MOTIVO } from './motivosSalida'
 import ZonasPrecio, { valoresDeZonas, type BordeZona, type ZonasDibujo } from './ZonasPrecio'
 import type { TipoZona } from '../../api'
@@ -35,6 +36,13 @@ const COLOR_TAKE = '#10b981'
 const COLOR_TRAILING = '#fbbf24'
 const COLOR_GATILLO_COMPRA = '#10b981'
 const COLOR_GATILLO_VENTA = '#ef4444'
+const COLOR_CRUZ = '#475569'
+/** Halo detrás de las etiquetas del eje: se leen aunque pase una vela o una media por debajo. */
+const COLOR_HALO = '#121621'
+/** Con velas más angostas que esto, el cuerpo y la mecha se confunden en una mancha: se dibuja la
+ * línea de cierres hasta que el zoom las vuelva legibles. */
+const PASO_MINIMO_VELAS = 2
+const FRACCIONES_GRILLA = [0.25, 0.5, 0.75]
 
 /** Salidas de un indicador de precio que NO están en la escala del precio (p.ej. Bollinger trae
  * `ancho_pct`/`pctb`, que son porcentajes u oscilan 0-1, junto con `media`/`superior`/`inferior`
@@ -45,7 +53,7 @@ const SALIDAS_EXCLUIDAS_PRECIO: Record<string, string[]> = {
   // velas aplastarían el precio contra el borde. `maximo`/`minimo`/`medio` sí son precios.
   EXTREMOS: ['dist_max_pct', 'dist_min_pct'],
 }
-function salidasGraficables(o: OverlayPrecio): [string, (number | null)[]][] {
+export function salidasGraficables(o: OverlayPrecio): [string, (number | null)[]][] {
   const excluidas = SALIDAS_EXCLUIDAS_PRECIO[o.tipo] ?? []
   return Object.entries(o.series).filter(([salida]) => !excluidas.includes(salida))
 }
@@ -79,9 +87,13 @@ export default function PanelPrecio({
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
   const handlers = manejadoresPuntero(svgRef, escalaX, onHover)
+  /** Escala Y congelada mientras se arrastra el borde de una zona. Si se recalculara, mover el
+   * borde que define el máximo cambiaría la escala bajo el dedo y la línea se escaparía. */
+  const [dominioCongelado, setDominioCongelado] = useState<[number, number] | null>(null)
+  const dibujarVelas = tieneVelas && escalaX.pasoX >= PASO_MINIMO_VELAS
 
   const cierres = barras.map(b => b.cierre)
-  const valoresBase = tieneVelas
+  const valoresBase = dibujarVelas
     ? [
         ...valoresVisibles(barras.map(b => b.maximo ?? b.cierre), escalaX),
         ...valoresVisibles(barras.map(b => b.minimo ?? b.cierre), escalaX),
@@ -99,8 +111,7 @@ export default function PanelPrecio({
   const minV = todos.length ? Math.min(...todos) : 0
   const maxV = todos.length ? Math.max(...todos) : 1
   const pad = (maxV - minV) * 0.08 || Math.abs(maxV) * 0.05 || 1
-  const y0 = minV - pad
-  const y1 = maxV + pad
+  const [y0, y1] = dominioCongelado ?? [minV - pad, maxV + pad]
   const yDeValor = (v: number) => alto - ((v - y0) / (y1 - y0 || 1)) * alto
   /** Inversa de `yDeValor`: la usa el arrastre de los bordes de zona. */
   const valorDeY = (y: number) => y0 + ((alto - y) / (alto || 1)) * (y1 - y0)
@@ -122,8 +133,21 @@ export default function PanelPrecio({
     return hasta >= escalaX.inicio && desde <= escalaX.fin
   })
 
+  // Eje de precio: el último cierre (con su color según la rueda) y, con la cruz puesta, el cierre
+  // de esa vela. Las etiquetas de la grilla que quedarían debajo de alguna de las dos se omiten.
+  const ultima = barras[ultimoIndice]
+  const yUltimo = ultima ? yDeValor(ultima.cierre) : null
+  const ultimoEnRango = yUltimo != null && yUltimo >= 6 && yUltimo <= alto - 6
+  const colorUltimo = ultima && ultima.cierre >= (barras[ultimoIndice - 1]?.cierre ?? ultima.cierre) ? COLOR_ALCISTA : COLOR_BAJISTA
+  const barraCruz = hoverIndex != null && escalaX.visible(hoverIndex) ? barras[hoverIndex] : undefined
+  const yCruz = barraCruz ? yDeValor(barraCruz.cierre) : null
+  const ocupadas = [ultimoEnRango ? yUltimo : null, yCruz].filter((y): y is number => y != null)
+  const etiquetasGrilla = FRACCIONES_GRILLA
+    .map(f => ({ y: alto * f, valor: valorDeY(alto * f) }))
+    .filter(e => ocupadas.every(y => Math.abs(y - e.y) > 13))
+
   return (
-    <svg ref={svgRef} width={escalaX.ancho} height={alto} className="block touch-none select-none" {...handlers}>
+    <svg ref={svgRef} width={escalaX.ancho} height={alto} className="block select-none" {...handlers}>
       {primeraBarraEvaluable != null && primeraBarraEvaluable > 0 && escalaX.inicio < primeraBarraEvaluable && (
         <rect
           x={0} y={0}
@@ -132,7 +156,7 @@ export default function PanelPrecio({
         />
       )}
 
-      {[0.25, 0.5, 0.75].map(f => (
+      {FRACCIONES_GRILLA.map(f => (
         <line key={f} x1={0} x2={escalaX.ancho} y1={alto * f} y2={alto * f} stroke={COLOR_GRID} strokeDasharray="3 3" />
       ))}
 
@@ -153,7 +177,7 @@ export default function PanelPrecio({
         </text>
       )}
 
-      {tieneVelas ? (
+      {dibujarVelas ? (
         visibles.map(i => {
           const b = barras[i]
           const alcista = b.cierre >= (b.apertura ?? b.cierre)
@@ -193,6 +217,7 @@ export default function PanelPrecio({
           zonas={zonas} ancho={escalaX.ancho} alto={alto}
           yDeValor={yDeValor} valorDeY={valorDeY} svgRef={svgRef}
           editando={editandoZonas} onArrastrar={onArrastrarZona}
+          onArrastreActivo={activo => setDominioCongelado(activo ? [y0, y1] : null)}
         />
       )}
 
@@ -280,10 +305,46 @@ export default function PanelPrecio({
         )
       })}
 
+      {etiquetasGrilla.map(e => (
+        <text
+          key={e.y} x={escalaX.ancho - 3} y={e.y + 3} fontSize={9} textAnchor="end"
+          fill={COLOR_EJE} fillOpacity={0.85} stroke={COLOR_HALO} strokeWidth={3} paintOrder="stroke"
+          className="font-mono" pointerEvents="none"
+        >
+          {formatoPrecio(e.valor)}
+        </text>
+      ))}
+
+      {ultima && ultimoEnRango && yUltimo != null && (
+        <g pointerEvents="none">
+          <line x1={0} x2={escalaX.ancho} y1={yUltimo} y2={yUltimo} stroke={colorUltimo} strokeOpacity={0.45} strokeDasharray="1 3" />
+          <EtiquetaEje x={escalaX.ancho} y={yUltimo} texto={formatoPrecio(ultima.cierre)} fondo={colorUltimo} />
+        </g>
+      )}
+
       {hoverIndex != null && barras[hoverIndex] && escalaX.visible(hoverIndex) && (
         <line x1={escalaX.xDeIndice(hoverIndex)} x2={escalaX.xDeIndice(hoverIndex)} y1={0} y2={alto} stroke={COLOR_EJE} strokeOpacity={0.5} />
       )}
+      {barraCruz && yCruz != null && (
+        <g pointerEvents="none">
+          <line x1={0} x2={escalaX.ancho} y1={yCruz} y2={yCruz} stroke={COLOR_EJE} strokeOpacity={0.35} strokeDasharray="3 3" />
+          <EtiquetaEje x={escalaX.ancho} y={yCruz} texto={formatoPrecio(barraCruz.cierre)} fondo={COLOR_CRUZ} />
+        </g>
+      )}
     </svg>
+  )
+}
+
+/** Valor sobre el borde derecho, en una cajita del color de la línea que rotula. */
+function EtiquetaEje({ x, y, texto, fondo }: { x: number; y: number; texto: string; fondo: string }) {
+  const ancho = texto.length * 5.6 + 8
+  return (
+    <g>
+      <rect x={x - ancho} y={y - 7} width={ancho} height={14} rx={2} fill={fondo} />
+      <text x={x - 4} y={y + 3} fontSize={9.5} textAnchor="end" fill="#fff" className="font-mono font-bold">
+        {texto}
+      </text>
+    </g>
   )
 }
 

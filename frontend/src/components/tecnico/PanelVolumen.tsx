@@ -3,6 +3,7 @@ import type { BarraOut } from '../../api'
 import type { EscalaX } from './useEscalaX'
 import { manejadoresPuntero } from './crosshair'
 import { trazoDeSerie, valoresVisibles } from './trazo'
+import { formatoVolumen } from './formatoEjes'
 
 const COLOR_ALCISTA = '#10b981'
 const COLOR_BAJISTA = '#ef4444'
@@ -35,10 +36,15 @@ export default function PanelVolumen({
   const minOverlay = Math.min(0, ...overlayValores)
   const yDeOverlay = (v: number) => alto - ((v - minOverlay) / (maxOverlay - minOverlay || 1)) * alto
 
+  const volumenTitulo = barras[hoverIndex ?? barras.length - 1]?.volumen
+
   return (
     <div>
-      <div className="text-label text-app-text-faint px-1 mb-0.5">Volumen</div>
-      <svg ref={svgRef} width={escalaX.ancho} height={alto} className="block touch-none select-none" {...handlers}>
+      <div className="flex items-baseline gap-2 text-label text-app-text-faint px-1 mb-0.5">
+        <span>Volumen</span>
+        <span className="font-mono tabular-nums text-app-text-dim">{formatoVolumen(volumenTitulo)}</span>
+      </div>
+      <svg ref={svgRef} width={escalaX.ancho} height={alto} className="block select-none" {...handlers}>
         {barras.map((b, i) => {
           if (b.volumen == null || !escalaX.visible(i)) return null
           const alcista = b.cierre >= (b.apertura ?? (barras[i - 1]?.cierre ?? b.cierre))

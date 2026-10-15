@@ -1,26 +1,27 @@
-import type { MouseEvent, RefObject, TouchEvent } from 'react'
+import type { PointerEvent, RefObject } from 'react'
 import type { EscalaX } from './useEscalaX'
 
-/** Maneja hover/touch sobre un panel SVG y lo traduce a índice de barra vía `escalaX`.
+/** Hover del **mouse** sobre un panel SVG, traducido a índice de barra vía `escalaX`.
  * Compartido entre PanelPrecio/PanelIndicador/PanelVolumen para que el crosshair quede
- * sincronizado sin importar sobre qué panel esté el puntero. */
+ * sincronizado sin importar sobre qué panel esté el puntero.
+ *
+ * Sólo mouse: en el celular la cruz la maneja `useVentanaVisible` (toque para fijarla, mantener
+ * apretado para recorrer velas), porque ahí un dedo que se mueve es desplazamiento o scroll, y la
+ * cruz no puede desaparecer al levantarlo. */
 export function manejadoresPuntero(
   svgRef: RefObject<SVGSVGElement | null>,
   escalaX: EscalaX,
   onHover: (i: number | null) => void,
 ) {
-  const desdeClientX = (clientX: number) => {
-    const rect = svgRef.current?.getBoundingClientRect()
-    if (!rect) return
-    onHover(escalaX.indiceDeX(clientX - rect.left))
-  }
   return {
-    onMouseMove: (e: MouseEvent) => desdeClientX(e.clientX),
-    onMouseLeave: () => onHover(null),
-    onTouchMove: (e: TouchEvent) => {
-      const t = e.touches[0]
-      if (t) desdeClientX(t.clientX)
+    onPointerMove: (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse') return
+      const rect = svgRef.current?.getBoundingClientRect()
+      if (!rect) return
+      onHover(escalaX.indiceDeX(e.clientX - rect.left))
     },
-    onTouchEnd: () => onHover(null),
+    onPointerLeave: (e: PointerEvent) => {
+      if (e.pointerType === 'mouse') onHover(null)
+    },
   }
 }

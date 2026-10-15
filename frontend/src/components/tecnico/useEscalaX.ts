@@ -5,17 +5,22 @@ import { useMemo } from 'react'
  * de barras sobre el mismo ancho, así el índice de una barra cae en el mismo píxel en todos los
  * paneles y el crosshair no se desincroniza.
  *
- * `inicio`/`fin` son la **ventana visible** (índices de barra, ambos inclusive) que produce
- * `useVentanaVisible` al hacer zoom o desplazar. Los paneles siguen recibiendo las series
- * completas y usan estos índices para acotar lo que dibujan y el rango de la escala Y: recortar
- * los arrays en cambio rompería la alineación 1:1 entre barras, señales, curvas e indicadores,
- * que es el contrato del backtest.
+ * La **ventana visible** que produce `useVentanaVisible` puede empezar en una fracción de barra:
+ * el desplazamiento con el dedo sigue al dedo píxel a píxel, no a saltos de una vela. Esa fracción
+ * vive sólo en `xDeIndice`/`indiceDeX`; `inicio`/`fin` son **enteros** (la primera y la última
+ * barra al menos en parte a la vista), así los bucles de los paneles no cambian. Lo que queda a
+ * medias contra el borde lo recorta el propio `<svg>`.
+ *
+ * Los paneles siguen recibiendo las series completas y usan estos índices para acotar lo que
+ * dibujan y el rango de la escala Y: recortar los arrays en cambio rompería la alineación 1:1 entre
+ * barras, señales, curvas e indicadores, que es el contrato del backtest.
  */
 export interface EscalaX {
   ancho: number
   n: number
   inicio: number
   fin: number
+  /** Barras a la vista, redondeado (para mostrar). */
   visibles: number
   pasoX: number
   xDeIndice: (i: number) => number
@@ -30,19 +35,23 @@ export function useEscalaX(n: number, ancho: number, ventana?: { inicio: number;
   const finPedido = ventana?.fin ?? n - 1
 
   return useMemo(() => {
-    const inicio = Math.max(0, Math.min(inicioPedido, Math.max(0, n - 1)))
-    const fin = Math.max(inicio, Math.min(finPedido, Math.max(0, n - 1)))
-    const visibles = n > 0 ? fin - inicio + 1 : 0
-    const pasoX = visibles > 0 ? ancho / visibles : ancho
+    const ultimo = Math.max(0, n - 1)
+    const desde = Math.max(0, Math.min(inicioPedido, ultimo))
+    const hasta = Math.max(desde, Math.min(finPedido, ultimo))
+    const visiblesExactos = n > 0 ? hasta - desde + 1 : 0
+    const pasoX = visiblesExactos > 0 ? ancho / visiblesExactos : ancho
+    // El epsilon evita que un 12.0000001 de la aritmética de punto flotante sume una barra fantasma.
+    const inicio = Math.floor(desde + 1e-6)
+    const fin = Math.min(ultimo, Math.max(inicio, Math.ceil(hasta - 1e-6)))
     return {
       ancho,
       n,
       inicio,
       fin,
-      visibles,
+      visibles: Math.round(visiblesExactos),
       pasoX,
-      xDeIndice: (i: number) => (i - inicio) * pasoX + pasoX / 2,
-      indiceDeX: (x: number) => Math.min(fin, Math.max(inicio, inicio + Math.floor(x / pasoX))),
+      xDeIndice: (i: number) => (i - desde) * pasoX + pasoX / 2,
+      indiceDeX: (x: number) => Math.min(fin, Math.max(inicio, Math.floor(desde + x / (pasoX || 1)))),
       visible: (i: number) => i >= inicio - 1 && i <= fin + 1,
     }
   }, [n, ancho, inicioPedido, finPedido])

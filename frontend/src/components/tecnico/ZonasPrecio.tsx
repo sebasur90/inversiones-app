@@ -1,6 +1,8 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { TipoZona } from '../../api'
+import { ATRIBUTO_GESTO_PROPIO } from './useVentanaVisible'
+import { formatoPrecio, pasoRedondo, redondearA } from './formatoEjes'
 
 /** Un borde de una zona. `null` = ese lado está abierto. */
 export interface ZonaDibujo {
@@ -24,9 +26,14 @@ export const COLOR_ZONA_VENTA = '#a78bfa'
 export const COLOR_NIVEL_STOP = '#ef4444'
 export const COLOR_NIVEL_OBJETIVO = '#10b981'
 
-/** Alto del área táctil de un handle. 24 px es lo mínimo que un dedo acierta sin pelearse con el
- * gráfico; la línea visible es de 1.5 px y va centrada. */
-const ALTO_HANDLE = 24
+/** Manija de un borde: un tirador con el precio, sobre el lado izquierdo (el derecho es del eje de
+ * precios). El área táctil es más grande que lo que se ve: 40 px de alto es lo que un dedo acierta
+ * sin apuntar. Va escalonada (piso a la izquierda, techo a su lado) para que, en una zona angosta,
+ * las dos manijas no queden una encima de la otra. */
+const MANIJA = { ancho: 70, alto: 20, toque: 40, separacion: 6 }
+/** Píxeles de precio que vale un paso del arrastre: con 3 px por paso el borde se mueve de a
+ * saltos que se pueden elegir, no de a decimales al azar. */
+const PX_POR_PASO = 3
 
 /** Todos los precios que la zona aporta al dominio Y del panel, para que la banda no quede fuera
  * de la vista. Lo usa `PanelPrecio` antes de calcular la escala. */
@@ -50,9 +57,9 @@ export function hayAlgoQueDibujar(zonas: ZonasDibujo | undefined): boolean {
 function etiquetaZona(tipo: TipoZona, zona: ZonaDibujo): string {
   const nombre = tipo === 'compra' ? 'Compra' : 'Venta'
   const { piso, techo } = zona
-  if (piso != null && techo != null) return `${nombre} ${piso.toFixed(2)}–${techo.toFixed(2)}`
-  if (techo != null) return `${nombre} ≤ ${techo.toFixed(2)}`
-  if (piso != null) return `${nombre} ≥ ${piso.toFixed(2)}`
+  if (piso != null && techo != null) return `${nombre} ${formatoPrecio(piso)}–${formatoPrecio(techo)}`
+  if (techo != null) return `${nombre} ≤ ${formatoPrecio(techo)}`
+  if (piso != null) return `${nombre} ≥ ${formatoPrecio(piso)}`
   return nombre
 }
 
@@ -63,12 +70,14 @@ function etiquetaZona(tipo: TipoZona, zona: ZonaDibujo): string {
  * abierta de un lado). El borde que **dispara** el aviso va con línea llena y el opuesto punteado:
  * en una zona de compra dispara el techo (el precio baja y entra) y en una de venta el piso.
  *
- * En modo edición cada borde lleva un handle arrastrable. El arrastre usa `setPointerCapture` y
- * corta la propagación: si el evento llegara al contenedor del gráfico, el mismo gesto haría
- * también pan (`useVentanaVisible`) y mover un borde desplazaría la ventana visible.
+ * En modo edición cada borde lleva una manija arrastrable con su precio. Las manijas se marcan con
+ * `ATRIBUTO_GESTO_PROPIO`: `useVentanaVisible` no toma los gestos que empiezan ahí (si no, mover un
+ * borde desplazaría también la ventana) y el resto del gráfico sigue navegable mientras se edita
+ * — se puede acercar el tramo reciente para ubicar la zona contra las velas. El arrastre usa
+ * `setPointerCapture`, se redondea a un paso que depende de la escala y no deja cruzar los bordes.
  */
 export default function ZonasPrecio({
-  zonas, ancho, alto, yDeValor, valorDeY, svgRef, editando, onArrastrar,
+  zonas, ancho, alto, yDeValor, valorDeY, svgRef, editando, onArrastrar, onArrastreActivo,
 }: {
   zonas: ZonasDibujo
   ancho: number
@@ -78,17 +87,29 @@ export default function ZonasPrecio({
   svgRef: React.RefObject<SVGSVGElement | null>
   editando?: boolean
   onArrastrar?: (tipo: TipoZona, borde: BordeZona, valor: number) => void
+  /** Avisa cuándo empieza y termina un arrastre: el panel congela su escala Y mientras tanto. */
+  onArrastreActivo?: (activo: boolean) => void
 }) {
-  // Ref y no estado: el arrastre dispara en cada movimiento del puntero y re-renderizar para
-  // guardar cuál borde se está moviendo sería tirar frames (mismo criterio que `useVentanaVisible`).
-  const arrastre = useRef<{ tipo: TipoZona; borde: BordeZona } | null>(null)
+  // El ref lo leen los handlers (sin esperar al render); el estado resalta la manija activa.
+  const arrastre = useRef<{ tipo: TipoZona; borde: BordeZona; desfase: number } | null>(null)
+  const [activa, setActiva] = useState<string | null>(null)
 
-  function alBajar(e: ReactPointerEvent, tipo: TipoZona, borde: BordeZona) {
+  /** Cuánto vale un paso del arrastre, según la escala actual del panel. */
+  const paso = pasoRedondo(Math.abs(valorDeY(0) - valorDeY(PX_POR_PASO)))
+
+  function alBajar(e: ReactPointerEvent, tipo: TipoZona, borde: BordeZona, yBorde: number) {
     if (!editando || !onArrastrar) return
     e.stopPropagation()
     e.preventDefault()
-    arrastre.current = { tipo, borde }
+    const rect = svgRef.current?.getBoundingClientRect()
+    // Se recuerda dónde agarró el dedo respecto de la línea: si no, el borde saltaría al punto
+    // tocado (que puede estar 15 px más abajo, dentro del área táctil).
+    const desfase = rect ? yBorde - (e.clientY - rect.top) : 0
+    arrastre.current = { tipo, borde, desfase }
+    setActiva(`${tipo}-${borde}`)
+    onArrastreActivo?.(true)
     e.currentTarget.setPointerCapture(e.pointerId)
+    navigator.vibrate?.(8)
   }
 
   function alMover(e: ReactPointerEvent) {
@@ -97,8 +118,13 @@ export default function ZonasPrecio({
     e.stopPropagation()
     const rect = svgRef.current?.getBoundingClientRect()
     if (!rect) return
-    const y = Math.min(Math.max(e.clientY - rect.top, 0), alto)
-    const valor = valorDeY(y)
+    const y = Math.min(Math.max(e.clientY - rect.top + actual.desfase, 0), alto)
+    let valor = redondearA(valorDeY(y), paso)
+    // El piso no puede pasar al techo ni al revés: el borrador quedaría inválido a mitad del gesto
+    // y el usuario tendría que adivinar qué pasó.
+    const zona = zonas[actual.tipo]
+    if (actual.borde === 'piso' && zona?.techo != null) valor = Math.min(valor, redondearA(zona.techo - paso, paso))
+    if (actual.borde === 'techo' && zona?.piso != null) valor = Math.max(valor, redondearA(zona.piso + paso, paso))
     if (valor > 0) onArrastrar(actual.tipo, actual.borde, valor)
   }
 
@@ -106,6 +132,8 @@ export default function ZonasPrecio({
     if (!arrastre.current) return
     e.stopPropagation()
     arrastre.current = null
+    setActiva(null)
+    onArrastreActivo?.(false)
   }
 
   const bandas: { tipo: TipoZona; zona: ZonaDibujo; color: string }[] = []
@@ -149,24 +177,40 @@ export default function ZonasPrecio({
                   >
                     <title>{`${etiqueta}${dispara ? ' · este borde dispara el aviso' : ''}`}</title>
                   </line>
-                  {editando && (
-                    <>
-                      {/* Área táctil: ancha, invisible, y por encima de la línea. */}
-                      <rect
-                        x={0} y={y - ALTO_HANDLE / 2} width={ancho} height={ALTO_HANDLE}
-                        fill="transparent" style={{ cursor: 'ns-resize' }}
-                        onPointerDown={e => alBajar(e, tipo, borde)}
+                  {editando && (() => {
+                    const x = 2 + (borde === 'techo' ? MANIJA.ancho + MANIJA.separacion : 0)
+                    const esActiva = activa === `${tipo}-${borde}`
+                    return (
+                      <g
+                        {...{ [ATRIBUTO_GESTO_PROPIO]: '' }}
+                        style={{ cursor: 'ns-resize', touchAction: 'none' }}
+                        onPointerDown={e => alBajar(e, tipo, borde, y)}
                         onPointerMove={alMover}
                         onPointerUp={alSoltar}
                         onPointerCancel={alSoltar}
-                      />
-                      {/* Tirador visible, en el borde izquierdo para no tapar la etiqueta. */}
-                      <rect
-                        x={2} y={y - 4} width={22} height={8} rx={4}
-                        fill={color} fillOpacity={0.9} pointerEvents="none"
-                      />
-                    </>
-                  )}
+                      >
+                        <title>{`Arrastrá para mover el ${borde} de la zona de ${tipo}`}</title>
+                        {/* Área táctil: más grande que el tirador, invisible. */}
+                        <rect
+                          x={x - 2} y={y - MANIJA.toque / 2} width={MANIJA.ancho + 4} height={MANIJA.toque}
+                          fill="transparent"
+                        />
+                        {esActiva && (
+                          <line x1={0} x2={ancho} y1={y} y2={y} stroke={color} strokeWidth={2.5} opacity={0.9} />
+                        )}
+                        <rect
+                          x={x} y={y - MANIJA.alto / 2} width={MANIJA.ancho} height={MANIJA.alto} rx={MANIJA.alto / 2}
+                          fill={color} stroke={esActiva ? '#fff' : 'none'} strokeWidth={1.5}
+                        />
+                        <text
+                          x={x + MANIJA.ancho / 2} y={y + 3.5} fontSize={10} textAnchor="middle"
+                          fill="#0a0e18" className="font-mono font-bold" pointerEvents="none"
+                        >
+                          {`↕ ${formatoPrecio(valor)}`}
+                        </text>
+                      </g>
+                    )
+                  })()}
                 </g>
               )
             })}
@@ -202,7 +246,7 @@ export default function ZonasPrecio({
               x={4} y={yDeValor(valor) - 4} fontSize={9} fill={color} fillOpacity={0.9}
               className="font-mono"
             >
-              {`${texto} ${valor.toFixed(2)}`}
+              {`${texto} ${formatoPrecio(valor)}`}
             </text>
           </g>
         )
