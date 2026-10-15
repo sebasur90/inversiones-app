@@ -1,4 +1,4 @@
-const CACHE_NAME = 'inversiones-shell-v4'
+const CACHE_NAME = 'inversiones-shell-v5'
 const API_CACHE = 'inversiones-api-v1'
 const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png']
 
@@ -35,13 +35,18 @@ function apiConRespaldo(request) {
     .catch(() => caches.match(request).then((cached) => cached || Promise.reject(new Error('offline'))))
 }
 
-// El shell se sirve de caché y se revalida contra la red por detrás.
+// El shell se sirve de caché y se revalida contra la red por detrás. Sólo se guarda lo que
+// respondió bien: antes un chunk inexistente devolvía el index.html del fallback de nginx y
+// quedaba cacheado bajo la URL del .js, rompiendo esa pantalla para siempre (la versión del
+// caché se subió para purgar lo ya contaminado).
 function shellStaleWhileRevalidate(request) {
   return caches.match(request).then((cached) => {
     const network = fetch(request)
       .then((response) => {
-        const copia = response.clone()
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, copia))
+        if (response.ok) {
+          const copia = response.clone()
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copia))
+        }
         return response
       })
       .catch(() => cached)
