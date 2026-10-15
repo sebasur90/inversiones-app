@@ -284,3 +284,103 @@ def test_no_recotiza_lo_que_esta_en_cartera(client, sesion):
     db = sesion()
     assert db.query(PrecioWatchlist).count() == 0
     db.close()
+
+
+# ── Serie en USD de un CEDEAR al darlo de alta ───────────────────────────────
+
+def _yahoo_xlp(monkeypatch, llamadas=None):
+    """Yahoo de mentira: AAPL cotiza en USD con ~5 meses de velas hasta ayer."""
+    from datetime import timedelta
+
+    hoy = date.today()
+
+    def _info(ticker):
+        if llamadas is not None:
+            llamadas.append(("info", ticker))
+        return {"moneda": "USD", "mercado": "NMS", "nombre": "Apple Inc."} if ticker == "AAPL" else None
+
+    def _historico(simbolo, desde, hasta):
+        if llamadas is not None:
+            llamadas.append(("historico", simbolo))
+        if simbolo != "AAPL":
+            return None
+        return [
+            market_data_precios.BarraCruda(
+                fecha=hoy - timedelta(days=150 - i), cierre=200.0 + i, apertura=199.0 + i,
+                maximo=201.0 + i, minimo=198.0 + i, volumen=1e6,
+            )
+            for i in range(150)
+        ]
+
+    monkeypatch.setattr(market_data_precios.yahoo, "fetch_info", _info)
+    monkeypatch.setattr(market_data_precios.yahoo, "fetch_historico_ohlcv", _historico)
+
+
+def test_alta_de_un_cedear_trae_la_serie_en_usd_en_el_acto(client, sesion, monkeypatch):
+    """Sin esperar al sync: un CEDEAR recién agregado ya se mira en dólares."""
+    _yahoo_xlp(monkeypatch)
+    item = client.post("/api/inversiones/watchlist", json={"ticker": "AAPL"}).json()
+
+    assert item["variante_referencia"] == "subyacente"
+    assert item["moneda_referencia"] == "USD"
+    assert item["precio_referencia"] is not None
+    s = sesion()
+    estado = s.get(EstadoMarketDataTicker, "AAPL")
+    assert estado.resolucion_estado == "ok" and estado.moneda_subyacente == "USD"
+    barras = s.query(BarraOHLCV).filter(BarraOHLCV.ticker == "AAPL@SUB").all()
+    assert len(barras) > 60 and {b.moneda for b in barras} == {"USD"}
+
+
+def test_alta_de_un_cedear_con_objetivo_escribe_la_zona_en_usd(client, sesion, monkeypatch):
+    """La zona se guarda después de bajar la serie en USD, así nace en la serie de referencia."""
+    from app.database import ZonaPrecio
+
+    _yahoo_xlp(monkeypatch)
+    client.post("/api/inversiones/watchlist", json={"ticker": "AAPL", "objetivo": 250})
+    zona = sesion().query(ZonaPrecio).filter(ZonaPrecio.ticker == "AAPL").one()
+    assert (zona.variante, zona.moneda, float(zona.techo)) == ("subyacente", "USD", 250.0)
+
+
+def test_alta_de_una_accion_local_no_llama_a_yahoo(client, monkeypatch):
+    llamadas: list = []
+    _yahoo_xlp(monkeypatch, llamadas)
+    client.post("/api/inversiones/watchlist", json={"ticker": "ALUA"})
+    assert llamadas == []
+
+
+def test_alta_de_un_cedear_sobrevive_a_que_yahoo_falle(client, sesion):
+    """Yahoo caído (el stub por default de conftest): el alta sale igual, en pesos."""
+    r = client.post("/api/inversiones/watchlist", json={"ticker": "AAPL"})
+    assert r.status_code == 201
+    assert r.json()["variante_referencia"] == "local"
+    assert sesion().get(EstadoMarketDataTicker, "AAPL").resolucion_estado == "sin_subyacente"
+
+
+def test_el_boton_precio_completa_la_serie_en_usd_de_un_cedear(client, sesion, monkeypatch):
+    """El alta fue con Yahoo caído; días después, "Precio" la reintenta sin esperar al sync."""
+    from datetime import timedelta
+
+    client.post("/api/inversiones/watchlist", json={"ticker": "AAPL"})
+    s = sesion()
+    s.get(EstadoMarketDataTicker, "AAPL").resolucion_intento = (
+        date.today() - timedelta(days=market_data_precios._REINTENTO_RESOLUCION_CEDEAR_DIAS)
+    )
+    s.commit()
+
+    _yahoo_xlp(monkeypatch)
+    item = client.post("/api/inversiones/watchlist/AAPL/precio").json()
+    assert item["variante_referencia"] == "subyacente"
+
+
+def test_un_item_viejo_con_tipo_que_no_dice_cedear_se_resuelve_por_el_catalogo(entorno, sesion):
+    """Una watchlist de la época del Sheet puede traer otro tipo: el catálogo manda."""
+    from app.services import watchlist_analytics
+
+    s = sesion()
+    s.add(WatchlistItem(ticker="AAPL", nombre="Apple", tipo_instrumento="Acción",
+                        mercado="BCBA", moneda="ARS", agregado_en=date.today()))
+    s.add(WatchlistItem(ticker="ALUA", nombre="Aluar", tipo_instrumento="Acción",
+                        mercado="BCBA", moneda="ARS", agregado_en=date.today()))
+    s.commit()
+    tipos = {i["ticker"]: i["tipo_instrumento"] for i in watchlist_analytics.items_para_market_data(s)}
+    assert tipos == {"AAPL": "CEDEAR", "ALUA": "Acción"}

@@ -171,6 +171,16 @@ def obtener(simbolo: str) -> dict | None:
     return None
 
 
+def simbolos_cedear() -> set[str]:
+    """Los símbolos (en mayúsculas) que el catálogo de IOL lista como CEDEAR.
+
+    Respaldo del tipo guardado: un ítem de la watchlist que viene de la época del Sheet puede
+    traer un tipo que no dice "CEDEAR" (o vacío), y entonces no se lo miraría en dólares aunque lo
+    sea. Vacío si no hay catálogo montado: en ese caso manda sólo el tipo guardado.
+    """
+    return {item["simbolo"].upper() for item in cargar_catalogo() if item["tipo"] == "CEDEAR"}
+
+
 def _publico(item: dict) -> dict:
     return {k: v for k, v in item.items() if not k.startswith("_")}
 

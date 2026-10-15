@@ -707,40 +707,7 @@ def sync_from_sheet(db: Session) -> dict:
         # `debe_reemplazar_barra` (iol > api; velas > close-only, a igual fuente).
         ohlcv_count = 0
         if usa_apis and barras_ohlcv_out:
-            tickers_con_barras = {b["ticker"] for b in barras_ohlcv_out}
-            existentes_ohlcv = {
-                (r.ticker, r.fecha): r
-                for r in db.query(BarraOHLCV).filter(BarraOHLCV.ticker.in_(tickers_con_barras)).all()
-            }
-            for fila in barras_ohlcv_out:
-                clave = (fila["ticker"], fila["fecha"])
-                existente = existentes_ohlcv.get(clave)
-                tiene_velas_nueva = fila["apertura"] is not None and fila["maximo"] is not None and fila["minimo"] is not None
-                existente_dict = (
-                    {"fuente": existente.fuente, "tiene_velas": existente.apertura is not None
-                     and existente.maximo is not None and existente.minimo is not None}
-                    if existente is not None else None
-                )
-                if not ohlcv_analytics.debe_reemplazar_barra(existente_dict, {"fuente": fila["fuente"], "tiene_velas": tiene_velas_nueva}):
-                    continue
-                if existente is not None:
-                    existente.apertura = fila["apertura"]
-                    existente.maximo = fila["maximo"]
-                    existente.minimo = fila["minimo"]
-                    existente.cierre = fila["cierre"]
-                    existente.volumen = fila["volumen"]
-                    existente.moneda = fila["moneda"]
-                    existente.fuente = fila["fuente"]
-                else:
-                    nueva = BarraOHLCV(
-                        ticker=fila["ticker"], fecha=fila["fecha"],
-                        apertura=fila["apertura"], maximo=fila["maximo"], minimo=fila["minimo"],
-                        cierre=fila["cierre"], volumen=fila["volumen"],
-                        moneda=fila["moneda"], fuente=fila["fuente"],
-                    )
-                    existentes_ohlcv[clave] = nueva
-                    db.add(nueva)
-            db.flush()
+            ohlcv_analytics.upsert_barras(db, barras_ohlcv_out)
 
         # Velas huérfanas. Guard sobre `Instrumentos`: bloqueada, `instrumentos_validos` está vacía y
         # la purga se llevaría las velas de toda la cartera. La watchlist ya no es una pestaña, así

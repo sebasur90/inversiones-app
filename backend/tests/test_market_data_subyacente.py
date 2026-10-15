@@ -85,23 +85,65 @@ def test_no_re_resuelve_si_ya_esta_ok(monkeypatch):
 
 
 def test_sin_subyacente_respeta_cooldown_180d(monkeypatch):
+    """Una acción local sin subyacente casi siempre es un no definitivo: se espera medio año."""
     def _boom(_t):
         raise AssertionError("dentro del cooldown no debería reintentar")
 
     monkeypatch.setattr(yahoo, "fetch_info", _boom)
-    estado = {"MSFT": {"resolucion_estado": "sin_subyacente",
+    estado = {"TXAR": {"resolucion_estado": "sin_subyacente",
                        "resolucion_intento": HOY - timedelta(days=90)}}
-    mdp.resolver_subyacente([_rv("MSFT", "Microsoft")], estado, hoy=HOY)  # no explota
+    mdp.resolver_subyacente([_rv("TXAR", "Ternium Argentina", tipo="Accion")], estado, hoy=HOY)
 
 
 def test_sin_subyacente_reintenta_pasados_180d(monkeypatch):
     monkeypatch.setattr(yahoo, "fetch_info", _info({
-        "MSFT": {"moneda": "USD", "mercado": "NMS", "nombre": "Microsoft Corporation"},
+        "YPF": {"moneda": "USD", "mercado": "NYQ", "nombre": "YPF Sociedad Anonima"},
     }))
-    estado = {"MSFT": {"resolucion_estado": "sin_subyacente",
-                       "resolucion_intento": HOY - timedelta(days=200)}}
-    mdp.resolver_subyacente([_rv("MSFT", "Microsoft")], estado, hoy=HOY)
-    assert estado["MSFT"]["resolucion_estado"] == "ok"
+    estado = {"YPF": {"resolucion_estado": "sin_subyacente",
+                      "resolucion_intento": HOY - timedelta(days=200)}}
+    mdp.resolver_subyacente([_rv("YPF", "YPF S.A.", tipo="Accion")], estado, hoy=HOY)
+    assert estado["YPF"]["resolucion_estado"] == "ok"
+
+
+def test_cedear_sin_subyacente_se_reintenta_a_los_pocos_dias(monkeypatch):
+    """Para un CEDEAR un `fetch_info` vacío es un fallo pasajero de Yahoo (el ticker *es* el del
+    subyacente): no puede dejarlo en pesos medio año."""
+    monkeypatch.setattr(yahoo, "fetch_info", _info({
+        "XLP": {"moneda": "USD", "mercado": "PCX", "nombre": "Consumer Staples Select Sector SPDR"},
+    }))
+    estado = {"XLP": {"resolucion_estado": "sin_subyacente",
+                      "resolucion_intento": HOY - timedelta(days=mdp._REINTENTO_RESOLUCION_CEDEAR_DIAS)}}
+    mdp.resolver_subyacente([_rv("XLP", "Cedear Consumer Staples")], estado, hoy=HOY)
+    assert estado["XLP"]["resolucion_estado"] == "ok"
+
+
+def test_cedear_sin_subyacente_respeta_su_cooldown_corto(monkeypatch):
+    def _boom(_t):
+        raise AssertionError("dentro del cooldown no debería reintentar")
+
+    monkeypatch.setattr(yahoo, "fetch_info", _boom)
+    estado = {"XLP": {"resolucion_estado": "sin_subyacente", "resolucion_intento": HOY}}
+    mdp.resolver_subyacente([_rv("XLP", "Cedear Consumer Staples")], estado, hoy=HOY)
+
+
+def test_cedear_sin_respuesta_avisa_el_plazo_corto(monkeypatch):
+    monkeypatch.setattr(yahoo, "fetch_info", _info({}))
+    estado: dict = {}
+    issues = mdp.resolver_subyacente([_rv("SMH", "Cedear Van Eck Vectors")], estado, hoy=HOY)
+    assert estado["SMH"]["resolucion_estado"] == "sin_subyacente"
+    (issue,) = [i for i in issues if i.regla == "subyacente_no_resuelto"]
+    assert f"~{mdp._REINTENTO_RESOLUCION_CEDEAR_DIAS} días" in issue.impacto
+
+
+def test_tipo_etf_se_resuelve_como_cedear(monkeypatch):
+    """Un tipo "ETF" (de un Sheet o una watchlist vieja) es renta variable y se acepta sin match de
+    nombre: en BYMA un ETF del exterior sólo se opera como CEDEAR."""
+    monkeypatch.setattr(yahoo, "fetch_info", _info({
+        "SMH": {"moneda": "USD", "mercado": "NMS", "nombre": "VanEck Semiconductor ETF"},
+    }))
+    estado: dict = {}
+    mdp.resolver_subyacente([_rv("SMH", "Van Eck Vectors Etf Tru", tipo="ETF")], estado, hoy=HOY)
+    assert estado["SMH"]["resolucion_estado"] == "ok"
 
 
 def test_renta_fija_no_se_toca(monkeypatch):

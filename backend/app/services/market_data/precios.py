@@ -129,7 +129,7 @@ def _es_renta_fija(tipo_instrumento: str) -> bool:
 
 def _es_renta_variable(tipo_instrumento: str) -> bool:
     t = _sin_acentos(tipo_instrumento or "")
-    return any(sub in t for sub in _SUBCADENAS_RENTA_VARIABLE)
+    return any(sub in t for sub in _SUBCADENAS_RENTA_VARIABLE) or clasificacion.es_cedear(t)
 
 
 _es_cedear = clasificacion.es_cedear
@@ -1630,6 +1630,10 @@ _PISO_SUBYACENTE = timedelta(days=366 * 5)      # 5 años (yfinance trae todo en
 _TOLERANCIA_PISO_SUBYACENTE_DIAS = 40
 _COLA_STALE_DIAS = 3                            # el tope de la serie se refresca si atrasa más
 _REINTENTO_RESOLUCION_DIAS = 180               # cooldown de un `sin_subyacente`
+# Un CEDEAR sin respuesta de Yahoo se reintenta mucho antes: su ticker *es* el del subyacente, así
+# que un `fetch_info` vacío es casi siempre un fallo pasajero (red, rate limit de yfinance) y no un
+# símbolo inexistente. Con 180 días un mal momento dejaba al CEDEAR en pesos medio año.
+_REINTENTO_RESOLUCION_CEDEAR_DIAS = 3
 _MAX_RESOLUCIONES_SUBYACENTE = 10
 _MAX_BACKFILL_SUBYACENTE_POR_SYNC = 12
 
@@ -1659,6 +1663,15 @@ def _nombre_matchea(a: str, b: str) -> bool:
     return bool(inter) and len(inter) / min(len(ta), len(tb)) >= 0.5
 
 
+def _dias_reintento_resolucion(activo: dict) -> int:
+    """Cooldown de un `sin_subyacente`: corto para un CEDEAR (ver `_REINTENTO_RESOLUCION_CEDEAR_DIAS`),
+    largo para una acción local, donde un no casi siempre es definitivo (no tiene ADR, o el
+    pelado es otra empresa)."""
+    if _es_cedear(activo.get("tipo_instrumento", "")):
+        return _REINTENTO_RESOLUCION_CEDEAR_DIAS
+    return _REINTENTO_RESOLUCION_DIAS
+
+
 def resolver_subyacente(
     activos: list[dict],
     estado_por_ticker: dict[str, dict],
@@ -1672,7 +1685,7 @@ def resolver_subyacente(
     por corrida. Se acepta el subyacente sólo si `moneda == "USD"` (G1). CEDEAR → aceptación
     automática (el ticker local es el del subyacente). Acción local → sólo si el nombre del
     instrumento matchea el que devuelve Yahoo (el pelado puede ser otra empresa). Un
-    `sin_subyacente` se reintenta a los ~180 días.
+    `sin_subyacente` se reintenta a los ~180 días (a los ~3 si es un CEDEAR).
 
     Muta `estado_por_ticker` in place (`simbolo_subyacente`, `mercado_subyacente`,
     `moneda_subyacente`, `resolucion_estado`, `resolucion_intento`). Devuelve issues INFO.
@@ -1691,7 +1704,7 @@ def resolver_subyacente(
             continue
         if estado == "sin_subyacente":
             intento = est.get("resolucion_intento")
-            if intento is not None and (hoy - intento).days < _REINTENTO_RESOLUCION_DIAS:
+            if intento is not None and (hoy - intento).days < _dias_reintento_resolucion(a):
                 continue
         candidatos.append(a)
 
@@ -1704,10 +1717,11 @@ def resolver_subyacente(
         info = yahoo.fetch_info(ticker)
         if info is None:
             est["resolucion_estado"] = "sin_subyacente"
+            dias = _dias_reintento_resolucion(a)
             issues.append(ValidationIssue(
                 tab="Subyacente (USD)", campo=ticker, regla="subyacente_no_resuelto",
                 mensaje=f"{ticker}: Yahoo no devolvió información del símbolo",
-                impacto="La pestaña Subyacente (USD) no está disponible para este ticker; se reintenta en ~180 días",
+                impacto=f"La pestaña Subyacente (USD) no está disponible para este ticker; se reintenta en ~{dias} días",
                 severidad=Severity.INFO,
             ))
             continue

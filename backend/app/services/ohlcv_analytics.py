@@ -32,7 +32,7 @@ from ..database import (
     BarraOHLCV, EstadoMarketDataTicker, InstrumentoInversion, PrecioInstrumento, PrecioSubyacente,
     WatchlistItem,
 )
-from . import splits_engine
+from . import catalogo_instrumentos, splits_engine
 from .cache import cache_por_sync
 from .clasificacion_instrumentos import es_cedear
 from .indicadores_engine import Barra
@@ -101,6 +101,52 @@ def debe_reemplazar_barra(existente: dict | None, nueva: dict) -> bool:
     return nueva["tiene_velas"] and not existente["tiene_velas"]
 
 
+def upsert_barras(db: Session, filas: list[dict]) -> None:
+    """Upsert de `serie_ohlcv` con la precedencia de `debe_reemplazar_barra`. Hace `flush`, no
+    `commit`.
+
+    Lo usan el sync (todas las barras de la corrida juntas) y el alta de un CEDEAR en la watchlist
+    (la serie del subyacente de un solo ticker), para que la precedencia viva en un solo lugar.
+    """
+    if not filas:
+        return
+    tickers = {b["ticker"] for b in filas}
+    existentes = {
+        (r.ticker, r.fecha): r
+        for r in db.query(BarraOHLCV).filter(BarraOHLCV.ticker.in_(tickers)).all()
+    }
+    for fila in filas:
+        clave = (fila["ticker"], fila["fecha"])
+        existente = existentes.get(clave)
+        tiene_velas_nueva = (
+            fila["apertura"] is not None and fila["maximo"] is not None and fila["minimo"] is not None
+        )
+        existente_dict = (
+            {"fuente": existente.fuente, "tiene_velas": existente.apertura is not None
+             and existente.maximo is not None and existente.minimo is not None}
+            if existente is not None else None
+        )
+        if not debe_reemplazar_barra(existente_dict, {"fuente": fila["fuente"], "tiene_velas": tiene_velas_nueva}):
+            continue
+        if existente is not None:
+            existente.apertura = fila["apertura"]
+            existente.maximo = fila["maximo"]
+            existente.minimo = fila["minimo"]
+            existente.cierre = fila["cierre"]
+            existente.volumen = fila["volumen"]
+            existente.moneda = fila["moneda"]
+            existente.fuente = fila["fuente"]
+        else:
+            nueva = BarraOHLCV(
+                ticker=fila["ticker"], fecha=fila["fecha"],
+                apertura=fila["apertura"], maximo=fila["maximo"], minimo=fila["minimo"],
+                cierre=fila["cierre"], volumen=fila["volumen"],
+                moneda=fila["moneda"], fuente=fila["fuente"],
+            )
+            existentes[clave] = nueva
+            db.add(nueva)
+    db.flush()
+
 def variantes_de_ticker(db: Session) -> dict[str, list[dict]]:
     """Por ticker base, las variantes de serie que tienen filas reales en `serie_ohlcv`.
 
@@ -161,6 +207,7 @@ def listar_tickers_tecnicos(db: Session) -> list[dict]:
     instrumentos = {row.ticker: row for row in db.query(InstrumentoInversion).all()}
     watchlist = {row.ticker: row for row in db.query(WatchlistItem).all()}
     variantes = variantes_de_ticker(db)
+    cedears_catalogo = catalogo_instrumentos.simbolos_cedear()
 
     resultado = []
     for ticker in sorted(set(instrumentos) | set(watchlist)):
@@ -175,6 +222,14 @@ def listar_tickers_tecnicos(db: Session) -> list[dict]:
             series.insert(0, {"variante": "local", "moneda": moneda, "mercado": mercado, "barras": 0})
 
         tipo = (inst.tipo_instrumento if inst else None) or (wl.tipo_instrumento if wl else "")
+        # CEDEAR si lo dice cualquiera de las fuentes: el tipo de la cartera manda para mostrar,
+        # pero un Sheet que dice "Acción" (o una watchlist vieja con otro tipo) no puede dejar en
+        # pesos algo que IOL lista como CEDEAR.
+        es_cedear_efectivo = (
+            es_cedear(tipo)
+            or (wl is not None and es_cedear(wl.tipo_instrumento or ""))
+            or ticker.upper() in cedears_catalogo
+        )
         resultado.append({
             "ticker": ticker,
             "nombre": (inst.nombre if inst else None) or (wl.nombre if wl else ticker),
@@ -182,7 +237,7 @@ def listar_tickers_tecnicos(db: Session) -> list[dict]:
             "tipo_instrumento": tipo,
             "origen": origen,
             "series": series,
-            "variante_referencia": variante_referencia(tipo, series),
+            "variante_referencia": variante_referencia("CEDEAR" if es_cedear_efectivo else tipo, series),
         })
     return resultado
 

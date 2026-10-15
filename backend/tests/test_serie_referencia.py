@@ -154,6 +154,47 @@ def test_el_listado_de_tickers_trae_la_referencia(db):
     assert oa.mapa_referencias(db) == por_ticker
 
 
+def test_es_cedear_reconoce_etf_por_token():
+    """En BYMA un ETF del exterior sólo se opera como CEDEAR."""
+    from app.services.clasificacion_instrumentos import es_cedear
+
+    for tipo in ("CEDEAR", "Cedear", "ETF", "etf", "Cedear ETF", "ETF/CEDEAR"):
+        assert es_cedear(tipo), tipo
+    for tipo in ("Acción", "Accion", "Bono", "ON", "Letra", "FCI", "", None):
+        assert not es_cedear(tipo), tipo
+
+
+def test_un_item_con_tipo_etf_se_mide_en_usd(db):
+    _watchlist(db, "SMH", tipo="ETF")
+    _resuelto(db, "SMH")
+    _serie_sub(db, "SMH")
+    assert oa.mapa_referencias(db)["SMH"] == "subyacente"
+
+
+def test_el_catalogo_marca_cedear_aunque_el_tipo_guardado_no_lo_diga(db, tmp_path, monkeypatch):
+    """Un ítem viejo (de la época del Sheet) con otro tipo no puede quedar en pesos si IOL lo lista
+    como CEDEAR; una acción argentina del catálogo sigue en local."""
+    import json
+
+    from app.services import catalogo_instrumentos as cat
+
+    ruta = tmp_path / "iol_catalogo.json"
+    ruta.write_text(json.dumps({"instrumentos": [
+        {"simbolo": "XLP", "descripcion": "Cedear Consumer Staples", "paneles": ["Acciones/CEDEARs"]},
+        {"simbolo": "GGAL", "descripcion": "Grupo Galicia", "paneles": ["Acciones/Merval"]},
+    ]}), encoding="utf-8")
+    monkeypatch.setenv("IOL_CATALOGO_FILE", str(ruta))
+    cat._cache.clear()
+    try:
+        for ticker in ("XLP", "GGAL"):
+            _watchlist(db, ticker, tipo="Acción")
+            _resuelto(db, ticker)
+            _serie_sub(db, ticker)
+        assert oa.mapa_referencias(db) == {"XLP": "subyacente", "GGAL": "local"}
+    finally:
+        cat._cache.clear()
+
+
 # ── endpoint ──────────────────────────────────────────────────────────────────
 
 @pytest.fixture

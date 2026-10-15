@@ -30,6 +30,7 @@ desde la app y el ticker sale del catálogo de IOL (`catalogo_instrumentos`), no
 """
 from datetime import date
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..database import (
@@ -41,7 +42,8 @@ from ..database import (
     WatchlistItem,
     ZonaPrecio,
 )
-from . import catalogo_instrumentos, cotizacion_diaria, ohlcv_analytics, zonas_precio
+from . import catalogo_instrumentos, cotizacion_diaria, estado_market_data, ohlcv_analytics, zonas_precio
+from .clasificacion_instrumentos import es_cedear
 from .inversiones_analytics import (
     _holdings_por_cartera_ticker,
     _precio_conocido,
@@ -270,8 +272,20 @@ def _item_a_dict(item: WatchlistItem) -> dict:
 
 
 def items_para_market_data(db: Session) -> list[dict]:
-    """Los ítems de la watchlist en la forma que consume `market_data.precios`. Lo usa el sync."""
-    return [_item_a_dict(i) for i in db.query(WatchlistItem).order_by(WatchlistItem.ticker).all()]
+    """Los ítems de la watchlist en la forma que consume `market_data.precios`. Lo usa el sync.
+
+    Un ítem que el catálogo lista como CEDEAR viaja con `tipo_instrumento="CEDEAR"` aunque el
+    guardado diga otra cosa (watchlist vieja, del Sheet): si no, `resolver_subyacente` no le busca
+    la serie en USD y queda en pesos.
+    """
+    cedears = catalogo_instrumentos.simbolos_cedear()
+    salida = []
+    for item in db.query(WatchlistItem).order_by(WatchlistItem.ticker).all():
+        fila = _item_a_dict(item)
+        if item.ticker.upper() in cedears and not es_cedear(fila["tipo_instrumento"] or ""):
+            fila["tipo_instrumento"] = "CEDEAR"
+        salida.append(fila)
+    return salida
 
 
 def refrescar_precios(
@@ -376,12 +390,53 @@ def agregar(
     db.add(item)
     db.flush()
 
-    if objetivo is not None:
-        _guardar_zona_compra(db, ticker, objetivo, entrada["moneda"])
-
     # Una sola llamada a IOL: el endpoint por símbolo, sin bajar los paneles enteros.
     _, issues = refrescar_precios(db, [ticker], max_simbolos_sueltos=1, solo_simbolo_suelto=True)
+    issues.extend(asegurar_serie_subyacente(db, ticker))
+
+    # Después de la serie en USD: la zona se escribe en la serie de referencia del ticker, y un
+    # CEDEAR sólo la tiene en dólares una vez que esa serie existe.
+    if objetivo is not None:
+        _guardar_zona_compra(db, ticker, objetivo, entrada["moneda"])
     return item, None, issues
+
+
+def asegurar_serie_subyacente(db: Session, ticker: str) -> list[ValidationIssue]:
+    """Para un CEDEAR de la watchlist: resuelve su subyacente y baja la serie `TICKER@SUB` en USD
+    ya mismo, en vez de esperar al próximo sync.
+
+    Sin esto un CEDEAR recién agregado se veía en pesos hasta el sync de la tarde (o varios, porque
+    el sync resuelve y baja unos pocos por corrida). Son a lo sumo dos llamadas a yfinance y
+    ninguna a IOL. Reusa las mismas funciones del sync (`resolver_subyacente`,
+    `fetch_backfill_ohlcv_subyacente`), así que respeta su cooldown y su precedencia de barras.
+
+    Best effort, como el precio del alta: si Yahoo no responde, el ítem queda como estaba y el
+    sync lo completa. No commitea: lo hace el endpoint.
+    """
+    if not market_data.use_external_apis():
+        return []
+    activo = next((a for a in items_para_market_data(db) if a["ticker"] == ticker), None)
+    if activo is None or not es_cedear(activo["tipo_instrumento"] or ""):
+        return []
+
+    estado = estado_market_data.cargar(db)
+    issues = market_data_precios.resolver_subyacente([activo], estado, max_resoluciones=1)
+
+    clave = ohlcv_analytics.clave_serie(ticker, "subyacente")
+    desde, hasta = db.query(func.min(BarraOHLCV.fecha), func.max(BarraOHLCV.fecha)).filter(
+        BarraOHLCV.ticker == clave,
+    ).one()
+    filas, issues_serie = market_data_precios.fetch_backfill_ohlcv_subyacente(
+        [activo],
+        {clave: desde} if desde is not None else {},
+        {clave: hasta} if hasta is not None else {},
+        estado, max_llamadas=1,
+    )
+    issues.extend(issues_serie)
+
+    estado_market_data.persistir(db, {ticker: estado[ticker]} if ticker in estado else {})
+    ohlcv_analytics.upsert_barras(db, filas)
+    return issues
 
 
 def _guardar_zona_compra(db: Session, ticker: str, techo: float | None, moneda: str) -> None:

@@ -820,13 +820,15 @@ def eliminar_de_watchlist(ticker: str, db: Session = Depends(get_db)):
 
 @router.post("/watchlist/{ticker}/precio", response_model=WatchlistItemOut)
 def refrescar_precio_watchlist(ticker: str, db: Session = Depends(get_db)):
-    """Vuelve a cotizar un instrumento sin esperar al próximo sync."""
+    """Vuelve a cotizar un instrumento sin esperar al próximo sync. A un CEDEAR además le completa
+    la serie en USD del subyacente si todavía no la tiene."""
     fila = watchlist_analytics.get_watchlist_item(db, ticker)
     if fila is None:
         raise HTTPException(status_code=404, detail=f"'{ticker}' no está en la watchlist")
     watchlist_analytics.refrescar_precios(
         db, [ticker], max_simbolos_sueltos=1, solo_simbolo_suelto=True,
     )
+    watchlist_analytics.asegurar_serie_subyacente(db, ticker)
     db.commit()
     return watchlist_analytics.get_watchlist_item(db, ticker)
 
