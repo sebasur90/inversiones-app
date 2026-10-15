@@ -231,16 +231,28 @@ export default function Watchlist() {
                     </div>
                   </div>
                   <div className="text-right shrink-0">
+                    {/* El precio que importa para decidir: el de la serie de referencia (USD del
+                        Nasdaq para un CEDEAR, el local para el resto). El CEDEAR en pesos queda
+                        como dato secundario, porque es lo que se compra pero no lo que se mira. */}
                     <div className="flex items-center justify-end gap-1.5">
                       <span className="font-mono text-caption font-bold text-app-text tabular-nums">
-                        {item.precio_actual != null ? formatMoneda(item.precio_actual, item.moneda_precio ?? item.moneda) : '—'}
+                        {item.precio_referencia != null
+                          ? formatMoneda(item.precio_referencia, item.moneda_referencia ?? item.moneda)
+                          : '—'}
                       </span>
-                      <VariacionDia pct={item.variacion_dia_pct} />
+                      <VariacionDia pct={item.variacion_dia_referencia_pct} />
                     </div>
+                    {item.variante_referencia === 'subyacente' && item.precio_actual != null && (
+                      <div className="text-label text-app-text-faint mt-0.5 tabular-nums">
+                        CEDEAR {formatMoneda(item.precio_actual, item.moneda_precio ?? item.moneda)}
+                      </div>
+                    )}
                     <div className="flex items-center justify-end gap-0.5 text-label text-app-text-dim mt-0.5 tabular-nums">
                       <span className="inline-flex items-center gap-0.5">
-                        {item.zona_compra ? 'Compra ' : 'Sin zona'}
-                        {item.zona_compra && textoZona(item.zona_compra, formatMoneda)}
+                        {item.zona_compra?.vencida
+                          ? 'Zona vencida'
+                          : item.zona_compra ? 'Compra ' : 'Sin zona'}
+                        {item.zona_compra && !item.zona_compra.vencida && textoZona(item.zona_compra, formatMoneda)}
                         <InfoTooltip term="watchlist_precio_objetivo" />
                       </span>
                     </div>

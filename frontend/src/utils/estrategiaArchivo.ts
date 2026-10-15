@@ -8,7 +8,7 @@
  * **No** reimplementa `validar_estrategia`: la autoridad es el backend (el backtest tras importar
  * dispara el 422 si el DSL es inválido). Acá sólo se chequea que el archivo tenga forma de
  * estrategia y que sus indicadores sean conocidos por esta versión de la app. */
-import type { EstrategiaDsl, VarianteSerie } from '../api'
+import type { EstrategiaDsl, VarianteEstrategia } from '../api'
 import { ESPEC_POR_TIPO } from '../components/tecnico/indicadoresConfig'
 import { sufijoFechaHoy } from './csv'
 
@@ -21,14 +21,14 @@ export interface EstrategiaArchivo {
   nombre: string | null
   descripcion: string | null
   ticker: string | null
-  variante: VarianteSerie
+  variante: VarianteEstrategia
 }
 
 interface MetaEstrategia {
   nombre?: string | null
   descripcion?: string | null
   ticker?: string | null
-  variante?: VarianteSerie
+  variante?: VarianteEstrategia
 }
 
 export function serializarEstrategia(definicion: EstrategiaDsl, meta: MetaEstrategia = {}): string {
@@ -39,7 +39,7 @@ export function serializarEstrategia(definicion: EstrategiaDsl, meta: MetaEstrat
     nombre: meta.nombre ?? null,
     descripcion: meta.descripcion ?? null,
     ticker: meta.ticker ?? null,
-    variante: meta.variante ?? 'local',
+    variante: meta.variante ?? 'referencia',
     definicion,
   }
   return JSON.stringify(sobre, null, 2) + '\n'
@@ -113,6 +113,8 @@ export function parsearArchivoEstrategia(texto: string): EstrategiaArchivo {
     nombre: typeof meta.nombre === 'string' ? meta.nombre : null,
     descripcion: typeof meta.descripcion === 'string' ? meta.descripcion : null,
     ticker: typeof meta.ticker === 'string' ? meta.ticker : null,
-    variante: varianteRaw === 'subyacente' ? 'subyacente' : 'local',
+    // Sin variante (un DSL crudo, un archivo viejo sin el campo) = la serie de referencia, que es el
+    // default de la app. Lo que el archivo fija a propósito (`local`, `subyacente`) se respeta.
+    variante: varianteRaw === 'subyacente' || varianteRaw === 'local' ? varianteRaw : 'referencia',
   }
 }

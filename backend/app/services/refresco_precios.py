@@ -14,7 +14,7 @@ Qué hace este job, entonces:
 3. hace upsert de esas filas en `precios_instrumento` y su espejo close-only en `serie_ohlcv`;
 4. re-cotiza la watchlist (`watchlist_analytics.refrescar_precios`);
 5. refresca el último precio en USD del subyacente de los tickers que tienen una zona medida sobre
-   esa serie (`_refrescar_subyacentes`);
+   esa serie o que se miran en dólares por ser CEDEARs (`_refrescar_subyacentes`);
 6. deja registro en `refresco_precios` (una fila, no un `SyncRun` -- ver el modelo).
 
 Qué **no** hace, y por eso es liviano: no lee el Sheet, no valida pestañas, no hace backfill
@@ -178,17 +178,34 @@ def _espejo_ohlcv(db: Session, filas: list[dict]) -> None:
     db.flush()
 
 
-#: Tope de llamadas a yfinance por corrida. Cada una es un GET secuencial: con cuatro corridas
-#: diarias y una zona en dólares por instrumento, 20 alcanza de sobra y acota el tiempo de pared.
-_MAX_SUBYACENTES_POR_CORRIDA = 20
+#: Topes de llamadas a yfinance por corrida, **separados por grupo**. Cada una es un GET secuencial:
+#: con cuatro corridas por día, 20 + 20 alcanza de sobra y acota el tiempo de pared. Van separados
+#: para que los tickers que se miran en dólares (potencialmente decenas) nunca desplacen a los que
+#: tienen una zona vigilada, que son los únicos que disparan un aviso.
+_MAX_SUBYACENTES_CON_ZONA = 20
+_MAX_SUBYACENTES_REFERENCIA = 20
+
+
+def _mas_viejos_primero(tickers: set[str], fechas: dict[str, date]) -> list[str]:
+    """Orden de refresco: el que lleva más tiempo sin precio primero (los que nunca tuvieron, antes
+    que todos), desempate por ticker. Con un tope menor al universo, esto rota entre corridas en vez
+    de pedir siempre a los mismos."""
+    return sorted(tickers, key=lambda t: (fechas.get(t, date.min), t))
 
 
 def _refrescar_subyacentes(db: Session) -> int:
-    """Último precio en USD del subyacente de los tickers con una zona medida sobre esa serie.
+    """Último precio en USD del subyacente de los tickers que se vigilan o se miran en dólares.
 
-    Sólo esos tickers: bajar el precio de todos los subyacentes resueltos sería gastar llamadas en
-    series que nadie está vigilando. La serie `TICKER@SUB` se sigue refrescando en el sync; esto es
-    para que una zona en dólares cruzada a media rueda avise el mismo día y no a la noche.
+    Dos grupos, en este orden de prioridad:
+
+    1. **los que tienen una zona activa medida sobre esa serie**: para que una zona en dólares
+       cruzada a media rueda avise el mismo día y no a la noche;
+    2. **los que tienen el subyacente como serie de referencia** (los CEDEARs, ver
+       `ohlcv_analytics.variante_referencia`): la Watchlist muestra su precio en dólares como el
+       principal, y sin esto sería el cierre de ayer durante toda la rueda.
+
+    Bajar el de cualquier otro subyacente resuelto sería gastar llamadas en series que nadie mira.
+    La serie `TICKER@SUB` se sigue completando en el sync.
 
     Se exige `resolucion_estado == "ok"` (hay un subyacente confirmado en USD) y que yfinance
     devuelva `moneda == "USD"`: comparar una zona en dólares contra un precio en otra moneda es un
@@ -197,20 +214,24 @@ def _refrescar_subyacentes(db: Session) -> int:
     No commitea: lo hace `refrescar`. Nunca lanza por red (`yahoo.fetch_ultimo_precio` devuelve
     `None` ante cualquier fallo).
     """
-    tickers_con_zona = {
+    con_zona = {
         fila.ticker
         for fila in db.query(ZonaPrecio).filter(
             ZonaPrecio.variante == zonas_precio.VARIANTE_SUBYACENTE,
             ZonaPrecio.activa == 1,
         )
     }
-    if not tickers_con_zona:
+    de_referencia = {
+        t for t, variante in ohlcv_analytics.mapa_referencias(db).items() if variante == "subyacente"
+    } - con_zona
+    candidatos = con_zona | de_referencia
+    if not candidatos:
         return 0
 
     simbolos = {
         fila.ticker: fila.simbolo_subyacente
         for fila in db.query(EstadoMarketDataTicker).filter(
-            EstadoMarketDataTicker.ticker.in_(tickers_con_zona),
+            EstadoMarketDataTicker.ticker.in_(candidatos),
             EstadoMarketDataTicker.resolucion_estado == "ok",
         )
         if fila.simbolo_subyacente
@@ -218,9 +239,18 @@ def _refrescar_subyacentes(db: Session) -> int:
     if not simbolos:
         return 0
 
+    fechas = {
+        fila.ticker: fila.fecha
+        for fila in db.query(PrecioSubyacente).filter(PrecioSubyacente.ticker.in_(simbolos))
+    }
+    a_pedir = (
+        _mas_viejos_primero(con_zona & simbolos.keys(), fechas)[:_MAX_SUBYACENTES_CON_ZONA]
+        + _mas_viejos_primero(de_referencia & simbolos.keys(), fechas)[:_MAX_SUBYACENTES_REFERENCIA]
+    )
+
     hoy = date.today()
     actualizados = 0
-    for ticker in sorted(simbolos)[:_MAX_SUBYACENTES_POR_CORRIDA]:
+    for ticker in a_pedir:
         dato = yahoo.fetch_ultimo_precio(simbolos[ticker])
         if dato is None:
             continue

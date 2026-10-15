@@ -718,6 +718,9 @@ class ZonaPrecioOut(BaseModel):
     piso: Optional[float] = None
     techo: Optional[float] = None
     activa: bool = True
+    # Apagada por la migración a la serie de referencia (era una zona en pesos sobre un CEDEAR):
+    # hay que volver a dibujarla sobre el gráfico en dólares.
+    vencida: bool = False
     notas: Optional[str] = None
     actualizado_en: Optional[datetime] = None
 
@@ -748,10 +751,15 @@ class WatchlistItemOut(BaseModel):
     negativo mientras el precio esté por encima del techo (todavía caro), cero o positivo una vez
     que entró en zona. El frontend usa el valor absoluto como distancia.
 
-    Sólo una zona de variante `local` alimenta esos tres campos: `precio_actual` es el precio
-    cotizado acá, y una zona dibujada sobre la serie del subyacente está en USD del mercado de
-    origen. Esa zona viaja igual en `zona_compra`, para dibujarla y mostrarla, pero no se compara
-    contra este precio.
+    Ya **no** valen contra `precio_actual` en todos los casos: la zona se compara contra el precio
+    de su propia serie (`base_comparacion`: `local` = el precio cotizado acá, `subyacente` = el del
+    instrumento en EE.UU. en USD) y `precio_objetivo` está en `moneda_objetivo`. Una distancia entre
+    dólares y pesos no significaría nada, así que nunca se cruzan.
+
+    `precio_actual` / `moneda_precio` / `variacion_dia_pct` siguen siendo el precio **cotizado
+    acá** (contrato de Resumen y de las alertas). Lo que se mira para decidir es `precio_referencia`
+    y compañía: para un CEDEAR con serie del subyacente, el precio en USD del Nasdaq; para el resto,
+    el mismo precio local.
     """
     ticker: str
     nombre: str
@@ -766,9 +774,19 @@ class WatchlistItemOut(BaseModel):
     fuente_precio: Optional[str] = None  # "cartera" | "iol" | "api"
     variacion_dia: Optional[float] = None
     variacion_dia_pct: Optional[float] = None  # ratio vs. el cierre inmediato anterior
+    variante_referencia: str = "local"          # "local" | "subyacente"
+    precio_referencia: Optional[float] = None
+    moneda_referencia: Optional[str] = None
+    fecha_precio_referencia: Optional[date] = None
+    # local: "cartera" | "iol" | "api"; subyacente: "intradia" (job liviano) | "cierre" (serie @SUB)
+    fuente_precio_referencia: Optional[str] = None
+    variacion_dia_referencia: Optional[float] = None
+    variacion_dia_referencia_pct: Optional[float] = None
     precio_objetivo: Optional[float] = None
     pct_a_objetivo: Optional[float] = None
     en_zona: Optional[bool] = None
+    base_comparacion: Optional[str] = None      # serie contra la que se midió la zona de compra
+    moneda_objetivo: Optional[str] = None
     zona_compra: Optional[ZonaPrecioOut] = None
     zona_venta: Optional[ZonaPrecioOut] = None
     en_cartera: bool = False
@@ -2020,6 +2038,7 @@ class SerieVarianteOut(BaseModel):
     variante: str  # "local" | "subyacente"
     moneda: str
     mercado: str = ""
+    barras: int = 0   # filas guardadas de esta serie (0 = la `local` sintetizada, sin velas)
 
 
 class TickerTecnicoOut(BaseModel):
@@ -2030,6 +2049,10 @@ class TickerTecnicoOut(BaseModel):
     origen: str  # "cartera" | "watchlist" | "ambos"
     # Siempre incluye "local"; "subyacente" (USD) sólo si hay serie del subyacente bajada.
     series: list[SerieVarianteOut] = Field(default_factory=list)
+    # La serie con la que hay que decidir sobre este ticker: "subyacente" para un CEDEAR que tiene
+    # su serie en USD, "local" para todo lo demás (ver `ohlcv_analytics.variante_referencia`).
+    # Siempre una serie concreta, nunca "referencia".
+    variante_referencia: str = "local"
 
 
 class BarraOut(BaseModel):
@@ -2121,8 +2144,9 @@ class BacktestRequest(BaseModel):
     desde: Optional[date] = None
     hasta: Optional[date] = None
     # Variante de serie sobre la que correr el backtest. Va en el body (no en el path) para que la
-    # clave `@SUB` nunca salga del backend y `_validar_ticker_tecnico` siga intacto.
-    variante: str = "local"
+    # clave `@SUB` nunca salga del backend y `_validar_ticker_tecnico` siga intacto. `None` = la
+    # serie de referencia del ticker; `BacktestOut.variante` informa la que se usó.
+    variante: Optional[str] = None
 
 
 class BacktestOut(BaseModel):
@@ -2181,7 +2205,10 @@ class EstrategiaGuardarRequest(BaseModel):
     ticker: Optional[str] = None
     tipo_preset: Optional[str] = None
     definicion: dict[str, Any]
-    variante: str = "local"
+    # "referencia" (default) = la serie de referencia del ticker evaluado; "local" y "subyacente"
+    # la fijan. Es el único lugar donde "referencia" es un valor válido: todo lo que se calcula
+    # informa siempre una serie concreta.
+    variante: str = "referencia"
 
 
 class EstrategiaOut(BaseModel):
@@ -2191,7 +2218,7 @@ class EstrategiaOut(BaseModel):
     ticker: Optional[str] = None
     tipo_preset: Optional[str] = None
     definicion: dict[str, Any]
-    variante: str = "local"
+    variante: str = "referencia"
     # Avisos por Telegram de las señales de esta estrategia. Se configuran en Ajustes, no al
     # guardar la definición: ver `estrategias_analytics.guardar_por_nombre`.
     notificar_compra: bool = False
@@ -2207,6 +2234,9 @@ class ScreenerRequest(BaseModel):
     estrategia_ids: list[int] = Field(default_factory=list)
     umbral_pct: float = Field(3.0, gt=0, le=15)
     origen: str = "todos"  # "todos" | "cartera" | "watchlist" — filtra el universo de tickers
+    # Fuerza una serie en todo el escaneo. `None` = cada estrategia decide (por default, la serie
+    # de referencia de cada ticker).
+    variante: Optional[Literal["local", "subyacente"]] = None
 
 
 class ScreenerCondicionOut(BaseModel):
@@ -2254,7 +2284,7 @@ class ComparadorRequest(BaseModel):
     estrategia_ids: list[int] = Field(..., min_length=1, max_length=8)
     desde: Optional[date] = None
     hasta: Optional[date] = None
-    variante: str = "local"
+    variante: Optional[str] = None   # None = la serie de referencia del ticker
     capital_inicial: float = Field(1_000_000.0, gt=0, le=1e12)
     # `None` = la referencia es "Comprar y mantener"; si no, el id de una de `estrategia_ids`.
     referencia_id: Optional[int] = None

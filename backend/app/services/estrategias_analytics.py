@@ -55,12 +55,12 @@ def buscar_por_nombre(nombre: str, db: Session, excluir_id: int | None = None) -
 def crear_estrategia(
     nombre: str, definicion: dict, db: Session,
     descripcion: str | None = None, ticker: str | None = None, tipo_preset: str | None = None,
-    variante: str = "local",
+    variante: str = ohlcv_analytics.VARIANTE_REFERENCIA,
 ) -> EstrategiaTecnica:
     ahora = datetime.utcnow()
     estrategia = EstrategiaTecnica(
         nombre=nombre, descripcion=descripcion, ticker=ticker, tipo_preset=tipo_preset,
-        definicion=definicion, variante=variante or "local",
+        definicion=definicion, variante=variante or ohlcv_analytics.VARIANTE_REFERENCIA,
         fecha_creacion=ahora, fecha_actualizacion=ahora,
     )
     db.add(estrategia)
@@ -131,7 +131,7 @@ def actualizar_estrategia(
 def guardar_por_nombre(
     nombre: str, definicion: dict, db: Session,
     descripcion: str | None = None, ticker: str | None = None, tipo_preset: str | None = None,
-    variante: str = "local",
+    variante: str = ohlcv_analytics.VARIANTE_REFERENCIA,
 ) -> tuple[EstrategiaTecnica, bool]:
     """Upsert por nombre normalizado. Devuelve `(estrategia, creada)`.
 
@@ -183,7 +183,7 @@ def duplicar_estrategia(estrategia_id: int, nuevo_nombre: str | None, db: Sessio
         nombre=_nombre_libre(nuevo_nombre or f"{original.nombre} (copia)", db),
         definicion=original.definicion, db=db,
         descripcion=original.descripcion, ticker=original.ticker, tipo_preset=original.tipo_preset,
-        variante=getattr(original, "variante", None) or "local",
+        variante=getattr(original, "variante", None) or ohlcv_analytics.VARIANTE_REFERENCIA,
     )
 
 
@@ -342,7 +342,9 @@ def senales_recientes(
 
     resultado: list[dict] = []
     for estrategia, info in pares:
-        variante = getattr(estrategia, "variante", None) or "local"
+        variante = ohlcv_analytics.resolver_variante(
+            getattr(estrategia, "variante", None), info.get("variante_referencia") or "local",
+        )
         dsl = estrategia.definicion
         try:
             # `get_serie_barras` también va dentro del `try`: una estrategia guardada antes de que

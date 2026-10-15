@@ -65,8 +65,12 @@ export default function ComparadorEstrategias() {
   const ticker = tickerSel ?? tickers[0]?.ticker ?? null
   const tickerMeta = tickers.find(t => t.ticker === ticker)
   const seriesDisponibles = tickerMeta?.series ?? []
+  // Sin elección, la serie de referencia del ticker (USD del subyacente para un CEDEAR): la misma
+  // que usa el backtest de Análisis técnico, para que una estrategia no dé dos resultados.
   const variante: VarianteSerie =
-    varianteSel && seriesDisponibles.some(s => s.variante === varianteSel) ? varianteSel : 'local'
+    varianteSel && seriesDisponibles.some(s => s.variante === varianteSel)
+      ? varianteSel
+      : tickerMeta?.variante_referencia ?? 'local'
 
   const tickersFiltrados = filtroTicker.trim()
     ? tickers.filter(t => t.ticker.toLowerCase().includes(filtroTicker.trim().toLowerCase()))
@@ -165,7 +169,7 @@ export default function ComparadorEstrategias() {
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4">
           {tickersFiltrados.map(t => (
             <button
-              key={t.ticker} onClick={() => setTickerSel(t.ticker)}
+              key={t.ticker} onClick={() => { setTickerSel(t.ticker); setVarianteSel(null) }}
               className={`shrink-0 font-semibold text-caption px-3 py-1.5 rounded-[10px] border transition-colors ${
                 t.ticker === ticker ? 'bg-app-accent-soft border-app-accent text-app-accent' : 'bg-app-surface border-app-border text-app-text-dim'
               }`}

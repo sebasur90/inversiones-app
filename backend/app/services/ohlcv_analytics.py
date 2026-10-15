@@ -29,10 +29,12 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..database import (
-    BarraOHLCV, EstadoMarketDataTicker, InstrumentoInversion, PrecioInstrumento, WatchlistItem,
+    BarraOHLCV, EstadoMarketDataTicker, InstrumentoInversion, PrecioInstrumento, PrecioSubyacente,
+    WatchlistItem,
 )
 from . import splits_engine
 from .cache import cache_por_sync
+from .clasificacion_instrumentos import es_cedear
 from .indicadores_engine import Barra
 
 MAX_BARRAS_DEFAULT = 750
@@ -52,10 +54,24 @@ _PRIORIDAD_FUENTE = {"api": 0, "iol": 1, "yahoo": 2}
 # contaminación ARS↔USD en el merge de `get_serie_barras` es imposible por construcción.
 SUFIJO_SUBYACENTE = "@SUB"
 
+# Series que existen de verdad. `"referencia"` NO es una serie: es el pedido de "la que corresponde
+# a este ticker" y se resuelve con `resolver_variante` antes de leer nada. Por eso `clave_serie`
+# rechaza todo lo que no sea una de estas dos: un `"referencia"` sin resolver que degradara en
+# silencio a la serie local daría un resultado plausible y equivocado.
+VARIANTES_SERIE = ("local", "subyacente")
+VARIANTE_REFERENCIA = "referencia"
+
+# Barras mínimas de la serie `@SUB` para que un CEDEAR la tome como referencia. El backfill del
+# subyacente baja por tandas: con 3 barras la pantalla por defecto mostraría un gráfico de 3 puntos
+# tapando años de serie local. ~3 meses de ruedas alcanza para indicadores de ventana corta.
+MIN_BARRAS_REFERENCIA = 60
+
 
 def clave_serie(ticker: str, variante: str = "local") -> str:
     """Clave de fila en `serie_ohlcv` para `(ticker, variante)`. `local` -> el ticker tal cual;
-    `subyacente` -> `"MSFT@SUB"`."""
+    `subyacente` -> `"MSFT@SUB"`. Cualquier otra variante es un error de quien llama."""
+    if variante not in VARIANTES_SERIE:
+        raise ValueError(f"variante de serie desconocida: {variante!r}")
     return f"{ticker}{SUFIJO_SUBYACENTE}" if variante == "subyacente" else ticker
 
 
@@ -88,7 +104,9 @@ def debe_reemplazar_barra(existente: dict | None, nueva: dict) -> bool:
 def variantes_de_ticker(db: Session) -> dict[str, list[dict]]:
     """Por ticker base, las variantes de serie que tienen filas reales en `serie_ohlcv`.
 
-    Cada entrada: `{variante, moneda, mercado}`. `moneda` es la dominante de esa clave de serie;
+    Cada entrada: `{variante, moneda, mercado, barras}`. `moneda` es la dominante de esa clave de
+    serie y `barras` cuántas filas tiene en total (es lo que decide si alcanza para ser la
+    referencia, ver `variante_referencia`);
     `mercado` sale de Instrumentos/Watchlist para `local` y de `EstadoMarketDataTicker` para
     `subyacente`. `local` va siempre primero. Un ticker sin ninguna fila en `serie_ohlcv` no
     aparece acá (lo completa `listar_tickers_tecnicos`).
@@ -112,6 +130,10 @@ def variantes_de_ticker(db: Session) -> dict[str, list[dict]]:
         db.query(EstadoMarketDataTicker.ticker, EstadoMarketDataTicker.mercado_subyacente)
     )
 
+    barras_por_clave: dict[str, int] = {}
+    for (clave, _moneda), n in conteo.items():
+        barras_por_clave[clave] = barras_por_clave.get(clave, 0) + n
+
     out: dict[str, list[dict]] = {}
     for clave, moneda in moneda_dominante.items():
         base = ticker_base(clave)
@@ -120,7 +142,10 @@ def variantes_de_ticker(db: Session) -> dict[str, list[dict]]:
             mercado = mercado_inst.get(base) or mercado_wl.get(base) or ""
         else:
             mercado = mercado_sub.get(base) or ""
-        out.setdefault(base, []).append({"variante": variante, "moneda": moneda, "mercado": mercado})
+        out.setdefault(base, []).append({
+            "variante": variante, "moneda": moneda, "mercado": mercado,
+            "barras": barras_por_clave.get(clave, 0),
+        })
     for lst in out.values():
         lst.sort(key=lambda s: 0 if s["variante"] == "local" else 1)
     return out
@@ -147,17 +172,114 @@ def listar_tickers_tecnicos(db: Session) -> list[dict]:
 
         series = list(variantes.get(ticker, []))
         if not any(s["variante"] == "local" for s in series):
-            series.insert(0, {"variante": "local", "moneda": moneda, "mercado": mercado})
+            series.insert(0, {"variante": "local", "moneda": moneda, "mercado": mercado, "barras": 0})
 
+        tipo = (inst.tipo_instrumento if inst else None) or (wl.tipo_instrumento if wl else "")
         resultado.append({
             "ticker": ticker,
             "nombre": (inst.nombre if inst else None) or (wl.nombre if wl else ticker),
             "moneda": moneda,
-            "tipo_instrumento": (inst.tipo_instrumento if inst else None) or (wl.tipo_instrumento if wl else ""),
+            "tipo_instrumento": tipo,
             "origen": origen,
             "series": series,
+            "variante_referencia": variante_referencia(tipo, series),
         })
     return resultado
+
+
+def variante_referencia(tipo_instrumento: str, series: list[dict]) -> str:
+    """La serie con la que hay que **decidir** sobre este ticker: `"subyacente"` o `"local"`.
+
+    Para comprar MSFT por CEDEAR, el momento de compra se juzga por la acción en el Nasdaq en
+    dólares, no por el CEDEAR: éste mezcla el movimiento de la empresa con el del dólar y el ratio,
+    así que su RSI, sus bandas y sus extremos describen otra cosa. Hace falta, a la vez:
+
+    - **ser un CEDEAR.** Una acción argentina con ADR (GGAL, YPF) tiene el ADR resuelto como
+      subyacente, pero su mercado de referencia es BYMA en pesos: no se la lleva a dólares. Un
+      bono o una ON tampoco tienen subyacente.
+    - **tener la serie `@SUB` en USD y con barras suficientes** (`MIN_BARRAS_REFERENCIA`). Un CEDEAR
+      recién agregado, o uno que yfinance no resolvió, sigue en `local`: apuntar a una serie vacía
+      dejaría el gráfico en blanco.
+
+    Pura: `series` es la lista que arma `variantes_de_ticker`. No convierte monedas; elige cuál de
+    las dos series se mira.
+    """
+    if not es_cedear(tipo_instrumento):
+        return "local"
+    for serie in series:
+        if (
+            serie["variante"] == "subyacente"
+            and (serie.get("moneda") or "").upper() == "USD"
+            and serie.get("barras", 0) >= MIN_BARRAS_REFERENCIA
+        ):
+            return "subyacente"
+    return "local"
+
+
+@cache_por_sync
+def mapa_referencias(db: Session) -> dict[str, str]:
+    """`ticker -> variante de referencia` de todo el universo cartera ∪ watchlist, en una pasada."""
+    return {t["ticker"]: t["variante_referencia"] for t in listar_tickers_tecnicos(db)}
+
+
+def resolver_variante(pedida: str | None, referencia: str) -> str:
+    """Traduce lo que pidió quien llama a una serie concreta (`local` | `subyacente`).
+
+    `None` y `"referencia"` significan "la de referencia de este ticker". Es **el único lugar**
+    donde se interpreta ese valor especial; `get_serie_barras` sólo acepta series reales para que
+    la misma serie no ocupe dos entradas de caché (`None` y su equivalente resuelto).
+    """
+    if pedida is None or pedida == VARIANTE_REFERENCIA:
+        return referencia
+    if pedida in VARIANTES_SERIE:
+        return pedida
+    raise ValueError(f"variante desconocida: {pedida!r}")
+
+
+def variante_para(db: Session, ticker: str, pedida: str | None) -> str:
+    """`resolver_variante` buscando la referencia del ticker. Un ticker fuera del universo (sin
+    cartera ni watchlist) no tiene serie del subyacente que preferir: cae en `local`."""
+    if pedida in VARIANTES_SERIE:
+        return pedida   # no hace falta saber la referencia para obedecer un pedido explícito
+    return resolver_variante(pedida, mapa_referencias(db).get(ticker, "local"))
+
+
+def ultimo_precio_subyacente(db: Session, tickers: set[str]) -> dict[str, tuple[date, float, str]]:
+    """Último precio en USD del subyacente de cada ticker: `ticker -> (fecha, precio, origen)`.
+
+    Une las dos fuentes que lo tienen. `precios_subyacente` lo refresca el job liviano varias veces
+    por rueda (`origen="intradia"`); la serie `TICKER@SUB` la completa el sync de la tarde
+    (`origen="cierre"`). **Gana la más fresca por fecha**, y no una fuente fija: si el job dejó de
+    correr hace días su precio es más viejo que el último cierre de la serie, y al revés durante la
+    rueda. A igual fecha gana el intradía.
+
+    Sólo USD, en las dos fuentes: comparar o mostrar como dólares un precio en otra moneda es peor
+    que no tener precio. Es la fuente única de la Watchlist y de las alertas, para que la pantalla y
+    el aviso de Telegram no puedan discrepar.
+    """
+    if not tickers:
+        return {}
+
+    mejor: dict[str, tuple[date, float, str]] = {}
+
+    def _considerar(ticker: str, fecha: date, precio: float, origen: str) -> None:
+        actual = mejor.get(ticker)
+        if actual is None or fecha >= actual[0]:
+            mejor[ticker] = (fecha, precio, origen)
+
+    claves = {clave_serie(t, "subyacente"): t for t in tickers}
+    for clave, fecha, cierre in (
+        db.query(BarraOHLCV.ticker, BarraOHLCV.fecha, BarraOHLCV.cierre)
+        .filter(BarraOHLCV.ticker.in_(claves), func.upper(BarraOHLCV.moneda) == "USD")
+        .order_by(BarraOHLCV.fecha)
+    ):
+        _considerar(claves[clave], fecha, float(cierre), "cierre")
+
+    for fila in db.query(PrecioSubyacente).filter(PrecioSubyacente.ticker.in_(tickers)):
+        if (fila.moneda or "").upper() == "USD":
+            _considerar(fila.ticker, fila.fecha, float(fila.precio), "intradia")
+
+    return mejor
 
 
 def _fila_a_barra(fecha, cierre, apertura=None, maximo=None, minimo=None, volumen=None) -> Barra:

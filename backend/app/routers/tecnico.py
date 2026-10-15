@@ -24,11 +24,18 @@ from ..services import ticker_analytics, zonas_precio
 router = APIRouter(prefix="/api/inversiones", tags=["tecnico"])
 
 _MAX_INDICADORES = 8
-_VARIANTES = ("local", "subyacente")
+_VARIANTES = ohlcv_analytics.VARIANTES_SERIE
 
 
-def _validar_variante(variante: str) -> None:
-    if variante not in _VARIANTES:
+def _validar_variante(variante: Optional[str]) -> None:
+    """Serie pedida para leer o calcular: `None` (= la de referencia), `local` o `subyacente`.
+    El literal `"referencia"` no se acepta acá: sólo se guarda en una estrategia."""
+    if variante is not None and variante not in _VARIANTES:
+        raise HTTPException(status_code=422, detail=f"variante desconocida: '{variante}'")
+
+
+def _validar_variante_estrategia(variante: str) -> None:
+    if variante not in (*_VARIANTES, ohlcv_analytics.VARIANTE_REFERENCIA):
         raise HTTPException(status_code=422, detail=f"variante desconocida: '{variante}'")
 
 
@@ -45,7 +52,7 @@ def _estrategia_out(e) -> EstrategiaOut:
     return EstrategiaOut(
         id=e.id, nombre=e.nombre, descripcion=e.descripcion, ticker=e.ticker,
         tipo_preset=e.tipo_preset, definicion=e.definicion,
-        variante=getattr(e, "variante", None) or "local",
+        variante=getattr(e, "variante", None) or ohlcv_analytics.VARIANTE_REFERENCIA,
         notificar_compra=bool(getattr(e, "notificar_compra", 0)),
         notificar_venta=bool(getattr(e, "notificar_venta", 0)),
         fecha_creacion=e.fecha_creacion, fecha_actualizacion=e.fecha_actualizacion,
@@ -118,7 +125,7 @@ def correr_screener(body: ScreenerRequest, db: Session = Depends(get_db)):
     if body.origen not in _ORIGENES_SCREENER:
         raise HTTPException(status_code=422, detail=f"origen desconocido: '{body.origen}'")
     return screener_analytics.escanear(
-        db, tuple(sorted(set(body.estrategia_ids))), body.umbral_pct, body.origen,
+        db, tuple(sorted(set(body.estrategia_ids))), body.umbral_pct, body.origen, body.variante,
     )
 
 
@@ -129,11 +136,15 @@ def serie_tecnica(
     hasta: Optional[date] = Query(None),
     indicadores: list[str] = Query([]),
     max_barras: int = Query(ohlcv_analytics.MAX_BARRAS_DEFAULT, ge=1, le=3000),
-    variante: str = Query("local"),
+    variante: Optional[str] = Query(
+        None, description="`local` o `subyacente`. Sin valor, la serie de referencia del ticker.",
+    ),
     db: Session = Depends(get_db),
 ):
     _validar_ticker_tecnico(ticker, db)
     _validar_variante(variante)
+    pedida = variante
+    variante = ohlcv_analytics.variante_para(db, ticker, pedida)
     if len(indicadores) > _MAX_INDICADORES:
         raise HTTPException(status_code=422, detail=f"máximo {_MAX_INDICADORES} indicadores por pedido")
 
@@ -163,9 +174,18 @@ def serie_tecnica(
     )
 
     # `variante=subyacente` sobre un ticker sin serie del subyacente bajada -> 404 (a diferencia de
-    # `local` sin datos, que devuelve 200 con la serie vacía: la local siempre "existe").
+    # `local` sin datos, que devuelve 200 con la serie vacía: la local siempre "existe"). Si el
+    # usuario no la pidió sino que la eligió la referencia, un 404 sería peor que mostrar la local:
+    # se degrada y se avisa.
     if variante == "subyacente" and not serie["barras"]:
-        raise HTTPException(status_code=404, detail=f"'{ticker}' no tiene serie del subyacente en USD")
+        if pedida is not None:
+            raise HTTPException(status_code=404, detail=f"'{ticker}' no tiene serie del subyacente en USD")
+        variante = "local"
+        serie = ohlcv_analytics.get_serie_barras(
+            ticker, desde, hasta, db, barras_previas=barras_previas, max_barras=max_barras,
+            variante=variante,
+        )
+        serie["advertencias"] = [*serie["advertencias"], "referencia_degradada"]
 
     resultado_indicadores: dict[str, dict[str, list]] = {}
     if serie["barras"]:
@@ -245,7 +265,8 @@ def backtest_tecnico(ticker: str, body: BacktestRequest, db: Session = Depends(g
     if errores:
         raise HTTPException(status_code=422, detail="; ".join(errores))
     return estrategias_analytics.ejecutar_backtest(
-        ticker, body.definicion, db, body.desde, body.hasta, variante=body.variante,
+        ticker, body.definicion, db, body.desde, body.hasta,
+        variante=ohlcv_analytics.variante_para(db, ticker, body.variante),
     )
 
 
@@ -266,7 +287,8 @@ def comparar_estrategias(ticker: str, body: ComparadorRequest, db: Session = Dep
     if body.referencia_id is not None and body.referencia_id not in ids:
         raise HTTPException(status_code=422, detail="referencia_id debe ser una de las estrategias seleccionadas")
     return comparador_estrategias_analytics.comparar_estrategias(
-        ticker, tuple(ids), db, desde=body.desde, hasta=body.hasta, variante=body.variante,
+        ticker, tuple(ids), db, desde=body.desde, hasta=body.hasta,
+        variante=ohlcv_analytics.variante_para(db, ticker, body.variante),
         capital_inicial=body.capital_inicial, referencia_id=body.referencia_id, sin_costos=body.sin_costos,
     )
 
@@ -291,7 +313,7 @@ def crear_estrategia_endpoint(body: EstrategiaGuardarRequest, response: Response
     if errores:
         raise HTTPException(status_code=422, detail="; ".join(errores))
 
-    _validar_variante(body.variante)
+    _validar_variante_estrategia(body.variante)
     e, creada = estrategias_analytics.guardar_por_nombre(
         nombre=body.nombre, definicion=body.definicion, db=db,
         descripcion=body.descripcion, ticker=body.ticker, tipo_preset=body.tipo_preset,
@@ -318,7 +340,7 @@ def actualizar_estrategia_endpoint(estrategia_id: int, body: EstrategiaGuardarRe
     if errores:
         raise HTTPException(status_code=422, detail="; ".join(errores))
 
-    _validar_variante(body.variante)
+    _validar_variante_estrategia(body.variante)
     e = estrategias_analytics.actualizar_estrategia(
         estrategia_id, db, nombre=body.nombre, descripcion=body.descripcion,
         ticker=body.ticker, definicion=body.definicion, variante=body.variante,

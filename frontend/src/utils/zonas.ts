@@ -6,7 +6,7 @@
  * válidas. Está acá y no en cada pantalla porque la watchlist, el resumen del gráfico y el detalle
  * del instrumento tienen que decir lo mismo.
  */
-import type { TipoZona, ZonaPrecioOut } from '../api'
+import type { TipoZona, VarianteSerie, ZonaPrecioOut } from '../api'
 
 /** El borde cuyo cruce dispara el aviso: el techo si se compra (el precio baja y entra en la
  * banda), el piso si se vende. */
@@ -35,9 +35,14 @@ export function textoZona(
  * ¿Esta zona se puede representar con un solo input de precio?
  *
  * El detalle de la watchlist tiene el atajo "comprar por debajo de X", que es una zona de compra
- * abierta hacia abajo sobre la serie local. Una zona con piso, o medida sobre el subyacente, no
- * cabe en ese input: mostrarla ahí la truncaría al guardar, así que esas se editan en el gráfico.
+ * abierta hacia abajo sobre la **serie de referencia** del instrumento (USD para un CEDEAR con su
+ * serie del subyacente, local para el resto). Una zona con piso, o medida sobre la otra serie, no
+ * cabe en ese input: mostrarla ahí la truncaría o la pasaría de serie al guardar, así que esas se
+ * editan en el gráfico. Una zona vencida sí: no tiene nada que conservar y el atajo es la forma
+ * más corta de reemplazarla.
  */
-export function cabeEnUnInput(zona: ZonaPrecioOut | null | undefined): boolean {
-  return !zona || (zona.piso == null && zona.variante === 'local')
+export function cabeEnUnInput(
+  zona: ZonaPrecioOut | null | undefined, referencia: VarianteSerie = 'local',
+): boolean {
+  return !zona || zona.vencida || (zona.piso == null && zona.variante === referencia)
 }

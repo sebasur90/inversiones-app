@@ -28,9 +28,9 @@ Backfill histórico: analisistecnico cubre renta fija soberana/letras (no ONs); 
 para lo que analisistecnico no cubre (ONs, renta variable) — ver `fetch_backfill_iol`.
 """
 from datetime import date, timedelta
-from unicodedata import combining, normalize
 
 from ...database import BarraOHLCV, PrecioWatchlist
+from .. import clasificacion_instrumentos as clasificacion
 from ..ohlcv_analytics import clave_serie
 from ..validation.types import Severity, ValidationIssue
 from . import analisistecnico, data912, yahoo
@@ -103,8 +103,7 @@ def _aplicar_factor_ohlcv(barra: BarraCruda, factor: float) -> BarraCruda:
     )
 
 
-def _sin_acentos(s: str) -> str:
-    return "".join(c for c in normalize("NFD", s) if not combining(c)).lower().strip()
+_sin_acentos = clasificacion.sin_acentos
 
 
 def _factor_escala(px_api: float, px_sheet: float) -> float | None:
@@ -133,10 +132,7 @@ def _es_renta_variable(tipo_instrumento: str) -> bool:
     return any(sub in t for sub in _SUBCADENAS_RENTA_VARIABLE)
 
 
-def _es_cedear(tipo_instrumento: str) -> bool:
-    """Un CEDEAR: el ticker local *es* el del subyacente por construcción, así que la resolución
-    automática del subyacente es segura (no hace falta match de nombre)."""
-    return "cedear" in _sin_acentos(tipo_instrumento or "")
+_es_cedear = clasificacion.es_cedear
 
 
 def _es_fci(tipo_instrumento: str) -> bool:

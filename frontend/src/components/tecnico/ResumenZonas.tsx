@@ -32,7 +32,9 @@ export default function ResumenZonas({
     { tipo: 'venta' as const, titulo: 'Venta', zona: zonas?.venta, color: COLOR_ZONA_VENTA },
   ]
   const algunaZona = lados.some(l => l.zona)
-  const otraSerie = lados.filter(l => l.zona && l.zona.variante !== variante)
+  // Una zona vencida ya tiene su propio aviso: no se la cuenta además como "de otra serie".
+  const vencidas = lados.filter(l => l.zona?.vencida)
+  const otraSerie = lados.filter(l => l.zona && !l.zona.vencida && l.zona.variante !== variante)
 
   return (
     <div className="flex flex-col gap-2">
@@ -68,12 +70,24 @@ export default function ResumenZonas({
                 {zona.variante === 'subyacente' && (
                   <span className="text-label text-app-text-faint">· subyacente</span>
                 )}
-                {!zona.activa && (
+                {zona.vencida ? (
+                  <span className="text-label text-app-text-faint">· vencida</span>
+                ) : !zona.activa && (
                   <span className="text-label text-app-text-faint">· pausada</span>
                 )}
               </div>
             ) : null
           ))}
+        </div>
+      )}
+
+      {vencidas.length > 0 && (
+        <div className="text-label text-app-text-dim bg-app-surface-2 rounded-xl px-2.5 py-2">
+          {vencidas.length === 2 ? 'Tus zonas de compra y de venta estaban' : `Tu zona de ${vencidas[0].titulo.toLowerCase()} estaba`}{' '}
+          medida{vencidas.length === 2 ? 's' : ''} sobre el CEDEAR en pesos. Este instrumento ahora se
+          analiza por el precio de la acción en EE.UU. en dólares, y una zona en pesos no se puede
+          pasar a dólares sin inventar el tipo de cambio y el ratio del CEDEAR: quedó
+          pausada con sus números. Dibujá la zona de nuevo sobre el gráfico en dólares.
         </div>
       )}
 

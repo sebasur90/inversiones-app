@@ -631,11 +631,28 @@ class ZonaPrecio(Base):
     # Apagar una zona sin perder los números: el gráfico la deja de dibujar y las alertas de
     # evaluarla, pero volver a prenderla no obliga a re-dibujarla.
     activa = Column(Integer, nullable=False, default=1, server_default="1")
+    # La apagó una migración, no el usuario: era una zona en pesos sobre un CEDEAR que ahora se
+    # analiza por su precio en dólares (ver `migrar_zonas_locales_de_cedears`). Distinguirla de una
+    # zona apagada a mano permite explicar en pantalla por qué desapareció la distancia y pedir que
+    # se vuelva a dibujar. Cualquier guardado del usuario la limpia.
+    vencida = Column(Integer, nullable=False, default=0, server_default="0")
     notas = Column(String, nullable=True)
     fecha_creacion = Column(DateTime, nullable=False)
     fecha_actualizacion = Column(DateTime, nullable=False)
 
     __table_args__ = (UniqueConstraint("ticker", "tipo", name="uq_zona_precio_ticker_tipo"),)
+
+
+class MigracionAplicada(Base):
+    """Marca de las migraciones de **datos** que no pueden correr en cada arranque.
+
+    Las migraciones de esquema se reconocen por la columna que falta; éstas no: reescriben filas
+    que el usuario puede volver a cambiar a propósito (una estrategia fijada en `local`, una zona
+    local sobre un CEDEAR), y sin una marca el próximo arranque se las desharía.
+    """
+    __tablename__ = "migraciones_aplicadas"
+    nombre = Column(String, primary_key=True)
+    fecha = Column(DateTime, nullable=False)
 
 
 def get_db():
@@ -672,6 +689,91 @@ def migrar_objetivo_watchlist_a_zonas(conn) -> None:
            )
     """))
     conn.execute(text("UPDATE watchlist SET objetivo = NULL WHERE objetivo IS NOT NULL"))
+    conn.commit()
+
+
+def _migracion_aplicada(conn, nombre: str) -> bool:
+    return conn.execute(
+        text("SELECT 1 FROM migraciones_aplicadas WHERE nombre = :n"), {"n": nombre},
+    ).first() is not None
+
+
+def _marcar_migracion(conn, nombre: str) -> None:
+    conn.execute(
+        text("INSERT INTO migraciones_aplicadas (nombre, fecha) VALUES (:n, datetime('now'))"),
+        {"n": nombre},
+    )
+
+
+def migrar_estrategias_a_referencia(conn) -> None:
+    """Las estrategias guardadas con `variante='local'` pasan a `'referencia'`: la serie que
+    corresponde a cada ticker (USD para un CEDEAR con serie del subyacente, local para el resto).
+
+    Las que están en `'subyacente'` no se tocan: ahí el usuario eligió explícitamente. Para un
+    ticker que no es CEDEAR `referencia` equivale a `local`, así que no cambia nada de lo que ya
+    funcionaba. No se borra el estado de los avisos de señal: las de tickers locales siguen
+    deduplicadas, y las de un CEDEAR que ahora se mide en USD son señales nuevas de verdad.
+
+    Corre **una sola vez** (marca en `migraciones_aplicadas`): si no, fijar una estrategia en
+    `local` a propósito se desharía en el próximo arranque.
+    """
+    nombre = "estrategias_variante_referencia"
+    if _migracion_aplicada(conn, nombre):
+        return
+    conn.execute(text("UPDATE estrategias_tecnicas SET variante = 'referencia' WHERE variante = 'local'"))
+    _marcar_migracion(conn, nombre)
+    conn.commit()
+
+
+def migrar_zonas_locales_de_cedears(conn, min_barras: int = 60) -> None:
+    """Una zona en pesos sobre un CEDEAR mide contra el precio equivocado para decidir el momento
+    de compra, y no se puede convertir a dólares (no hay histórico de CCL ni el ratio del CEDEAR).
+    Se apaga y se marca `vencida`, conservando los números, para que la pantalla pida dibujarla de
+    nuevo sobre el gráfico en USD.
+
+    Alcanza a las zonas `local` activas de tickers que cumplen la regla de
+    `ohlcv_analytics.variante_referencia` en SQL: son CEDEAR y tienen serie `TICKER@SUB` con
+    `min_barras` o más y moneda dominante USD (`min_barras` replica
+    `ohlcv_analytics.MIN_BARRAS_REFERENCIA`; un test los mantiene iguales). Un bono, una acción
+    argentina o un CEDEAR sin serie del subyacente quedan como estaban.
+
+    También borra el estado de las alertas de esas zonas: si no, al volver a dibujarla en dólares
+    el primer cruce quedaría silenciado por el "ya disparada" de la zona vieja.
+
+    Corre **una sola vez** (marca en `migraciones_aplicadas`): sin ella, una zona local que el
+    usuario dibuje a propósito sobre un CEDEAR se volvería a apagar en cada arranque.
+    """
+    nombre = "zonas_locales_de_cedears_vencidas"
+    if _migracion_aplicada(conn, nombre):
+        return
+    filas = conn.execute(text("""
+        SELECT z.id, z.ticker
+          FROM zonas_precio z
+         WHERE z.variante = 'local' AND z.activa = 1
+           AND z.ticker IN (
+               SELECT ticker FROM watchlist
+                WHERE lower(COALESCE(tipo_instrumento, '')) LIKE '%cedear%'
+               UNION
+               SELECT ticker FROM instrumentos_inversion
+                WHERE lower(COALESCE(tipo_instrumento, '')) LIKE '%cedear%'
+           )
+           AND z.ticker || '@SUB' IN (
+               SELECT ticker FROM serie_ohlcv
+                GROUP BY ticker
+               HAVING COUNT(*) >= :min_barras
+                  AND 2 * SUM(CASE WHEN upper(moneda) = 'USD' THEN 1 ELSE 0 END) > COUNT(*)
+           )
+    """), {"min_barras": min_barras}).fetchall()
+    for zona_id, ticker in filas:
+        conn.execute(
+            text("UPDATE zonas_precio SET activa = 0, vencida = 1, fecha_actualizacion = datetime('now') WHERE id = :i"),
+            {"i": zona_id},
+        )
+        conn.execute(
+            text("DELETE FROM alertas_precio WHERE ticker = :t AND tipo IN ('compra_zona', 'venta_zona')"),
+            {"t": ticker},
+        )
+    _marcar_migracion(conn, nombre)
     conn.commit()
 
 
@@ -772,6 +874,18 @@ def init_db():
             conn.commit()
 
         migrar_objetivo_watchlist_a_zonas(conn)
+
+        # Marca de zonas vencidas por la migración a la serie de referencia.
+        result = conn.execute(text("PRAGMA table_info(zonas_precio)"))
+        cols = [row[1] for row in result.fetchall()]
+        if 'vencida' not in cols:
+            conn.execute(text("ALTER TABLE zonas_precio ADD COLUMN vencida INTEGER NOT NULL DEFAULT 0"))
+            conn.commit()
+
+        # Migraciones de datos de la serie de referencia. Van acá y no antes: necesitan que ya
+        # existan `estrategias_tecnicas.variante` y `zonas_precio.vencida`.
+        migrar_estrategias_a_referencia(conn)
+        migrar_zonas_locales_de_cedears(conn)
 
         # Interruptor de la zona de venta. Default 1 como los otros tres: dibujar la zona ya es la
         # decisión de querer el aviso. **Un tipo de nivel sin su interruptor queda silenciado**

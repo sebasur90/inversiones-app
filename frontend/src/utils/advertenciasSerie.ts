@@ -23,6 +23,9 @@ const TEXTOS: Record<string, string> = {
     'descartó para no graficar en otra unidad. Probá refrescar el precio del instrumento.',
   subyacente_sin_subyacente:
     'No se pudo identificar el instrumento subyacente en EE.UU. para este ticker.',
+  referencia_degradada:
+    'La serie de referencia de este instrumento (el precio en dólares de la acción en EE.UU.) ' +
+    'todavía no tiene datos: se muestra la serie local. Se completa en el próximo sync.',
   subyacente_ticker_no_apto:
     'Este instrumento no tiene un subyacente en EE.UU. (es renta fija o un activo local).',
 }

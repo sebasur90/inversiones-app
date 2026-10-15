@@ -74,6 +74,9 @@ class Zona:
     piso: Optional[float] = None
     techo: Optional[float] = None
     activa: bool = True
+    # Apagada por la migración a la serie de referencia, no por el usuario. Sigue siendo
+    # `activa=False`: las alertas y las distancias no la evalúan.
+    vencida: bool = False
     notas: Optional[str] = None
     actualizado_en: Optional[datetime] = None
 
@@ -149,6 +152,7 @@ def _a_zona(fila: ZonaPrecio) -> Zona:
         piso=float(fila.piso) if fila.piso is not None else None,
         techo=float(fila.techo) if fila.techo is not None else None,
         activa=bool(fila.activa),
+        vencida=bool(getattr(fila, "vencida", 0)),
         notas=fila.notas,
         actualizado_en=fila.fecha_actualizacion,
     )
@@ -220,6 +224,8 @@ def _upsert(db: Session, ticker: str, tipo: str, entrada: dict) -> None:
         "piso": float(piso) if piso is not None else None,
         "techo": float(techo) if techo is not None else None,
         "activa": 1 if entrada.get("activa", True) else 0,
+        # Dibujar o editar la zona es la respuesta al aviso de "vencida": deja de estarlo.
+        "vencida": 0,
         "notas": (entrada.get("notas") or "").strip() or None,
     }
     if fila is None:
@@ -307,6 +313,7 @@ def a_dict(ticker: str, zonas: ZonasTicker) -> dict:
             "piso": zona.piso,
             "techo": zona.techo,
             "activa": zona.activa,
+            "vencida": zona.vencida,
             "notas": zona.notas,
             "actualizado_en": zona.actualizado_en,
         }

@@ -10,6 +10,7 @@ export type AnalisisTecnicoHelpKey =
   | 'analisis_tecnico_extremos'
   | 'analisis_tecnico_percentil'
   | 'zonas_precio'
+  | 'serie_referencia'
   | 'screener_titulo'
   | 'screener_universo'
   | 'screener_distancia'
@@ -21,13 +22,21 @@ export type AnalisisTecnicoHelpKey =
   | 'screener_grafico_gatillo'
 
 export const ANALISISTECNICO_HELP: Record<AnalisisTecnicoHelpKey, HelpContent> = {
+  serie_referencia: {
+    title: 'Serie de referencia',
+    shortDescription: 'Para un CEDEAR, el precio que sirve para decidir es el de la acción en EE.UU. en dólares, no el del CEDEAR en pesos. La app lo toma como referencia automáticamente.',
+    whyItMatters: 'El CEDEAR de MSFT se mueve por dos cosas: lo que hace Microsoft y lo que hace el dólar (más el ratio de conversión). Los indicadores, las bandas y los máximos y mínimos calculados sobre el CEDEAR mezclan las dos; sobre el precio de la acción en dólares describen sólo a la empresa. El CEDEAR importa a la hora de ejecutar la orden, no a la de decidir.',
+    howToInterpret: 'Un instrumento usa el precio en dólares como referencia cuando es un CEDEAR y la app ya bajó su serie en dólares. El resto (acciones argentinas, bonos, ONs, o un CEDEAR cuya serie todavía no está) usa el precio local. Las acciones argentinas con ADR (GGAL, YPF) se miran en pesos: su mercado de referencia es el local. El gráfico, la watchlist, las estrategias, el backtest y el screener arrancan en la serie de referencia; el selector de serie te deja mirar la otra cuando quieras.',
+    limitations: 'No hay conversión entre una serie y otra (no existe un historial confiable del dólar financiero ni del ratio de cada CEDEAR): son dos series distintas, nunca el mismo precio en dos monedas. Por eso una zona de compra o de venta en pesos, medida sobre el CEDEAR, no se puede pasar sola a dólares: hay que volver a dibujarla sobre el gráfico en dólares. El stop loss y el objetivo de una posición siguen en pesos, porque son un porcentaje sobre el precio al que compraste el CEDEAR.',
+    relatedTerms: ['zonas_precio', 'watchlist_zona_compra'],
+  },
   zonas_precio: {
     title: 'Zonas de compra y de venta',
     shortDescription: 'El rango de precios en el que querés entrar o salir de un instrumento, dibujado sobre el gráfico. Cuando el precio entra en la zona, llega el aviso al celular.',
     whyItMatters: 'Decidir el rango con el gráfico a la vista —y no en el momento en que el precio se mueve— es la diferencia entre una compra planeada y una reacción. El rango además dice algo que un precio solo no dice: entre cuánto y cuánto te parece buena la entrada.',
     howToInterpret: 'De los dos bordes, uno dispara el aviso y el otro es referencia. En una zona de compra dispara el techo (el precio baja y cruza hacia adentro); en una de venta dispara el piso (sube y cruza). El borde que dispara se dibuja con línea llena y el otro punteado. Cualquiera de los dos puede quedar vacío: una zona de compra sin piso es simplemente "comprar por debajo de X".',
-    limitations: 'Hay una sola zona de compra y una sola de venta por instrumento, y cada una se mide sobre la serie en la que la dibujaste: la local en pesos o la del subyacente en dólares. No hay conversión de moneda entre una y otra — son dos instrumentos distintos, no el mismo precio en dos monedas. Las zonas son independientes del stop-loss y el objetivo de una posición, que se editan en el detalle del ticker y acá se dibujan sólo como referencia.',
-    relatedTerms: ['watchlist_zona_compra', 'stopLoss', 'objetivo'],
+    limitations: 'Hay una sola zona de compra y una sola de venta por instrumento, y cada una se mide sobre la serie en la que la dibujaste: la local en pesos o la del subyacente en dólares (para un CEDEAR, la de referencia es la de dólares). No hay conversión de moneda entre una y otra — son dos instrumentos distintos, no el mismo precio en dos monedas. Las zonas son independientes del stop-loss y el objetivo de una posición, que se editan en el detalle del ticker y acá se dibujan sólo como referencia.',
+    relatedTerms: ['serie_referencia', 'watchlist_zona_compra', 'stopLoss', 'objetivo'],
   },
   analisis_tecnico_titulo: {
     title: 'Análisis técnico',

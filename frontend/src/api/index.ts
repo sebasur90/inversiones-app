@@ -102,9 +102,24 @@ export interface WatchlistItemOut {
   fuente_precio: string | null
   variacion_dia: number | null
   variacion_dia_pct: number | null
+  /** La serie con la que se decide sobre este instrumento: `subyacente` para un CEDEAR con su serie
+   * en USD, `local` para el resto. `precio_actual` sigue siendo el precio cotizado acá; el que hay
+   * que mirar para decidir es `precio_referencia` (mismo valor cuando la referencia es local). */
+  variante_referencia: VarianteSerie
+  precio_referencia: number | null
+  moneda_referencia: string | null
+  fecha_precio_referencia: string | null
+  /** local: 'cartera' | 'iol' | 'api'; subyacente: 'intradia' | 'cierre'. */
+  fuente_precio_referencia: string | null
+  variacion_dia_referencia: number | null
+  variacion_dia_referencia_pct: number | null
+  /** El nivel de la zona de compra está en `moneda_objetivo` y se midió contra la serie
+   * `base_comparacion`: pesos y dólares nunca se cruzan. */
   precio_objetivo: number | null
   pct_a_objetivo: number | null
   en_zona: boolean | null
+  base_comparacion: VarianteSerie | null
+  moneda_objetivo: string | null
   zona_compra: ZonaPrecioOut | null
   zona_venta: ZonaPrecioOut | null
   en_cartera: boolean
@@ -2112,12 +2127,18 @@ export const getDefaultsVida = (cartera: string | null) =>
 
 // ---- Análisis técnico ----
 
+/** Una serie concreta. Es lo que devuelve siempre el backend: lo calculado nunca dice 'referencia'. */
 export type VarianteSerie = 'local' | 'subyacente'
+
+/** Lo que puede *guardar* una estrategia: además de fijar una serie, 'referencia' (el default)
+ * significa "la serie de referencia del ticker que se esté evaluando". */
+export type VarianteEstrategia = VarianteSerie | 'referencia'
 
 export interface SerieVarianteOut {
   variante: VarianteSerie
   moneda: string
   mercado: string
+  barras?: number
 }
 
 export interface TickerTecnicoOut {
@@ -2127,6 +2148,8 @@ export interface TickerTecnicoOut {
   tipo_instrumento: string
   origen: 'cartera' | 'watchlist' | 'ambos'
   series: SerieVarianteOut[]
+  /** La serie con la que hay que decidir sobre este ticker (ver `WatchlistItemOut`). */
+  variante_referencia: VarianteSerie
 }
 
 export interface BarraOut {
@@ -2176,6 +2199,9 @@ export interface ZonaPrecioOut {
   piso: number | null
   techo: number | null
   activa: boolean
+  /** La apagó la migración a la serie de referencia (era una zona en pesos sobre un CEDEAR que
+   * ahora se analiza en dólares): hay que volver a dibujarla sobre el gráfico en USD. */
+  vencida: boolean
   notas: string | null
   actualizado_en: string | null
 }
@@ -2359,7 +2385,7 @@ export interface EstrategiaGuardarRequest {
   ticker?: string | null
   tipo_preset?: string | null
   definicion: EstrategiaDsl
-  variante?: VarianteSerie
+  variante?: VarianteEstrategia
 }
 
 export interface EstrategiaOut {
@@ -2369,7 +2395,7 @@ export interface EstrategiaOut {
   ticker: string | null
   tipo_preset: string | null
   definicion: EstrategiaDsl
-  variante: VarianteSerie
+  variante: VarianteEstrategia
   /** Avisos por Telegram de las señales de esta estrategia; se configuran en Ajustes. */
   notificar_compra: boolean
   notificar_venta: boolean
@@ -2402,7 +2428,7 @@ export const getSenalesTecnicas = (tickers?: string[]) =>
     .then(r => r.data)
 
 export const backtestEstrategia = (
-  ticker: string, definicion: EstrategiaDsl, desde?: string, hasta?: string, variante: VarianteSerie = 'local',
+  ticker: string, definicion: EstrategiaDsl, desde?: string, hasta?: string, variante?: VarianteSerie,
 ) =>
   api.post<BacktestOut>(`/inversiones/tecnico/${encodeURIComponent(ticker)}/backtest`, { definicion, desde, hasta, variante }).then(r => r.data)
 
@@ -2435,6 +2461,9 @@ export interface ScreenerRequest {
   estrategia_ids?: number[]
   umbral_pct?: number
   origen?: OrigenScreener
+  /** Fuerza una serie en todo el escaneo; sin esto, cada estrategia decide (por default, la serie
+   * de referencia de cada ticker). */
+  variante?: VarianteSerie
 }
 
 export interface ScreenerCondicionOut {

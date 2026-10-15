@@ -23,7 +23,7 @@ from typing import Iterable
 
 from sqlalchemy.orm import Session
 
-from ..database import AlertaPrecio, BarraOHLCV, EstadoMarketDataTicker, PrecioSubyacente
+from ..database import AlertaPrecio, EstadoMarketDataTicker
 from . import (
     alertas_engine, avisos_config, estrategias_analytics, inversiones_analytics,
     ohlcv_analytics, watchlist_analytics, zonas_precio,
@@ -112,40 +112,16 @@ def _precio_local(universo: _Universo, ticker: str) -> tuple[float, str] | None:
 
 
 def _precios_subyacente(db: Session, tickers: set[str]) -> dict[str, float]:
-    """Último precio en USD del subyacente de cada ticker, de las dos fuentes que lo tienen.
-
-    `precios_subyacente` lo refresca el job liviano varias veces por rueda; la serie `TICKER@SUB`
-    la completa el sync de la tarde. **Gana el más fresco por fecha**, y no una fuente fija: si el
-    job dejó de correr hace días, su precio es más viejo que el último cierre de la serie, y al
-    revés durante la rueda. Comparar la zona contra un precio de la semana pasada cuando hay uno
-    de hoy sería no avisar de un cruce real.
+    """Último precio en USD del subyacente de cada ticker (la fuente es compartida con la
+    Watchlist: `ohlcv_analytics.ultimo_precio_subyacente`, así la pantalla y el aviso no discrepan).
 
     Tener sólo el cierre de ayer igual sirve: la alternativa es que una zona en dólares no se
     evalúe nunca hasta el primer refresco.
     """
-    if not tickers:
-        return {}
-
-    mejor: dict[str, tuple[date, float]] = {}
-
-    def _considerar(ticker: str, fecha: date, precio: float) -> None:
-        actual = mejor.get(ticker)
-        if actual is None or fecha >= actual[0]:
-            mejor[ticker] = (fecha, precio)
-
-    claves = {ohlcv_analytics.clave_serie(t, "subyacente"): t for t in tickers}
-    for clave, fecha, cierre in (
-        db.query(BarraOHLCV.ticker, BarraOHLCV.fecha, BarraOHLCV.cierre)
-        .filter(BarraOHLCV.ticker.in_(claves))
-    ):
-        _considerar(claves[clave], fecha, float(cierre))
-
-    for fila in db.query(PrecioSubyacente).filter(PrecioSubyacente.ticker.in_(tickers)):
-        # La moneda se validó al guardar (sólo USD); acá se respeta por si una fila vieja difiere.
-        if (fila.moneda or "").upper() == "USD":
-            _considerar(fila.ticker, fila.fecha, float(fila.precio))
-
-    return {ticker: precio for ticker, (_, precio) in mejor.items()}
+    return {
+        ticker: precio
+        for ticker, (_fecha, precio, _origen) in ohlcv_analytics.ultimo_precio_subyacente(db, tickers).items()
+    }
 
 
 def _contexto_de_zona(universo: _Universo, ticker: str) -> dict:

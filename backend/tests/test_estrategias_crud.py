@@ -103,9 +103,11 @@ def test_variante_roundtrip_y_se_arrastra_al_duplicar(db):
     assert dup.variante == "subyacente"
 
 
-def test_variante_default_es_local(db):
+def test_variante_default_es_referencia(db):
+    """Una estrategia nueva corre en la serie de referencia de cada ticker (USD para un CEDEAR con
+    serie del subyacente, local para el resto), no fija `local`."""
     creada = ea.crear_estrategia("Def", _DSL, db)
-    assert ea.obtener_estrategia(creada.id, db).variante == "local"
+    assert ea.obtener_estrategia(creada.id, db).variante == "referencia"
 
 
 def test_eliminar_estrategia(db):

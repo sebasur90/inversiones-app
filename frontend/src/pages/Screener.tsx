@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   listarEstrategias, correrScreener,
-  type ScreenerFilaOut, type OrigenScreener,
+  type ScreenerFilaOut, type OrigenScreener, type VarianteSerie,
 } from '../api'
 import { qk } from '../api/queryClient'
 import { usePreferencia } from '../hooks/usePreferencia'
@@ -55,6 +55,9 @@ export default function Screener() {
     arr => JSON.stringify(arr),
   )
 
+  // `null` = cada estrategia decide, y por default eso es la serie de referencia de cada ticker.
+  const [serieForzada, setSerieForzada] = useState<VarianteSerie | null>(null)
+
   const [expandida, setExpandida] = useState<string | null>(null)
   const [haEscaneado, setHaEscaneado] = useState(false)
   const [detalle, setDetalle] = useState<ScreenerFilaOut | null>(null)
@@ -65,8 +68,11 @@ export default function Screener() {
   const idsOrdenados = useMemo(() => [...estrategiaIds].sort((a, b) => a - b), [estrategiaIds])
 
   const scanQuery = useQuery({
-    queryKey: qk.de('screener', idsOrdenados, umbralPct, origen),
-    queryFn: () => correrScreener({ estrategia_ids: idsOrdenados, umbral_pct: umbralPct, origen }),
+    queryKey: qk.de('screener', idsOrdenados, umbralPct, origen, serieForzada),
+    queryFn: () => correrScreener({
+      estrategia_ids: idsOrdenados, umbral_pct: umbralPct, origen,
+      variante: serieForzada ?? undefined,
+    }),
     enabled: false,
   })
 
@@ -148,6 +154,26 @@ export default function Screener() {
         </div>
 
         <div>
+          <div className="text-label font-bold text-app-text-dim uppercase mb-1.5">Serie</div>
+          <Segmented
+            options={[
+              { value: 'referencia' as const, label: 'De referencia' },
+              { value: 'local' as const, label: 'Local' },
+              { value: 'subyacente' as const, label: 'Subyacente' },
+            ]}
+            value={serieForzada ?? 'referencia'}
+            onChange={v => setSerieForzada(v === 'referencia' ? null : v)}
+          />
+          <div className="text-label text-app-text-faint mt-1">
+            {serieForzada === null
+              ? 'Cada ticker se mide en su serie de referencia: el precio en USD de la acción en EE.UU. para un CEDEAR, el local para el resto.'
+              : serieForzada === 'local'
+                ? 'Todo se mide por el precio local (el CEDEAR en pesos).'
+                : 'Sólo se evalúan los tickers que tienen serie del subyacente, en dólares.'}
+          </div>
+        </div>
+
+        <div>
           <div className="flex items-center gap-1 text-label font-bold text-app-text-dim uppercase mb-1.5">
             Umbral de proximidad
             <InfoTooltip term="screener_umbral" />
@@ -180,10 +206,10 @@ export default function Screener() {
                 {filas.length > 0 && (
                   <BotonExportarCsv
                     nombre="screener"
-                    encabezados={['Ticker', 'Nombre', 'Estrategia', 'Tipo', 'Motivo', 'Distancia %', 'Precio actual', 'Precio gatillo']}
+                    encabezados={['Ticker', 'Nombre', 'Estrategia', 'Tipo', 'Motivo', 'Distancia %', 'Moneda', 'Precio actual', 'Precio gatillo']}
                     filas={() => filas.map(f => [
                       f.ticker, f.nombre, f.estrategia_nombre, f.tipo, f.motivo,
-                      f.distancia_pct, f.precio_actual, f.precio_gatillo,
+                      f.distancia_pct, f.moneda, f.precio_actual, f.precio_gatillo,
                     ])}
                   />
                 )}

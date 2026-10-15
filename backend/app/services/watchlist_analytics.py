@@ -11,6 +11,15 @@ Los campos `precio_objetivo`/`pct_a_objetivo`/`en_zona` de la salida se mantiene
 nombre y el mismo criterio: son el contrato del badge de la pantalla, de `alertas_engine` y de
 Oportunidades de compra del Resumen.
 
+**Serie de referencia.** Para un CEDEAR (MSFT) el precio que importa para decidir es el de la
+acción en el Nasdaq en dólares, no el del CEDEAR en pesos (ver
+`ohlcv_analytics.variante_referencia`). Cada fila trae por eso `precio_referencia` y compañía: el
+precio de esa serie, con su moneda, su fecha y su variación del día. `precio_actual` sigue siendo
+el precio cotizado acá, porque es el contrato de otros consumidores (Resumen, Oportunidades de
+compra, alertas) y cambiarlo movería cálculos que no son de esta pantalla. La proximidad a la zona
+ya **no** supone que el precio y la zona están en la misma moneda: cada zona se compara contra el
+precio de **su propia serie**, igual que en las alertas (`base_comparacion` dice cuál).
+
 La detección de "cerca" (el umbral de proximidad) vive en el frontend, como la de posiciones: es
 una preferencia del usuario guardada en localStorage y se aplica sobre `pct_a_objetivo` sin
 necesidad de re-sincronizar.
@@ -32,7 +41,7 @@ from ..database import (
     WatchlistItem,
     ZonaPrecio,
 )
-from . import catalogo_instrumentos, cotizacion_diaria, zonas_precio
+from . import catalogo_instrumentos, cotizacion_diaria, ohlcv_analytics, zonas_precio
 from .inversiones_analytics import (
     _holdings_por_cartera_ticker,
     _precio_conocido,
@@ -53,20 +62,28 @@ def _tickers_en_cartera(db: Session, hasta: date) -> set[str]:
     return {t for t, cant in totales.items() if cant > 0}
 
 
-def _cierres_barras(db: Session, tickers: list[str]) -> dict[str, list[tuple[date, float, str]]]:
-    """Cierres diarios de `BarraOHLCV` con la forma de `_precios_por_ticker` (la moneda se pasa
-    vacía: las velas no la guardan, así que la comparación de moneda se hace con la del precio)."""
+def _cierres_barras(
+    db: Session, tickers: list[str], variante: str = "local", moneda: str = "",
+) -> dict[str, list[tuple[date, float, str]]]:
+    """Cierres diarios de `BarraOHLCV` con la forma de `_precios_por_ticker`, por ticker base.
+
+    `moneda` es la que se pone en cada tupla. Para la serie local queda vacía (las velas no la
+    guardan, así que la comparación de moneda se hace con la del precio); para la del subyacente es
+    `"USD"`, porque `_variacion_diaria` exige la misma moneda entre el precio y el registro previo y
+    con `""` contra `"USD"` nunca daría un número.
+    """
     if not tickers:
         return {}
+    claves = {ohlcv_analytics.clave_serie(t, variante): t for t in tickers}
     filas = (
         db.query(BarraOHLCV.ticker, BarraOHLCV.fecha, BarraOHLCV.cierre)
-        .filter(BarraOHLCV.ticker.in_(tickers))
+        .filter(BarraOHLCV.ticker.in_(claves))
         .order_by(BarraOHLCV.ticker, BarraOHLCV.fecha)
         .all()
     )
     out: dict[str, list[tuple[date, float, str]]] = {}
-    for ticker, fecha, cierre in filas:
-        out.setdefault(ticker, []).append((fecha, float(cierre), ""))
+    for clave, fecha, cierre in filas:
+        out.setdefault(claves[clave], []).append((fecha, float(cierre), moneda))
     return out
 
 
@@ -77,10 +94,11 @@ def get_watchlist(db: Session) -> list[dict]:
     también existe en `Instrumentos` -- ahí hay historia real --, y de `precios_watchlist` cuando
     es un ticker que sólo se está siguiendo.
 
-    El nivel sale del techo de la zona de compra, y **sólo si la zona es de variante `local`**: una
-    zona dibujada sobre la serie del subyacente está en USD del mercado de origen y compararla
-    contra este precio (el CEDEAR en ARS) daría una distancia sin sentido. La zona viaja igual en
-    la salida para dibujarla; quien la evalúa en su propia moneda es la corrida de alertas.
+    El nivel sale del techo de la zona de compra, comparado contra el precio **de la serie de esa
+    zona**: una zona `local` contra el precio cotizado acá, una `subyacente` contra el último
+    precio del instrumento en EE.UU. en USD. Nunca se cruzan (una distancia entre 170 dólares y
+    26.000 pesos no significa nada): `base_comparacion` dice contra cuál se midió y
+    `moneda_objetivo` en qué moneda está el nivel. Es el mismo criterio de las alertas.
 
     Ordena por urgencia: primero lo que ya está en zona, después lo más cerca del borde, y al
     final lo que no tiene zona o no tiene precio.
@@ -99,6 +117,18 @@ def get_watchlist(db: Session) -> list[dict]:
     cierres = _cierres_barras(db, solo_seguidos)
     cotizaciones_dia = cotizacion_diaria.cargar_por_clave(db, {i.ticker for i in items})
     zonas = zonas_precio.mapa_zonas(db)   # una sola consulta para toda la lista
+
+    # Serie de referencia de cada ticker y, para los que se miran en dólares (o tienen una zona
+    # dibujada sobre el subyacente), su último precio y sus cierres. Todo en bloque, nunca por ítem:
+    # `get_watchlist_item` recalcula la lista entera en cada alta o edición.
+    referencias = ohlcv_analytics.mapa_referencias(db)
+    tickers_sub = {i.ticker for i in items if referencias.get(i.ticker) == "subyacente"}
+    for item in items:
+        zc = zonas.get(item.ticker, zonas_precio.VACIO).compra
+        if zc is not None and zc.activa and zc.variante == zonas_precio.VARIANTE_SUBYACENTE:
+            tickers_sub.add(item.ticker)
+    precios_sub = ohlcv_analytics.ultimo_precio_subyacente(db, tickers_sub)
+    cierres_sub = _cierres_barras(db, sorted(tickers_sub), "subyacente", "USD")
 
     resultado: list[dict] = []
     for item in items:
@@ -133,16 +163,40 @@ def get_watchlist(db: Session) -> list[dict]:
                     cierres.get(item.ticker, []), fecha_precio, precio_actual, "", cotizaciones_dia.get((item.ticker, fecha_precio)),
                 )
 
+        # Serie de referencia: lo que hay que mirar para decidir. Si es el subyacente se usa su
+        # precio en USD con la variación del día calculada sobre sus propias velas (no la de IOL,
+        # que es la del CEDEAR en pesos); si por algún motivo no hay precio, se cae a la local en
+        # vez de dejar la fila en blanco.
+        variante_ref = referencias.get(item.ticker, "local")
+        sub = precios_sub.get(item.ticker)
+        if variante_ref == "subyacente" and sub is not None:
+            fecha_ref, precio_ref, fuente_ref = sub
+            moneda_ref = "USD"
+            var_ref, var_ref_pct = _variacion_diaria(
+                cierres_sub.get(item.ticker, []), fecha_ref, precio_ref, "USD", None,
+            )
+        else:
+            variante_ref = "local"
+            fecha_ref, precio_ref, fuente_ref = fecha_precio, precio_actual, fuente_precio
+            moneda_ref = moneda_precio or item.moneda
+            var_ref, var_ref_pct = variacion_dia, variacion_dia_pct
+
+        # La zona de compra se mide contra el precio de su propia serie, sin convertir monedas.
         del_ticker = zonas.get(item.ticker, zonas_precio.VACIO)
         zonas_dict = zonas_precio.a_dict(item.ticker, del_ticker)
         zona_compra = del_ticker.compra
-        comparable = (
-            zona_compra
-            if zona_compra is not None and zona_compra.variante == zonas_precio.VARIANTE_LOCAL
-            else None
-        )
+        base_comparacion = moneda_objetivo = None
+        precio_comparado: float | None = None
+        if zona_compra is not None and zona_compra.activa:
+            if zona_compra.variante == zonas_precio.VARIANTE_SUBYACENTE:
+                if sub is not None:
+                    precio_comparado, moneda_objetivo = sub[1], "USD"
+            else:
+                precio_comparado, moneda_objetivo = precio_actual, moneda_precio or item.moneda
+            if precio_comparado is not None:
+                base_comparacion = zona_compra.variante
         precio_objetivo, pct_a_objetivo, en_zona = zonas_precio.estado_de_zona(
-            comparable, precio_actual,
+            zona_compra, precio_comparado,
         )
 
         resultado.append({
@@ -159,9 +213,18 @@ def get_watchlist(db: Session) -> list[dict]:
             "fuente_precio": fuente_precio,
             "variacion_dia": round(variacion_dia, 6) if variacion_dia is not None else None,
             "variacion_dia_pct": round(variacion_dia_pct, 4) if variacion_dia_pct is not None else None,
+            "variante_referencia": variante_ref,
+            "precio_referencia": precio_ref,
+            "moneda_referencia": moneda_ref,
+            "fecha_precio_referencia": fecha_ref,
+            "fuente_precio_referencia": fuente_ref,
+            "variacion_dia_referencia": round(var_ref, 6) if var_ref is not None else None,
+            "variacion_dia_referencia_pct": round(var_ref_pct, 4) if var_ref_pct is not None else None,
             "precio_objetivo": precio_objetivo,
             "pct_a_objetivo": pct_a_objetivo,
             "en_zona": en_zona,
+            "base_comparacion": base_comparacion,
+            "moneda_objetivo": moneda_objetivo,
             "zona_compra": zonas_dict["compra"],
             "zona_venta": zonas_dict["venta"],
             "en_cartera": item.ticker in en_cartera,
@@ -323,15 +386,20 @@ def agregar(
 
 def _guardar_zona_compra(db: Session, ticker: str, techo: float | None, moneda: str) -> None:
     """Traduce el escalar `objetivo` de la API de watchlist a la zona de compra: techo = objetivo,
-    piso abierto. `None` borra la zona.
+    piso abierto, en la serie de referencia del ticker. `None` borra la zona.
 
     Pasa por `zonas_precio.aplicar_cambios` y no escribe la tabla a mano para no duplicar la
     validación ni el re-armado de la alerta. Esa función commitea, igual que los endpoints de
     niveles: es el final de la operación en los dos llamadores (alta y edición).
     """
+    # El atajo escribe en la serie de referencia del ticker: para un CEDEAR con serie del
+    # subyacente, "comprar por debajo de 470" son 470 dólares del Nasdaq, no pesos del CEDEAR.
+    variante = ohlcv_analytics.variante_para(db, ticker, None)
+    if variante == zonas_precio.VARIANTE_SUBYACENTE:
+        moneda = "USD"
     cambios = {zonas_precio.TIPO_COMPRA: None} if techo is None else {
         zonas_precio.TIPO_COMPRA: {
-            "variante": zonas_precio.VARIANTE_LOCAL, "moneda": moneda,
+            "variante": variante, "moneda": moneda,
             "piso": None, "techo": techo, "activa": True,
         }
     }

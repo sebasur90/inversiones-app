@@ -46,7 +46,7 @@ def sembrar_presets(db: Session, forzar: bool = False) -> dict:
             descripcion=_descripcion(espec),
             ticker=None,
             tipo_preset=slug,
-            variante="local",
+            variante="referencia",
         )
         if fue_creada:
             creadas += 1

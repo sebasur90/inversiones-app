@@ -7,7 +7,7 @@ import {
   guardarEstrategia, actualizarEstrategia, duplicarEstrategia, eliminarEstrategiaTecnica,
   backtestEstrategia, sembrarPresetsEstrategia, getZonasTicker, guardarZonasTicker,
   type CategoriaPreset, type EstrategiaDsl, type EstrategiaOut, type BacktestOut,
-  type PresetEstrategiaOut, type VarianteSerie, type TipoZona, type ZonaPrecioIn,
+  type PresetEstrategiaOut, type VarianteSerie, type VarianteEstrategia, type TipoZona, type ZonaPrecioIn,
   type ZonaPrecioOut,
 } from '../api'
 import ScreenHeader from '../components/layout/ScreenHeader'
@@ -94,6 +94,7 @@ export default function AnalisisTecnico() {
    * refresco. `replace` para no llenar el historial de atrás con cada ticker mirado. */
   function elegirTicker(nuevo: string) {
     setTickerSel(nuevo)
+    setVarianteSel(null)   // cada ticker abre en su propia referencia, no en la serie del anterior
     setBorrador(null)   // el borrador era de otro instrumento
     setErrorZonas(null)
     const params = new URLSearchParams(searchParams)
@@ -102,8 +103,11 @@ export default function AnalisisTecnico() {
   }
   const tickerMeta = tickers.find(t => t.ticker === ticker)
   const seriesDisponibles = tickerMeta?.series ?? []
+  // Sin elección de esta sesión, cada ticker abre en su serie de referencia: el precio en USD del
+  // subyacente para un CEDEAR (es el que sirve para decidir), el local para el resto.
+  const referencia: VarianteSerie = tickerMeta?.variante_referencia ?? 'local'
   const variante: VarianteSerie =
-    varianteSel && seriesDisponibles.some(s => s.variante === varianteSel) ? varianteSel : 'local'
+    varianteSel && seriesDisponibles.some(s => s.variante === varianteSel) ? varianteSel : referencia
   const monedaSerie =
     seriesDisponibles.find(s => s.variante === variante)?.moneda || tickerMeta?.moneda || ''
 
@@ -301,7 +305,20 @@ export default function AnalisisTecnico() {
                 {monedaMostrada}
               </span>
             )}
+            {seriesDisponibles.length > 1 && variante === referencia && (
+              <span className="inline-flex items-center gap-1 text-label font-semibold px-1.5 py-0.5 rounded border border-app-accent/40 text-app-accent">
+                Referencia
+                <InfoTooltip term="serie_referencia" />
+              </span>
+            )}
           </div>
+          {seriesDisponibles.length > 1 && variante !== referencia && (
+            <p className="mb-3 text-label text-app-text-dim">
+              Estás viendo la serie {variante === 'local' ? 'local (el CEDEAR en pesos)' : 'del subyacente'}.
+              Para decidir, la referencia de {ticker} es{' '}
+              {referencia === 'subyacente' ? 'el precio en dólares de la acción en EE.UU.' : 'la serie local'}.
+            </p>
+          )}
           <div className="mb-3">
             <div className="flex items-center gap-1 text-label font-bold text-app-text-dim uppercase mb-1.5">
               Indicadores
@@ -342,6 +359,15 @@ export default function AnalisisTecnico() {
             ) : null}
           </QueryBoundary>
 
+          {variante === 'subyacente'
+            && (zonasGuardadas?.nivel_stop_loss != null || zonasGuardadas?.nivel_objetivo != null) && (
+            <p className="mt-2 text-label text-app-text-dim">
+              El stop loss y el objetivo de tu posición están en pesos, sobre el precio al que
+              compraste el CEDEAR: se ven en la serie Local. Para vigilar una venta en dólares,
+              dibujá una zona de venta acá.
+            </p>
+          )}
+
           {serie && serie.barras.length > 0 && serie.advertencias.length > 0 && (
             <ul className="mt-2 text-label text-app-text-dim list-disc pl-4 space-y-0.5">
               {textosAdvertenciasSerie(serie.advertencias).map(texto => (
@@ -376,7 +402,8 @@ export default function AnalisisTecnico() {
       ) : (
         ticker && (
           <SeccionEstrategias
-            ticker={ticker} desde={desde} variante={variante} moneda={monedaSerie}
+            ticker={ticker} desde={desde} variante={variante} varianteElegida={varianteSel}
+            moneda={monedaSerie}
             seriesDisponibles={seriesDisponibles} onVariante={setVarianteSel}
             tieneVelas={serie?.tiene_velas ?? true} tieneVolumen={serie?.tiene_volumen ?? true}
           />
@@ -411,14 +438,18 @@ const ETIQUETA_CATEGORIA: Record<CategoriaPreset, string> = {
 }
 
 function SeccionEstrategias({
-  ticker, desde, variante, moneda, seriesDisponibles, onVariante, tieneVelas, tieneVolumen,
+  ticker, desde, variante, varianteElegida, moneda, seriesDisponibles, onVariante, tieneVelas, tieneVolumen,
 }: {
   ticker: string
   desde?: string
+  /** La serie sobre la que corre el backtest ahora (la elegida, o si no, la de referencia). */
   variante: VarianteSerie
+  /** Lo que el usuario fijó con el selector; `null` = no tocó nada y rige la de referencia. Es lo
+   * que se guarda con la estrategia: sin esto, guardar la dejaría clavada en USD o en pesos. */
+  varianteElegida: VarianteSerie | null
   moneda: string
   seriesDisponibles: { variante: VarianteSerie; moneda: string; mercado: string }[]
-  onVariante: (v: VarianteSerie) => void
+  onVariante: (v: VarianteSerie | null) => void
   tieneVelas: boolean
   tieneVolumen: boolean
 }) {
@@ -512,8 +543,9 @@ function SeccionEstrategias({
     setResultado(null)
     setErrores([])
     setAvisoImport(null)
-    // Sincronizar el toggle de variante con la que trae la estrategia guardada.
-    onVariante(e.variante)
+    // Sincronizar el toggle de variante con la que trae la estrategia guardada; `referencia` no
+    // fija nada: rige la serie de referencia del ticker.
+    onVariante(e.variante === 'referencia' ? null : e.variante)
   }
 
   function importarTexto(texto: string) {
@@ -537,7 +569,9 @@ function SeccionEstrategias({
     setDescripcionActual(archivo.descripcion)
     setReutilizable(!archivo.ticker)
     setResultado(null)
-    if (archivo.variante && seriesDisponibles.some(s => s.variante === archivo.variante)) {
+    if (archivo.variante === 'referencia') {
+      onVariante(null)
+    } else if (seriesDisponibles.some(s => s.variante === archivo.variante)) {
       onVariante(archivo.variante)
     }
     // No cambiamos el ticker de la página (podría no estar en cartera ni watchlist -> 404):
@@ -554,7 +588,8 @@ function SeccionEstrategias({
   function exportar() {
     if (!dsl) return
     const contenido = serializarEstrategia(dsl, {
-      nombre: nombreActual || null, descripcion: descripcionActual, ticker: null, variante,
+      nombre: nombreActual || null, descripcion: descripcionActual, ticker: null,
+      variante: varianteElegida ?? 'referencia',
     })
     descargarArchivo(nombreArchivoEstrategia(nombreActual || 'estrategia'), contenido, 'application/json')
   }
@@ -562,9 +597,10 @@ function SeccionEstrategias({
   async function guardar() {
     if (!dsl || !nombreParaGuardar.trim()) return
     const tickerAGuardar = reutilizable ? null : ticker
+    const varianteAGuardar: VarianteEstrategia = varianteElegida ?? 'referencia'
     const cuerpo = {
       nombre: nombreParaGuardar, descripcion: descripcionActual, ticker: tickerAGuardar,
-      tipo_preset: presetActual, definicion: dsl, variante,
+      tipo_preset: presetActual, definicion: dsl, variante: varianteAGuardar,
     }
     try {
       if (estrategiaActualId) {

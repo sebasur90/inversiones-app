@@ -12,7 +12,8 @@ reconocen, así que la familia de un instrumento del catálogo queda bien resuel
 """
 import json
 import os
-from unicodedata import combining, normalize
+
+from .clasificacion_instrumentos import sin_acentos as _sin_acentos
 
 # Prefijo de panel -> tipo. Los strings de la derecha los tienen que seguir matcheando los
 # clasificadores de `market_data/precios.py`; ver `_TIPOS` en la docstring del módulo.
@@ -67,10 +68,6 @@ def _catalogo_path() -> str:
         if os.path.exists(ruta):
             return ruta
     return candidatos[-1]
-
-
-def _sin_acentos(s: str) -> str:
-    return "".join(c for c in normalize("NFD", s) if not combining(c)).lower().strip()
 
 
 def _normalizar_moneda(moneda: str) -> str:

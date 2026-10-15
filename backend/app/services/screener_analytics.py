@@ -23,9 +23,18 @@ MAX_PARES = estrategias_universo.MAX_PARES
 _ORIGENES_VALIDOS = estrategias_universo.ORIGENES_VALIDOS
 
 
-def _evaluar_par(estrategia: EstrategiaTecnica, ticker_info: dict, db: Session, hoy: date) -> dict | None:
+def _evaluar_par(
+    estrategia: EstrategiaTecnica, ticker_info: dict, db: Session, hoy: date,
+    variante_forzada: str | None = None,
+) -> dict | None:
     dsl = estrategia.definicion
-    variante = getattr(estrategia, "variante", None) or "local"
+    # Una estrategia `referencia` (el default) corre en la serie que corresponde a cada ticker: la
+    # misma estrategia evalúa a MSFT en dólares y a AL30 en pesos en el mismo escaneo. Si se forzó
+    # una serie en el pedido, manda sobre la guardada en la estrategia.
+    variante = ohlcv_analytics.resolver_variante(
+        variante_forzada or getattr(estrategia, "variante", None),
+        ticker_info.get("variante_referencia") or "local",
+    )
     max_barras = estrategias_universo.max_barras_para(dsl)
 
     serie = ohlcv_analytics.get_serie_barras(
@@ -84,15 +93,21 @@ def _evaluar_par(estrategia: EstrategiaTecnica, ticker_info: dict, db: Session, 
 @cache_por_sync
 def escanear(
     db: Session, estrategia_ids: tuple[int, ...] = (), umbral_pct: float = 3.0, origen: str = "todos",
+    variante: str | None = None,
 ) -> dict:
     """Filas de (estrategia, ticker) a `<= umbral_pct` de disparar, ordenadas por cercanía.
 
     `estrategia_ids` vacío = todas las guardadas. `origen` filtra el universo de tickers
     (`"todos"|"cartera"|"watchlist"`), no las estrategias: una estrategia con `ticker` propio
     corre en ese ticker sin importar `origen` si ese ticker no queda filtrado afuera.
+
+    `variante` (`"local"` | `"subyacente"`) fuerza esa serie en todo el escaneo; `None` deja que
+    cada estrategia decida (por default, la serie de referencia de cada ticker).
     """
     if origen not in _ORIGENES_VALIDOS:
         raise ValueError(f"origen desconocido: {origen!r}")
+    if variante is not None and variante not in ohlcv_analytics.VARIANTES_SERIE:
+        raise ValueError(f"variante desconocida: {variante!r}")
 
     hoy = date.today()
     advertencias: list[str] = []
@@ -111,7 +126,7 @@ def escanear(
     for estrategia, ticker_info in pares:
         tickers_evaluados.add(ticker_info["ticker"])
         try:
-            fila = _evaluar_par(estrategia, ticker_info, db, hoy)
+            fila = _evaluar_par(estrategia, ticker_info, db, hoy, variante)
         except (ValueError, KeyError, TypeError):
             continue  # DSL válido para el validador pero roto para esta serie: se omite
         if fila is None:

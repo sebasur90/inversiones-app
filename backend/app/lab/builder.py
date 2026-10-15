@@ -346,7 +346,7 @@ class Estrategia:
         self.nombre = nombre
         self.descripcion = descripcion
         self.ticker: str | None = None
-        self.variante: str = "local"
+        self.variante: str = "referencia"   # el default de la app: la serie de referencia del ticker
         self._entrada: Condicion | None = None
         self._salida: Condicion | None = None
         self._riesgo = dict(_RIESGO_VACIO)

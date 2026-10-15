@@ -166,7 +166,7 @@ comparar_con_mascara(est, barras, mascara)   # barras donde tu máscara difiere 
   "nombre": "Mínimo histórico",
   "descripcion": null,
   "ticker": null,
-  "variante": "local",
+  "variante": "referencia",
   "definicion": { "version": 1, "indicadores": [], "entrada": {} }
 }
 ```

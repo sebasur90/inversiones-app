@@ -272,7 +272,7 @@ def test_variantes_de_ticker_y_series_en_listar_tickers():
     # `variantes_de_ticker` refleja sólo lo que hay en `serie_ohlcv`: MSFT no tiene velas locales
     # (su serie local vive en `precios_instrumento`), así que sólo aparece la del subyacente.
     variantes = oa.variantes_de_ticker(db)
-    assert variantes["MSFT"] == [{"variante": "subyacente", "moneda": "USD", "mercado": "NMS"}]
+    assert variantes["MSFT"] == [{"variante": "subyacente", "moneda": "USD", "mercado": "NMS", "barras": 5}]
     assert [s["variante"] for s in variantes["AL30"]] == ["local"]
 
     # `listar_tickers_tecnicos` siempre sintetiza la entrada `local`.

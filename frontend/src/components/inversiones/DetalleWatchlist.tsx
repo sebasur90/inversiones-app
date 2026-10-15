@@ -49,8 +49,12 @@ export default function DetalleWatchlist({
 
   // El input representa el **techo** de la zona de compra (ver la docstring): se siembra de ahí y
   // no de `precio_objetivo`, que queda en `null` cuando la zona se mide sobre otra serie.
-  const techoZona = item.zona_compra?.techo ?? null
-  const simple = cabeEnUnInput(item.zona_compra)
+  // Una zona vencida (era en pesos sobre el CEDEAR) no se siembra: guardaría esos pesos como si
+  // fueran dólares.
+  const techoZona = item.zona_compra && !item.zona_compra.vencida ? item.zona_compra.techo : null
+  const simple = cabeEnUnInput(item.zona_compra, item.variante_referencia)
+  const enDolares = item.variante_referencia === 'subyacente'
+  const monedaAtajo = enDolares ? 'USD' : (item.moneda_referencia ?? item.moneda)
 
   // Re-sincroniza con el ítem: tras guardar o refrescar llega una versión nueva del servidor.
   useEffect(() => {
@@ -67,17 +71,25 @@ export default function DetalleWatchlist({
         <div className="text-label text-app-text-dim">{item.nombre}</div>
         <div className="flex items-baseline gap-2 mt-1">
           <span className="font-mono text-heading font-bold text-app-text tabular-nums">
-            {item.precio_actual != null
-              ? formatMoneda(item.precio_actual, item.moneda_precio ?? item.moneda)
+            {item.precio_referencia != null
+              ? formatMoneda(item.precio_referencia, item.moneda_referencia ?? item.moneda)
               : 'Sin cotización'}
           </span>
-          {item.fecha_precio && (
-            <span className="text-label text-app-text-dim">al {item.fecha_precio}</span>
+          {item.fecha_precio_referencia && (
+            <span className="text-label text-app-text-dim">al {item.fecha_precio_referencia}</span>
           )}
         </div>
+        {enDolares && (
+          <div className="text-label text-app-text-dim mt-0.5">
+            Precio de la acción en EE.UU. en dólares: es el que sirve para decidir.
+            {item.precio_actual != null && (
+              <> El CEDEAR cotiza {formatMoneda(item.precio_actual, item.moneda_precio ?? item.moneda)}.</>
+            )}
+          </div>
+        )}
         <div className="text-label text-app-text-dim mt-0.5">
           {item.tipo_instrumento || '—'} · {item.mercado || '—'}
-          {item.fuente_precio && ` · ${item.fuente_precio}`}
+          {item.fuente_precio_referencia && ` · ${item.fuente_precio_referencia}`}
           {item.en_cartera && ' · En cartera'}
         </div>
       </div>
@@ -85,14 +97,14 @@ export default function DetalleWatchlist({
       {simple ? (
         <label className="flex flex-col gap-1.5">
           <span className="inline-flex items-center gap-1 text-label font-bold text-app-text-dim">
-            Comprar por debajo de
+            Comprar por debajo de {monedaAtajo ? `(${monedaAtajo})` : ''}
             <InfoTooltip term="watchlist_precio_objetivo" />
           </span>
           <input
             inputMode="decimal"
             value={objetivo}
             onChange={e => setObjetivo(e.target.value)}
-            placeholder="Ej. 1200"
+            placeholder={enDolares ? 'Ej. 450' : 'Ej. 1200'}
             className={`h-11 px-3 rounded-2xl bg-app-surface-2 border text-body text-app-text tabular-nums outline-none ${
               objetivoInvalido ? 'border-app-neg' : 'border-app-border'
             }`}
@@ -101,8 +113,17 @@ export default function DetalleWatchlist({
             <span className="text-label text-app-neg">Tiene que ser un número mayor que cero.</span>
           )}
           <span className="text-label text-app-text-faint">
+            {enDolares
+              ? 'En dólares, sobre el precio de la acción en EE.UU. (no el del CEDEAR). '
+              : ''}
             Para un rango con piso y techo, dibujalo en el gráfico.
           </span>
+          {item.zona_compra?.vencida && (
+            <span className="text-label text-app-text-dim">
+              Tu zona anterior ({textoZona(item.zona_compra, formatMoneda)}) estaba medida sobre el
+              CEDEAR en pesos y quedó vencida: escribí el nuevo nivel en dólares.
+            </span>
+          )}
         </label>
       ) : (
         <div className="flex flex-col gap-1.5">
@@ -112,9 +133,11 @@ export default function DetalleWatchlist({
           </span>
           <span className="font-mono text-body text-app-text tabular-nums">
             {textoZona(item.zona_compra, formatMoneda)}
-            {item.zona_compra?.variante === 'subyacente' && (
+            {item.zona_compra?.variante === 'subyacente' ? (
               <span className="ml-1.5 text-label text-app-text-dim">sobre el subyacente</span>
-            )}
+            ) : enDolares ? (
+              <span className="ml-1.5 text-label text-app-text-dim">sobre el CEDEAR, en pesos</span>
+            ) : null}
           </span>
           <span className="text-label text-app-text-faint">
             Esta zona se ajusta arrastrándola en el gráfico.
