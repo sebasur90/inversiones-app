@@ -229,6 +229,8 @@ export default function ZonasPrecio({
         )
       })}
 
+      <IndicadoresFuera zonas={zonas} ancho={ancho} alto={alto} yDeValor={yDeValor} />
+
       {/* Niveles de la posición: referencia, no editables acá. */}
       {([
         { valor: zonas.stopLoss, color: COLOR_NIVEL_STOP, texto: 'Stop loss' },
@@ -250,6 +252,70 @@ export default function ZonasPrecio({
             </text>
           </g>
         )
+      ))}
+    </g>
+  )
+}
+
+/**
+ * Flechas en el borde superior o inferior del panel para las zonas y niveles que quedan fuera de
+ * la escala (zoom sobre un tramo viejo, con el precio lejos de la zona). Sin esto, la zona
+ * "desaparecía" al hacer zoom y no se sabía si seguía ahí ni para qué lado estaba.
+ */
+function IndicadoresFuera({
+  zonas, ancho, alto, yDeValor,
+}: {
+  zonas: ZonasDibujo
+  ancho: number
+  alto: number
+  yDeValor: (v: number) => number
+}) {
+  const items: { texto: string; color: string; lado: 'arriba' | 'abajo' }[] = []
+  const lado = (valores: number[]): 'arriba' | 'abajo' | null => {
+    const ys = valores.map(yDeValor)
+    if (ys.length === 0) return null
+    if (ys.every(y => y < 0)) return 'arriba'
+    if (ys.every(y => y > alto)) return 'abajo'
+    return null
+  }
+
+  for (const [tipo, zona, color] of [
+    ['compra', zonas.compra, COLOR_ZONA_COMPRA],
+    ['venta', zonas.venta, COLOR_ZONA_VENTA],
+  ] as const) {
+    if (!zona) continue
+    const valores = [zona.piso, zona.techo].filter((v): v is number => v != null)
+    const l = lado(valores)
+    if (l) items.push({ texto: etiquetaZona(tipo, zona), color, lado: l })
+  }
+  for (const [valor, color, texto] of [
+    [zonas.stopLoss, COLOR_NIVEL_STOP, 'Stop loss'],
+    [zonas.objetivo, COLOR_NIVEL_OBJETIVO, 'Objetivo'],
+  ] as const) {
+    if (valor == null) continue
+    const l = lado([valor])
+    if (l) items.push({ texto: `${texto} ${formatoPrecio(valor)}`, color, lado: l })
+  }
+
+  const arriba = items.filter(i => i.lado === 'arriba')
+  const abajo = items.filter(i => i.lado === 'abajo')
+  return (
+    <g pointerEvents="none">
+      {arriba.map((it, k) => (
+        <text
+          key={`a-${it.texto}`} x={ancho / 2} y={12 + k * 13} fontSize={10} textAnchor="middle"
+          fill={it.color} stroke="#121621" strokeWidth={3} paintOrder="stroke" className="font-mono font-bold"
+        >
+          {`▲ ${it.texto}`}
+        </text>
+      ))}
+      {abajo.map((it, k) => (
+        <text
+          key={`b-${it.texto}`} x={ancho / 2} y={alto - 5 - k * 13} fontSize={10} textAnchor="middle"
+          fill={it.color} stroke="#121621" strokeWidth={3} paintOrder="stroke" className="font-mono font-bold"
+        >
+          {`▼ ${it.texto}`}
+        </text>
       ))}
     </g>
   )

@@ -103,11 +103,18 @@ export default function PanelPrecio({
   const valoresSenales = (senales ?? []).filter(s => escalaX.visible(s.indice)).map(s => s.precio)
   const ultimaBarraVisible = escalaX.visible(barras.length - 1)
   const valoresGatillo = gatillo && ultimaBarraVisible ? [gatillo.precio, gatillo.precioActual] : []
-  // Una zona es un nivel vigente, no histórico: entra en el dominio Y sólo si la última barra está
-  // a la vista (igual que el gatillo), porque con zoom sobre un tramo viejo aplastaría las velas
-  // contra el borde. En modo edición entra siempre: no se puede arrastrar lo que no se ve.
-  const valoresZonas = editandoZonas || ultimaBarraVisible ? valoresDeZonas(zonas) : []
-  const todos = [...valoresBase, ...valoresOverlay, ...valoresSenales, ...valoresGatillo, ...valoresZonas]
+  // Las zonas se dibujan siempre, pero no siempre entran en la escala Y. Con la última barra a la
+  // vista (o editando: no se puede arrastrar lo que no se ve) entran todas. Con zoom sobre un tramo
+  // viejo, sólo las que caen cerca del precio de ese tramo: una zona a 40 % de distancia aplastaría
+  // las velas contra el borde. Las que quedan afuera se señalan con una flecha en el borde del
+  // panel (`ZonasPrecio`), así no desaparecen al hacer zoom.
+  const sinZonas = [...valoresBase, ...valoresOverlay, ...valoresSenales, ...valoresGatillo]
+  const minSin = sinZonas.length ? Math.min(...sinZonas) : 0
+  const maxSin = sinZonas.length ? Math.max(...sinZonas) : 1
+  const margenZonas = (maxSin - minSin) * 0.5
+  const valoresZonas = valoresDeZonas(zonas).filter(v =>
+    editandoZonas || ultimaBarraVisible || (v >= minSin - margenZonas && v <= maxSin + margenZonas))
+  const todos = [...sinZonas, ...valoresZonas]
   const minV = todos.length ? Math.min(...todos) : 0
   const maxV = todos.length ? Math.max(...todos) : 1
   const pad = (maxV - minV) * 0.08 || Math.abs(maxV) * 0.05 || 1
@@ -212,7 +219,7 @@ export default function PanelPrecio({
         />
       )))}
 
-      {zonas && (editandoZonas || ultimaBarraVisible) && (
+      {zonas && (
         <ZonasPrecio
           zonas={zonas} ancho={escalaX.ancho} alto={alto}
           yDeValor={yDeValor} valorDeY={valorDeY} svgRef={svgRef}

@@ -34,13 +34,16 @@ export interface OpcionesGestos {
   serie?: unknown
   /** Cambió la serie (no en el primer render): la cruz fija apuntaría a una vela de otra cosa. */
   onCambioSerie?: () => void
+  /** Se intentó desplazar con todo el período a la vista: no hay hacia dónde ir, y sin un aviso el
+   * gesto parece roto. */
+  onSinRecorrido?: () => void
 }
 
 export interface ControlesVentana {
   ventana: Ventana
   /** ¿Está mostrando toda la serie? Sirve para deshabilitar "restablecer". */
   completa: boolean
-  /** `factor > 1` acerca, alrededor del centro del panel (lo usan los botones). */
+  /** `factor > 1` acerca (lo usan los botones; ver la implementación para el ancla). */
   zoom: (factor: number) => void
   reset: () => void
   /** `true` mientras se arrastra con el mouse: el contenedor cambia el cursor. */
@@ -180,9 +183,13 @@ export function useVentanaVisible(
     aplicar(acotar(u - (px * visibles) / a, visibles, nRef.current))
   }, [aplicar, posicionEn])
 
+  /** Botones +/−. Si la última rueda está a la vista, el zoom la deja clavada contra el borde
+   * derecho: acercar alrededor del centro la sacaba de la vista, y con ella lo más reciente (y las
+   * zonas, que se miran contra el precio de hoy). Si no, acerca alrededor del centro. */
   const zoom = useCallback((factor: number) => {
     detenerInercia()
-    zoomEn(factor)
+    const v = ventanaRef.current
+    zoomEn(factor, v.fin >= nRef.current - 1 - 1e-6 ? anchoRef.current : undefined)
   }, [detenerInercia, zoomEn])
 
   const reset = useCallback(() => {
@@ -203,7 +210,7 @@ export function useVentanaVisible(
     let muestras: { t: number; inicio: number }[] = []
     let cruzPendiente: number | null = null
     let frameCruz: number | null = null
-    let arrastreMouse: { x0: number; inicio0: number; visibles: number } | null = null
+    let arrastreMouse: { x0: number; inicio0: number; visibles: number; avisado?: boolean } | null = null
 
     const xEnPanel = (clientX: number) => clientX - contenedor.getBoundingClientRect().left
     const indiceEn = (x: number) => Math.min(nRef.current - 1, Math.max(0, Math.floor(posicionEn(x))))
@@ -329,6 +336,7 @@ export function useVentanaVisible(
         limpiarTimer()
         if (Math.abs(dx) > Math.abs(dy)) {
           const v = ventanaRef.current
+          if (v.fin - v.inicio + 1 >= nRef.current - 1e-6) opcionesRef.current.onSinRecorrido?.()
           gesto = { tipo: 'desplazando', x0: t.clientX, inicio0: v.inicio, visibles: v.fin - v.inicio + 1 }
           muestras = [{ t: performance.now(), inicio: v.inicio }]
           if (e.cancelable) e.preventDefault()
@@ -423,6 +431,10 @@ export function useVentanaVisible(
     function onPointerMoveVentana(e: PointerEvent) {
       const a = arrastreMouse
       if (!a) return
+      if (!a.avisado && Math.abs(e.clientX - a.x0) > UMBRAL_MOVIMIENTO && a.visibles >= nRef.current - 1e-6) {
+        a.avisado = true
+        opcionesRef.current.onSinRecorrido?.()
+      }
       const inicio = a.inicio0 + ((a.x0 - e.clientX) * a.visibles) / (anchoRef.current || 1)
       aplicar(acotar(inicio, a.visibles, nRef.current))
     }

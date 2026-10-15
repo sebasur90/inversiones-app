@@ -13,6 +13,7 @@ import EjeFechas from './EjeFechas'
 import FichaBarra from './FichaBarra'
 import { BotonesGrafico, PieGrafico } from './ControlesGrafico'
 import { formatoValor } from './formatoEjes'
+import GuiaGestos, { AVISO_SIN_RECORRIDO, AvisoGrafico, useAvisoGrafico, useGuiaGestos } from './GuiaGestos'
 import { ESPEC_POR_TIPO, claveIndicador, colorIndicador, type IndicadorActivo } from './indicadoresConfig'
 
 /** Orquesta precio + paneles de osciladores + volumen sobre una escala X compartida
@@ -46,6 +47,8 @@ export default function GraficoTecnico({
 }) {
   const [containerRef, ancho] = useAnchoContenedor<HTMLDivElement>(280)
   const gestosRef = useRef<HTMLDivElement>(null)
+  const guia = useGuiaGestos()
+  const aviso = useAvisoGrafico()
   // Gestos (desplazar, pellizcar, rueda, doble toque/clic) sobre la serie que ya está en pantalla:
   // el selector de período recarga la serie del backend, esto navega la que ya está.
   // Editando zonas el gráfico sigue navegable: las manijas se marcan como gesto propio y el hook no
@@ -57,6 +60,7 @@ export default function GraficoTecnico({
     onCruz: onHover,
     serie: barras,
     onCambioSerie: () => onHover(null),
+    onSinRecorrido: () => aviso.avisar(AVISO_SIN_RECORRIDO),
   })
   const escalaX = useEscalaX(barras.length, ancho, controles.ventana)
 
@@ -133,6 +137,9 @@ export default function GraficoTecnico({
         </div>
       )}
 
+      <div className="relative">
+      {guia.visible && <GuiaGestos onCerrar={guia.cerrar} conZonas={editandoZonas} />}
+      <AvisoGrafico texto={aviso.texto} />
       <div
         ref={gestosRef}
         className={controles.arrastrando ? 'cursor-grabbing' : 'cursor-grab'}
@@ -164,8 +171,12 @@ export default function GraficoTecnico({
           </div>
         )}
       </div>
+      </div>
 
-      <PieGrafico barras={barras} escalaX={escalaX} completa={controles.completa} />
+      <PieGrafico
+        barras={barras} escalaX={escalaX} completa={controles.completa}
+        conCruz={hoverIndex != null} onAyuda={guia.mostrar}
+      />
     </div>
   )
 }

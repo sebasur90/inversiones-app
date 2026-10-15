@@ -13,6 +13,7 @@ import EjeFechas from './EjeFechas'
 import FichaBarra from './FichaBarra'
 import { BotonesGrafico, PieGrafico } from './ControlesGrafico'
 import { formatoValor } from './formatoEjes'
+import GuiaGestos, { AVISO_SIN_RECORRIDO, AvisoGrafico, useAvisoGrafico, useGuiaGestos } from './GuiaGestos'
 import { ESPEC_POR_TIPO, claveIndicador } from './indicadoresConfig'
 import { COLOR_MOTIVO, ETIQUETA_MOTIVO, GLIFO_MOTIVO } from './motivosSalida'
 
@@ -91,6 +92,8 @@ export default function GraficoBacktest({
   const [containerRef, ancho] = useAnchoContenedor<HTMLDivElement>(280)
   const gestosRef = useRef<HTMLDivElement>(null)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+  const guia = useGuiaGestos()
+  const aviso = useAvisoGrafico()
   const controles = useVentanaVisible(barras.length, ancho, gestosRef, {
     activo: true,
     onToque: i => setHoverIndex(hoverIndex === i ? null : i),
@@ -98,6 +101,7 @@ export default function GraficoBacktest({
     // `barrasRaw` y no `barras`: ésta es un `.slice()` nuevo en cada render.
     serie: barrasRaw,
     onCambioSerie: () => setHoverIndex(null),
+    onSinRecorrido: () => aviso.avisar(AVISO_SIN_RECORRIDO),
   })
   const escalaX = useEscalaX(barras.length, ancho, controles.ventana)
 
@@ -167,6 +171,9 @@ export default function GraficoBacktest({
         )}
       </div>
 
+      <div className="relative">
+      {guia.visible && <GuiaGestos onCerrar={guia.cerrar} />}
+      <AvisoGrafico texto={aviso.texto} />
       <div
         ref={gestosRef}
         className={controles.arrastrando ? 'cursor-grabbing' : 'cursor-grab'}
@@ -219,8 +226,12 @@ export default function GraficoBacktest({
           </div>
         )}
       </div>
+      </div>
 
-      <PieGrafico barras={barras} escalaX={escalaX} completa={controles.completa} />
+      <PieGrafico
+        barras={barras} escalaX={escalaX} completa={controles.completa}
+        conCruz={hoverIndex != null} onAyuda={guia.mostrar}
+      />
     </div>
   )
 }
