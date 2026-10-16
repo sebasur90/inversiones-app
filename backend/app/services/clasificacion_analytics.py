@@ -6,7 +6,7 @@ texto crudo de la ficha del Sheet; ahora la clasificación combina cuatro fuente
 (`clasificacion_engine.resolver`): la corrección manual hecha desde la app, el seed versionado,
 lo que se derivó de Yahoo (`clasificacion_auto`) y la ficha del Sheet o de la watchlist.
 
-`CLASIFICACION_AUTO` (env) es el interruptor: en `false` (el default por ahora) el resolutor
+`CLASIFICACION_AUTO` (env, default `true`) es el interruptor de reversión: en `false` el resolutor
 devuelve **exactamente** el texto crudo del Sheet, que era el comportamiento previo.
 """
 from __future__ import annotations
@@ -15,7 +15,9 @@ import os
 
 from sqlalchemy.orm import Session
 
-from ..database import ClasificacionAuto, ClasificacionOverride, InstrumentoInversion, WatchlistItem
+from ..database import (
+    ClasificacionAuto, ClasificacionOverride, InstrumentoInversion, MovimientoInversion, WatchlistItem,
+)
 from . import clasificacion_engine as ce
 from .cache import cache_por_sync
 from .catalogo_instrumentos import cargar_catalogo
@@ -35,7 +37,7 @@ CAMPO_POR_ATRIBUTO = {
 
 
 def modo_auto() -> bool:
-    return (os.getenv("CLASIFICACION_AUTO") or "false").strip().lower() in ("true", "1", "yes")
+    return (os.getenv("CLASIFICACION_AUTO") or "true").strip().lower() in ("true", "1", "yes")
 
 
 def _desde_sheet(tipo, sector, pais) -> ce.ClasificacionResuelta:
@@ -110,6 +112,13 @@ def clasificaciones(db: Session) -> dict[str, ce.ClasificacionResuelta]:
         resultado[i.ticker] = ctx.resolver(
             i.ticker, {"tipo_instrumento": i.tipo_instrumento, "sector": i.sector, "pais": i.pais},
         )
+    # Tickers con movimientos pero sin ficha en el Sheet: antes caían enteros en "Sin
+    # clasificar"; si Yahoo o el catálogo los conocen, ahora se clasifican igual.
+    for (ticker,) in db.query(MovimientoInversion.ticker).distinct():
+        if ticker and ticker not in resultado:
+            c = ctx.resolver(ticker, None)
+            if c.tipo or c.sector or c.pais:
+                resultado[ticker] = c
     return resultado
 
 
@@ -149,3 +158,113 @@ def diferencias(db: Session) -> list[dict]:
                 "cambios": cambios,
             })
     return salida
+
+
+# ── Correcciones manuales ────────────────────────────────────────────────────
+
+CAMPOS_CORREGIBLES = ("tipo", "sector", "industria", "pais", "region", "simbolo_yahoo")
+
+
+def _validar_valor(campo: str, valor: str) -> str:
+    """Normaliza la corrección al vocabulario canónico. Un valor fuera del vocabulario en un campo
+    cerrado (tipo, región) es un error: si no, la corrección no matchearía con nada."""
+    valor = (valor or "").strip()
+    if not valor:
+        raise ValueError(f"{campo}: valor vacío (para volver al automático, borrá la corrección)")
+    if campo == "tipo":
+        if valor not in ce.TIPOS:
+            raise ValueError(f"tipo debe ser uno de {', '.join(ce.TIPOS)}")
+        return valor
+    if campo == "region":
+        canon = ce.region_canonica(valor)
+        if canon not in ce.REGIONES:
+            raise ValueError(f"región debe ser una de {', '.join(ce.REGIONES)}")
+        return canon
+    if campo == "sector":
+        return ce.sector_canonico(valor) or valor
+    if campo == "pais":
+        return ce.pais_canonico(valor) or valor
+    if campo == "simbolo_yahoo":
+        return valor.upper()
+    return valor
+
+
+def get_clasificacion_ticker(db: Session, ticker: str) -> dict:
+    ctx = Contexto(db)
+    base = ctx.base(ticker)
+    inst = db.query(InstrumentoInversion).filter(InstrumentoInversion.ticker == ticker).first()
+    wl = db.get(WatchlistItem, ticker)
+    fila = inst or wl
+    sheet = {"tipo_instrumento": fila.tipo_instrumento, "sector": fila.sector, "pais": fila.pais} if fila else {}
+    resuelta = ctx.resolver(ticker, sheet)
+    auto = ctx.auto.get(base)
+    return {
+        "ticker": ticker,
+        "ticker_base": base,
+        "resuelta": {
+            "tipo": resuelta.tipo, "tipo_base": resuelta.tipo_base, "sector": resuelta.sector,
+            "industria": resuelta.industria, "pais": resuelta.pais, "region": resuelta.region,
+            "fuentes": dict(resuelta.fuentes),
+        },
+        "automatica": _auto_dict(auto),
+        "sheet": {"tipo": sheet.get("tipo_instrumento"), "sector": sheet.get("sector"), "pais": sheet.get("pais")} if fila else {},
+        "correcciones": dict(ctx.overrides.get(base, {})),
+        "simbolo_yahoo": auto.simbolo_yahoo if auto else None,
+        "estado_datos": auto.estado if auto else None,
+        "opciones": {
+            "tipo": list(ce.TIPOS),
+            "sector": list(ce.SECTORES) + list(ce.SECTORES_EXTRA),
+            "region": list(ce.REGIONES),
+        },
+    }
+
+
+def corregir(db: Session, ticker: str, campos: dict[str, str | None]) -> None:
+    """Guarda las correcciones de `campos` (sólo los que vienen con valor). Hace commit."""
+    from datetime import datetime
+
+    base = Contexto(db).base(ticker)
+    ahora = datetime.utcnow()
+    normalizados = {c: _validar_valor(c, v) for c, v in campos.items() if v is not None and c in CAMPOS_CORREGIBLES}
+    for campo, valor in normalizados.items():
+        fila = db.query(ClasificacionOverride).filter_by(ticker_base=base, campo=campo).one_or_none()
+        if fila is None:
+            db.add(ClasificacionOverride(ticker_base=base, campo=campo, valor=valor, fecha_actualizacion=ahora))
+        else:
+            fila.valor = valor
+            fila.fecha_actualizacion = ahora
+    db.commit()
+
+
+def borrar_correccion(db: Session, ticker: str, campo: str) -> bool:
+    base = Contexto(db).base(ticker)
+    n = db.query(ClasificacionOverride).filter_by(ticker_base=base, campo=campo).delete()
+    db.commit()
+    return n > 0
+
+
+def corregir_par(db: Session, ticker: str, par: str, accion: str) -> None:
+    """Agrega o quita un par. Agregar algo que estaba quitado (o al revés) reemplaza la fila."""
+    from datetime import datetime
+    from ..database import ParOverride
+
+    ctx = Contexto(db)
+    base, par_base = ctx.base(ticker), ctx.base(par.strip().upper())
+    if par_base == base:
+        raise ValueError("un emisor no puede ser par de sí mismo")
+    fila = db.query(ParOverride).filter_by(ticker_base=base, par=par_base).one_or_none()
+    if fila is None:
+        db.add(ParOverride(ticker_base=base, par=par_base, accion=accion, fecha=datetime.utcnow()))
+    else:
+        fila.accion = accion
+        fila.fecha = datetime.utcnow()
+    db.commit()
+
+
+def borrar_correccion_par(db: Session, ticker: str, par: str) -> bool:
+    from ..database import ParOverride
+
+    ctx = Contexto(db)
+    n = db.query(ParOverride).filter_by(ticker_base=ctx.base(ticker), par=ctx.base(par.strip().upper())).delete()
+    db.commit()
+    return n > 0

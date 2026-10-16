@@ -1,5 +1,5 @@
 """Adaptador Session/DB → `descomposicion_engine`: descomposición jerárquica de la cartera en
-Familia → País → Sector → Ticker.
+Familia → Región (País con `CLASIFICACION_AUTO=false`) → Sector → Ticker.
 
 Reutiliza `_clasificados_valorizados` (valuación + clasificación) de `inversiones_analytics`,
 igual que hacen `contribucion_analytics`/`riesgo_analytics`, en vez de recalcular la valuación
@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 
 from .cache import cache_por_sync
 from .clasificacion_analytics import atributo
-from .descomposicion_engine import NIVELES, construir_arbol
+from .clasificacion_analytics import modo_auto
+from .descomposicion_engine import NIVELES, NIVELES_REGION, construir_arbol
 from .inversiones_analytics import _clasificados_valorizados
 
 
@@ -35,10 +36,11 @@ def get_descomposicion(cartera: str | None, db: Session) -> dict:
             "tipo_instrumento": atributo(clasif, ticker, "tipo_instrumento"),
             "sector": atributo(clasif, ticker, "sector"),
             "pais": atributo(clasif, ticker, "pais"),
-            # Sin ficha en Instrumentos: cae directo en el bucket "Sin clasificar" del árbol
-            # (ver `descomposicion_engine.familia_de`), mismo criterio que el bucket residual
-            # de los ejes de `get_exposicion`.
-            "con_ficha": inst is not None,
+            "region": atributo(clasif, ticker, "region"),
+            # Sin ficha en Instrumentos (y sin clasificación automática): cae directo en el
+            # bucket "Sin clasificar" del árbol (ver `descomposicion_engine.familia_de`), mismo
+            # criterio que el bucket residual de los ejes de `get_exposicion`.
+            "con_ficha": inst is not None or atributo(clasif, ticker, "tipo_instrumento") is not None,
             "valor_usd": acc["valor_usd"],
             "valor_ars": acc["valor_ars"],
         })
@@ -46,10 +48,11 @@ def get_descomposicion(cartera: str | None, db: Session) -> dict:
     total_usd = sum(p["valor_usd"] for p in posiciones)
     total_ars = sum(p["valor_ars"] for p in posiciones)
 
-    raiz = construir_arbol(posiciones, total_usd, total_ars)
+    niveles = NIVELES_REGION if modo_auto() else NIVELES
+    raiz = construir_arbol(posiciones, total_usd, total_ars, niveles)
 
     return {
-        "niveles": list(NIVELES),
+        "niveles": list(niveles),
         "total_usd": round(total_usd, 2),
         "total_ars": round(total_ars, 2),
         "instrumentos": len(posiciones),

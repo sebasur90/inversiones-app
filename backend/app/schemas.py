@@ -311,6 +311,9 @@ class RebalanceoEje(BaseModel):
 class RebalanceoOut(BaseModel):
     ejes: list[RebalanceoEje]
     avisos: ValuacionAvisos = Field(default_factory=ValuacionAvisos)
+    # Objetivos del Sheet cuya categoría no corresponde a ninguna del vocabulario de
+    # clasificación ni a ninguna posición actual ("Sector: Soberano"): quedan sin cumplir solos.
+    objetivos_sin_equivalente: list[str] = Field(default_factory=list)
 
 
 class ConfiguracionCarteraOut(BaseModel):
@@ -323,7 +326,7 @@ class ConfiguracionCarteraOut(BaseModel):
 
 
 class RebalanceoSimulacionRequest(BaseModel):
-    eje: str  # "Cartera" | "Tipo" | "Sector" | "Ticker"
+    eje: str  # "Cartera" | "Tipo" | "Sector" | "Región" | "Ticker"
     modo: str = "completo"  # "completo" | "solo_aportes"
     aporte_usd: float = 0.0
     tasa_comision_pct: Optional[float] = None  # None => usar estimación histórica
@@ -2607,3 +2610,30 @@ class ValuacionListaOut(BaseModel):
     total: int
     conteos: dict[str, int]
     items: list[ValuacionItemOut]
+
+
+class ClasificacionTickerOut(BaseModel):
+    ticker: str
+    ticker_base: str
+    resuelta: ClasificacionResueltaOut
+    automatica: dict[str, Optional[str]] = Field(default_factory=dict)
+    sheet: dict[str, Optional[str]] = Field(default_factory=dict)
+    correcciones: dict[str, str] = Field(default_factory=dict)
+    simbolo_yahoo: Optional[str] = None
+    estado_datos: Optional[str] = None
+    opciones: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class ClasificacionCorreccionIn(BaseModel):
+    """Campos a pisar. Un campo ausente no se toca; para volver al automático, DELETE."""
+    tipo: Optional[str] = None
+    sector: Optional[str] = None
+    industria: Optional[str] = None
+    pais: Optional[str] = None
+    region: Optional[str] = None
+    simbolo_yahoo: Optional[str] = None
+
+
+class ParCorreccionIn(BaseModel):
+    par: str = Field(min_length=1, max_length=20)
+    accion: Literal["agregar", "quitar"]

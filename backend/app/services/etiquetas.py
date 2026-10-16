@@ -11,7 +11,8 @@ así cualquier eje suma el patrimonio completo, el mismo que informa la pantalla
 SIN_CLASIFICAR = "Sin clasificar"   # sin ficha en la hoja Instrumentos
 SIN_SECTOR = "Sin sector"
 SIN_PAIS = "Sin país"
+SIN_REGION = "Sin región"
 SIN_VENCIMIENTO = "Sin vencimiento"  # no vence (acciones, CEDEARs) o no está cargado
 
 # Para los motores que necesitan descartar buckets residuales sin saber de qué eje vienen.
-BUCKETS_RESIDUALES = frozenset({SIN_CLASIFICAR, SIN_SECTOR, SIN_PAIS, SIN_VENCIMIENTO})
+BUCKETS_RESIDUALES = frozenset({SIN_CLASIFICAR, SIN_SECTOR, SIN_PAIS, SIN_REGION, SIN_VENCIMIENTO})

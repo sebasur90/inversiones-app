@@ -14,7 +14,10 @@ TIPOS_MOVIMIENTO = {
 
 MONEDAS_VALIDAS = ("ARS", "USD")
 
-EJES_REBALANCEO = {"cartera": "Cartera", "tipo": "Tipo", "sector": "Sector", "ticker": "Ticker"}
+EJES_REBALANCEO = {
+    "cartera": "Cartera", "tipo": "Tipo", "sector": "Sector", "ticker": "Ticker",
+    "region": "Región",
+}
 
 
 def _strip_accents(s: str) -> str:

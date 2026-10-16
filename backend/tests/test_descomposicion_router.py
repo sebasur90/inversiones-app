@@ -52,7 +52,8 @@ def test_descomposicion_cartera_ok(client: TestClient):
     r = client.get("/api/inversiones/carteras/test/descomposicion")
     assert r.status_code == 200
     data = r.json()
-    assert data["niveles"] == ["Familia", "País", "Sector", "Ticker"]
+    # Con la clasificación automática (default) el segundo nivel es la región.
+    assert data["niveles"] == ["Familia", "Región", "Sector", "Ticker"]
     assert data["instrumentos"] == 1
     etiquetas = {n["etiqueta"] for n in data["raiz"]}
     assert etiquetas == {"Renta variable"}
@@ -76,10 +77,21 @@ def test_descomposicion_arbol_completo_llega_hasta_ticker(client: TestClient):
     r = client.get("/api/inversiones/carteras/test/descomposicion")
     data = r.json()
     familia = data["raiz"][0]
-    pais = familia["hijos"][0]
-    sector = pais["hijos"][0]
+    region = familia["hijos"][0]
+    # CEDEAR sin clasificación automática todavía: el "AR" del Sheet es la plaza, no el emisor.
+    assert region["nivel"] == "Región" and region["etiqueta"] == "Sin clasificar"
+    sector = region["hijos"][0]
+    assert sector["etiqueta"] == "Tecnología"     # "Tecnologia" del Sheet, canonizado
     ticker = sector["hijos"][0]
     assert ticker["nivel"] == "Ticker"
     assert ticker["etiqueta"] == "AAPL"
-    assert ticker["tipo_instrumento"] == "CEDEAR"
+    assert ticker["tipo_instrumento"] == "CEDEAR-acción"
     assert ticker["hijos"] == []
+
+
+def test_descomposicion_modo_sheet_conserva_el_arbol_por_pais(client: TestClient, monkeypatch):
+    monkeypatch.setenv("CLASIFICACION_AUTO", "false")
+    data = client.get("/api/inversiones/carteras/test/descomposicion").json()
+    assert data["niveles"] == ["Familia", "País", "Sector", "Ticker"]
+    ticker = data["raiz"][0]["hijos"][0]["hijos"][0]["hijos"][0]
+    assert ticker["tipo_instrumento"] == "CEDEAR"

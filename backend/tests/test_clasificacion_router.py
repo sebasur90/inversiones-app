@@ -24,6 +24,9 @@ def client(sesion, monkeypatch):
         {"simbolo": "PEP", "descripcion": "Pepsico", "moneda": "ARS", "tipo": "CEDEAR"},
     ])
     monkeypatch.setattr(fi, "cargar_seed", lambda: {"variantes": {}, "simbolos_yahoo": {}, "exposicion": {}})
+    from app.services import clasificacion_analytics as ca
+    monkeypatch.setattr(ca, "cargar_catalogo", fi.cargar_catalogo)
+    monkeypatch.setattr(ca, "cargar_seed", fi.cargar_seed)
 
     def override():
         s = sesion()
@@ -64,3 +67,40 @@ def test_actualizar_rechaza_mas_de_cinco(client):
 def test_actualizar_sin_tickers(client):
     r = client.post("/api/inversiones/clasificacion/actualizar", json={"tickers": []})
     assert r.json()["resultado"] == "sin_tickers"
+
+
+# ── correcciones manuales ─────────────────────────────────────────────────
+
+def test_corregir_y_volver_al_automatico(client, sesion):
+    db = sesion()
+    db.add(ClasificacionAuto(ticker_base="KO", simbolo_yahoo="KO", estado="ok", tipo="CEDEAR-acción",
+                             sector="Consumo básico", pais="Estados Unidos", region="EEUU", intentos_fallidos=0))
+    db.commit()
+    db.close()
+    r = client.put("/api/inversiones/clasificacion/KO", json={"sector": "tecnologia", "region": "global"})
+    assert r.status_code == 200, r.text
+    b = r.json()
+    assert b["resuelta"]["sector"] == "Tecnología" and b["resuelta"]["fuentes"]["sector"] == "manual"
+    assert b["resuelta"]["region"] == "Global"
+    assert b["correcciones"] == {"sector": "Tecnología", "region": "Global"}
+    assert b["automatica"]["sector"] == "Consumo básico"
+
+    r = client.delete("/api/inversiones/clasificacion/KO/sector")
+    assert r.json()["resuelta"]["sector"] == "Consumo básico"
+
+
+def test_corregir_rechaza_valores_fuera_del_vocabulario(client):
+    assert client.put("/api/inversiones/clasificacion/KO", json={"region": "Marte"}).status_code == 422
+    assert client.put("/api/inversiones/clasificacion/KO", json={"tipo": "Cripto"}).status_code == 422
+    assert client.delete("/api/inversiones/clasificacion/KO/color").status_code == 422
+
+
+def test_corregir_pares(client, sesion):
+    r = client.post("/api/inversiones/pares/KO", json={"par": "pep", "accion": "agregar"})
+    assert r.status_code == 200, r.text
+    assert r.json()["pares"]["agregados"] == ["PEP"]
+    r = client.post("/api/inversiones/pares/KO", json={"par": "PEP", "accion": "quitar"})
+    assert r.json()["pares"]["agregados"] == [] and r.json()["pares"]["quitados"] == ["PEP"]
+    r = client.delete("/api/inversiones/pares/KO/PEP")
+    assert r.json()["pares"]["quitados"] == []
+    assert client.post("/api/inversiones/pares/KO", json={"par": "KO", "accion": "agregar"}).status_code == 422

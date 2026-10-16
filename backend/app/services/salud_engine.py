@@ -429,17 +429,19 @@ def _obs_clasificacion(inventario: list[dict]) -> list[dict]:
         obs.append(_observacion(
             "sin_sector", "calidad_datos", "atencion",
             f"{len(sin_sector)} instrumento(s) no tienen sector",
-            "Faltan datos para clasificar por sector en tu Sheet.",
+            "Ni la clasificación automática ni la ficha del Sheet informan su sector. Se puede "
+            "corregir a mano desde la ficha del ticker (pestaña Pares).",
             ", ".join(sin_sector[:5]) + ("..." if len(sin_sector) > 5 else ""), "Sector completo",
-            "Instrumentos (ficha del Sheet)", "/calidad-datos", "Revisar calidad de datos",
+            "Clasificación (automática, Sheet o corrección manual)", "/calidad-datos", "Revisar calidad de datos",
         ))
     if sin_pais:
         obs.append(_observacion(
             "sin_pais", "calidad_datos", "atencion",
             f"{len(sin_pais)} instrumento(s) no tienen país",
-            "Faltan datos para clasificar por país en tu Sheet.",
+            "Ni la clasificación automática ni la ficha del Sheet informan su país. Se puede "
+            "corregir a mano desde la ficha del ticker (pestaña Pares).",
             ", ".join(sin_pais[:5]) + ("..." if len(sin_pais) > 5 else ""), "País completo",
-            "Instrumentos (ficha del Sheet)", "/calidad-datos", "Revisar calidad de datos",
+            "Clasificación (automática, Sheet o corrección manual)", "/calidad-datos", "Revisar calidad de datos",
         ))
     return obs
 

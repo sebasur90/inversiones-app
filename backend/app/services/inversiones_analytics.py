@@ -8,11 +8,12 @@ from sqlalchemy.orm import Session
 
 from ..database import MovimientoInversion, InstrumentoInversion, PrecioInstrumento, IndiceMercado, RebalanceoObjetivo, ConfiguracionCartera
 from . import clasificacion_analytics, cotizacion_diaria, niveles_analytics, rebalanceo_engine
+from . import clasificacion_engine as ce
 from .cache import cache_por_sync
 # Etiquetas de los buckets residuales de los ejes: una posición sin ficha en Instrumentos, o sin
 # el atributo que agrupa el eje (sector/país/vencimiento son opcionales), entra al eje con una de
 # ellas en vez de desaparecer, para que cualquier eje sume el patrimonio completo.
-from .etiquetas import SIN_CLASIFICAR, SIN_PAIS, SIN_SECTOR, SIN_VENCIMIENTO
+from .etiquetas import SIN_CLASIFICAR, SIN_PAIS, SIN_REGION, SIN_SECTOR, SIN_VENCIMIENTO
 
 DEFAULT_TOLERANCIA_PP = 2.0
 
@@ -1312,6 +1313,8 @@ def get_exposicion(cartera: str | None, db: Session) -> dict:
         ejes.append({"eje": "Ticker", "items": ticker_eje})
 
     _eje("Sector", "sector", SIN_SECTOR)
+    if clasificacion_analytics.modo_auto():
+        _eje("Región", "region", SIN_REGION)
     _eje("País", "pais", SIN_PAIS)
 
     def _bucket_venc(ticker: str) -> str | None:
@@ -1384,13 +1387,38 @@ def _construir_eje_rebalanceo(
     }
 
 
+def _categoria_canonica(eje: str, categoria: str) -> str:
+    """La categoría de un objetivo del Sheet en el mismo vocabulario que la clasificación, para
+    que "Tecnologia" matchee con "Tecnología" y "Cedear" con "CEDEAR". Con la clasificación
+    automática apagada vuelve tal cual (el comportamiento previo)."""
+    if not clasificacion_analytics.modo_auto():
+        return categoria
+    if eje == "Sector":
+        return ce.sector_canonico(categoria) or categoria
+    if eje == "Tipo":
+        return ce.tipo_base_de(categoria) or categoria
+    if eje == "Región":
+        return ce.region_canonica(categoria) or categoria
+    return categoria
+
+
 def _targets_por_eje(eje: str, cartera: str | None, objetivos: list[RebalanceoObjetivo]) -> dict[str, float]:
     # Filtrado en Python (no SQL) para que None == None matchee de forma directa.
-    return {
-        o.categoria: float(o.porcentaje_objetivo)
-        for o in objetivos
-        if o.eje == eje and o.cartera == cartera
-    }
+    targets: dict[str, float] = {}
+    for o in objetivos:
+        if o.eje == eje and o.cartera == cartera:
+            clave = _categoria_canonica(eje, o.categoria)
+            targets[clave] = targets.get(clave, 0.0) + float(o.porcentaje_objetivo)
+    return targets
+
+
+# Vocabulario cerrado por eje: un objetivo fuera de esto y sin posición que lo matchee no se va a
+# poder cumplir nunca (ver `RebalanceoOut.objetivos_sin_equivalente`).
+_VOCABULARIO_EJE = {
+    "Sector": set(ce.SECTORES) | set(ce.SECTORES_EXTRA),
+    "Tipo": set(ce.TIPOS_BASE),
+    "Región": set(ce.REGIONES),
+}
 
 
 @cache_por_sync
@@ -1431,12 +1459,34 @@ def get_rebalanceo(cartera: str | None, db: Session) -> dict:
     if eje_sector:
         ejes.append(eje_sector)
 
+    if clasificacion_analytics.modo_auto():
+        region = _agrupar(
+            [(_atributo(instrumentos, t, "region", clasif), v_usd, v_ars) for _, t, v_usd, v_ars in valores],
+            sin_dato=SIN_REGION,
+        )
+        eje_region = _construir_eje_rebalanceo("Región", region, _targets_por_eje("Región", cartera, objetivos), total_usd, total_ars)
+        if eje_region:
+            ejes.append(eje_region)
+
     ticker = _agrupar([(t, v_usd, v_ars) for _, t, v_usd, v_ars in valores])
     eje_ticker = _construir_eje_rebalanceo("Ticker", ticker, _targets_por_eje("Ticker", cartera, objetivos), total_usd, total_ars)
     if eje_ticker:
         ejes.append(eje_ticker)
 
-    return {"ejes": ejes, "avisos": pos.avisos()}
+    sin_equivalente = []
+    if clasificacion_analytics.modo_auto():
+        for e in ejes:
+            vocabulario = _VOCABULARIO_EJE.get(e["eje"])
+            if vocabulario is None:
+                continue
+            actuales = {it["etiqueta"] for it in e["sin_objetivo"]} | {
+                it["etiqueta"] for it in e["items"] if it["porcentaje_actual"] > 0
+            }
+            for it in e["items"]:
+                if it["etiqueta"] not in vocabulario and it["etiqueta"] not in actuales:
+                    sin_equivalente.append(f"{e['eje']}: {it['etiqueta']}")
+
+    return {"ejes": ejes, "avisos": pos.avisos(), "objetivos_sin_equivalente": sin_equivalente}
 
 
 def get_configuracion_cartera(cartera: str | None, db: Session) -> dict:
@@ -1499,6 +1549,8 @@ def _categoria_para_eje(eje: str, cart: str, ticker: str, instrumentos: dict, cl
         return _atributo(instrumentos, ticker, "tipo_base", clasif) or SIN_CLASIFICAR
     if eje == "Sector":
         return _atributo(instrumentos, ticker, "sector", clasif) or SIN_SECTOR
+    if eje == "Región":
+        return _atributo(instrumentos, ticker, "region", clasif) or SIN_REGION
     return None
 
 

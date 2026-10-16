@@ -792,6 +792,9 @@ def agregar_a_watchlist(body: WatchlistItemIn, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail=f"'{body.ticker}' ya está en la watchlist")
 
     db.commit()
+    # Clasificación y fundamentales del ticker nuevo, en segundo plano (Yahoo, sin cupo de IOL).
+    from .clasificacion import pedir_datos_en_segundo_plano
+    pedir_datos_en_segundo_plano([item.ticker])
     return watchlist_analytics.get_watchlist_item(db, item.ticker)
 
 

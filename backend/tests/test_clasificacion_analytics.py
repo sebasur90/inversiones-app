@@ -112,3 +112,86 @@ def test_diferencias(db):
     assert difs["KOD"]["cambios"]["sector"] == {"antes": "Cosumo Masivo", "despues": "Consumo básico", "fuente": "yahoo"}
     assert difs["VIST"]["cambios"]["pais"]["fuente"] == "seed"
     assert "sector" not in difs.get("AL30", {}).get("cambios", {})
+
+
+# ── Paso B: precedencia activa en las pantallas ───────────────────────────
+
+from app.database import RebalanceoObjetivo  # noqa: E402
+from app.services.descomposicion_analytics import get_descomposicion  # noqa: E402
+from app.services.inversiones_analytics import get_rebalanceo  # noqa: E402
+
+
+def test_exposicion_suma_eje_region_solo_en_modo_auto(db, monkeypatch):
+    monkeypatch.setenv("CLASIFICACION_AUTO", "true")
+    region = _eje(get_exposicion(None, db), "Región")
+    assert set(region) == {"EEUU", "Argentina"}
+    assert region["Argentina"] == pytest.approx(200 / 3, abs=0.01)   # VIST (seed) + AL30
+    limpiar_cache()
+    monkeypatch.setenv("CLASIFICACION_AUTO", "false")
+    assert _eje(get_exposicion(None, db), "Región") == {}
+
+
+def test_rebalanceo_canoniza_objetivos_y_avisa_huerfanos(db, monkeypatch):
+    monkeypatch.setenv("CLASIFICACION_AUTO", "true")
+    for eje, cat, pct in (("Sector", "consumo masivo", 40), ("Sector", "Soberano", 30),
+                          ("Sector", "Cripto", 30), ("Tipo", "Cedear", 70), ("Región", "eeuu", 50)):
+        db.add(RebalanceoObjetivo(cartera=None, eje=eje, categoria=cat, porcentaje_objetivo=pct))
+    db.commit()
+    reb = get_rebalanceo(None, db)
+    ejes = {e["eje"]: e for e in reb["ejes"]}
+    sector = {it["etiqueta"]: it for it in ejes["Sector"]["items"]}
+    assert sector["Consumo básico"]["porcentaje_actual"] == pytest.approx(100 / 3, abs=0.01)
+    tipo = {it["etiqueta"]: it for it in ejes["Tipo"]["items"]}
+    assert tipo["CEDEAR"]["porcentaje_actual"] == pytest.approx(200 / 3, abs=0.01)
+    assert {it["etiqueta"] for it in ejes["Región"]["items"]} == {"EEUU"}
+    # "Soberano" no es del vocabulario pero AL30 lo tiene: no es huérfano. "Cripto" sí es del
+    # vocabulario. Nada huérfano acá…
+    assert reb["objetivos_sin_equivalente"] == []
+    db.add(RebalanceoObjetivo(cartera=None, eje="Sector", categoria="Agro raro", porcentaje_objetivo=5))
+    db.commit()
+    assert get_rebalanceo(None, db)["objetivos_sin_equivalente"] == ["Sector: Agro raro"]
+
+
+def test_descomposicion_por_region(db, monkeypatch):
+    monkeypatch.setenv("CLASIFICACION_AUTO", "true")
+    d = get_descomposicion(None, db)
+    assert d["niveles"][1] == "Región"
+    rv = next(n for n in d["raiz"] if n["etiqueta"] == "Renta variable")
+    assert {h["etiqueta"] for h in rv["hijos"]} == {"EEUU", "Argentina"}
+
+
+def test_ticker_con_movimientos_sin_ficha_se_clasifica(db, monkeypatch):
+    monkeypatch.setenv("CLASIFICACION_AUTO", "true")
+    db.add(MovimientoInversion(fecha=date(2024, 1, 2), cartera="c", ticker="KO", tipo_movimiento="compra",
+                               cantidad=1, precio=10.0, moneda="USD", comision=0.0))
+    db.commit()
+    assert ca.clasificaciones(db)["KO"].sector == "Consumo básico"
+
+
+def test_equivalencia_con_tablas_vacias_y_sheet_canonico(monkeypatch):
+    """Sin nada de Yahoo ni correcciones y con un Sheet ya escrito en el vocabulario canónico,
+    los dos modos dan las mismas etiquetas en todos los ejes que existían."""
+    monkeypatch.setattr(ca, "cargar_catalogo", lambda: [])
+    monkeypatch.setattr(ca, "cargar_seed", lambda: {"variantes": {}, "simbolos_yahoo": {}, "exposicion": {}})
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    s = Session(engine)
+    s.add(IndiceMercado(fecha=date(2024, 1, 1), mep=1000.0))
+    for t, tipo, sector, pais in (("GGAL", "Acción", "Financiero", "Argentina"),
+                                  ("AL30", "Bono", "Soberano", "Argentina"),
+                                  ("FCI1", "FCI", "Liquidez", "Argentina")):
+        s.add(InstrumentoInversion(ticker=t, nombre=t, tipo_instrumento=tipo, mercado="BCBA",
+                                   moneda="USD", sector=sector, pais=pais))
+        s.add(MovimientoInversion(fecha=date(2024, 1, 2), cartera="c", ticker=t, tipo_movimiento="compra",
+                                  cantidad=1, precio=100.0, moneda="USD", comision=0.0))
+        s.add(PrecioInstrumento(fecha=HOY, ticker=t, precio=100.0, moneda="USD", fuente="sheet"))
+    s.commit()
+    salidas = {}
+    for modo in ("false", "true"):
+        monkeypatch.setenv("CLASIFICACION_AUTO", modo)
+        limpiar_cache()
+        salidas[modo] = {e["eje"]: e["items"] for e in get_exposicion(None, s)["ejes"]}
+    for eje, items in salidas["false"].items():
+        assert salidas["true"][eje] == items, eje
+    assert set(salidas["true"]) - set(salidas["false"]) == {"Región"}
+    s.close()

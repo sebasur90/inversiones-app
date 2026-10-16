@@ -15,6 +15,10 @@ from .market_data.precios import _es_fci, _es_renta_fija, _es_renta_variable
 from .salud_engine import SECTORES_LIQUIDOS
 
 NIVELES = ("Familia", "País", "Sector", "Ticker")
+# Con la clasificación automática prendida el segundo nivel es la región (EEUU, Argentina,
+# Desarrollados ex-EEUU, Emergentes, Global): es lo que responde "¿dónde está mi plata?" sin
+# atomizar en un país por CEDEAR. El país sigue en el eje País de Exposición.
+NIVELES_REGION = ("Familia", "Región", "Sector", "Ticker")
 
 # Orden fijo del nivel 1: el árbol se lee siempre igual, sin importar cuánto pese cada familia
 # hoy. Cualquier familia no contemplada (no debería pasar, ver `familia_de`) cae después de
@@ -62,6 +66,10 @@ def _etiqueta_pais(p: dict) -> str:
     return p.get("pais") or SIN_CLASIFICAR
 
 
+def _etiqueta_region(p: dict) -> str:
+    return p.get("region") or SIN_CLASIFICAR
+
+
 def _etiqueta_sector(p: dict) -> str:
     return p.get("sector") or SIN_CLASIFICAR
 
@@ -73,6 +81,7 @@ def _etiqueta_ticker(p: dict) -> str:
 _ETIQUETA_POR_NIVEL = {
     "Familia": _etiqueta_familia,
     "País": _etiqueta_pais,
+    "Región": _etiqueta_region,
     "Sector": _etiqueta_sector,
     "Ticker": _etiqueta_ticker,
 }
@@ -102,11 +111,14 @@ def _ordenar_etiquetas(nivel: str, grupos: dict[str, list[dict]]) -> list[str]:
     return normales
 
 
-def _nivel(posiciones: list[dict], profundidad: int, total_usd: float, valor_padre_usd: float) -> list[dict]:
-    if profundidad >= len(NIVELES) or not posiciones:
+def _nivel(
+    posiciones: list[dict], profundidad: int, total_usd: float, valor_padre_usd: float,
+    niveles: tuple[str, ...] = NIVELES,
+) -> list[dict]:
+    if profundidad >= len(niveles) or not posiciones:
         return []
 
-    nombre_nivel = NIVELES[profundidad]
+    nombre_nivel = niveles[profundidad]
     grupos = _agrupar_por(posiciones, _ETIQUETA_POR_NIVEL[nombre_nivel])
     orden = _ordenar_etiquetas(nombre_nivel, grupos)
 
@@ -137,19 +149,21 @@ def _nivel(posiciones: list[dict], profundidad: int, total_usd: float, valor_pad
             nodo["tipo_instrumento"] = p.get("tipo_instrumento")
             nodo["nombre"] = p.get("nombre")
         else:
-            nodo["hijos"] = _nivel(items, profundidad + 1, total_usd, valor_usd)
+            nodo["hijos"] = _nivel(items, profundidad + 1, total_usd, valor_usd, niveles)
         nodos.append(nodo)
     return nodos
 
 
-def construir_arbol(posiciones: list[dict], total_usd: float, total_ars: float) -> list[dict]:
-    """Árbol de 4 niveles (Familia → País → Sector → Ticker) a partir de posiciones ya
+def construir_arbol(
+    posiciones: list[dict], total_usd: float, total_ars: float, niveles: tuple[str, ...] = NIVELES,
+) -> list[dict]:
+    """Árbol de 4 niveles (Familia → País|Región → Sector → Ticker) a partir de posiciones ya
     valorizadas (una por ticker). `total_usd`/`total_ars` son el total de cartera: sirven de
     denominador estable para `porcentaje` en todos los niveles.
 
     Cada posición esperada como:
-        {ticker, nombre, tipo_instrumento, sector, pais, con_ficha, valor_usd, valor_ars}
+        {ticker, nombre, tipo_instrumento, sector, pais, region, con_ficha, valor_usd, valor_ars}
     """
     if total_usd <= 0 or not posiciones:
         return []
-    return _nivel(posiciones, 0, total_usd, total_usd)
+    return _nivel(posiciones, 0, total_usd, total_usd, niveles)
