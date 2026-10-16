@@ -346,6 +346,11 @@ export default function Ajustes() {
           <div className="text-caption text-app-text-dim">
             IOL está desactivada (IOL_ENABLED=false): los precios salen de las fuentes públicas.
           </div>
+        ) : !iol.credenciales ? (
+          <div className="text-caption text-app-text-dim">
+            No se encuentran las credenciales de IOL (iol.json): no se hace ninguna llamada, por eso el
+            contador queda en 0 y los precios salen de las fuentes públicas.
+          </div>
         ) : (
           <>
             <BarraProgreso

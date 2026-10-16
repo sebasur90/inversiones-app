@@ -185,6 +185,7 @@ def iol_estado(db: Session = Depends(get_db)):
         restante=max(0, limite - llamadas),
         limite_por_sync=iol_auth.limite_por_corrida(),
         habilitada=iol_auth.iol_enabled(),
+        credenciales=iol_auth.credenciales_disponibles(),
     )
 
 

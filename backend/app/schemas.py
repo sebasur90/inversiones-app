@@ -165,6 +165,7 @@ class IolEstadoOut(BaseModel):
     restante: int           # max(0, limite - llamadas)
     limite_por_sync: int    # IOL_MAX_LLAMADAS_POR_SYNC (0 = sin cota por corrida)
     habilitada: bool        # IOL_ENABLED
+    credenciales: bool = True  # el archivo iol.json existe y es válido; sin él no se llama a IOL
 
 
 class SyncRunResumenOut(BaseModel):

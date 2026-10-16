@@ -2790,6 +2790,7 @@ export interface IolEstadoOut {
   restante: number
   limite_por_sync: number
   habilitada: boolean
+  credenciales: boolean
 }
 
 export const getIolEstado = () =>

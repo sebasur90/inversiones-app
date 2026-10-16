@@ -113,6 +113,11 @@ def _leer_credenciales() -> tuple[str, str] | None:
         return None
 
 
+def credenciales_disponibles() -> bool:
+    """True si el archivo de credenciales existe y tiene usuario y contraseña."""
+    return _leer_credenciales() is not None
+
+
 def _periodo_actual() -> str:
     """"YYYY-MM" en UTC — el mismo huso con el que está documentada la clave de `EstadoApiIol`.
     No `date.today()`: esa es la fecha local del contenedor y, con un TZ corrido, el corte de mes
@@ -312,6 +317,10 @@ def get_bearer(db: Session) -> str | None:
             return None
         credenciales = _leer_credenciales()
         if credenciales is None:
+            logger.warning(
+                "market_data.iol: sin credenciales en '%s' (¿falta el archivo o está montado como "
+                "directorio?); no se llama a IOL y el contador de cupo no avanza", _credentials_path(),
+            )
             return None
         username, password = credenciales
         return _autenticar(db, username, password)
