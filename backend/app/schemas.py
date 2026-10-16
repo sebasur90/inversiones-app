@@ -2609,7 +2609,7 @@ class DimensionDiagnosticoOut(BaseModel):
     votos: list[VotoFamiliaOut] = Field(default_factory=list)
 
 
-class DiagnosticoOut(BaseModel):
+class DiagnosticoEmpresaOut(BaseModel):
     version_reglas: int
     dimensiones: list[DimensionDiagnosticoOut]
     confianza: str                      # "alta" | "media" | "baja" | "sin_datos"
@@ -2642,7 +2642,7 @@ class ValuacionTickerOut(BaseModel):
     n_pares_con_datos: int
     fuerza_relativa: list[PuntoFuerzaRelativaOut]
     advertencias: list[str]
-    diagnostico: DiagnosticoOut
+    diagnostico: DiagnosticoEmpresaOut
 
 
 class ValuacionItemOut(BaseModel):
