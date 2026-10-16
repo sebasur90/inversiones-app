@@ -5,10 +5,13 @@ import { useMemo } from 'react'
  * de barras sobre el mismo ancho, así el índice de una barra cae en el mismo píxel en todos los
  * paneles y el crosshair no se desincroniza.
  *
+ * La ventana puede pasar de la última barra: el margen vacío a la derecha (el "futuro") ocupa
+ * ancho pero no tiene índices; `indiceDeX` ahí devuelve la última barra.
+ *
  * La **ventana visible** que produce `useVentanaVisible` puede empezar en una fracción de barra:
  * el desplazamiento con el dedo sigue al dedo píxel a píxel, no a saltos de una vela. Esa fracción
  * vive sólo en `xDeIndice`/`indiceDeX`; `inicio`/`fin` son **enteros** (la primera y la última
- * barra al menos en parte a la vista), así los bucles de los paneles no cambian. Lo que queda a
+ * barra con datos al menos en parte a la vista), así los bucles de los paneles no cambian. Lo que queda a
  * medias contra el borde lo recorta el propio `<svg>`.
  *
  * Los paneles siguen recibiendo las series completas y usan estos índices para acotar lo que
@@ -37,8 +40,11 @@ export function useEscalaX(n: number, ancho: number, ventana?: { inicio: number;
   return useMemo(() => {
     const ultimo = Math.max(0, n - 1)
     const desde = Math.max(0, Math.min(inicioPedido, ultimo))
-    const hasta = Math.max(desde, Math.min(finPedido, ultimo))
-    const visiblesExactos = n > 0 ? hasta - desde + 1 : 0
+    // La ventana puede pasar de la última barra: ese margen vacío cuenta para el ancho de cada
+    // barra, pero no hay nada que dibujar ahí.
+    const hastaPedido = Math.max(desde, finPedido)
+    const hasta = Math.min(hastaPedido, ultimo)
+    const visiblesExactos = n > 0 ? hastaPedido - desde + 1 : 0
     const pasoX = visiblesExactos > 0 ? ancho / visiblesExactos : ancho
     // El epsilon evita que un 12.0000001 de la aritmética de punto flotante sume una barra fantasma.
     const inicio = Math.floor(desde + 1e-6)
@@ -48,7 +54,7 @@ export function useEscalaX(n: number, ancho: number, ventana?: { inicio: number;
       n,
       inicio,
       fin,
-      visibles: Math.round(visiblesExactos),
+      visibles: n > 0 ? Math.round(hasta - desde + 1) : 0,
       pasoX,
       xDeIndice: (i: number) => (i - desde) * pasoX + pasoX / 2,
       indiceDeX: (x: number) => Math.min(fin, Math.max(inicio, Math.floor(desde + x / (pasoX || 1)))),

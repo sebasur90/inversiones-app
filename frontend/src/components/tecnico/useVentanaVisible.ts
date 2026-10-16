@@ -17,7 +17,9 @@ const FRICCION = 0.94
 const IGNORAR_MOUSE_TRAS_TOQUE = 800
 
 /** Ventana visible en índices de barra. `inicio` puede tener fracción (el desplazamiento sigue al
- * dedo píxel a píxel); `fin = inicio + visibles − 1`. Ver `useEscalaX`. */
+ * dedo píxel a píxel); `fin = inicio + visibles − 1`. `fin` puede pasar de la última barra (`n − 1`):
+ * ese tramo es el "futuro" sin datos, un margen para no tener la última vela pegada al borde del
+ * celular. Ver `useEscalaX`. */
 export interface Ventana { inicio: number; fin: number }
 
 export interface OpcionesGestos {
@@ -50,15 +52,33 @@ export interface ControlesVentana {
   arrastrando: boolean
 }
 
-function visiblesPermitidos(visibles: number, n: number): number {
-  return Math.max(Math.min(MINIMO_VISIBLE, n), Math.min(visibles, n))
+/** Barras vacías a la derecha en la vista de todo el período (≈6 %): la última vela queda
+ * despegada del borde. */
+function margenInicial(n: number): number {
+  return n > 0 ? Math.max(2, Math.round(n * 0.06)) : 0
 }
 
+/** Ventana de "todo el período": desde la primera barra, más el margen vacío a la derecha. */
+function ventanaCompleta(n: number): Ventana {
+  return { inicio: 0, fin: n > 0 ? n - 1 + margenInicial(n) : 0 }
+}
+
+function visiblesPermitidos(visibles: number, n: number): number {
+  return Math.max(Math.min(MINIMO_VISIBLE, n), Math.min(visibles, n + margenInicial(n)))
+}
+
+/** Sin datos a la derecha se puede desplazar hasta dejar la última vela en el centro del panel
+ * (más allá no hay nada que mirar); a la izquierda, hasta la primera barra. */
 function acotar(inicio: number, visibles: number, n: number): Ventana {
   if (n <= 0) return { inicio: 0, fin: 0 }
   const v = visiblesPermitidos(visibles, n)
-  const i = Math.min(Math.max(inicio, 0), n - v)
+  const i = Math.min(Math.max(inicio, 0), n - v / 2)
   return { inicio: i, fin: i + v - 1 }
+}
+
+/** ¿Es la vista de todo el período (sin zoom ni desplazamiento)? */
+function esCompleta(v: Ventana, n: number): boolean {
+  return v.inicio <= 1e-6 && v.fin >= ventanaCompleta(n).fin - 1e-6
 }
 
 /** Marca un elemento que maneja su propio arrastre: un gesto que empieza ahí no desplaza ni hace
@@ -116,7 +136,7 @@ export function useVentanaVisible(
   ref: RefObject<HTMLElement | null>,
   opciones: OpcionesGestos,
 ): ControlesVentana {
-  const [ventana, setVentana] = useState<Ventana>(() => ({ inicio: 0, fin: Math.max(0, n - 1) }))
+  const [ventana, setVentana] = useState<Ventana>(() => ventanaCompleta(n))
   const [arrastrando, setArrastrando] = useState(false)
 
   // Lo que leen los listeners: siempre el último valor, sin volver a registrarlos en cada render.
@@ -155,7 +175,7 @@ export function useVentanaVisible(
     if (previa.n === n && previa.serie === serie) return
     serieVistaRef.current = { n, serie }
     detenerInercia()
-    const v = { inicio: 0, fin: Math.max(0, n - 1) }
+    const v = ventanaCompleta(n)
     ventanaRef.current = v
     setVentana(v)
     opcionesRef.current.onCambioSerie?.()
@@ -194,7 +214,7 @@ export function useVentanaVisible(
 
   const reset = useCallback(() => {
     detenerInercia()
-    aplicar({ inicio: 0, fin: Math.max(0, nRef.current - 1) })
+    aplicar(ventanaCompleta(nRef.current))
   }, [aplicar, detenerInercia])
 
   const activo = opciones.activo
@@ -336,7 +356,7 @@ export function useVentanaVisible(
         limpiarTimer()
         if (Math.abs(dx) > Math.abs(dy)) {
           const v = ventanaRef.current
-          if (v.fin - v.inicio + 1 >= nRef.current - 1e-6) opcionesRef.current.onSinRecorrido?.()
+          if (esCompleta(v, nRef.current)) opcionesRef.current.onSinRecorrido?.()
           gesto = { tipo: 'desplazando', x0: t.clientX, inicio0: v.inicio, visibles: v.fin - v.inicio + 1 }
           muestras = [{ t: performance.now(), inicio: v.inicio }]
           if (e.cancelable) e.preventDefault()
@@ -431,7 +451,7 @@ export function useVentanaVisible(
     function onPointerMoveVentana(e: PointerEvent) {
       const a = arrastreMouse
       if (!a) return
-      if (!a.avisado && Math.abs(e.clientX - a.x0) > UMBRAL_MOVIMIENTO && a.visibles >= nRef.current - 1e-6) {
+      if (!a.avisado && Math.abs(e.clientX - a.x0) > UMBRAL_MOVIMIENTO && a.visibles >= ventanaCompleta(nRef.current).fin + 1 - 1e-6) {
         a.avisado = true
         opcionesRef.current.onSinRecorrido?.()
       }
@@ -493,7 +513,7 @@ export function useVentanaVisible(
 
   return {
     ventana,
-    completa: ventana.inicio <= 1e-6 && ventana.fin >= n - 1 - 1e-6,
+    completa: esCompleta(ventana, n),
     zoom,
     reset,
     arrastrando,
