@@ -315,3 +315,28 @@ def test_purga_snapshots_viejos(db, llamadas):
     _correr(db, tickers=["KO"])
     assert db.query(FundamentalesSnapshot).filter_by(simbolo_yahoo="KO").count() == fi.SNAPSHOTS_RETENIDOS
     assert db.query(FundamentalesSnapshot).filter_by(simbolo_yahoo="KO", fecha=HOY).count() == 1
+
+
+def test_serie_de_cinco_anios_solo_en_el_snapshot_mas_nuevo(db, llamadas, monkeypatch):
+    pedidas = []
+
+    def _serie(simbolo, semanas=56):
+        pedidas.append(semanas)
+        return yahoo.ResultadoYahoo(yahoo.ESTADO_OK, datos=list(SERIE))
+    monkeypatch.setattr(yahoo, "fetch_cierres_semanales", _serie)
+    db.add(FundamentalesSnapshot(simbolo_yahoo="KO", fecha=HOY - timedelta(days=7), metricas={},
+                                 serie_semanal=[{"fecha": "2026-01-01", "cierre": 1.0}]))
+    db.commit()
+    _correr(db, tickers=["KO"])
+    assert pedidas == [fi.SEMANAS_SERIE]
+    viejo = db.query(FundamentalesSnapshot).filter_by(simbolo_yahoo="KO", fecha=HOY - timedelta(days=7)).one()
+    nuevo = db.query(FundamentalesSnapshot).filter_by(simbolo_yahoo="KO", fecha=HOY).one()
+    assert viejo.serie_semanal is None and nuevo.serie_semanal == SERIE
+
+
+def test_forzar_repide_lo_fresco(db, llamadas):
+    _correr(db)
+    llamadas.clear()
+    assert _correr(db)["procesados"] == 0          # todo fresco: nada que hacer
+    assert _correr(db, forzar=True)["procesados"] > 0
+    assert "KO" in llamadas

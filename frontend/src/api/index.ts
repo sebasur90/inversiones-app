@@ -2828,7 +2828,8 @@ export interface ValuacionTicker {
   frases: FraseValuacion[]
   tabla: { columnas: string[]; filas: FilaValuacion[] }
   n_pares_con_datos: number
-  fuerza_relativa: { fecha: string; propio: number; mediana_pares: number | null; pares: Record<string, number> }[]
+  /** Cierres semanales en USD (hasta 5 años), sin normalizar: el gráfico re-basa desde la fecha elegida. */
+  fuerza_relativa: { fecha: string; propio: number; pares: Record<string, number> }[]
   advertencias: string[]
 }
 

@@ -2563,9 +2563,9 @@ class GrupoParesOut(BaseModel):
 
 
 class PuntoFuerzaRelativaOut(BaseModel):
+    """Cierre semanal en USD (sin normalizar: el gráfico re-basa desde la fecha que elija el usuario)."""
     fecha: date
     propio: float
-    mediana_pares: Optional[float] = None
     pares: dict[str, float] = Field(default_factory=dict)
 
 

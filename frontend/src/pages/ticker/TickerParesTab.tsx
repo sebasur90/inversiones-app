@@ -233,7 +233,7 @@ export default function TickerParesTab({ ticker }: { ticker: string }) {
 
           {v.fuerza_relativa.length > 1 && (
             <Card>
-              <div className="text-strong font-bold text-app-text mb-2">Precio vs. sus pares (12 meses)</div>
+              <div className="text-strong font-bold text-app-text mb-2">Precio vs. sus pares</div>
               <FuerzaRelativaChart
                 key={v.pares.items.map(p => p.ticker_base).join(',')}
                 puntos={v.fuerza_relativa}

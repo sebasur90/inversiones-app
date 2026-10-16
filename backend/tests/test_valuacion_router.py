@@ -101,13 +101,13 @@ def test_ficha_de_valuacion(client):
     assert fila_pe["valores"]["PEP"] == 24.0
     assert fila_pe["banda"] == "mejor"
     assert b["tabla"]["columnas"][0] == "KO"
-    assert b["fuerza_relativa"][0]["propio"] == 100.0
-    assert b["fuerza_relativa"][-1]["propio"] == pytest.approx(120.0)
-    assert b["fuerza_relativa"][-1]["mediana_pares"] is not None
+    # Precios en USD sin normalizar: el re-base lo hace el gráfico desde la fecha elegida.
+    assert b["fuerza_relativa"][0]["propio"] == pytest.approx(50.0)
+    assert b["fuerza_relativa"][-1]["propio"] == pytest.approx(60.0)
     ultimo = b["fuerza_relativa"][-1]
     assert set(ultimo["pares"]) == {"PEP", "MNST", "KDP", "CELH"}
-    assert ultimo["pares"]["CELH"] == pytest.approx(50.0)     # 40 -> 20
-    assert b["fuerza_relativa"][0]["pares"]["PEP"] == 100.0
+    assert ultimo["pares"]["CELH"] == pytest.approx(20.0)
+    assert b["fuerza_relativa"][0]["pares"]["PEP"] == pytest.approx(150.0)
 
 
 def test_ficha_de_ticker_sin_datos(client):

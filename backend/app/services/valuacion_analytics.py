@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from statistics import median
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -182,33 +181,24 @@ def _clasificacion_dict(c: ce.ClasificacionResuelta) -> dict:
 
 
 def _fuerza_relativa(u: Universo, base: str, pares: list[str]) -> list[dict]:
-    """Serie semanal base 100 del emisor, de cada par y de la mediana de los pares (todo en USD).
+    """Cierres semanales en USD del emisor y de cada par, alineados por fecha (hasta 5 años).
 
-    Cada par se normaliza contra su propio cierre de la primera semana del emisor: así las líneas
-    arrancan juntas en 100 y lo que se compara es cuánto se movió cada uno desde ese día.
+    Van **en precio, no normalizados**: la fecha base desde la que se compara la elige el usuario
+    en el gráfico (p.ej. el piso de una baja), y el re-base a 100 y la mediana de los pares se
+    calculan ahí, sobre esa fecha.
     """
     propia = u.serie_usd(base)
     if len(propia) < 2:
         return []
-    series_pares: dict[str, dict] = {}
-    for p in pares:
-        s = dict(u.serie_usd(p))
-        if s.get(propia[0][0]):
-            series_pares[p] = s
-    base_propia = propia[0][1]
-    bases_pares = {p: s[propia[0][0]] for p, s in series_pares.items()}
-    salida = []
-    for fecha, cierre in propia:
-        por_par = {
-            p: round(s[fecha] / bases_pares[p] * 100.0, 2) for p, s in series_pares.items() if fecha in s
-        }
-        salida.append({
+    series_pares = {p: dict(s) for p in pares if (s := u.serie_usd(p))}
+    return [
+        {
             "fecha": fecha,
-            "propio": round(cierre / base_propia * 100.0, 2),
-            "mediana_pares": round(median(por_par.values()), 2) if por_par else None,
-            "pares": por_par,
-        })
-    return salida
+            "propio": round(cierre, 6),
+            "pares": {p: round(s[fecha], 6) for p, s in series_pares.items() if fecha in s},
+        }
+        for fecha, cierre in propia
+    ]
 
 
 def _evaluar(u: Universo, e: _Emisor) -> tuple[pares_engine.GrupoPares, valuacion_engine.ResultadoValuacion | None]:

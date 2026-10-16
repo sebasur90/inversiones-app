@@ -61,6 +61,10 @@ NO_ENCONTRADO_REINTENTO_DIAS = 90
 BACKOFF_TOPE_DIAS = 30
 FALLOS_SEGUIDOS_CORTE = 5
 SNAPSHOTS_RETENIDOS = 8
+# Cinco años de cierres semanales: alcanza para medir "desde la baja de 2022" en el gráfico de
+# precio vs. pares, y sigue siendo una sola llamada por emisor. La serie se guarda sólo en el
+# snapshot más reciente (ver `_purgar_snapshots`), así no se repite 8 veces.
+SEMANAS_SERIE = 262
 LOCK_ESCRITURA_TIMEOUT_SEG = 300
 MAX_TICKERS_SINCRONICO = 5
 
@@ -189,10 +193,13 @@ def armar_cola(
     estado: dict[str, ClasificacionAuto],
     hoy: date,
     solo: set[str] | None = None,
+    forzar: bool = False,
 ) -> list[Tarea]:
     """Las tareas pendientes, ordenadas por prioridad (ver docstring del módulo).
 
     `solo`: limita a esos tickers base e ignora frescura y backoff (el botón "Actualizar datos").
+    `forzar`: todo el universo, ignorando frescura y backoff (lo propio primero). Es para
+    recargar después de un cambio en lo que se guarda, como la serie de 5 años.
     """
     industrias_propias = {
         (estado[b].industria_raw or "").lower()
@@ -211,6 +218,9 @@ def armar_cola(
     for simbolo, emisores in por_simbolo.items():
         if solo is not None:
             tareas.append(Tarea(simbolo, emisores, 0))
+            continue
+        if forzar:
+            tareas.append(Tarea(simbolo, emisores, 1 if any(em.propio for em in emisores) else 4))
             continue
 
         filas = [estado.get(em.ticker_base) for em in emisores]
@@ -408,7 +418,19 @@ def _marcar_no_aptos(db: Session, universo: dict[str, Emisor]) -> None:
 
 
 def _purgar_snapshots(db: Session, simbolos: set[str]) -> None:
+    """Deja `SNAPSHOTS_RETENIDOS` snapshots por símbolo, y la serie semanal sólo en el más nuevo
+    que la tenga (cinco años de cierres repetidos en cada foto no aportan nada)."""
     for simbolo in simbolos:
+        ya_hay_serie = False
+        for snap in (
+            db.query(FundamentalesSnapshot)
+            .filter(FundamentalesSnapshot.simbolo_yahoo == simbolo)
+            .order_by(FundamentalesSnapshot.fecha.desc())
+        ):
+            if snap.serie_semanal:
+                if ya_hay_serie:
+                    snap.serie_semanal = None
+                ya_hay_serie = True
         viejos = (
             db.query(FundamentalesSnapshot.id)
             .filter(FundamentalesSnapshot.simbolo_yahoo == simbolo)
@@ -456,6 +478,7 @@ def correr(
     max_emisores: int | None = None,
     tickers: list[str] | None = None,
     pausa_seg: float | None = None,
+    forzar: bool = False,
 ) -> dict:
     """Una corrida de ingesta. Hace commit. Nunca lanza por red.
 
@@ -467,12 +490,12 @@ def correr(
     if not _lock_ingesta.acquire(blocking=False):
         return {"resultado": "en_curso", "procesados": 0, "ok": 0, "fallidos": 0}
     try:
-        return _correr(db, max_emisores, tickers, pausa_seg)
+        return _correr(db, max_emisores, tickers, pausa_seg, forzar)
     finally:
         _lock_ingesta.release()
 
 
-def _correr(db, max_emisores, tickers, pausa_seg) -> dict:
+def _correr(db, max_emisores, tickers, pausa_seg, forzar=False) -> dict:
     inicio = time.monotonic()
     hoy = date.today()
     tope = max_emisores if max_emisores is not None else _entero_env(
@@ -488,7 +511,7 @@ def _correr(db, max_emisores, tickers, pausa_seg) -> dict:
         catalogo = cargar_catalogo()
         variantes = ce.mapa_variantes(catalogo, cargar_seed()["variantes"])
         solo = {ce.ticker_base(t, variantes) for t in tickers[:MAX_TICKERS_SINCRONICO]}
-    cola = armar_cola(universo, estado, hoy, solo=solo)
+    cola = armar_cola(universo, estado, hoy, solo=solo, forzar=forzar)
     pendientes_total = len(cola)
     cola = cola[:tope]
     # Cierra la transacción de lectura: la parte de red puede tardar minutos.
@@ -509,7 +532,7 @@ def _correr(db, max_emisores, tickers, pausa_seg) -> dict:
         obtenido = _Obtenido(tarea, res, None)
         if res.estado == yahoo.ESTADO_OK:
             obtenido.metricas, obtenido.market_cap_usd = enriquecer_usd(res.datos, conversor)
-            serie = yahoo.fetch_cierres_semanales(tarea.simbolo_yahoo)
+            serie = yahoo.fetch_cierres_semanales(tarea.simbolo_yahoo, semanas=SEMANAS_SERIE)
             if serie.estado == yahoo.ESTADO_RATE_LIMITED:
                 rate_limited = True
                 obtenidos.append(obtenido)

@@ -521,6 +521,14 @@ curl -X POST http://localhost:8087/api/inversiones/clasificacion/actualizar \
 curl http://localhost:8087/api/inversiones/clasificacion/estado                      # cobertura
 ```
 
+Recargar todo el catálogo ignorando frescura (p.ej. después de cambiar qué se guarda, como la
+serie semanal de 5 años del gráfico de precio vs. pares). Son ~900 llamadas, 15-20 minutos; si
+Yahoo limita, se corta sola y guarda lo obtenido, y se vuelve a correr:
+
+```bash
+docker compose exec backend python -c "from app.database import SessionLocal; from app.services import fundamentales_ingesta as fi; print(fi.correr(SessionLocal(), max_emisores=500, forzar=True))"
+```
+
 El alta en watchlist pide los datos del ticker nuevo en segundo plano.
 
 ### Endpoints
