@@ -2503,3 +2503,107 @@ class DiferenciaClasificacionOut(BaseModel):
     en_cartera: bool
     region: Optional[str] = None
     cambios: dict[str, CambioClasificacionOut]
+
+
+class ClasificacionResueltaOut(BaseModel):
+    tipo: Optional[str] = None
+    tipo_base: Optional[str] = None
+    sector: Optional[str] = None
+    industria: Optional[str] = None
+    pais: Optional[str] = None
+    region: Optional[str] = None
+    fuentes: dict[str, Optional[str]] = Field(default_factory=dict)
+
+
+class FraseValuacionOut(BaseModel):
+    texto: str
+    regla: str
+    tono: str
+    metricas: list[str] = Field(default_factory=list)
+
+
+class FilaValuacionOut(BaseModel):
+    clave: str
+    nombre: str
+    grupo: str
+    formato: str
+    valor: Optional[float] = None
+    mediana_pares: Optional[float] = None
+    n: int
+    percentil: Optional[float] = None
+    banda: Optional[str] = None
+    mayor_es_mejor: bool
+    valores: dict[str, Optional[float]] = Field(default_factory=dict)
+
+
+class TablaValuacionOut(BaseModel):
+    columnas: list[str]
+    filas: list[FilaValuacionOut]
+
+
+class ParOut(BaseModel):
+    ticker_base: str
+    nombre: Optional[str] = None
+    tiene_datos: bool
+    agregado: bool
+    tamano_usd: Optional[float] = None
+
+
+class GrupoParesOut(BaseModel):
+    criterio: str
+    items: list[ParOut]
+    automaticos: list[str]
+    agregados: list[str]
+    quitados: list[str]
+
+
+class PuntoFuerzaRelativaOut(BaseModel):
+    fecha: date
+    propio: float
+    mediana_pares: Optional[float] = None
+
+
+class ValuacionTickerOut(BaseModel):
+    ticker: str
+    ticker_base: str
+    nombre: Optional[str] = None
+    simbolo_yahoo: Optional[str] = None
+    metodo_mapeo: Optional[str] = None
+    estado_datos: str
+    fecha_dato: Optional[date] = None
+    es_etf: bool
+    clasificacion: ClasificacionResueltaOut
+    pares: GrupoParesOut
+    lectura: str
+    lectura_texto: str
+    regla_lectura: str
+    frases: list[FraseValuacionOut]
+    tabla: TablaValuacionOut
+    n_pares_con_datos: int
+    fuerza_relativa: list[PuntoFuerzaRelativaOut]
+    advertencias: list[str]
+
+
+class ValuacionItemOut(BaseModel):
+    ticker: str
+    ticker_base: str
+    nombre: Optional[str] = None
+    tipo: Optional[str] = None
+    sector: Optional[str] = None
+    region: Optional[str] = None
+    industria: Optional[str] = None
+    lectura: str
+    lectura_texto: str
+    frases: list[str]
+    n_pares_con_datos: int
+    estado_datos: str
+    fecha_dato: Optional[date] = None
+    en_cartera: bool
+    en_watchlist: bool
+
+
+class ValuacionListaOut(BaseModel):
+    universo: str
+    total: int
+    conteos: dict[str, int]
+    items: list[ValuacionItemOut]

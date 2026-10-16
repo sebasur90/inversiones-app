@@ -5,15 +5,15 @@ sola dos veces por día; estos endpoints muestran su estado y permiten dispararl
 """
 import threading
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal, get_db
 from ..schemas import (
     ActualizarClasificacionIn, ActualizarClasificacionOut, DiferenciaClasificacionOut,
-    EstadoClasificacionOut,
+    EstadoClasificacionOut, ValuacionListaOut, ValuacionTickerOut,
 )
-from ..services import clasificacion_analytics, fundamentales_ingesta, scheduler
+from ..services import clasificacion_analytics, fundamentales_ingesta, scheduler, valuacion_analytics
 
 router = APIRouter(prefix="/api/inversiones", tags=["clasificacion"])
 
@@ -64,3 +64,28 @@ def actualizar_lote():
     instante; el avance se ve en `GET /clasificacion/estado`."""
     threading.Thread(target=_corrida_en_segundo_plano, daemon=True, name="fundamentales-manual").start()
     return ActualizarClasificacionOut(resultado="iniciada")
+
+
+# ── Valuación contra pares ───────────────────────────────────────────────────
+
+@router.get("/valuacion", response_model=ValuacionListaOut)
+def valuacion_lista(
+    universo: str = Query("cartera"),
+    tipo: str | None = None,
+    sector: str | None = None,
+    region: str | None = None,
+    lectura: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """Lectura de valuación (más barata / más cara / en línea…) de cada emisor del universo:
+    lo que hay en cartera, en la watchlist o todo el catálogo con datos."""
+    if universo not in valuacion_analytics.UNIVERSOS:
+        raise HTTPException(status_code=422, detail=f"universo debe ser uno de {valuacion_analytics.UNIVERSOS}")
+    return valuacion_analytics.get_valuacion_lista(universo, db, tipo=tipo, sector=sector, region=region, lectura=lectura)
+
+
+@router.get("/valuacion/{ticker}", response_model=ValuacionTickerOut)
+def valuacion_ticker(ticker: str, db: Session = Depends(get_db)):
+    """Ficha de valuación de un ticker contra sus pares: clasificación con fuentes, pares y el
+    criterio con que se eligieron, tabla lado a lado, percentiles, frases y fuerza relativa."""
+    return valuacion_analytics.get_valuacion_ticker(ticker.strip().upper(), db)
