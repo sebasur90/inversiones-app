@@ -315,3 +315,15 @@ def test_resolver_sin_datos():
 def test_resolver_tipo_etf_desde_sheet():
     r = ce.resolver(sheet={"tipo_instrumento": "ETF"})
     assert r.tipo == ce.TIPO_CEDEAR_ETF
+
+
+def test_cedear_y_etf_de_un_pais_toman_el_pais_de_origen():
+    """Un CEDEAR nunca es "Argentina" por cotizar en BYMA: manda el país de la empresa, y un ETF
+    de un solo país toma el de sus tenencias (seed)."""
+    seed = cargar_seed()["exposicion"]
+    assert seed["EWZ"] == {"pais": "Brasil"}
+    etf = {"tipo": ce.TIPO_CEDEAR_ETF, "sector": "Diversificado", "region": ce.REGION_EMERGENTES}
+    r = ce.resolver(seed=seed["EWZ"], auto=etf, sheet={"tipo_instrumento": "CEDEAR", "pais": "AR"})
+    assert r.pais == "Brasil" and r.region == ce.REGION_EMERGENTES
+    r = ce.resolver(seed=seed["EWJ"], auto={"tipo": ce.TIPO_CEDEAR_ETF, "region": ce.REGION_DESARROLLADOS})
+    assert r.pais == "Japón" and r.region == ce.REGION_DESARROLLADOS

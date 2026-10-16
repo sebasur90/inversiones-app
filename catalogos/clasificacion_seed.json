@@ -76,6 +76,11 @@
     "NU": {"pais": "Brasil"},
     "PAGS": {"pais": "Brasil"},
     "STNE": {"pais": "Brasil"},
-    "XP": {"pais": "Brasil"}
+    "XP": {"pais": "Brasil"},
+    "_doc_etf": "ETFs de un solo país: el país de origen es el de las empresas que tienen adentro (Yahoo no informa país para un ETF).",
+    "EWJ": {"pais": "Japón"},
+    "EWY": {"pais": "Corea del Sur"},
+    "EWZ": {"pais": "Brasil"},
+    "FXI": {"pais": "China"}
   }
 }
