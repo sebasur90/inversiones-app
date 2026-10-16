@@ -2489,3 +2489,17 @@ class ActualizarClasificacionOut(BaseModel):
     procesados: int = 0
     ok: int = 0
     fallidos: int = 0
+
+
+class CambioClasificacionOut(BaseModel):
+    antes: Optional[str] = None
+    despues: Optional[str] = None
+    fuente: Optional[str] = None
+
+
+class DiferenciaClasificacionOut(BaseModel):
+    ticker: str
+    ticker_base: str
+    en_cartera: bool
+    region: Optional[str] = None
+    cambios: dict[str, CambioClasificacionOut]

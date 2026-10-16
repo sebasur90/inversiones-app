@@ -9,7 +9,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from ..database import InstrumentoInversion, PrecioInstrumento
-from . import salud_engine
+from . import clasificacion_analytics, salud_engine
 from .cache import cache_por_sync
 from .calidad_datos import get_calidad_datos
 from .contribucion_analytics import get_concentracion
@@ -60,6 +60,7 @@ def _inventario_posiciones(cartera: str | None, db: Session) -> list[dict]:
     precios_por_ticker = _precios_por_ticker(db)
     fuentes = _ultimo_precio_por_ticker(db)
     instrumentos = {i.ticker: i for i in db.query(InstrumentoInversion).all()}
+    clasif = clasificacion_analytics.clasificaciones(db)
     mep_cache: dict = {}
 
     cantidad_por_ticker: dict[str, float] = {}
@@ -87,9 +88,9 @@ def _inventario_posiciones(cartera: str | None, db: Session) -> list[dict]:
         items.append({
             "ticker": ticker,
             "nombre": inst.nombre if inst else ticker,
-            "tipo_instrumento": inst.tipo_instrumento if inst else None,
-            "sector": inst.sector if inst else None,
-            "pais": inst.pais if inst else None,
+            "tipo_instrumento": clasificacion_analytics.atributo(clasif, ticker, "tipo_instrumento"),
+            "sector": clasificacion_analytics.atributo(clasif, ticker, "sector"),
+            "pais": clasificacion_analytics.atributo(clasif, ticker, "pais"),
             "moneda": inst.moneda if inst else None,
             "fecha_vencimiento": inst.fecha_vencimiento if inst else None,
             "cantidad": cantidad,

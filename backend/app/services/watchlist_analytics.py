@@ -42,7 +42,10 @@ from ..database import (
     WatchlistItem,
     ZonaPrecio,
 )
-from . import catalogo_instrumentos, cotizacion_diaria, estado_market_data, ohlcv_analytics, zonas_precio
+from . import (
+    catalogo_instrumentos, clasificacion_analytics, cotizacion_diaria, estado_market_data,
+    ohlcv_analytics, zonas_precio,
+)
 from .clasificacion_instrumentos import es_cedear
 from .inversiones_analytics import (
     _holdings_por_cartera_ticker,
@@ -114,6 +117,7 @@ def get_watchlist(db: Session) -> list[dict]:
     en_cartera = _tickers_en_cartera(db, hoy)
     precios_wl = {row.ticker: row for row in db.query(PrecioWatchlist).all()}
     precios_inst = _precios_por_ticker(db) if tickers_instrumento else {}
+    clasif = clasificacion_analytics.clasificaciones(db)
 
     solo_seguidos = [i.ticker for i in items if i.ticker not in tickers_instrumento]
     cierres = _cierres_barras(db, solo_seguidos)
@@ -207,8 +211,8 @@ def get_watchlist(db: Session) -> list[dict]:
             "tipo_instrumento": item.tipo_instrumento,
             "mercado": item.mercado,
             "moneda": item.moneda,
-            "pais": item.pais,
-            "sector": item.sector,
+            "pais": clasificacion_analytics.atributo(clasif, item.ticker, "pais"),
+            "sector": clasificacion_analytics.atributo(clasif, item.ticker, "sector"),
             "precio_actual": precio_actual,
             "fecha_precio": fecha_precio,
             "moneda_precio": moneda_precio or item.moneda,

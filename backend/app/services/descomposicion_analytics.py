@@ -8,6 +8,7 @@ de cartera: por eso el total de acá es el mismo que el de la pantalla principal
 from sqlalchemy.orm import Session
 
 from .cache import cache_por_sync
+from .clasificacion_analytics import atributo
 from .descomposicion_engine import NIVELES, construir_arbol
 from .inversiones_analytics import _clasificados_valorizados
 
@@ -15,7 +16,7 @@ from .inversiones_analytics import _clasificados_valorizados
 @cache_por_sync
 def get_descomposicion(cartera: str | None, db: Session) -> dict:
     pos = _clasificados_valorizados(cartera, db)
-    instrumentos = pos.instrumentos
+    instrumentos, clasif = pos.instrumentos, pos.clasif
 
     # Consolidar por ticker: en Consolidado el mismo ticker puede estar en más de una cartera,
     # y acá tiene que aparecer como una sola hoja (sumando los valores de todas).
@@ -31,9 +32,9 @@ def get_descomposicion(cartera: str | None, db: Session) -> dict:
         posiciones.append({
             "ticker": ticker,
             "nombre": inst.nombre if inst else ticker,
-            "tipo_instrumento": inst.tipo_instrumento if inst else None,
-            "sector": inst.sector if inst else None,
-            "pais": inst.pais if inst else None,
+            "tipo_instrumento": atributo(clasif, ticker, "tipo_instrumento"),
+            "sector": atributo(clasif, ticker, "sector"),
+            "pais": atributo(clasif, ticker, "pais"),
             # Sin ficha en Instrumentos: cae directo en el bucket "Sin clasificar" del árbol
             # (ver `descomposicion_engine.familia_de`), mismo criterio que el bucket residual
             # de los ejes de `get_exposicion`.

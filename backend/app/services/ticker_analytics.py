@@ -10,7 +10,7 @@ from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
 
 from ..database import MovimientoInversion, InstrumentoInversion
-from . import niveles_analytics, risk_engine
+from . import clasificacion_analytics, niveles_analytics, risk_engine
 from .inversiones_analytics import (
     _movimientos_ordenados,
     _precios_por_ticker,
@@ -120,6 +120,7 @@ def get_ticker_position(ticker: str, cartera: Optional[str], db: Session) -> dic
 
     # Instrumento y precio actual
     instrumento = db.query(InstrumentoInversion).filter(InstrumentoInversion.ticker == ticker).first()
+    clasif = clasificacion_analytics.clasificaciones(db)
     precios_por_ticker = _precios_por_ticker(db)
     info = _precio_conocido(precios_por_ticker.get(ticker), hoy) if precios_por_ticker.get(ticker) else None
     precio_actual = info[1] if info else None  # Puede ser None sin descartar el bloque
@@ -148,8 +149,8 @@ def get_ticker_position(ticker: str, cartera: Optional[str], db: Session) -> dic
         "tipo_instrumento": instrumento.tipo_instrumento if instrumento else "—",
         "mercado": instrumento.mercado if instrumento else "—",
         "moneda": instrumento.moneda if instrumento else moneda_costo,
-        "pais": instrumento.pais if instrumento else None,
-        "sector": instrumento.sector if instrumento else None,
+        "pais": clasificacion_analytics.atributo(clasif, ticker, "pais"),
+        "sector": clasificacion_analytics.atributo(clasif, ticker, "sector"),
         "cantidad_actual": round(cantidad_actual, 8),
         "precio_promedio": round(precio_promedio, 6),
         "precio_actual": round(precio_actual, 6) if precio_actual is not None else None,

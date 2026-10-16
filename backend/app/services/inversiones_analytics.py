@@ -7,7 +7,7 @@ from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from ..database import MovimientoInversion, InstrumentoInversion, PrecioInstrumento, IndiceMercado, RebalanceoObjetivo, ConfiguracionCartera
-from . import cotizacion_diaria, niveles_analytics, rebalanceo_engine
+from . import clasificacion_analytics, cotizacion_diaria, niveles_analytics, rebalanceo_engine
 from .cache import cache_por_sync
 # Etiquetas de los buckets residuales de los ejes: una posición sin ficha en Instrumentos, o sin
 # el atributo que agrupa el eje (sector/país/vencimiento son opcionales), entra al eje con una de
@@ -1159,6 +1159,9 @@ class PosicionesValorizadas:
     """
     valores: list[tuple[str, str, float, float]]
     instrumentos: dict[str, InstrumentoInversion]
+    # Clasificación resuelta por ticker (`clasificacion_analytics.clasificaciones`): de acá salen
+    # tipo, sector, país y región de todos los ejes, no de la ficha cruda.
+    clasif: dict = field(default_factory=dict)
     # Valuadas al costo promedio de compra porque no hay cotización conocida (igual que el
     # Resumen, que las marca con `tiene_precios_desactualizados`).
     aproximadas: list[str] = field(default_factory=list)
@@ -1227,7 +1230,9 @@ def _clasificados_valorizados(cartera: str | None, db: Session) -> PosicionesVal
 
     holdings, costos = _holdings_y_costos(movs, hoy)
 
-    pos = PosicionesValorizadas(valores=[], instrumentos=instrumentos)
+    pos = PosicionesValorizadas(
+        valores=[], instrumentos=instrumentos, clasif=clasificacion_analytics.clasificaciones(db),
+    )
     for (cart, ticker), cantidad in holdings.items():
         if abs(cantidad) < EPS:
             continue
@@ -1265,8 +1270,14 @@ def _clasificados_valorizados(cartera: str | None, db: Session) -> PosicionesVal
     return pos
 
 
-def _atributo(instrumentos: dict, ticker: str, attr: str):
-    """Atributo de la ficha del ticker, o None si no tiene ficha (o el campo está vacío)."""
+def _atributo(instrumentos: dict, ticker: str, attr: str, clasif: dict | None = None):
+    """Atributo de la ficha del ticker, o None si no tiene ficha (o el campo está vacío).
+
+    Tipo, sector, país y región salen de la clasificación resuelta (`clasif`) cuando se la pasa:
+    ver `clasificacion_analytics`. El resto (mercado, moneda, vencimiento) es de la ficha.
+    """
+    if clasif is not None and attr in clasificacion_analytics.CAMPO_POR_ATRIBUTO:
+        return clasificacion_analytics.atributo(clasif, ticker, attr)
     inst = instrumentos.get(ticker)
     return getattr(inst, attr) if inst is not None else None
 
@@ -1279,12 +1290,12 @@ def get_exposicion(cartera: str | None, db: Session) -> dict:
     fuera del donut.
     """
     pos = _clasificados_valorizados(cartera, db)
-    valores, instrumentos = pos.valores, pos.instrumentos
+    valores, instrumentos, clasif = pos.valores, pos.instrumentos, pos.clasif
     hoy = date.today()
 
     def _eje(nombre: str, attr: str, sin_dato: str) -> None:
         items = _agrupar(
-            [(_atributo(instrumentos, t, attr), v_usd, v_ars) for _, t, v_usd, v_ars in valores],
+            [(_atributo(instrumentos, t, attr, clasif), v_usd, v_ars) for _, t, v_usd, v_ars in valores],
             sin_dato=sin_dato,
         )
         if items:
@@ -1389,7 +1400,7 @@ def get_rebalanceo(cartera: str | None, db: Session) -> dict:
     desviación contra el objetivo —y la plata que hay que mover— saldrían mal.
     """
     pos = _clasificados_valorizados(cartera, db)
-    valores, instrumentos = pos.valores, pos.instrumentos
+    valores, instrumentos, clasif = pos.valores, pos.instrumentos, pos.clasif
 
     total_usd = pos.total_usd()
     total_ars = pos.total_ars()
@@ -1405,7 +1416,7 @@ def get_rebalanceo(cartera: str | None, db: Session) -> dict:
             ejes.append(eje_cartera)
 
     tipo = _agrupar(
-        [(_atributo(instrumentos, t, "tipo_instrumento"), v_usd, v_ars) for _, t, v_usd, v_ars in valores],
+        [(_atributo(instrumentos, t, "tipo_base", clasif), v_usd, v_ars) for _, t, v_usd, v_ars in valores],
         sin_dato=SIN_CLASIFICAR,
     )
     eje_tipo = _construir_eje_rebalanceo("Tipo", tipo, _targets_por_eje("Tipo", cartera, objetivos), total_usd, total_ars)
@@ -1413,7 +1424,7 @@ def get_rebalanceo(cartera: str | None, db: Session) -> dict:
         ejes.append(eje_tipo)
 
     sector = _agrupar(
-        [(_atributo(instrumentos, t, "sector"), v_usd, v_ars) for _, t, v_usd, v_ars in valores],
+        [(_atributo(instrumentos, t, "sector", clasif), v_usd, v_ars) for _, t, v_usd, v_ars in valores],
         sin_dato=SIN_SECTOR,
     )
     eje_sector = _construir_eje_rebalanceo("Sector", sector, _targets_por_eje("Sector", cartera, objetivos), total_usd, total_ars)
@@ -1475,7 +1486,7 @@ def _tasa_comision_promedio(cartera: str | None, db: Session) -> float | None:
     return round(total_comision_usd / total_monto_usd * 100, 4)
 
 
-def _categoria_para_eje(eje: str, cart: str, ticker: str, instrumentos: dict) -> str | None:
+def _categoria_para_eje(eje: str, cart: str, ticker: str, instrumentos: dict, clasif: dict | None = None) -> str | None:
     """Etiqueta del ticker en el eje. Las posiciones sin ficha (o sin sector cargado) caen en
     el bucket residual: el motor las deja en "mantener" por no tener objetivo, pero siguen
     contando en el total contra el que se miden los pesos de las demás.
@@ -1485,9 +1496,9 @@ def _categoria_para_eje(eje: str, cart: str, ticker: str, instrumentos: dict) ->
     if eje == "Ticker":
         return ticker
     if eje == "Tipo":
-        return _atributo(instrumentos, ticker, "tipo_instrumento") or SIN_CLASIFICAR
+        return _atributo(instrumentos, ticker, "tipo_base", clasif) or SIN_CLASIFICAR
     if eje == "Sector":
-        return _atributo(instrumentos, ticker, "sector") or SIN_SECTOR
+        return _atributo(instrumentos, ticker, "sector", clasif) or SIN_SECTOR
     return None
 
 
@@ -1507,7 +1518,7 @@ def simular_rebalanceo(
 
     posiciones = []
     for cart, ticker, v_usd, _ in pos.valores:
-        categoria = _categoria_para_eje(eje, cart, ticker, instrumentos)
+        categoria = _categoria_para_eje(eje, cart, ticker, instrumentos, pos.clasif)
         if categoria is None:
             continue
         posiciones.append(rebalanceo_engine.PosicionActual(ticker=ticker, categoria=categoria, valor_usd=v_usd))
@@ -1706,6 +1717,7 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
 
     precios_por_ticker = _precios_por_ticker(db)
     instrumentos = {i.ticker: i for i in db.query(InstrumentoInversion).all()}
+    clasif = clasificacion_analytics.clasificaciones(db)
     # Niveles vigentes de todos los tickers (Sheet + overrides de la app) en una sola consulta,
     # fuera del loop: esta función se llama varias veces por request y una vez por cartera en cada
     # corrida de alertas, así que una consulta por ticker se notaría.
@@ -1853,8 +1865,8 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
             "tipo_instrumento": instrumento.tipo_instrumento if instrumento else "—",
             "mercado": instrumento.mercado if instrumento else "—",
             "moneda": instrumento.moneda if instrumento else moneda,
-            "pais": instrumento.pais if instrumento else None,
-            "sector": instrumento.sector if instrumento else None,
+            "pais": clasificacion_analytics.atributo(clasif, ticker, "pais"),
+            "sector": clasificacion_analytics.atributo(clasif, ticker, "sector"),
             "cantidad_actual": round(tenencia, 8),
             "precio_promedio": round(precio_promedio_compra, 6),
             "precio_actual": round(precio_actual, 6),

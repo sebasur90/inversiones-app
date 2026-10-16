@@ -9,7 +9,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from ..database import InstrumentoInversion
-from . import contribucion_engine
+from . import clasificacion_analytics, contribucion_engine
 from .etiquetas import SIN_CLASIFICAR, SIN_PAIS, SIN_SECTOR
 from .inversiones_analytics import (
     EPS,
@@ -80,6 +80,7 @@ def get_contribucion(cartera: str | None, db: Session) -> dict:
 
     precios_por_ticker = _precios_por_ticker(db)
     instrumentos = {i.ticker: i for i in db.query(InstrumentoInversion).all()}
+    clasif = clasificacion_analytics.clasificaciones(db)
     mep_cache: dict = {}
 
     peso_promedio_pct = _peso_promedio_por_ticker(movs, precios_por_ticker, db, mep_cache)
@@ -131,7 +132,10 @@ def get_contribucion(cartera: str | None, db: Session) -> dict:
         grupos: dict[str, dict[str, float]] = {}
         for t in tickers_todos:
             instrumento = instrumentos.get(t)
-            etiqueta = getattr(instrumento, attr, None) if instrumento else None
+            if attr in clasificacion_analytics.CAMPO_POR_ATRIBUTO:
+                etiqueta = clasificacion_analytics.atributo(clasif, t, attr)
+            else:
+                etiqueta = getattr(instrumento, attr, None) if instrumento else None
             if etiqueta is None:
                 if bucket_sin_dato is None or instrumento is None:
                     continue
@@ -157,7 +161,7 @@ def get_contribucion(cartera: str | None, db: Session) -> dict:
 
 def get_concentracion(cartera: str | None, db: Session) -> list[dict]:
     pos = _clasificados_valorizados(cartera, db)
-    valores, instrumentos = pos.valores, pos.instrumentos
+    valores, instrumentos, clasif = pos.valores, pos.instrumentos, pos.clasif
     if not valores:
         return []
 
@@ -174,7 +178,7 @@ def get_concentracion(cartera: str | None, db: Session) -> list[dict]:
 
     def _items(attr: str, sin_dato: str) -> list[dict]:
         return _agrupar(
-            [(_atributo(instrumentos, t, attr), v_usd, v_ars) for _, t, v_usd, v_ars in valores],
+            [(_atributo(instrumentos, t, attr, clasif), v_usd, v_ars) for _, t, v_usd, v_ars in valores],
             sin_dato=sin_dato,
         )
 

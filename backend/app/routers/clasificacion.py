@@ -10,9 +10,10 @@ from sqlalchemy.orm import Session
 
 from ..database import SessionLocal, get_db
 from ..schemas import (
-    ActualizarClasificacionIn, ActualizarClasificacionOut, EstadoClasificacionOut,
+    ActualizarClasificacionIn, ActualizarClasificacionOut, DiferenciaClasificacionOut,
+    EstadoClasificacionOut,
 )
-from ..services import fundamentales_ingesta, scheduler
+from ..services import clasificacion_analytics, fundamentales_ingesta, scheduler
 
 router = APIRouter(prefix="/api/inversiones", tags=["clasificacion"])
 
@@ -26,6 +27,13 @@ def estado_clasificacion(db: Session = Depends(get_db)):
         ultima_corrida=fundamentales_ingesta.ultima_corrida(db),
         horas_programadas=scheduler._horas_fundamentales() if scheduler.habilitado() else "",
     )
+
+
+@router.get("/clasificacion/diferencias", response_model=list[DiferenciaClasificacionOut])
+def diferencias_clasificacion(db: Session = Depends(get_db)):
+    """Tickers de cartera y watchlist cuya clasificación resuelta difiere de la ficha del Sheet,
+    con la fuente de cada cambio."""
+    return clasificacion_analytics.diferencias(db)
 
 
 @router.post("/clasificacion/actualizar", response_model=ActualizarClasificacionOut)
