@@ -87,6 +87,12 @@ class AlertaPrecioOut(BaseModel):
     senal_fecha: Optional[str] = None    # ISO
     senal_motivo: Optional[str] = None
     variante: Optional[str] = None
+    # Cambio de diagnóstico (tipo `diagnostico:<dimensión>`)
+    diag_dimension: Optional[str] = None
+    diag_de: Optional[str] = None
+    diag_a: Optional[str] = None
+    diag_razon: Optional[str] = None
+    diag_fecha_dato: Optional[str] = None
     emitida_en: Optional[datetime] = None
     entregada: bool = False
 
@@ -99,6 +105,7 @@ class AlertasEstadoOut(BaseModel):
     niveles_vigilados: int
     senales_vigiladas: int = 0
     estrategias_con_aviso: int = 0
+    diagnosticos_vigilados: int = 0
     ultimo_aviso: Optional[datetime] = None
     sin_entregar: int = 0
 
@@ -131,6 +138,7 @@ class AvisosConfigOut(BaseModel):
     avisar_objetivo: bool
     avisar_compra_zona: bool
     avisar_venta_zona: bool = True
+    avisar_diagnostico: bool = True
     estrategias: list[AvisoEstrategiaOut] = Field(default_factory=list)
 
 
@@ -140,6 +148,7 @@ class AvisosConfigIn(BaseModel):
     avisar_objetivo: Optional[bool] = None
     avisar_compra_zona: Optional[bool] = None
     avisar_venta_zona: Optional[bool] = None
+    avisar_diagnostico: Optional[bool] = None
 
 
 class AvisoEstrategiaIn(BaseModel):
@@ -2856,3 +2865,215 @@ class ComparadorAlternativasOut(BaseModel):
     pares: list[ComparacionParOut] = Field(default_factory=list)
     conclusion: Optional[ConclusionComparadorOut] = None
     fuerza_relativa: list[PuntoFuerzaRelativaOut] = Field(default_factory=list)
+
+
+# ── Valor razonable y escenarios (Etapa 3) ──────────────────────────────────
+
+class ValorEscenarioOut(BaseModel):
+    clave: str                          # pesimista | base | optimista
+    nombre: str
+    valor: float
+    margen_seguridad: Optional[float] = None   # (valor − precio) ÷ valor
+    potencial: Optional[float] = None          # (valor − precio) ÷ precio
+
+
+class ValorMetodoOut(BaseModel):
+    clave: str
+    nombre: str
+    familia: str
+    familia_nombre: str
+    estado: str                         # usado | no_aplica | falta | inestable | excluido
+    motivo: str = ""
+    origen: str                         # observado | estimado | calculado
+    decide: bool = True
+    multiplo_propio: Optional[float] = None
+    n_pares: int = 0
+    referencias: dict[str, Optional[float]] = Field(default_factory=dict)
+    valores: dict[str, Optional[float]] = Field(default_factory=dict)
+    manual: bool = False
+    regla: str = ""
+
+
+class ValorFamiliaOut(BaseModel):
+    familia: str
+    nombre: str
+    decide: bool
+    metodos: list[str] = Field(default_factory=list)
+    valores: dict[str, float] = Field(default_factory=dict)
+
+
+class ValorSupuestosOut(BaseModel):
+    ajuste_pct: float = 0.0
+    excluir: list[str] = Field(default_factory=list)
+    multiplos: dict[str, float] = Field(default_factory=dict)
+    por_defecto: bool = True
+
+
+class ValorAnalistasOut(BaseModel):
+    media: float
+    minimo: Optional[float] = None
+    maximo: Optional[float] = None
+    n: Optional[int] = None
+
+
+class ValorParOut(BaseModel):
+    ticker_base: str
+    nombre: Optional[str] = None
+
+
+class ValorRazonableOut(BaseModel):
+    version_reglas: int
+    estado: str                         # ok | sin_conclusion | no_aplica | sin_datos
+    mensaje: str = ""
+    modelo: str
+    moneda: Optional[str] = None
+    precio: Optional[float] = None
+    escenarios: list[ValorEscenarioOut] = Field(default_factory=list)
+    metodos: list[ValorMetodoOut] = Field(default_factory=list)
+    familias: list[ValorFamiliaOut] = Field(default_factory=list)
+    lectura: Optional[str] = None
+    lectura_texto: str = ""
+    regla_lectura: str = ""
+    dispersion: Optional[float] = None
+    convergen: Optional[bool] = None
+    confianza: str = "sin_datos"
+    regla_confianza: str = ""
+    n_pares: int = 0
+    supuestos: ValorSupuestosOut = Field(default_factory=ValorSupuestosOut)
+    faltantes: list[str] = Field(default_factory=list)
+    analistas: Optional[ValorAnalistasOut] = None
+    salvedad: str = ""
+    limites: list[str] = Field(default_factory=list)
+    ticker: str
+    ticker_base: str
+    nombre: Optional[str] = None
+    es_etf: bool
+    estado_datos: str
+    fecha_dato: Optional[date] = None
+    elegido_por_usuario: bool = False
+    pares: list[ValorParOut] = Field(default_factory=list)
+
+
+class ValorSupuestosIn(BaseModel):
+    ajuste_pct: float = 0.0
+    excluir: list[str] = Field(default_factory=list)
+    multiplos: dict[str, float] = Field(default_factory=dict)
+
+
+# ── Impacto en cartera (Etapa 4) ─────────────────────────────────────────────
+
+class ImpactoCompraIn(BaseModel):
+    ticker: str = Field(..., min_length=1, max_length=15)
+    monto_usd: float = Field(..., gt=0, le=1_000_000_000)
+
+
+class ImpactoItemOut(BaseModel):
+    etiqueta: str
+    antes_pct: float
+    despues_pct: float
+    delta_pp: float
+    antes_usd: float
+    despues_usd: float
+    afectada: bool
+    residual: bool = False
+    tickers: list[str] = Field(default_factory=list)
+    nombre: Optional[str] = None
+
+
+class ImpactoMayorOut(BaseModel):
+    etiqueta: str
+    porcentaje: float
+
+
+class ImpactoConcentracionOut(BaseModel):
+    hhi_normalizado: Optional[float] = None
+    n_efectivo: Optional[float] = None
+    mayor: Optional[ImpactoMayorOut] = None
+
+
+class ImpactoEjeOut(BaseModel):
+    eje: str
+    etiqueta_compra: str
+    items: list[ImpactoItemOut]
+    antes: ImpactoConcentracionOut
+    despues: ImpactoConcentracionOut
+
+
+class ImpactoObservacionOut(BaseModel):
+    nivel: str                       # revisar | atencion | info
+    texto: str
+    regla: str = ""
+    eje: str = ""
+
+
+class ImpactoTotalOut(BaseModel):
+    antes_usd: float
+    despues_usd: float
+    antes_ars: float
+    despues_ars: float
+
+
+class ImpactoClasificacionOut(BaseModel):
+    tipo: Optional[str] = None
+    sector: Optional[str] = None
+    pais: Optional[str] = None
+    region: Optional[str] = None
+
+
+class ImpactoCompraOut(BaseModel):
+    version_reglas: int
+    ticker: str
+    emisor: str
+    nombre: Optional[str] = None
+    cartera: Optional[str] = None
+    monto_usd: float
+    monto_ars: float
+    peso_monto_pct: Optional[float] = None
+    total: ImpactoTotalOut
+    ejes: list[ImpactoEjeOut]
+    observaciones: list[ImpactoObservacionOut] = Field(default_factory=list)
+    clasificacion: ImpactoClasificacionOut
+    notas: list[str] = Field(default_factory=list)
+    avisos: dict[str, list[str]] = Field(default_factory=dict)
+
+
+# ── Historial de diagnósticos (Etapa 5) ──────────────────────────────────────
+
+class HistorialCambioOut(BaseModel):
+    dimension: str
+    de: Optional[str] = None
+    a: Optional[str] = None
+
+
+class HistorialItemOut(BaseModel):
+    id: int
+    fecha: date
+    fecha_dato: Optional[date] = None
+    version_diagnostico: int
+    version_comparador: Optional[int] = None
+    version_valor: Optional[int] = None
+    estados: dict[str, Any] = Field(default_factory=dict)
+    lectura: Optional[str] = None
+    confianza: Optional[str] = None
+    precio: Optional[float] = None
+    moneda: Optional[str] = None
+    valor_razonable: Optional[dict[str, Any]] = None
+    cambios: list[HistorialCambioOut] = Field(default_factory=list)
+    cambio_de_reglas: bool = False
+    n_pares: int = 0
+
+
+class HistorialOut(BaseModel):
+    ticker_base: str
+    total: int
+    items: list[HistorialItemOut] = Field(default_factory=list)
+
+
+class BacktestHistorialOut(BaseModel):
+    horizontes: list[int]
+    minimo_muestra: int
+    eventos_totales: int
+    base: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    estados: list[dict[str, Any]] = Field(default_factory=list)
+    suficiente: bool = False
+    limites: list[str] = Field(default_factory=list)

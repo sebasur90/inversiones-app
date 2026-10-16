@@ -64,6 +64,11 @@ const TIPOS_DE_NIVEL: { campo: keyof AvisosConfigIn; etiqueta: string; ayuda: st
     etiqueta: 'Zona de venta',
     ayuda: 'Cuando el precio sube y entra en la zona de venta que dibujaste en el gráfico.',
   },
+  {
+    campo: 'avisar_diagnostico',
+    etiqueta: 'Cambio de diagnóstico',
+    ayuda: 'Cuando la valuación, la calidad o la solidez de una empresa de tu cartera o tu watchlist cambia de estado y el cambio se confirma en una segunda lectura. No avisa con datos viejos ni poco confiables.',
+  },
 ]
 
 /**

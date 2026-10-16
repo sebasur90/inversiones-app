@@ -14,6 +14,9 @@ import EditorClasificacion from '../../components/valuacion/EditorClasificacion'
 import EditorPares from '../../components/valuacion/EditorPares'
 import DiagnosticoCard from '../../components/valuacion/DiagnosticoCard'
 import ComparadorAlternativas from '../../components/valuacion/ComparadorAlternativas'
+import ValorRazonable from '../../components/valuacion/ValorRazonable'
+import ImpactoCartera from '../../components/valuacion/ImpactoCartera'
+import HistorialDiagnostico from '../../components/valuacion/HistorialDiagnostico'
 import {
   FuenteBadge, LecturaBadge, NOMBRE_GRUPO, OrigenTag, TONO_FRASE, formatMetrica, formatTamano,
 } from '../../components/valuacion/comun'
@@ -223,6 +226,9 @@ export default function TickerParesTab({ ticker }: { ticker: string }) {
           </Card>
 
           <ComparadorAlternativas ticker={ticker} />
+          <ValorRazonable ticker={ticker} />
+          <ImpactoCartera ticker={ticker} />
+          <HistorialDiagnostico ticker={ticker} />
 
           {v.tabla.filas.length > 0 && (
             <Card>

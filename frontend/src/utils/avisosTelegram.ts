@@ -12,9 +12,15 @@ import type { AccionAviso, AlertaPrecioOut } from '../api'
 import { ETIQUETA_MOTIVO } from '../components/tecnico/motivosSalida'
 
 const PREFIJO_SENAL = 'estrategia:'
+const PREFIJO_DIAGNOSTICO = 'diagnostico:'
 
 export function esAvisoDeSenal(tipo: string): boolean {
   return tipo.startsWith(PREFIJO_SENAL)
+}
+
+/** Un cambio de estado en el diagnóstico de una empresa (`diagnostico:<dimensión>`), no un cruce de precio. */
+export function esAvisoDeDiagnostico(tipo: string): boolean {
+  return tipo.startsWith(PREFIJO_DIAGNOSTICO)
 }
 
 /** Color del texto de la acción. Nunca es la única señal: siempre va con la palabra. */
@@ -39,6 +45,7 @@ export function etiquetaOrigen(aviso: AlertaPrecioOut): string {
 
 /** Qué regla lo disparó: la estrategia y su motivo, o el nivel de precio. */
 export function etiquetaRegla(aviso: AlertaPrecioOut): string {
+  if (esAvisoDeDiagnostico(aviso.tipo)) return aviso.etiqueta
   if (!esAvisoDeSenal(aviso.tipo)) return aviso.etiqueta
   const motivo = aviso.senal_motivo ? ETIQUETA_MOTIVO[aviso.senal_motivo] ?? aviso.senal_motivo : null
   const nombre = aviso.estrategia_nombre ?? 'Estrategia'

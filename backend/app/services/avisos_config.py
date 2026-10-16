@@ -29,6 +29,10 @@ CAMPO_POR_TIPO = {
 #: no tiene forma de prenderlos.
 assert set(CAMPO_POR_TIPO) == set(alertas_engine.TIPOS)
 
+#: Interruptor de los cambios de diagnóstico. Va aparte de `CAMPO_POR_TIPO` (que cubre los *tipos de nivel*
+#: y cuyo `assert` exige una entrada por cada uno): el diagnóstico es otra familia de alerta.
+CAMPO_DIAGNOSTICO = "avisar_diagnostico"
+
 _FILA = 1
 
 
@@ -53,6 +57,7 @@ def actualizar(
     avisar_objetivo: bool | None = None,
     avisar_compra_zona: bool | None = None,
     avisar_venta_zona: bool | None = None,
+    avisar_diagnostico: bool | None = None,
 ) -> AjustesAvisos:
     """Cambia los interruptores pasados; `None` es "no tocar"."""
     fila = obtener(db)
@@ -61,6 +66,7 @@ def actualizar(
         ("avisar_objetivo", avisar_objetivo),
         ("avisar_compra_zona", avisar_compra_zona),
         ("avisar_venta_zona", avisar_venta_zona),
+        (CAMPO_DIAGNOSTICO, avisar_diagnostico),
     ):
         if valor is not None:
             setattr(fila, campo, 1 if valor else 0)
@@ -74,6 +80,11 @@ def tipos_habilitados(db: Session) -> set[str]:
     """Tipos de nivel que hoy se mandan. Los demás se siguen pero se silencian."""
     fila = obtener(db)
     return {tipo for tipo, campo in CAMPO_POR_TIPO.items() if bool(getattr(fila, campo))}
+
+
+def diagnostico_habilitado(db: Session) -> bool:
+    """Si los cambios de diagnóstico se mandan. Apagado igual se siguen (el estado avanza), sólo se silencian."""
+    return bool(getattr(obtener(db), CAMPO_DIAGNOSTICO))
 
 
 def lados_por_estrategia(db: Session) -> dict[int, set[str]]:
@@ -114,6 +125,7 @@ def estado(db: Session) -> dict:
         "avisar_objetivo": bool(fila.avisar_objetivo),
         "avisar_compra_zona": bool(fila.avisar_compra_zona),
         "avisar_venta_zona": bool(fila.avisar_venta_zona),
+        "avisar_diagnostico": bool(fila.avisar_diagnostico),
         "estrategias": [
             {
                 "id": e.id,

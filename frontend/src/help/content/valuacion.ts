@@ -18,6 +18,16 @@ export type ValuacionHelpKey =
   | 'comparador_ranking'
   | 'comparador_conclusion'
   | 'comparador_minimo'
+  | 'valor_razonable_que_es'
+  | 'valor_razonable_margen'
+  | 'valor_razonable_escenarios'
+  | 'valor_razonable_supuestos'
+  | 'valor_razonable_analistas'
+  | 'impacto_cartera_que_es'
+  | 'impacto_cartera_emisor'
+  | 'historial_que_es'
+  | 'historial_backtest'
+  | 'aviso_diagnostico'
 
 export const VALUACION_HELP: Record<ValuacionHelpKey, HelpContent> = {
   valuacion_que_es: {
@@ -139,7 +149,7 @@ export const VALUACION_HELP: Record<ValuacionHelpKey, HelpContent> = {
     howToInterpret:
       'Sin elegir, usa tu grupo de pares. Podés sumar las sugeridas, buscar otra alternativa o quitar las que no te convencen. Cada alternativa dice por qué es (o no) comparable; la tabla sólo muestra las métricas que importan al sector y aclara lo que no aplica.',
     limitations:
-      'Es un análisis relativo: no calcula un valor razonable, no mide el efecto en tu cartera y no es una recomendación de compra o venta. La elección de alternativas no se guarda; para cambiar tu grupo permanente usá "Editar" en Pares.',
+      'Es un análisis relativo: no dice si el precio es el correcto (para eso está la tarjeta «Valor razonable»), no mide el efecto en tu cartera (para eso está «¿Cómo cambiaría mi cartera?») y no es una recomendación de compra o venta. La elección de alternativas no se guarda; para cambiar tu grupo permanente usá "Editar" en Pares.',
     relatedTerms: ['comparador_comparabilidad', 'comparador_ranking', 'comparador_conclusion', 'comparador_minimo', 'diagnostico_que_es'],
   },
   comparador_comparabilidad: {
@@ -169,7 +179,7 @@ export const VALUACION_HELP: Record<ValuacionHelpKey, HelpContent> = {
     howToInterpret:
       '"Podría merecer un múltiplo mayor/menor" explica la diferencia de precio relativo, no si es una buena inversión. "Lectura firme/orientativa/poco firme" depende de cuántas alternativas hay, de la confianza en los datos y de si hay balances de otro período o moneda.',
     limitations:
-      'No dice "comprá" ni "vendé". No hay historia contable de varios años, valor razonable ni escenarios; tampoco el efecto en tu cartera.',
+      'No dice "comprá" ni "vendé". No hay historia contable de varios años; el valor razonable por múltiplos y el efecto en tu cartera son otros cálculos, aparte.',
   },
   comparador_minimo: {
     title: 'Mínimo de alternativas',
@@ -177,5 +187,103 @@ export const VALUACION_HELP: Record<ValuacionHelpKey, HelpContent> = {
     whyItMatters:
       'Con el instrumento y 2 alternativas hay 3 valores por métrica: lo mínimo para hablar de posición en un grupo. Con una sola, podés ver la tabla lado a lado pero no hay ranking ni conclusión.',
     howToInterpret: 'Si faltan, sumá alguna de las sugeridas o buscá otra con parecido de industria, tamaño y región. Las de comparabilidad baja se ven pero no cuentan para el mínimo.',
+  },
+  valor_razonable_que_es: {
+    title: 'Valor razonable y escenarios',
+    shortDescription:
+      'A qué precio cotizaría la empresa si se le aplicaran los múltiplos que hoy pagan sus pares (P/E, P/Ventas, EV/EBITDA, flujo de caja, valor libro). Da un rango con tres escenarios —pesimista, base y optimista— y lo compara con el precio de hoy.',
+    whyItMatters:
+      'Saber que algo cotiza más barato que sus pares no dice cuánto más. Esto lo traduce a un precio y muestra cuánto colchón hay (margen de seguridad) y cuánto subiría hasta ese valor (potencial), con los supuestos a la vista y editables.',
+    howItIsCalculated:
+      'Por cada múltiplo: precio × múltiplo de los pares ÷ múltiplo propio. En EV/EBITDA se descuenta además la deuda neta (EV − capitalización). Las métricas de una misma familia (P/E y P/E estimado; EV/EBITDA y P/Ventas) cuentan una vez: se toma la mediana de cada familia y después la mediana entre familias. Hacen falta al menos 2 familias, cada método con 4 o más pares con dato.',
+    howToInterpret:
+      'Si el precio está por debajo del escenario pesimista, cotiza más barato que todo el rango según sus pares; por encima del optimista, más caro; en el medio, dentro del rango. "Los métodos no convergen" significa que los múltiplos dan valores muy distintos entre sí (más de 2 veces): el rango es poco confiable.',
+    limitations:
+      'Es un valor relativo a los pares elegidos, no un valor intrínseco ni un pronóstico: si todo el grupo está caro o barato, el valor lo hereda. Usa los datos de los últimos 12 meses de Yahoo: no compara con los múltiplos históricos de la propia empresa. No es una recomendación de compra o venta.',
+    relatedTerms: ['valor_razonable_margen', 'valor_razonable_escenarios', 'valor_razonable_supuestos', 'valuacion_pares_criterio', 'comparador_que_es'],
+  },
+  valor_razonable_margen: {
+    title: 'Margen de seguridad y potencial',
+    shortDescription:
+      'Dos números distintos para la misma brecha entre el valor y el precio. Margen de seguridad = (valor − precio) ÷ valor: cuánto del valor es colchón. Potencial = (valor − precio) ÷ precio: cuánto subiría el precio hasta llegar al valor.',
+    example:
+      'Valor 125 y precio 100: el margen de seguridad es 20 % (el precio está 20 % por debajo del valor) y el potencial es +25 % (el precio tendría que subir 25 % para llegar a 125).',
+    howToInterpret:
+      'Los dos son negativos cuando el precio está por encima del valor. El potencial siempre es mayor que el margen cuando el valor supera al precio; no los confundas ni los restes.',
+    limitations: 'Ninguno de los dos es una predicción: dependen de que los pares estén bien valuados.',
+  },
+  valor_razonable_escenarios: {
+    title: 'Escenarios pesimista, base y optimista',
+    shortDescription:
+      'Los tres valores salen de los múltiplos de los pares: el pesimista usa el cuartil inferior (el 25 % más barato del grupo), el base la mediana y el optimista el cuartil superior (el 25 % más caro).',
+    whyItMatters: 'Un solo número da una falsa precisión. El rango muestra cuánto cambia el valor según cuánto paga el mercado por empresas parecidas.',
+    limitations: 'No son pronósticos de precio ni probabilidades: sólo describen la dispersión de los múltiplos de los pares.',
+  },
+  valor_razonable_supuestos: {
+    title: 'Supuestos editables',
+    shortDescription:
+      'Podés mover tres cosas: un ajuste general sobre los múltiplos de referencia (por ejemplo −10 % si creés que merece un descuento), excluir métodos que no te convencen y fijar a mano el múltiplo de un método.',
+    howToInterpret:
+      'El ajuste general no se aplica a un múltiplo que fijaste a mano. Los supuestos se guardan para este emisor y se repiten en la respuesta; "Restablecer" vuelve a la mediana de los pares.',
+    limitations: 'Cambiar los supuestos cambia el resultado: es tu criterio, no un dato. Quedan a la vista para que sepas qué estás mirando.',
+  },
+  valor_razonable_analistas: {
+    title: 'Referencia: precio objetivo de analistas',
+    shortDescription:
+      'Promedio, mínimo y máximo de los precios objetivo que informan los analistas que sigue Yahoo, y cuántos son. Es una estimación de terceros.',
+    howToInterpret: 'Se muestra aparte y no entra en el valor razonable, el rango ni la lectura: sirve para contrastar, no para sumar.',
+    limitations: 'Puede estar desactualizado o venir de pocos analistas; sólo se muestra cuando el balance está en la misma moneda que la cotización.',
+  },
+  impacto_cartera_que_es: {
+    title: '¿Cómo cambiaría mi cartera?',
+    shortDescription:
+      'Simula sumar un monto en dólares de este emisor y muestra cómo quedarían los pesos de tu cartera antes y después: por emisor, sector, país, región y tipo de instrumento.',
+    whyItMatters:
+      'Una idea que parece buena sola puede dejarte demasiado concentrado en un emisor, un sector o un país. Acá lo ves antes de decidir nada.',
+    howItIsCalculated:
+      'Se toma tu cartera valuada hoy (con el mismo criterio que el Resumen: lo que no tiene cotización se valúa al costo y se avisa) y se le suma el monto en una fila simulada. Los pesos "antes" son exactamente los de Exposición. Las observaciones usan los umbrales de Salud de cartera: por emisor, desde 20 % de atención y 30 % de revisar (o tu peso máximo configurado, y 1,5 veces ese valor para revisar); por país, desde 70 % y 90 %.',
+    howToInterpret:
+      'Mirá la fila marcada con ◂ en cada eje: es donde cae el monto. "Cambio (pp)" son puntos porcentuales de la cartera. Si el ticker no tiene sector, país o región cargados, el monto cuenta en «Sin sector», «Sin país» o «Sin región» hasta que lo corrijas en la ficha.',
+    limitations:
+      'No guarda nada, no escribe movimientos, no estima el precio ni la cantidad de títulos y no es una recomendación de compra o venta. El resultado es con la cartera de hoy: no proyecta precios.',
+    relatedTerms: ['impacto_cartera_emisor', 'valuacion_que_es'],
+  },
+  impacto_cartera_emisor: {
+    title: 'Emisor (un CEDEAR y su acción de origen cuentan una sola vez)',
+    shortDescription:
+      'Un mismo emisor puede cotizar con varios tickers: el CEDEAR en pesos, el CEDEAR en dólares y la acción de origen. A efectos de concentración son una sola exposición.',
+    whyItMatters:
+      'Tener KO y KOD no es diversificar: si Coca-Cola cae, caen los dos. Por eso este eje suma las variantes y lo aclara debajo del nombre.',
+    howToInterpret: 'Los "emisores equivalentes" dicen cuántas posiciones iguales darían la misma concentración: más alto, más repartida la cartera.',
+  },
+  historial_que_es: {
+    title: 'Historial del diagnóstico',
+    shortDescription:
+      'Cada vez que cambia algo en el diagnóstico de una empresa de tu cartera o tu watchlist (el dato de Yahoo, los estados o los pares), la app guarda una foto con lo que decía ese día y la versión de las reglas que lo dijo.',
+    whyItMatters:
+      'Sin esas fotos no hay forma honesta de saber si "barata" o "calidad débil" anticiparon algo: recalcular el pasado con las reglas y los datos de hoy sería mirar el futuro.',
+    howToInterpret:
+      'Una foto nunca se modifica. Si cambian las reglas del diagnóstico, la foto lo marca y sus estados no se comparan con los de la anterior: no es un cambio de la empresa. "Sin cambios de estado" significa que cambió el dato o los pares pero las conclusiones siguieron igual.',
+    limitations:
+      'Empieza a acumularse desde que existe esta función: no reconstruye el pasado, porque no hay datos contables históricos. Se guarda después de cada corrida de la ingesta de fundamentales.',
+    relatedTerms: ['historial_backtest', 'aviso_diagnostico'],
+  },
+  historial_backtest: {
+    title: '¿Anticiparon algo estos estados?',
+    shortDescription:
+      'Compara, para cada estado del diagnóstico, qué hizo el precio (en USD) a 30, 90 y 180 días de la entrada a ese estado, al lado del resultado de todos los eventos.',
+    howItIsCalculated:
+      'Sólo cuentan entradas a un estado (la primera foto o un cambio), no cada foto repetida, y estados de versiones de reglas distintas no se mezclan. Hasta tener al menos 30 eventos por estado y horizonte no se muestra ningún promedio.',
+    howToInterpret: 'Un retorno solo no dice nada: se mira contra la fila "Todos los eventos". Si en general subió, que un estado haya subido no lo distingue.',
+    limitations:
+      'Es el precio sin dividendos ni costos y no promete nada sobre el futuro. Con una muestra chica, o un período donde todo subió o bajó, no se puede concluir.',
+  },
+  aviso_diagnostico: {
+    title: 'Aviso de cambio de diagnóstico',
+    shortDescription:
+      'Un mensaje por Telegram cuando la valuación, la calidad o la solidez de una empresa de tu cartera o tu watchlist pasa a otro estado, con el estado anterior, el nuevo, la razón principal y la fecha del dato.',
+    howItIsCalculated:
+      'Para no avisar por ruido, el cambio tiene que verse en dos actualizaciones de datos distintas seguidas. No avisa si el dato tiene más de 21 días, si la confianza de los datos es baja, ni cuando cambian las reglas del diagnóstico (se toma el estado nuevo como punto de partida). La primera vez sólo registra el estado actual.',
+    limitations: 'Es información de seguimiento: no indica qué hacer. Se puede apagar en Ajustes → Avisos.',
   },
 }

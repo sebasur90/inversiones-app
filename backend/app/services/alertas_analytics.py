@@ -23,9 +23,9 @@ from typing import Iterable
 
 from sqlalchemy.orm import Session
 
-from ..database import AlertaPrecio, EstadoMarketDataTicker
+from ..database import AlertaPrecio, DiagnosticoAlertaEstado, DiagnosticoHistorial, EstadoMarketDataTicker
 from . import (
-    alertas_engine, avisos_config, estrategias_analytics, inversiones_analytics,
+    alertas_diagnostico_engine, alertas_engine, avisos_config, estrategias_analytics, inversiones_analytics,
     ohlcv_analytics, watchlist_analytics, zonas_precio,
 )
 from .notificaciones import telegram
@@ -236,6 +236,8 @@ def _estado_guardado(db: Session) -> tuple[
     avisadas: dict[tuple[str, str, str], tuple[str | None, str | None]] = {}
     for fila in db.query(AlertaPrecio).all():
         clave = (fila.ticker, fila.tipo, fila.cartera or "")
+        if alertas_engine.es_tipo_diagnostico(fila.tipo):
+            continue   # su estado vive en `diagnostico_alerta_estado`, no es un nivel ni una señal
         if alertas_engine.es_tipo_senal(fila.tipo):
             detalle = fila.detalle or {}
             avisadas[clave] = (detalle.get("senal_fecha"), detalle.get("senal_tipo"))
@@ -346,6 +348,80 @@ def _senales_candidatas(
             contexto=_contexto_de_senal(senal, universo),
         ))
     return salida
+
+
+# ─── Cambios de diagnóstico ──────────────────────────────────────────────────
+
+def _diagnosticos_candidatos(db: Session, universo: _Universo) -> list[alertas_diagnostico_engine.CandidatoDiagnostico]:
+    """El estado actual de cada dimensión de lo que hay en cartera o en la watchlist, desde la última foto
+    del historial de diagnósticos (`historial_diagnosticos`). No recalcula nada: si el historial está vacío no
+    hay candidatos, y el aviso espera a que corra la ingesta."""
+    from .clasificacion_analytics import Contexto
+
+    ctx = Contexto(db)
+    por_base: dict[str, str] = {}
+    for ticker, filas in universo.posiciones_por_ticker.items():
+        if any((f.get("cantidad_actual") or 0) > 0 for _, f in filas):
+            por_base.setdefault(ctx.base(ticker), ticker)
+    for ticker in universo.watchlist_por_ticker:
+        por_base.setdefault(ctx.base(ticker), ticker)
+    if not por_base:
+        return []
+
+    ultimas: dict[str, DiagnosticoHistorial] = {}
+    for fila in (
+        db.query(DiagnosticoHistorial).filter(DiagnosticoHistorial.ticker_base.in_(list(por_base)))
+        .order_by(DiagnosticoHistorial.id.desc())
+    ):
+        ultimas.setdefault(fila.ticker_base, fila)
+
+    candidatos = []
+    for base, fila in ultimas.items():
+        ticker = por_base[base]
+        origen = _contexto_de_zona(universo, ticker)
+        contexto = alertas_engine.Contexto(
+            origen=origen.get("origen") or "", cartera_nombre=origen.get("cartera_nombre"),
+            carteras_extra=origen.get("carteras_extra") or 0, en_cartera=origen.get("en_cartera"),
+        )
+        for dimension in alertas_diagnostico_engine.DIMENSIONES_CON_AVISO:
+            dato = (fila.estados or {}).get(dimension)
+            if not dato or not fila.fecha_dato:
+                continue
+            candidatos.append(alertas_diagnostico_engine.CandidatoDiagnostico(
+                ticker_base=base, ticker=ticker, nombre=origen.get("nombre") or ticker, dimension=dimension,
+                estado=dato.get("estado") or "", nivel=dato.get("nivel") or "", razon=dato.get("razon") or "",
+                regla=dato.get("regla") or "", fecha_dato=fila.fecha_dato.isoformat(),
+                version=fila.version_diagnostico, confianza=fila.confianza or "sin_datos",
+                precio=float(fila.precio) if fila.precio is not None else None, moneda=fila.moneda or "",
+                contexto=contexto,
+            ))
+    return candidatos
+
+
+def _estados_diagnostico(db: Session) -> dict[tuple[str, str], alertas_diagnostico_engine.EstadoAlerta]:
+    return {
+        (f.ticker_base, f.dimension): alertas_diagnostico_engine.EstadoAlerta(
+            f.estado_base, f.pendiente, f.pendiente_fecha_dato, f.version)
+        for f in db.query(DiagnosticoAlertaEstado)
+    }
+
+
+def _aplicar_diagnosticos(
+    db: Session, decision: alertas_diagnostico_engine.DecisionDiagnostico, habilitado: bool, ahora: datetime,
+) -> None:
+    """Guarda el estado del antirrebote (siempre, también con el aviso silenciado) y los avisos emitidos."""
+    for (base, dimension), est in decision.nuevos.items():
+        fila = db.query(DiagnosticoAlertaEstado).filter_by(ticker_base=base, dimension=dimension).one_or_none()
+        if fila is None:
+            fila = DiagnosticoAlertaEstado(ticker_base=base, dimension=dimension)
+            db.add(fila)
+        fila.estado_base = est.estado_base
+        fila.pendiente = est.pendiente
+        fila.pendiente_fecha_dato = est.pendiente_fecha_dato
+        fila.version = est.version
+        fila.fecha_actualizacion = ahora
+    for alerta in decision.a_emitir:
+        _guardar_aviso(db, alerta, ahora, silenciado=not habilitado)
 
 
 # ─── Persistencia ────────────────────────────────────────────────────────────
@@ -496,6 +572,10 @@ def _pendientes_de_entrega(db: Session) -> list[alertas_engine.Alerta]:
             # Una señal no tiene nivel; lo que no puede faltar es la barra que la identifica.
             if not detalle.get("senal_fecha"):
                 continue
+        elif alertas_engine.es_tipo_diagnostico(fila.tipo):
+            # Tampoco un cambio de diagnóstico: lo que no puede faltar es la dimensión que cambió.
+            if not detalle.get("diag_dimension"):
+                continue
         elif fila.nivel is None:
             continue
         salida.append(alertas_engine.Alerta(
@@ -545,7 +625,13 @@ def evaluar_y_notificar(db: Session, notificar: bool = True) -> dict:
     tipos_habilitados = avisos_config.tipos_habilitados(db)
     silenciadas = [a for a in decision.a_emitir if a.tipo not in tipos_habilitados]
 
+    diagnosticos = alertas_diagnostico_engine.evaluar_diagnosticos(
+        _diagnosticos_candidatos(db, universo), _estados_diagnostico(db), date.today(),
+    )
+    diagnostico_habilitado = avisos_config.diagnostico_habilitado(db)
+
     _aplicar(db, decision, alertas_senal, tipos_habilitados, set(lados))
+    _aplicar_diagnosticos(db, diagnosticos, diagnostico_habilitado, datetime.utcnow())
     db.commit()  # antes del envío: la red no corre con una transacción de escritura abierta
 
     # Los avisos nuevos ya quedaron persistidos con `entregada=0`, así que salen de esta consulta
@@ -557,7 +643,11 @@ def evaluar_y_notificar(db: Session, notificar: bool = True) -> dict:
         "senales_vigiladas": len(senales),
         "nuevas": len(decision.a_emitir),
         "senales_nuevas": len(alertas_senal),
-        "silenciadas": len(silenciadas),
+        "diagnosticos_nuevos": len(diagnosticos.a_emitir),
+        "diagnosticos_sembrados": diagnosticos.sembradas,
+        "diagnosticos_pendientes": diagnosticos.pendientes,
+        "diagnosticos_silenciados_por_dato": diagnosticos.silenciadas_por_dato,
+        "silenciadas": len(silenciadas) + (0 if diagnostico_habilitado else len(diagnosticos.a_emitir)),
         "rearmadas": len(decision.a_rearmar),
         "pendientes_de_entrega": len(a_enviar),
         "entregado": False,
@@ -644,6 +734,11 @@ def listar(db: Session, limite: int = 50) -> list[dict]:
             "senal_fecha": contexto.senal_fecha,
             "senal_motivo": contexto.senal_motivo,
             "variante": contexto.variante,
+            "diag_dimension": contexto.diag_nombre_dimension,
+            "diag_de": contexto.diag_de,
+            "diag_a": contexto.diag_a,
+            "diag_razon": contexto.diag_razon,
+            "diag_fecha_dato": contexto.diag_fecha_dato,
             "emitida_en": f.emitida_en,
             "entregada": bool(f.entregada),
         })
@@ -659,7 +754,7 @@ def estado_configuracion(db: Session) -> dict:
         .first()
     )
     filas = db.query(AlertaPrecio).all()
-    niveles = [f for f in filas if not alertas_engine.es_tipo_senal(f.tipo)]
+    niveles = [f for f in filas if not alertas_engine.es_tipo_senal(f.tipo) and not alertas_engine.es_tipo_diagnostico(f.tipo)]
     senales = [f for f in filas if alertas_engine.es_tipo_senal(f.tipo)]
     return {
         "habilitadas": telegram.alertas_habilitadas(),
@@ -668,6 +763,7 @@ def estado_configuracion(db: Session) -> dict:
         "niveles_vigilados": len(niveles),
         "senales_vigiladas": len(senales),
         "estrategias_con_aviso": len(avisos_config.lados_por_estrategia(db)),
+        "diagnosticos_vigilados": db.query(DiagnosticoAlertaEstado).count(),
         "ultimo_aviso": ultima.emitida_en if ultima is not None else None,
         "sin_entregar": sum(
             1 for f in filas

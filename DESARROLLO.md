@@ -470,10 +470,18 @@ fundamentales de Yahoo (`get_info()`), y las pantallas agrupan por un único voc
 | `services/valuacion_analytics.py` | Adaptador DB de las dos anteriores |
 | `services/comparador_engine.py` | Puro. Comparador "¿qué compraría en su lugar?": comparabilidad, tabla por sector, ranking y conclusión (reglas v1) |
 | `services/comparador_analytics.py` | Adaptador DB del comparador (reutiliza `Universo`) |
+| `services/valor_razonable_engine.py` | Puro. Valor razonable y escenarios por múltiplos de pares, margen de seguridad vs. potencial, supuestos editables (reglas v1) |
+| `services/valor_razonable_analytics.py` | Adaptador DB del valor razonable (reutiliza `Universo`; lee/guarda `valor_supuestos`) |
+| `services/impacto_cartera_engine.py` | Puro. Impacto de sumar un monto a la cartera: pesos antes/después por eje, observaciones con los umbrales de Salud (reglas v1) |
+| `services/impacto_cartera_analytics.py` | Adaptador: `_clasificados_valorizados` + una tenencia simulada en memoria; agrupa con `_agrupar` (la de Exposición) |
+| `services/historial_diagnosticos.py` | Foto point-in-time del diagnóstico (+ comparador y valor razonable de lo que está en cartera/watchlist) tras cada ingesta; línea de tiempo y backtest |
+| `services/historial_engine.py` | Puro. Retornos posteriores por estado del diagnóstico (entradas a un estado, muestra mínima, línea de base) |
+| `services/alertas_diagnostico_engine.py` | Puro. Cuándo avisar de un cambio de estado del diagnóstico (siembra, pendiente, confirmación, silencios) |
 | `routers/clasificacion.py` | Endpoints |
 
 Tablas nuevas (`create_all`, sin migración): `clasificacion_auto`, `fundamentales_snapshot` (se
-retienen 8 por símbolo), `clasificacion_override`, `pares_override`, `ingesta_fundamentales`.
+retienen 8 por símbolo), `clasificacion_override`, `pares_override`, `ingesta_fundamentales`, `valor_supuestos`, `diagnostico_historial`, `diagnostico_alerta_estado`
+(más la columna `ajustes_avisos.avisar_diagnostico`, con `ALTER` idempotente en `init_db`).
 Ninguna tiene FK a `instrumentos_inversion`: el sync la vacía.
 
 **Precedencia** (`clasificacion_engine.resolver`): corrección manual > seed > Yahoo > Sheet, con
@@ -499,6 +507,7 @@ FUNDAMENTALES_HORAS=3,19          # lun-sáb; vacío lo desactiva (requiere SCHE
 FUNDAMENTALES_MINUTO=30
 FUNDAMENTALES_MAX_POR_CORRIDA=60  # emisores por corrida (~2 llamadas a Yahoo c/u)
 FUNDAMENTALES_PAUSA_SEG=0.5
+HISTORIAL_UNIVERSO=cartera,watchlist  # qué emisores guarda el historial de diagnósticos (+ catalogo); 0 llamadas a Yahoo
 ```
 
 - ~460 emisores de renta variable: con dos corridas por día el catálogo se completa en ~4 días.
@@ -540,6 +549,11 @@ El alta en watchlist pide los datos del ticker nuevo en segundo plano.
 | GET | `/valuacion?universo=cartera\|watchlist\|catalogo` | Lectura por emisor (filtros `tipo`, `sector`, `region`, `lectura`) |
 | GET | `/valuacion/{ticker}` | Ficha: clasificación con fuentes, pares y criterio, tabla, percentiles, frases, fuerza relativa |
 | GET | `/valuacion/{ticker}/comparador?con=A,B` | Comparador de alternativas (ver más abajo). `con` = hasta 6 tickers separados por coma; sin `con`, usa el grupo de pares |
+| GET | `/valuacion/{ticker}/valor-razonable?con=A,B` | Valor razonable y escenarios (ver más abajo). `con` = emisores de referencia efímeros, hasta 6; sin `con`, su grupo de pares |
+| PUT/DELETE | `/valuacion/{ticker}/valor-razonable/supuestos` | Guardar (`{ajuste_pct, excluir[], multiplos{}}`) o restablecer los supuestos; devuelven el cálculo recalculado |
+| POST | `/carteras/{nombre}/impacto-compra`, `/consolidado/impacto-compra` | Simulador de impacto en cartera (ver más abajo). Body `{ticker, monto_usd}`; 404 si el ticker no existe, 422 si es inválido. No persiste nada |
+| GET | `/valuacion/{ticker}/historial` | Línea de tiempo del diagnóstico (fotos guardadas, qué cambió entre una y otra, marca de cambio de reglas) |
+| GET | `/valuacion/historial/backtest` | Retornos posteriores por estado, sólo con lo acumulado; "muestra insuficiente" hasta 30 eventos por celda |
 | GET/PUT | `/clasificacion/{ticker}` | Ver / corregir tipo, sector, industria, país, región, símbolo Yahoo |
 | DELETE | `/clasificacion/{ticker}/{campo}` | Volver al automático |
 | POST | `/pares/{ticker}` | `{par, accion: agregar\|quitar}` |
@@ -623,11 +637,113 @@ es efímera (parámetro `con`), el grupo persistente sigue siendo `ParOverride`.
   alta/media/baja según miembros, confianza de datos y períodos/monedas. Un test garantiza que ningún texto
   dice comprá/vendé/recomendar.
 
-**Qué no se hizo (propuesto):** valor razonable y escenarios, múltiplos históricos (requiere guardar estados
-contables por período: hoy sólo hay una foto TTM y hasta 8 snapshots), simulador de compra sobre la cartera
-(tratar CEDEAR/subyacente como un emisor con `Contexto.base`), alertas por cambio de diagnóstico e historial
-(`version_reglas` de diagnóstico y de comparador ya viajan en la respuesta). Sin historia contable de varios
+### Valor razonable y escenarios (reglas v1)
+
+`valor_razonable_engine.py` (puro) + `valor_razonable_analytics.py` (adaptador con `cache_por_sync`; los
+supuestos viven en `valor_supuestos`, una fila por `ticker_base` con un JSON validado por
+`normalizar_supuestos`; cualquier escritura invalida el caché). **0 llamadas nuevas a Yahoo**: sale de la
+foto TTM que ya existe.
+
+- **Cálculo, todo en proporciones** (no depende de la moneda del balance): múltiplo de precio →
+  `valor = precio × M_ref ÷ M_propio`; EV/EBITDA → `cap_ref = M_ref × EV ÷ M_propio − (EV − cap)` y
+  `valor = precio × cap_ref ÷ cap` (deuda neta ≈ EV − capitalización, con minoritarios/preferidas dentro).
+  Precio/FCF = 1 ÷ rendimiento del FCF. Escenarios: pesimista = cuartil 1, base = mediana, optimista =
+  cuartil 3 de los múltiplos de los pares (winsorizados con la regla de `valuacion_engine`).
+- **Familias** (`valuacion_engine.FAMILIAS`): mediana dentro de la familia y luego entre familias; las que
+  "sólo apoyan" (`familias_que_solo_apoyan`) se muestran y no deciden. Métodos pertinentes por modelo de
+  negocio: `comparador_engine.METRICAS_POR_MODELO` (banco: P/E, P/E est., P/VL; inmobiliaria: P/VL, P/FCF).
+  ETF → `no_aplica`.
+- **Mínimos**: `N_MIN_PARES = 4` por método y `FAMILIAS_MINIMAS = 2`; si no, `sin_conclusion` con lo que falta.
+  Método sin dato propio = `falta`; sin ganancias / banco sin EV / balance en otra moneda = `no_aplica`
+  (no es faltante); factor fuera de 0,2×–5× o patrimonio ≤ 0 = `inestable` (se muestra, no entra).
+- **Margen de seguridad ≠ potencial**: `(V − P) ÷ V` y `(V − P) ÷ P` (V=125, P=100 → 20 % y +25 %).
+- **Confianza** por puntos (≥3 familias, dispersión ≤ 1,5×, ≥6 pares por método), limitada por la
+  confianza de datos del diagnóstico; dispersión > 2× = "no convergen" y confianza baja.
+- **Supuestos editables**: ajuste general (±50 %), métodos excluidos y múltiplo fijo por método (el ajuste
+  no toca un múltiplo fijado a mano). Se repiten en la respuesta.
+- **Referencia de analistas** (`targetMeanPrice`, `targetLow/HighPrice`, `numberOfAnalystOpinions`, claves
+  nuevas de `yahoo.CLAVES_NUMERO`, mismo `get_info()`): se muestra aparte y sólo con `ratios_precio_confiables`;
+  **no entra** al cálculo. Aparece tras la próxima ingesta.
+- Un test garantiza que ningún texto dice comprá/vendé/recomendar.
+
+**Qué no se hizo (propuesto):** múltiplos históricos propios y consistencia de resultados (3b: tabla de
+estados contables anuales para cartera + watchlist en un job aparte, ~3 llamadas extra por emisor; hoy sólo
+hay una foto TTM y hasta 8 snapshots), alertas por cambio de diagnóstico e historial (`version_reglas` de
+diagnóstico, comparador y valor razonable ya viajan en la respuesta). Sin historia contable de varios
 años la **consistencia** de resultados no se evalúa, y la pantalla lo dice.
+
+### Impacto en cartera: "¿cómo cambiaría mi cartera?" (reglas v1)
+
+`impacto_cartera_engine.py` (puro) + `impacto_cartera_analytics.py`. **No persiste nada** (un test cuenta las
+filas de todas las tablas antes y después), no escribe movimientos, no estima precio ni cantidad. Sin caché
+(parámetros libres, igual que `rebalanceo/simular`).
+
+- "Antes" = `_clasificados_valorizados` (criterio único de totales: sin cotización → al costo + aviso,
+  buckets residuales `SIN_*`). "Después" = `dataclasses.replace(pos, valores=… + [(cartera, ticker, N, N·MEP)])`
+  con la clasificación del ticker (la de la posición si ya la tiene; si no, `Contexto.resolver` con la
+  ficha de la watchlist). Sin MEP la compra entra con 0 ARS y se avisa, como cualquier posición sin valor ARS.
+- Cada eje se agrupa con `_agrupar` —la de Exposición—, así que "antes" coincide con esa pantalla (hay un test
+  de equivalencia contra `get_exposicion`). **No se refactorizó `get_exposicion`.**
+- **Eje Emisor (nuevo)**: agrupa por `Contexto.base`, o sea CEDEAR en pesos + CEDEAR en dólares + acción de
+  origen = un emisor. Exposición y Contribución **no** hacen esto (su eje "Ticker" es el ticker local).
+  Otros ejes: Sector, País, Región (sólo en modo auto), Tipo de instrumento.
+- **Observaciones** con los umbrales de `salud_engine` citados en `regla`: peso del emisor (atención ≥ 20 %,
+  revisar ≥ 30 %, o `peso_maximo` configurado y 1,5× para revisar; el umbral es "desde"), país (70 % / 90 %,
+  sólo si el peso sube y no es un bucket residual), diversificación (emisores equivalentes < 5 / < 3, avisa
+  al cruzar para peor y como dato al mejorar), monto que cae en un bucket residual, y emisor que ya estaba
+  en cartera. Un test garantiza que ningún texto dice comprá/vendé/recomendar (los textos dicen "pasaría",
+  "quedaría").
+- Frontend: tarjeta `ImpactoCartera.tsx` en la pestaña Pares; los importes van por `useFormatoFijo('USD')`
+  (modo privacidad) y los pesos quedan visibles, como en Exposición.
+
+**Qué no se hizo (propuesto):** efecto sobre riesgo/rendimiento esperado, cantidad de títulos (requiere
+precio), simular ventas o varios tickers a la vez, y el eje "Ticker" de Exposición sigue sin unificar
+variantes.
+
+### Historial de diagnósticos y alertas por cambio de estado (reglas v1)
+
+**Historial** (`historial_diagnosticos.py`, tabla `diagnostico_historial`). Después de cada corrida del job
+`fundamentales` (`scheduler._registrar_historial_diagnosticos`, con su propia sesión y su propio `try/except`:
+un fallo no toca la ingesta ni al revés; **fuera** del commit único de la ingesta y de `sync_lock`) se arma el
+`Universo` **una sola vez** y se guarda una foto por emisor del universo `HISTORIAL_UNIVERSO` (default
+`cartera,watchlist`; `catalogo` suma todo). Para lo que está en cartera o watchlist la foto incluye además un
+extracto del comparador (estado, ranking, regla de la conclusión; nunca `tabla`/`pares`/`rechazadas`) y del
+valor razonable; para `get_comparador`/`get_valor_razonable` se separó el cuerpo en `calcular(u, …)`.
+
+- **Point-in-time**: la foto lleva `version_diagnostico/comparador/valor`, estados por dimensión con su razón
+  y su regla, métricas, pares, precio y `fecha_dato`; nunca se recalcula ni se edita. Fechas en ISO.
+- **Sólo si cambió algo** (`huella` = versiones + `fecha_dato` + estados/niveles + lectura + pares; los
+  percentiles, el precio y las métricas no entran) → la tabla crece con los cambios, no con los días. Sin
+  purga: medir el crecimiento real en el servidor. Emisores sin fundamentales no generan foto; renta fija y
+  FCI se saltean.
+- **Backtest** (`historial_engine`): una *entrada a un estado* (primera foto o cambio, misma versión de
+  reglas) es un evento; retorno del precio en USD a 30/90/180 días (último cierre ≤ fecha de la foto →
+  primer cierre ≥ fecha + horizonte, tolerancia 10 días, sin rellenar); celdas por `(dimensión, estado,
+  versión)`; **menos de 30 eventos = sin promedio**; siempre junto a la línea de base de todos los eventos.
+  Hoy responde "muestra insuficiente".
+
+**Alertas** (`alertas_diagnostico_engine`, tipo `diagnostico:<dimensión>` en `alertas_precio`, `cartera=""`).
+Dimensiones que avisan: valuación, calidad, solidez. Es la tercera familia de alerta, con su propio
+antirrebote (por transición, sin nivel):
+1. se silencia —sin tocar el estado— si el estado no aplica o no tiene datos, el snapshot tiene más de 21
+   días (`MAX_DIAS_DATO`, inclusivo) o la confianza global es baja (**este silencio por dato viejo no existía
+   en el motor de alertas**);
+2. primera vez → **siembra** el estado, sin avisar; 3. cambio de `version_reglas` → **re-siembra** sin
+   avisar (un cambio de reglas no es un cambio de la empresa); 4. mismo estado → cancela el pendiente;
+5. estado distinto → **pendiente**, y recién se avisa cuando el *mismo* estado se ve en un snapshot con otra
+   `fecha_dato` (la misma lectura no confirma; oscilar en el borde de una banda no avisa nunca).
+El estado vive en `diagnostico_alerta_estado` (aparte de `alertas_precio`, porque tiene que avanzar también con
+el aviso silenciado); el aviso emitido va a `alertas_precio` y hereda entrega, reintento e historial. Lee la
+**última foto del historial**, no recalcula nada: sin historial, no hay alertas. Interruptor
+`avisar_diagnostico` (default prendido; apagado se sigue el estado y sólo se silencia). Mensaje: bloque
+"CAMBIO DE DIAGNÓSTICO" con ticker, origen, `dimensión: de → a`, razón, fecha del dato, versión de reglas y
+"información de seguimiento, no una indicación de operar". Tests garantizan que ningún texto (ni las razones
+guardadas) dice comprá/vendé/recomendar.
+
+**Qué no se hizo (propuesto):** purga/compactación del historial (hay que medir el crecimiento), registro del
+catálogo completo (medir el costo en el servidor antes de subir `HISTORIAL_UNIVERSO`), alertas de
+crecimiento/confianza, avisos por cambio de comparador o de valor razonable, y un backtest con benchmark de
+mercado (hoy sólo la línea de base de los propios eventos).
 
 ### Limitaciones conocidas
 

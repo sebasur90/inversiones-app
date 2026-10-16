@@ -120,9 +120,9 @@ MOTIVO_NO_APLICA_ETF = (
 )
 
 LIMITES = (
-    "No calcula un valor razonable ni escenarios de precio: sólo compara contra las alternativas elegidas.",
+    "No dice si el precio es el correcto: sólo compara contra las alternativas elegidas. El valor razonable por múltiplos es otro cálculo (tarjeta «Valor razonable»).",
     "No hay historia contable de varios años: la consistencia de resultados no se puede evaluar.",
-    "No mide cuánto cambiaría tu cartera: no hay un simulador de impacto todavía.",
+    "No mide cuánto cambiaría tu cartera: eso lo hace la tarjeta «¿Cómo cambiaría mi cartera?», que es otro cálculo.",
     "Es un análisis relativo: que algo esté más barato o mejor que sus alternativas no dice que su precio sea el correcto.",
 )
 SALVEDAD_MULTIPLO = (

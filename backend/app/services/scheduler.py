@@ -225,6 +225,27 @@ def correr_fundamentales() -> None:
     finally:
         db.close()
 
+    _registrar_historial_diagnosticos()
+
+
+def _registrar_historial_diagnosticos() -> None:
+    """Foto del diagnóstico de cada emisor si cambió algo. Nunca lanza.
+
+    Va **después** de cerrar la sesión de la ingesta y con la suya: un fallo (o un emisor raro) no puede
+    deshacer lo que la ingesta ya guardó, ni la ingesta puede depender de que esto ande.
+    """
+    from ..database import SessionLocal
+    from . import historial_diagnosticos
+
+    db = SessionLocal()
+    try:
+        historial_diagnosticos.registrar(db)
+    except Exception as exc:
+        logger.exception("scheduler: el historial de diagnósticos falló: %s", exc)
+        db.rollback()
+    finally:
+        db.close()
+
 
 def iniciar() -> None:
     """Arranca el scheduler si está habilitado. Tolera que APScheduler no esté instalado."""

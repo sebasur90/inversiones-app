@@ -18,7 +18,12 @@ from .valuacion_analytics import Universo, _estado_datos, _fuerza_relativa
 @cache_por_sync
 def get_comparador(ticker: str, con: tuple, db: Session) -> dict:
     """Comparador de `ticker` contra las alternativas `con` (o contra su grupo de pares si `con` está vacío)."""
-    u = Universo(db)
+    return calcular(Universo(db), ticker, con)
+
+
+def calcular(u: Universo, ticker: str, con: tuple = ()) -> dict:
+    """El comparador sobre un `Universo` ya armado, sin caché: es lo que reutiliza el historial de
+    diagnósticos para recorrer muchos tickers sin reconstruir el universo en cada uno."""
     e = u.emisor(ticker)
     grupo = u.pares(e)
 

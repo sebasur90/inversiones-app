@@ -258,7 +258,7 @@ export default function Ajustes() {
 
       <Seccion
         titulo="Avisos al celular"
-        ayuda="El servidor te manda un mensaje por Telegram cuando una posición cruza su stop-loss o su precio objetivo, cuando un ticker de la watchlist entra en zona de compra, y cuando dispara una estrategia que habilitaste. Cada aviso dice si es compra o venta, de qué cartera (o de la watchlist) y qué regla lo disparó. Llega con la app cerrada; se configura con TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID (ver .env.example)."
+        ayuda="El servidor te manda un mensaje por Telegram cuando una posición cruza su stop-loss o su precio objetivo, cuando un ticker de la watchlist entra en zona de compra, cuando dispara una estrategia que habilitaste, y cuando cambia de estado el diagnóstico (valuación, calidad o solidez) de una empresa de tu cartera o tu watchlist. Cada aviso dice si es compra o venta, de qué cartera (o de la watchlist) y qué regla lo disparó. Llega con la app cerrada; se configura con TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID (ver .env.example)."
       >
         <div className="text-caption text-app-text-dim">
           Estado: <span className="font-semibold text-app-text">{textoEstadoAlertas}</span>

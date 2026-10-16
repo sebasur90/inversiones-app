@@ -23,6 +23,7 @@ from ..schemas import (
     RebalanceoOut,
     ConfiguracionCarteraOut,
     RebalanceoSimulacionRequest,
+    ImpactoCompraIn, ImpactoCompraOut,
     RebalanceoSimulacionOut,
     MovimientoInversionOut,
     RendimientoPorTickerItem,
@@ -265,6 +266,29 @@ def simular_rebalanceo_cartera(nombre: str, body: RebalanceoSimulacionRequest, d
 @router.post("/consolidado/rebalanceo/simular", response_model=RebalanceoSimulacionOut)
 def simular_rebalanceo_consolidado(body: RebalanceoSimulacionRequest, db: Session = Depends(get_db)):
     return simular_rebalanceo(None, db, body.eje, body.modo, body.aporte_usd, body.tasa_comision_pct)
+
+
+def _impacto_compra(cartera: str | None, body: ImpactoCompraIn, db: Session) -> dict:
+    from ..services import impacto_cartera_analytics
+
+    try:
+        return impacto_cartera_analytics.simular_aporte(cartera, db, body.ticker, body.monto_usd)
+    except impacto_cartera_analytics.TickerDesconocido:
+        raise HTTPException(status_code=404, detail="No encontramos ese ticker en tu cartera, la watchlist ni el catálogo")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.post("/carteras/{nombre}/impacto-compra", response_model=ImpactoCompraOut)
+def impacto_compra_cartera(nombre: str, body: ImpactoCompraIn, db: Session = Depends(get_db)):
+    """Cómo cambiarían los pesos de la cartera al sumar un monto en USD de un ticker. Sólo simula: no guarda nada."""
+    _validar_cartera(nombre, db)
+    return _impacto_compra(nombre, body, db)
+
+
+@router.post("/consolidado/impacto-compra", response_model=ImpactoCompraOut)
+def impacto_compra_consolidado(body: ImpactoCompraIn, db: Session = Depends(get_db)):
+    return _impacto_compra(None, body, db)
 
 
 @router.get("/movimientos", response_model=list[MovimientoInversionOut])
@@ -1014,6 +1038,7 @@ def guardar_config_avisos(cambios: AvisosConfigIn, db: Session = Depends(get_db)
         avisar_objetivo=cambios.avisar_objetivo,
         avisar_compra_zona=cambios.avisar_compra_zona,
         avisar_venta_zona=cambios.avisar_venta_zona,
+        avisar_diagnostico=cambios.avisar_diagnostico,
     )
     return avisos_config.estado(db)
 

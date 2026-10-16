@@ -224,6 +224,8 @@ CLAVES_NUMERO = (
     "netIncomeToCommon", "totalRevenue", "ebitda", "trailingEps", "forwardEps", "bookValue",
     # período contable al que corresponden los datos (epoch en segundos), solidez del dividendo y liquidez
     "mostRecentQuarter", "payoutRatio", "currentRatio",
+    # consenso de analistas: referencia externa del valor razonable (no entra al cálculo)
+    "targetMeanPrice", "targetLowPrice", "targetHighPrice", "numberOfAnalystOpinions",
     # precio y riesgo
     "currentPrice", "regularMarketPrice", "previousClose", "beta", "fiftyTwoWeekHigh",
     "fiftyTwoWeekLow",

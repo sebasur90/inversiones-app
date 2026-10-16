@@ -423,6 +423,64 @@ export const getConfiguracionCartera = (cartera: string | null) =>
 export const simularRebalanceo = (cartera: string | null, body: RebalanceoSimulacionRequest) =>
   api.post<RebalanceoSimulacionOut>(`${carteraPath(cartera)}/rebalanceo/simular`, body).then(r => r.data)
 
+// ── Impacto en cartera: "si sumara N USD de X" ──────────────────────────────
+
+export interface ImpactoFila {
+  etiqueta: string
+  antes_pct: number
+  despues_pct: number
+  delta_pp: number
+  antes_usd: number
+  despues_usd: number
+  afectada: boolean
+  residual: boolean
+  /** Sólo en el eje Emisor: los tickers de la cartera que son este mismo emisor. */
+  tickers: string[]
+  nombre: string | null
+}
+
+export interface ImpactoConcentracion {
+  hhi_normalizado: number | null
+  n_efectivo: number | null
+  mayor: { etiqueta: string; porcentaje: number } | null
+}
+
+export interface ImpactoEje {
+  eje: string
+  etiqueta_compra: string
+  items: ImpactoFila[]
+  antes: ImpactoConcentracion
+  despues: ImpactoConcentracion
+}
+
+export interface ImpactoObservacion {
+  nivel: 'revisar' | 'atencion' | 'info'
+  texto: string
+  regla: string
+  eje: string
+}
+
+export interface ImpactoCompra {
+  version_reglas: number
+  ticker: string
+  emisor: string
+  nombre: string | null
+  cartera: string | null
+  monto_usd: number
+  monto_ars: number
+  peso_monto_pct: number | null
+  total: { antes_usd: number; despues_usd: number; antes_ars: number; despues_ars: number }
+  ejes: ImpactoEje[]
+  observaciones: ImpactoObservacion[]
+  clasificacion: { tipo: string | null; sector: string | null; pais: string | null; region: string | null }
+  notas: string[]
+  avisos: Record<string, string[]>
+}
+
+/** Sólo simula: no guarda nada ni toca movimientos. */
+export const simularImpactoCompra = (cartera: string | null, body: { ticker: string; monto_usd: number }) =>
+  api.post<ImpactoCompra>(`${carteraPath(cartera)}/impacto-compra`, body).then(r => r.data)
+
 export const getMovimientosInversion = (params: { cartera?: string; ticker?: string }) =>
   api.get<MovimientoInversion[]>('/inversiones/movimientos', { params }).then(r => r.data)
 
@@ -2635,6 +2693,12 @@ export interface AlertaPrecioOut {
   senal_fecha: string | null
   senal_motivo: string | null
   variante: string | null
+  /** Cambio de diagnóstico (tipo `diagnostico:<dimensión>`). */
+  diag_dimension?: string | null
+  diag_de?: string | null
+  diag_a?: string | null
+  diag_razon?: string | null
+  diag_fecha_dato?: string | null
   emitida_en: string | null
   entregada: boolean
 }
@@ -2646,6 +2710,7 @@ export interface AlertasEstadoOut {
   niveles_vigilados: number
   senales_vigiladas: number
   estrategias_con_aviso: number
+  diagnosticos_vigilados?: number
   ultimo_aviso: string | null
   sin_entregar: number
 }
@@ -2675,6 +2740,7 @@ export interface AvisosConfigOut {
   avisar_objetivo: boolean
   avisar_compra_zona: boolean
   avisar_venta_zona: boolean
+  avisar_diagnostico: boolean
   estrategias: AvisoEstrategiaOut[]
 }
 
@@ -2684,6 +2750,7 @@ export interface AvisosConfigIn {
   avisar_objetivo?: boolean
   avisar_compra_zona?: boolean
   avisar_venta_zona?: boolean
+  avisar_diagnostico?: boolean
 }
 
 export interface AvisoEstrategiaIn {
@@ -3121,6 +3188,145 @@ export const getComparador = (ticker: string, con: string[] = []) =>
   api.get<Comparador>(`/inversiones/valuacion/${encodeURIComponent(ticker)}/comparador`, {
     params: con.length ? { con: con.join(',') } : {},
   }).then(r => r.data)
+
+// ── Valor razonable y escenarios ────────────────────────────────────────────
+
+export type EscenarioClave = 'pesimista' | 'base' | 'optimista'
+export type EstadoMetodoValor = 'usado' | 'no_aplica' | 'falta' | 'inestable' | 'excluido'
+
+export interface EscenarioValor {
+  clave: EscenarioClave
+  nombre: string
+  valor: number
+  /** (valor − precio) ÷ valor */
+  margen_seguridad: number | null
+  /** (valor − precio) ÷ precio */
+  potencial: number | null
+}
+
+export interface MetodoValor {
+  clave: string
+  nombre: string
+  familia: string
+  familia_nombre: string
+  estado: EstadoMetodoValor
+  motivo: string
+  origen: OrigenDato
+  decide: boolean
+  multiplo_propio: number | null
+  n_pares: number
+  referencias: Partial<Record<EscenarioClave, number | null>>
+  valores: Partial<Record<EscenarioClave, number | null>>
+  manual: boolean
+  regla: string
+}
+
+export interface SupuestosValor {
+  ajuste_pct: number
+  excluir: string[]
+  multiplos: Record<string, number>
+  por_defecto?: boolean
+}
+
+export interface ValorRazonable {
+  version_reglas: number
+  estado: 'ok' | 'sin_conclusion' | 'no_aplica' | 'sin_datos'
+  mensaje: string
+  modelo: string
+  moneda: string | null
+  precio: number | null
+  escenarios: EscenarioValor[]
+  metodos: MetodoValor[]
+  familias: { familia: string; nombre: string; decide: boolean; metodos: string[]; valores: Record<string, number> }[]
+  lectura: 'por_debajo' | 'dentro' | 'por_encima' | null
+  lectura_texto: string
+  regla_lectura: string
+  dispersion: number | null
+  convergen: boolean | null
+  confianza: 'alta' | 'media' | 'baja' | 'sin_datos'
+  regla_confianza: string
+  n_pares: number
+  supuestos: Required<SupuestosValor>
+  faltantes: string[]
+  analistas: { media: number; minimo: number | null; maximo: number | null; n: number | null } | null
+  salvedad: string
+  limites: string[]
+  ticker: string
+  ticker_base: string
+  nombre: string | null
+  es_etf: boolean
+  estado_datos: string
+  fecha_dato: string | null
+  elegido_por_usuario: boolean
+  pares: { ticker_base: string; nombre: string | null }[]
+}
+
+/** `con` va como un solo parámetro separado por comas (ver `getComparador`). */
+const paramsCon = (con: string[]) => (con.length ? { con: con.join(',') } : {})
+const urlValor = (ticker: string) => `/inversiones/valuacion/${encodeURIComponent(ticker)}/valor-razonable`
+
+export const getValorRazonable = (ticker: string, con: string[] = []) =>
+  api.get<ValorRazonable>(urlValor(ticker), { params: paramsCon(con) }).then(r => r.data)
+
+export const guardarSupuestosValor = (ticker: string, supuestos: SupuestosValor, con: string[] = []) =>
+  api.put<ValorRazonable>(`${urlValor(ticker)}/supuestos`, {
+    ajuste_pct: supuestos.ajuste_pct, excluir: supuestos.excluir, multiplos: supuestos.multiplos,
+  }, { params: paramsCon(con) }).then(r => r.data)
+
+export const restablecerSupuestosValor = (ticker: string, con: string[] = []) =>
+  api.delete<ValorRazonable>(`${urlValor(ticker)}/supuestos`, { params: paramsCon(con) }).then(r => r.data)
+
+// ── Historial de diagnósticos ───────────────────────────────────────────────
+
+export interface EstadoDimensionHistorial {
+  estado: string
+  nivel: NivelDimension
+  percentil: number | null
+  razon: string
+  regla: string
+}
+
+export interface HistorialItem {
+  id: number
+  fecha: string
+  fecha_dato: string | null
+  version_diagnostico: number
+  version_comparador: number | null
+  version_valor: number | null
+  estados: Record<string, EstadoDimensionHistorial>
+  lectura: string | null
+  confianza: string | null
+  precio: number | null
+  moneda: string | null
+  valor_razonable: { estado: string; lectura: string | null; confianza: string; escenarios: { clave: string; valor: number }[] } | null
+  cambios: { dimension: string; de: string | null; a: string | null }[]
+  cambio_de_reglas: boolean
+  n_pares: number
+}
+
+export interface HistorialDiagnostico {
+  ticker_base: string
+  total: number
+  items: HistorialItem[]
+}
+
+export interface CeldaBacktest { n: number; suficiente: boolean; mediana: number | null; positivos_pct: number | null }
+
+export interface BacktestHistorial {
+  horizontes: number[]
+  minimo_muestra: number
+  eventos_totales: number
+  base: Record<string, CeldaBacktest>
+  estados: { dimension: string; estado: string; version: number; eventos: number; horizontes: Record<string, CeldaBacktest> }[]
+  suficiente: boolean
+  limites: string[]
+}
+
+export const getHistorialDiagnostico = (ticker: string) =>
+  api.get<HistorialDiagnostico>(`/inversiones/valuacion/${encodeURIComponent(ticker)}/historial`).then(r => r.data)
+
+export const getBacktestHistorial = () =>
+  api.get<BacktestHistorial>('/inversiones/valuacion/historial/backtest').then(r => r.data)
 
 export const getEstadoClasificacion = () =>
   api.get<EstadoClasificacion>('/inversiones/clasificacion/estado').then(r => r.data)

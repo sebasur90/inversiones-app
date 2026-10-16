@@ -12,11 +12,11 @@ from ..database import SessionLocal, get_db
 from ..schemas import (
     ActualizarClasificacionIn, ActualizarClasificacionOut, ClasificacionCorreccionIn,
     ClasificacionTickerOut, ComparadorAlternativasOut, DiferenciaClasificacionOut, EstadoClasificacionOut, ParCorreccionIn,
-    ValuacionListaOut, ValuacionTickerOut,
+    BacktestHistorialOut, HistorialOut, ValorRazonableOut, ValorSupuestosIn, ValuacionListaOut, ValuacionTickerOut,
 )
 from ..services import (
     clasificacion_analytics, comparador_analytics, comparador_engine, fundamentales_ingesta, scheduler,
-    valuacion_analytics,
+    historial_diagnosticos, valor_razonable_analytics, valuacion_analytics,
 )
 
 router = APIRouter(prefix="/api/inversiones", tags=["clasificacion"])
@@ -100,6 +100,13 @@ def valuacion_lista(
     return valuacion_analytics.get_valuacion_lista(universo, db, tipo=tipo, sector=sector, region=region, lectura=lectura)
 
 
+@router.get("/valuacion/historial/backtest", response_model=BacktestHistorialOut)
+def valuacion_backtest(db: Session = Depends(get_db)):
+    """Qué hizo el precio después de cada estado del diagnóstico, **sólo con el historial acumulado desde
+    que existe** (point-in-time). Mientras la muestra es corta lo dice en vez de dar un promedio."""
+    return historial_diagnosticos.backtest(db)
+
+
 @router.get("/valuacion/{ticker}", response_model=ValuacionTickerOut)
 def valuacion_ticker(ticker: str, db: Session = Depends(get_db)):
     """Ficha de valuación de un ticker contra sus pares: clasificación con fuentes, pares y el
@@ -116,6 +123,48 @@ def valuacion_comparador(ticker: str, con: str = Query("", description="Alternat
     if len(elegidas) > comparador_engine.MAX_ALTERNATIVAS:
         raise HTTPException(status_code=422, detail=f"con admite hasta {comparador_engine.MAX_ALTERNATIVAS} alternativas")
     return comparador_analytics.get_comparador(ticker.strip().upper(), tuple(elegidas), db)
+
+
+@router.get("/valuacion/{ticker}/historial", response_model=HistorialOut)
+def valuacion_historial(ticker: str, db: Session = Depends(get_db)):
+    """Línea de tiempo del diagnóstico de un emisor: qué decía la app cada vez que algo cambió, con la
+    versión de las reglas de cada foto."""
+    return historial_diagnosticos.lista_historial(db, ticker)
+
+
+def _elegidas(con: str) -> list[str]:
+    return list(dict.fromkeys(t.strip().upper() for t in con.split(",") if t.strip()))
+
+
+@router.get("/valuacion/{ticker}/valor-razonable", response_model=ValorRazonableOut)
+def valuacion_valor_razonable(ticker: str, con: str = Query("", description="Emisores de referencia separados por coma"),
+                              db: Session = Depends(get_db)):
+    """Valor razonable y escenarios (pesimista / base / optimista) con los múltiplos de los pares, con el
+    margen de seguridad separado del potencial. Sin `con` usa su grupo de pares."""
+    elegidas = _elegidas(con)
+    if len(elegidas) > comparador_engine.MAX_ALTERNATIVAS:
+        raise HTTPException(status_code=422, detail=f"con admite hasta {comparador_engine.MAX_ALTERNATIVAS} emisores")
+    return valor_razonable_analytics.get_valor_razonable(ticker.strip().upper(), tuple(elegidas), db)
+
+
+@router.put("/valuacion/{ticker}/valor-razonable/supuestos", response_model=ValorRazonableOut)
+def guardar_supuestos_valor(ticker: str, body: ValorSupuestosIn, con: str = Query(""), db: Session = Depends(get_db)):
+    """Guarda los supuestos del usuario (ajuste, métodos excluidos, múltiplo manual) y devuelve el cálculo
+    recalculado. Supuestos vacíos equivalen a restablecerlos."""
+    t = ticker.strip().upper()
+    try:
+        valor_razonable_analytics.guardar_supuestos(db, t, body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return valor_razonable_analytics.get_valor_razonable(t, tuple(_elegidas(con)), db)
+
+
+@router.delete("/valuacion/{ticker}/valor-razonable/supuestos", response_model=ValorRazonableOut)
+def borrar_supuestos_valor(ticker: str, con: str = Query(""), db: Session = Depends(get_db)):
+    """Restablece los supuestos: vuelve a la mediana de los pares."""
+    t = ticker.strip().upper()
+    valor_razonable_analytics.borrar_supuestos(db, t)
+    return valor_razonable_analytics.get_valor_razonable(t, tuple(_elegidas(con)), db)
 
 
 # ── Correcciones manuales ────────────────────────────────────────────────────

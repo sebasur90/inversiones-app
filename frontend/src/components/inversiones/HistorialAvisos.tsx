@@ -7,7 +7,7 @@ import { fechaHora } from '../../utils/fechas'
 import { formatMonto } from '../../utils/formatoMonto'
 import { useMontosOcultos } from '../../utils/privacidad'
 import {
-  COLOR_ACCION, ETIQUETA_ACCION, esAvisoDeSenal, etiquetaOrigen, etiquetaRegla,
+  COLOR_ACCION, ETIQUETA_ACCION, esAvisoDeDiagnostico, esAvisoDeSenal, etiquetaOrigen, etiquetaRegla,
 } from '../../utils/avisosTelegram'
 import EmptyState from '../ui/EmptyState'
 import QueryBoundary from '../ui/QueryBoundary'
@@ -21,6 +21,7 @@ function Fila({ aviso }: { aviso: AlertaPrecioOut }) {
   const ocultos = useMontosOcultos()
   const divisa = moneda(aviso)
   const esSenal = esAvisoDeSenal(aviso.tipo)
+  const esDiagnostico = esAvisoDeDiagnostico(aviso.tipo)
 
   return (
     <div className="py-2.5 border-b border-app-border-soft last:border-b-0">
@@ -40,6 +41,13 @@ function Fila({ aviso }: { aviso: AlertaPrecioOut }) {
         {etiquetaRegla(aviso)} · {etiquetaOrigen(aviso)}
       </div>
 
+      {esDiagnostico ? (
+        <div className="text-caption text-app-text mt-0.5">
+          <span className="font-semibold">{aviso.diag_dimension}</span>: {aviso.diag_de ?? '—'} → <span className="font-semibold">{aviso.diag_a ?? '—'}</span>
+          {aviso.diag_razon && <div className="text-app-text-dim">{aviso.diag_razon}</div>}
+          {aviso.diag_fecha_dato && <div className="text-label text-app-text-faint">Dato del {aviso.diag_fecha_dato}</div>}
+        </div>
+      ) : (
       <div className="text-caption text-app-text mt-0.5">
         {esSenal
           ? `cierre${aviso.senal_fecha ? ` del ${aviso.senal_fecha}` : ''}: ${formatMonto(aviso.precio_disparo, divisa, ocultos)}`
@@ -51,6 +59,7 @@ function Fila({ aviso }: { aviso: AlertaPrecioOut }) {
           </span>
         )}
       </div>
+      )}
 
       {!aviso.entregada && (
         <div className="text-caption text-app-neg mt-0.5">

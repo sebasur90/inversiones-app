@@ -159,8 +159,11 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
       '"Resumen" da la foto rápida; el resto son las mismas métricas que ves en Rendimiento y Riesgo, pero sólo para este ticker.',
       '"Pares" lo compara contra competidores parecidos (misma industria y tamaño) y muestra de dónde sale su sector, país y región.',
       'Dentro de "Pares", la tarjeta "¿Qué compraría en su lugar?" lo pone lado a lado con alternativas comparables que elegís vos (o sugeridas), con una conclusión que explica por qué podría merecer un múltiplo mayor o menor.',
+      'Dentro de "Pares", la tarjeta "Valor razonable" estima a qué precio cotizaría con los múltiplos de sus pares (pesimista, base y optimista), separa el margen de seguridad del potencial y deja editar los supuestos.',
+      'Dentro de "Pares", "¿Cómo cambiaría mi cartera?" simula sumar un monto en dólares de ese emisor y muestra cómo quedarían tus pesos por emisor, sector, país, región y tipo, con los umbrales de Salud de cartera. Sólo simula: no guarda nada.',
+      'Dentro de "Pares", "Cómo fue cambiando" muestra las fotos del diagnóstico que fue guardando la app, con la versión de las reglas de cada una; si lo tenés en cartera o watchlist, también te puede avisar por Telegram cuando un estado cambia.',
     ],
-    terminos: ['tickerdetalle_total_pl', 'tickerdetalle_retorno_anualizado', 'valuacion_que_es', 'diagnostico_que_es', 'comparador_que_es', 'valuacion_fuentes'],
+    terminos: ['tickerdetalle_total_pl', 'tickerdetalle_retorno_anualizado', 'valuacion_que_es', 'diagnostico_que_es', 'comparador_que_es', 'valor_razonable_que_es', 'impacto_cartera_que_es', 'historial_que_es', 'valuacion_fuentes'],
   },
 
   '/objetivo': {

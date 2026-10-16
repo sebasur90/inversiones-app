@@ -546,6 +546,10 @@ class AjustesAvisos(Base):
     avisar_objetivo = Column(Integer, nullable=False, default=1, server_default="1")
     avisar_compra_zona = Column(Integer, nullable=False, default=1, server_default="1")
     avisar_venta_zona = Column(Integer, nullable=False, default=1, server_default="1")
+    # Cambios de estado del diagnóstico de una empresa (valuación, calidad, solidez): ver
+    # `alertas_diagnostico_engine`. Arranca prendido: sólo avisa de un cambio confirmado y la
+    # primera corrida siembra el estado sin mandar nada.
+    avisar_diagnostico = Column(Integer, nullable=False, default=1, server_default="1")
     fecha_actualizacion = Column(DateTime, nullable=False)
 
 
@@ -748,6 +752,73 @@ class ParOverride(Base):
     fecha = Column(DateTime, nullable=False)
 
     __table_args__ = (UniqueConstraint("ticker_base", "par", name="uq_par_override"),)
+
+
+class ValorSupuestos(Base):
+    """Supuestos del usuario para el valor razonable de un emisor (`valor_razonable_engine`).
+
+    Una fila por `ticker_base`; `supuestos` es un JSON `{ajuste_pct, excluir[], multiplos{método: x}}` que
+    se valida con `valor_razonable_engine.normalizar_supuestos` antes de guardarse. Sin fila, rige el
+    cálculo por defecto (mediana de los pares). La gestiona la app: el sync no la toca.
+    """
+    __tablename__ = "valor_supuestos"
+    id = Column(Integer, primary_key=True, index=True)
+    ticker_base = Column(String, nullable=False, unique=True)
+    supuestos = Column(JSON, nullable=False)
+    fecha_actualizacion = Column(DateTime, nullable=False)
+
+
+class DiagnosticoHistorial(Base):
+    """Foto del diagnóstico de un emisor cada vez que algo cambia (`services/historial_diagnosticos.py`).
+
+    **Point-in-time**: cada fila guarda lo que la app *decía* ese día, con la versión de las reglas que
+    lo dijo, y no se recalcula nunca. Es lo único que permite medir más adelante si las lecturas
+    sirvieron: reconstruir el pasado con las reglas de hoy y los datos de hoy sería mirar el futuro.
+
+    Sólo se agrega una fila si cambió algo respecto de la anterior (`huella`: versiones, fecha del dato,
+    estados por dimensión, lectura y pares), así que la tabla crece con los cambios y no con los días.
+    `estados`, `metricas`, `pares`, `comparador` y `valor_razonable` son JSON con fechas en ISO. No hay FK
+    a nada que el sync vacíe. La gestiona la app.
+    """
+    __tablename__ = "diagnostico_historial"
+    id = Column(Integer, primary_key=True, index=True)
+    ticker_base = Column(String, nullable=False, index=True)
+    fecha = Column(Date, nullable=False)              # día en que se registró
+    fecha_dato = Column(Date, nullable=True)          # fecha del snapshot de fundamentales que se usó
+    version_diagnostico = Column(Integer, nullable=False)
+    version_comparador = Column(Integer, nullable=True)
+    version_valor = Column(Integer, nullable=True)
+    estados = Column(JSON, nullable=False)
+    lectura = Column(String, nullable=True)
+    confianza = Column(String, nullable=True)
+    metricas = Column(JSON, nullable=True)
+    pares = Column(JSON, nullable=True)
+    comparador = Column(JSON, nullable=True)
+    valor_razonable = Column(JSON, nullable=True)
+    precio = Column(Numeric(18, 6), nullable=True)
+    moneda = Column(String, nullable=True)
+    huella = Column(String, nullable=False)
+
+
+class DiagnosticoAlertaEstado(Base):
+    """Estado del antirrebote de las alertas de cambio de diagnóstico, por `(emisor, dimensión)`.
+
+    `estado_base` es el último estado avisado (o sembrado); `pendiente` el estado nuevo que se vio una vez y
+    espera confirmación en un snapshot con otra `fecha_dato`. Aparte de `alertas_precio`, que guarda el aviso
+    emitido (entrega, reintento, historial), porque ese registro se pisa con cada aviso y este estado tiene
+    que avanzar también cuando el aviso está silenciado.
+    """
+    __tablename__ = "diagnostico_alerta_estado"
+    id = Column(Integer, primary_key=True, index=True)
+    ticker_base = Column(String, nullable=False)
+    dimension = Column(String, nullable=False)
+    estado_base = Column(String, nullable=True)
+    pendiente = Column(String, nullable=True)
+    pendiente_fecha_dato = Column(String, nullable=True)    # ISO
+    version = Column(Integer, nullable=True)
+    fecha_actualizacion = Column(DateTime, nullable=False)
+
+    __table_args__ = (UniqueConstraint("ticker_base", "dimension", name="uq_diagnostico_alerta_estado"),)
 
 
 class IngestaFundamentales(Base):
@@ -1028,6 +1099,11 @@ def init_db():
         if 'avisar_venta_zona' not in cols:
             conn.execute(text(
                 "ALTER TABLE ajustes_avisos ADD COLUMN avisar_venta_zona INTEGER NOT NULL DEFAULT 1"
+            ))
+            conn.commit()
+        if 'avisar_diagnostico' not in cols:
+            conn.execute(text(
+                "ALTER TABLE ajustes_avisos ADD COLUMN avisar_diagnostico INTEGER NOT NULL DEFAULT 1"
             ))
             conn.commit()
 

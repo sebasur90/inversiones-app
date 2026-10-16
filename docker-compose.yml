@@ -31,6 +31,8 @@ services:
       - FUNDAMENTALES_HORAS=${FUNDAMENTALES_HORAS:-3,19}
       - FUNDAMENTALES_MINUTO=${FUNDAMENTALES_MINUTO:-30}
       - FUNDAMENTALES_MAX_POR_CORRIDA=${FUNDAMENTALES_MAX_POR_CORRIDA:-60}
+      # Qué emisores guarda el historial de diagnósticos tras cada ingesta (cartera, watchlist, catalogo).
+      - HISTORIAL_UNIVERSO=${HISTORIAL_UNIVERSO:-cartera,watchlist}
       # Clasificación automática (Yahoo + correcciones) en todas las pantallas; false = la del Sheet.
       - CLASIFICACION_AUTO=${CLASIFICACION_AUTO:-true}
       # Alertas de precio por Telegram. El token y el chat id van en .env (gitignored), nunca acá.

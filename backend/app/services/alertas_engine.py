@@ -23,6 +23,10 @@ para ese par (estrategia, ticker). Eso resuelve de una vez el rebote (la misma s
 durante varias barras y sólo la primera avisa) y la secuencia compra → venta → compra (cada una
 tiene barra distinta, así que cada una avisa una vez).
 
+**Cambios de diagnóstico** (`alertas_diagnostico_engine`). Tampoco hay nivel: avisa cuando una dimensión
+del diagnóstico de una empresa (valuación, calidad, solidez) cambia de estado y el cambio se confirma. La
+decisión es de ese módulo; acá viven sólo el tipo (`diagnostico:<dimensión>`), el contexto y el texto.
+
 El texto del aviso vive también acá, en HTML de Telegram: el formato es parte de la decisión de
 "cuándo avisar" —un aviso que no se entiende de un vistazo en el celular es un aviso que no
 sirve—, y mantenerlo en el módulo puro lo deja testeable sin red ni DB.
@@ -111,6 +115,27 @@ def estrategia_de_tipo(tipo: str) -> int | None:
         return None
 
 
+# ─── Tipos compuestos de los cambios de diagnóstico ──────────────────────────
+#
+# Igual que las señales: la dimensión entra dentro de `tipo` porque el UNIQUE de `alertas_precio` no se
+# puede ampliar sin reconstruir la tabla, y `cartera` queda vacía (el diagnóstico es del emisor, no de una
+# tenencia: con dos carteras avisaría dos veces).
+
+PREFIJO_DIAGNOSTICO = "diagnostico:"
+
+
+def tipo_diagnostico(dimension: str) -> str:
+    return f"{PREFIJO_DIAGNOSTICO}{dimension}"
+
+
+def es_tipo_diagnostico(tipo: str) -> bool:
+    return (tipo or "").startswith(PREFIJO_DIAGNOSTICO)
+
+
+def dimension_de_tipo(tipo: str) -> str | None:
+    return tipo[len(PREFIJO_DIAGNOSTICO):] if es_tipo_diagnostico(tipo) else None
+
+
 # ─── Datos del aviso ─────────────────────────────────────────────────────────
 
 @dataclass(frozen=True)
@@ -151,6 +176,16 @@ class Contexto:
     zona_piso: float | None = None
     zona_techo: float | None = None
     mercado: str | None = None
+    # Cambio de diagnóstico: qué dimensión, de qué estado a cuál, la razón principal y la regla, el
+    # snapshot del que sale y la versión de las reglas. Fechas en ISO (columna JSON).
+    diag_dimension: str | None = None
+    diag_nombre_dimension: str | None = None
+    diag_de: str | None = None
+    diag_a: str | None = None
+    diag_razon: str | None = None
+    diag_regla: str | None = None
+    diag_fecha_dato: str | None = None
+    diag_version: int | None = None
 
 
 @dataclass(frozen=True)
@@ -503,6 +538,7 @@ ACCION_REVISAR = "REVISAR"
 #: Claves de bloque de las señales. Las de nivel son directamente `TIPO_*`.
 BLOQUE_SENAL_VENTA = "senal_venta"
 BLOQUE_SENAL_COMPRA = "senal_compra"
+BLOQUE_DIAGNOSTICO = "diagnostico"
 
 #: Orden de los bloques en el mensaje: primero lo que pone capital en riesgo, después las salidas
 #: por regla, después las tomas de ganancia, al final las entradas.
@@ -513,6 +549,7 @@ ORDEN_BLOQUES = (
     TIPO_VENTA_ZONA,
     TIPO_COMPRA_ZONA,
     BLOQUE_SENAL_COMPRA,
+    BLOQUE_DIAGNOSTICO,
 )
 
 
@@ -535,6 +572,7 @@ BLOQUES = {
     TIPO_COMPRA_ZONA: _Bloque(
         "🟢", "OPORTUNIDAD DE COMPRA", "en zona", ACCION_COMPRA, "tickers"),
     BLOQUE_SENAL_COMPRA: _Bloque("🟢", "SEÑAL DE COMPRA", "", ACCION_COMPRA, "señales"),
+    BLOQUE_DIAGNOSTICO: _Bloque("🔎", "CAMBIO DE DIAGNÓSTICO", "", ACCION_REVISAR, "cambios"),
 }
 
 #: Motivo de la señal en palabras. Mismo vocabulario que `motivosSalida.ts` en el front, para que
@@ -559,6 +597,8 @@ def escapar_html(texto) -> str:
 
 def bloque_de(alerta: Alerta) -> str:
     """Clave de bloque de una alerta: su tipo de nivel, o el bloque de señal según compra/venta."""
+    if es_tipo_diagnostico(alerta.tipo):
+        return BLOQUE_DIAGNOSTICO
     if es_tipo_senal(alerta.tipo):
         return (
             BLOQUE_SENAL_VENTA if alerta.contexto.senal_tipo == SENAL_VENTA
@@ -568,6 +608,8 @@ def bloque_de(alerta: Alerta) -> str:
 
 
 def _bloque_de_tipo(tipo: str, contexto: Contexto) -> _Bloque | None:
+    if es_tipo_diagnostico(tipo):
+        return BLOQUES[BLOQUE_DIAGNOSTICO]
     if es_tipo_senal(tipo):
         clave = BLOQUE_SENAL_VENTA if contexto.senal_tipo == SENAL_VENTA else BLOQUE_SENAL_COMPRA
         return BLOQUES[clave]
@@ -586,6 +628,9 @@ def etiqueta_de(tipo: str, contexto: Contexto = Contexto()) -> str:
     Hace falta porque el `tipo` de una señal es `"estrategia:7"`: mostrarlo crudo (que es lo que
     hacía `ETIQUETA_TIPO.get(tipo, tipo)`) deja un aviso ilegible en pantalla.
     """
+    if es_tipo_diagnostico(tipo):
+        nombre = contexto.diag_nombre_dimension or (dimension_de_tipo(tipo) or "").capitalize()
+        return f"Cambio de diagnóstico · {nombre}" if nombre else "Cambio de diagnóstico"
     if es_tipo_senal(tipo):
         bloque = _bloque_de_tipo(tipo, contexto)
         base = "Señal de venta" if bloque and bloque.accion == ACCION_VENTA else "Señal de compra"
@@ -752,8 +797,40 @@ def _linea_tenencia(alerta: Alerta) -> str:
     return " · ".join(partes)
 
 
+def _linea_diagnostico(alerta: Alerta) -> str:
+    ctx = alerta.contexto
+    nombre = escapar_html(ctx.diag_nombre_dimension or dimension_de_tipo(alerta.tipo) or "Diagnóstico")
+    return f"<b>{nombre}</b>: {escapar_html(ctx.diag_de or '—')} → <b>{escapar_html(ctx.diag_a or '—')}</b>"
+
+
+def _lineas_diagnostico(alerta: Alerta, nivel_detalle: str) -> list[str]:
+    ctx = alerta.contexto
+    if nivel_detalle == NIVEL_COMPACTO:
+        trozos = [f"<b>{escapar_html(alerta.ticker)}</b>"]
+        if alerta.cartera or ctx.cartera_nombre:
+            trozos.append(escapar_html(alerta.cartera or ctx.cartera_nombre))
+        elif ctx.origen == ORIGEN_WATCHLIST:
+            trozos.append("watchlist")
+        trozos.append(_linea_diagnostico(alerta))
+        return [" · ".join(trozos)]
+    lineas = [_linea_identidad(alerta), _linea_diagnostico(alerta)]
+    if ctx.diag_razon:
+        lineas.append(escapar_html(ctx.diag_razon))
+    # Sin consejo de ejecución: el aviso dice qué cambió y con qué datos, nada más.
+    pie = ["información de seguimiento, no una indicación de operar"]
+    fecha = _fmt_fecha_corta(ctx.diag_fecha_dato)
+    if fecha:
+        pie.insert(0, f"dato del {fecha}")
+    if ctx.diag_version is not None:
+        pie.insert(-1, f"reglas v{ctx.diag_version}")
+    lineas.append(f"<i>{escapar_html(' · '.join(pie))}</i>")
+    return lineas
+
+
 def _lineas(alerta: Alerta, nivel_detalle: str) -> list[str]:
     """Las líneas de un aviso. `completo` = 3 o 4 líneas; `compacto` = exactamente una."""
+    if es_tipo_diagnostico(alerta.tipo):
+        return _lineas_diagnostico(alerta, nivel_detalle)
     es_senal = es_tipo_senal(alerta.tipo)
 
     if nivel_detalle == NIVEL_COMPACTO:
