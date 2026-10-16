@@ -117,17 +117,17 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
   '/valuacion': {
     queEs: 'Qué acciones, CEDEARs y ETFs están más baratos o más caros que sus competidores, para decidir dónde mirar antes de entrar o salir.',
     comoLeerla: [
-      'Cada tarjeta es un instrumento con su lectura en palabras (Barata, Cara, En línea, Mixta…) y las dos razones principales.',
-      'Arriba elegís el universo: lo que tenés, lo que seguís en la watchlist, o todo el catálogo de IOL. Los chips filtran por lectura, región y tipo.',
+      'Cada tarjeta es un instrumento con su lectura en palabras (Barata, Cara, En línea, Mixta…), cuatro estados por separado (valuación, calidad, crecimiento y solidez), la confianza en los datos y las dos razones principales.',
+      'Arriba elegís el universo: lo que tenés, lo que seguís en la watchlist, o todo el catálogo de IOL. Los chips filtran por lectura, región y tipo, y "Ordenar por" ordena por un criterio a la vez (más baratas, mejor calidad, más crecimiento, más confianza).',
       '"Barata con alertas" es barata pero con calidad, crecimiento o precio flojos: puede estar barata por una buena razón.',
       'La barra de arriba dice cuántos emisores ya tienen datos: la app los baja de Yahoo de a poco, dos veces por día.',
     ],
     queHacer: [
-      'Tocá una tarjeta para ver el detalle: métrica por métrica contra sus pares, quiénes son esos pares y su precio comparado.',
+      'Tocá una tarjeta para ver el detalle: métrica por métrica contra sus pares, quiénes son esos pares y su precio comparado. Ahí mismo, "¿Qué compraría en su lugar?" lo compara con alternativas que elijas.',
       'Si falta un competidor o la clasificación está mal, corregilo desde la ficha: vale para todas las pantallas.',
     ],
     ojo: 'No es una recomendación de compra o venta. Los datos de Yahoo pueden estar atrasados o tener errores; la ficha muestra la fecha y las advertencias.',
-    terminos: ['valuacion_que_es', 'valuacion_percentil', 'valuacion_trampa_valor', 'valuacion_pares_criterio', 'per'],
+    terminos: ['valuacion_que_es', 'diagnostico_que_es', 'valuacion_percentil', 'valuacion_trampa_valor', 'valuacion_pares_criterio', 'per'],
   },
 
   '/movimientos': {
@@ -158,8 +158,9 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
       'Las pestañas de arriba cambian la vista sin salir de la pantalla.',
       '"Resumen" da la foto rápida; el resto son las mismas métricas que ves en Rendimiento y Riesgo, pero sólo para este ticker.',
       '"Pares" lo compara contra competidores parecidos (misma industria y tamaño) y muestra de dónde sale su sector, país y región.',
+      'Dentro de "Pares", la tarjeta "¿Qué compraría en su lugar?" lo pone lado a lado con alternativas comparables que elegís vos (o sugeridas), con una conclusión que explica por qué podría merecer un múltiplo mayor o menor.',
     ],
-    terminos: ['tickerdetalle_total_pl', 'tickerdetalle_retorno_anualizado', 'valuacion_que_es', 'valuacion_fuentes'],
+    terminos: ['tickerdetalle_total_pl', 'tickerdetalle_retorno_anualizado', 'valuacion_que_es', 'diagnostico_que_es', 'comparador_que_es', 'valuacion_fuentes'],
   },
 
   '/objetivo': {

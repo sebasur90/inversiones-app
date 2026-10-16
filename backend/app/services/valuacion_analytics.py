@@ -9,7 +9,7 @@ ingesta (`fundamentales_ingesta`) lo trae en su próxima corrida.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import date
 
 from sqlalchemy import func
@@ -19,7 +19,7 @@ from ..database import (
     ClasificacionAuto, FundamentalesSnapshot, InstrumentoInversion, ParOverride, WatchlistItem,
 )
 from . import clasificacion_engine as ce
-from . import pares_engine, valuacion_engine
+from . import diagnostico_empresa_engine, pares_engine, valuacion_engine
 from .cache import cache_por_sync
 from .clasificacion_analytics import Contexto
 from .inversiones_analytics import _mep_sheet
@@ -34,6 +34,10 @@ class _Emisor:
     snapshot: FundamentalesSnapshot | None
     clasif: ce.ClasificacionResuelta
     es_etf: bool
+    # Serie semanal del snapshot más nuevo **que la tenga**: puede ser anterior al de los fundamentales
+    # (si la descarga de la serie falló o un 429 cortó la corrida, el snapshot nuevo queda sin ella).
+    serie: list | None = None
+    fecha_serie: date | None = None
 
     @property
     def simbolo(self) -> str | None:
@@ -66,6 +70,16 @@ class Universo:
             )
         }
 
+        # Sólo tres columnas: el JSON de métricas de cada foto no hace falta acá.
+        self._series: dict[str, tuple[date, list]] = {}
+        for simbolo, fecha, serie in (
+            db.query(FundamentalesSnapshot.simbolo_yahoo, FundamentalesSnapshot.fecha,
+                     FundamentalesSnapshot.serie_semanal)
+            .order_by(FundamentalesSnapshot.fecha.desc())
+        ):
+            if serie and simbolo not in self._series:
+                self._series[simbolo] = (fecha, serie)
+
         self.sheet: dict[str, dict] = {}
         for w in db.query(WatchlistItem):
             self.sheet[self.ctx.base(w.ticker)] = {"tipo_instrumento": w.tipo_instrumento, "sector": w.sector, "pais": w.pais}
@@ -90,7 +104,9 @@ class Universo:
     def _emisor(self, base: str, auto: ClasificacionAuto | None, snap) -> _Emisor:
         clasif = self.ctx.resolver(base, self.sheet.get(base))
         es_etf = clasif.tipo == ce.TIPO_CEDEAR_ETF or (auto is not None and (auto.quote_type or "").upper() == "ETF")
-        return _Emisor(base=base, auto=auto, snapshot=snap, clasif=clasif, es_etf=es_etf)
+        fecha_serie, serie = self._series.get(auto.simbolo_yahoo, (None, None)) if auto and auto.simbolo_yahoo else (None, None)
+        return _Emisor(base=base, auto=auto, snapshot=snap, clasif=clasif, es_etf=es_etf,
+                       serie=serie, fecha_serie=fecha_serie)
 
     def emisor(self, ticker: str) -> _Emisor:
         base = self.ctx.base(ticker)
@@ -99,7 +115,11 @@ class Universo:
         return self.emisores[base]
 
     def candidato(self, e: _Emisor) -> pares_engine.Candidato:
-        industria = (self.ctx.overrides.get(e.base) or {}).get("industria") or (e.auto.industria_raw if e.auto else None)
+        # La corrección manual se guarda en castellano ("Bebidas sin alcohol") y Yahoo trae el inglés
+        # ("Beverages - Non-Alcoholic"): se comparan por la forma legible de las dos.
+        industria = ce.industria_legible(
+            (self.ctx.overrides.get(e.base) or {}).get("industria") or (e.auto.industria_raw if e.auto else None)
+        )
         tamano = float(e.snapshot.market_cap_usd) if e.snapshot and e.snapshot.market_cap_usd is not None else None
         return pares_engine.Candidato(
             ticker_base=e.base,
@@ -133,11 +153,12 @@ class Universo:
                 e.snapshot.metricas or {}, bool(e.snapshot.ratios_precio_confiables), e.es_etf, e.clasif.sector,
             )
             a_usd, aproximado = self._a_usd(e.snapshot.moneda)
-            ext.valores.update(valuacion_engine.rendimientos(e.snapshot.serie_semanal, a_usd))
+            ext.valores.update(valuacion_engine.rendimientos(e.serie, a_usd))
             ficha = valuacion_engine.Ficha(
                 ticker_base=base, valores=ext.valores, es_etf=e.es_etf, sin_ganancias=ext.sin_ganancias,
                 recalculadas=ext.recalculadas, descartadas_moneda=ext.descartadas_moneda,
-                fecha_dato=e.snapshot.fecha, momentum_aproximado=aproximado,
+                fecha_dato=e.snapshot.fecha, momentum_aproximado=aproximado, sector=e.clasif.sector,
+                fecha_serie=e.fecha_serie, extra=ext.extra, periodo_contable=ext.periodo_contable,
             )
         self._fichas[base] = ficha
         return ficha
@@ -154,7 +175,7 @@ class Universo:
             return []
         a_usd, _ = self._a_usd(e.snapshot.moneda)
         puntos = []
-        for p in e.snapshot.serie_semanal or []:
+        for p in e.serie or []:
             try:
                 f, c = date.fromisoformat(p["fecha"]), float(p["cierre"])
             except (KeyError, TypeError, ValueError):
@@ -210,6 +231,15 @@ def _evaluar(u: Universo, e: _Emisor) -> tuple[pares_engine.GrupoPares, valuacio
     return grupo, valuacion_engine.evaluar(ficha, fichas_pares)
 
 
+def _diagnostico(u: Universo, e: _Emisor, grupo: pares_engine.GrupoPares,
+                 res: valuacion_engine.ResultadoValuacion | None) -> diagnostico_empresa_engine.Diagnostico:
+    ficha = u.ficha(e.base)
+    if ficha is None or res is None:
+        return diagnostico_empresa_engine.diagnostico_sin_datos()
+    fichas_pares = [f for f in (u.ficha(p) for p in grupo.pares) if f is not None]
+    return diagnostico_empresa_engine.diagnosticar(ficha, res, fichas_pares)
+
+
 def _metrica_dict(r: valuacion_engine.ResultadoMetrica) -> dict:
     return {
         "clave": r.clave, "nombre": r.nombre, "grupo": r.grupo, "formato": r.formato,
@@ -239,7 +269,11 @@ def get_valuacion_ticker(ticker: str, db: Session) -> dict:
             for col in columnas:
                 f = u.ficha(col)
                 valores[col] = f.valores.get(r.clave) if f is not None else None
-            tabla.append({**_metrica_dict(r), "valores": valores})
+            tabla.append({
+                **_metrica_dict(r),
+                "origen": diagnostico_empresa_engine.origen_metrica(r.clave, u.ficha(e.base)),
+                "valores": valores,
+            })
 
     def _par_dict(p: str) -> dict:
         em = u.emisores.get(p)
@@ -276,6 +310,7 @@ def get_valuacion_ticker(ticker: str, db: Session) -> dict:
         "n_pares_con_datos": res.n_pares_con_datos if res else 0,
         "fuerza_relativa": _fuerza_relativa(u, e.base, grupo.pares) if res else [],
         "advertencias": res.advertencias if res else [],
+        "diagnostico": asdict(_diagnostico(u, e, grupo, res)),
     }
 
 
@@ -333,6 +368,7 @@ def get_valuacion_lista(
         lect = res.lectura if res else valuacion_engine.LECTURA_SIN_DATOS
         if lectura and lect != lectura:
             continue
+        diag = _diagnostico(u, e, grupo, res)
         items.append({
             "ticker": ticker,
             "ticker_base": e.base,
@@ -349,6 +385,8 @@ def get_valuacion_lista(
             "fecha_dato": e.snapshot.fecha if e.snapshot else None,
             "en_cartera": en_cartera,
             "en_watchlist": en_watchlist,
+            "dimensiones": [{"clave": d.clave, "estado": d.estado, "nivel": d.nivel, "percentil": d.percentil}
+                            for d in diag.dimensiones],
         })
 
     conteos: dict[str, int] = {}

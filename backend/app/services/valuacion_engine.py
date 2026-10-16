@@ -32,7 +32,7 @@ Acá todo queda en fracción (0,023 = 2,3 %) o en veces ("x").
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from statistics import median
 from typing import Callable
 
@@ -47,8 +47,30 @@ TOPE_PEG = 10.0
 BANDA_BAJA = 25.0
 BANDA_ALTA = 75.0
 DIAS_DATO_VIEJO = 21
+DIAS_SERIE_ATRASADA = 7
 
 SECTORES_SIN_EBITDA = ("Financiero", "Inmobiliario")
+# Donde el patrimonio contable casi no dice nada del valor (activos intangibles): el valor libro suma
+# a una lectura de valuación pero no la decide.
+SECTORES_PATRIMONIO_NO_DECIDE = ("Tecnología", "Comunicaciones", "Salud")
+
+# Métricas que la app deriva de estimaciones de analistas (no de resultados ya publicados) y las
+# que calcula ella misma a partir de datos observados. El resto es lo que Yahoo informa tal cual.
+METRICAS_ESTIMADAS = frozenset({"forward_pe", "peg", "crec_esperado"})
+METRICAS_CALCULADAS = frozenset({"fcf_yield", "rend_3m", "rend_6m", "rend_12m"})
+# Se muestran y se comparan, pero no mueven la lectura clásica ("barata", "cara justificada"…):
+# una estimación no debería alcanzar para justificar una prima.
+SOLO_DIAGNOSTICO = frozenset({"crec_esperado"})
+
+# Familias de valuación: las métricas de una misma familia miden lo mismo, así que votan **una** vez.
+FAMILIAS = {
+    "ganancias": "Ganancias",
+    "ventas_ebitda": "Ventas y EBITDA",
+    "flujo": "Flujo de caja",
+    "patrimonio": "Valor libro",
+    "renta": "Dividendo",
+    "costos": "Costos",
+}
 
 LECTURA_BARATA = "barata"
 LECTURA_CARA = "cara"
@@ -78,18 +100,19 @@ class Metrica:
     formato: str          # "x" | "pct"
     solo_etf: bool = False
     solo_accion: bool = False
+    familia: str = ""     # sólo en valuación: clave de `FAMILIAS`
 
 
 METRICAS = (
-    Metrica("pe", "P/E", "valuacion", False, "x"),
-    Metrica("forward_pe", "P/E estimado", "valuacion", False, "x", solo_accion=True),
-    Metrica("ev_ebitda", "EV/EBITDA", "valuacion", False, "x", solo_accion=True),
-    Metrica("ps", "P/Ventas", "valuacion", False, "x", solo_accion=True),
-    Metrica("pb", "P/Valor libro", "valuacion", False, "x"),
-    Metrica("peg", "PEG", "valuacion", False, "x", solo_accion=True),
-    Metrica("fcf_yield", "Rendimiento FCF", "valuacion", True, "pct", solo_accion=True),
-    Metrica("div_yield", "Dividendo", "valuacion", True, "pct"),
-    Metrica("gastos", "Gastos anuales", "valuacion", False, "pct", solo_etf=True),
+    Metrica("pe", "P/E", "valuacion", False, "x", familia="ganancias"),
+    Metrica("forward_pe", "P/E estimado", "valuacion", False, "x", solo_accion=True, familia="ganancias"),
+    Metrica("ev_ebitda", "EV/EBITDA", "valuacion", False, "x", solo_accion=True, familia="ventas_ebitda"),
+    Metrica("ps", "P/Ventas", "valuacion", False, "x", solo_accion=True, familia="ventas_ebitda"),
+    Metrica("pb", "P/Valor libro", "valuacion", False, "x", familia="patrimonio"),
+    Metrica("peg", "PEG", "valuacion", False, "x", solo_accion=True, familia="ganancias"),
+    Metrica("fcf_yield", "Rendimiento FCF", "valuacion", True, "pct", solo_accion=True, familia="flujo"),
+    Metrica("div_yield", "Dividendo", "valuacion", True, "pct", familia="renta"),
+    Metrica("gastos", "Gastos anuales", "valuacion", False, "pct", solo_etf=True, familia="costos"),
     Metrica("margen_bruto", "Margen bruto", "calidad", True, "pct", solo_accion=True),
     Metrica("margen_operativo", "Margen operativo", "calidad", True, "pct", solo_accion=True),
     Metrica("margen_neto", "Margen neto", "calidad", True, "pct", solo_accion=True),
@@ -98,6 +121,7 @@ METRICAS = (
     Metrica("deuda_patrimonio", "Deuda/Patrimonio", "calidad", False, "x", solo_accion=True),
     Metrica("crec_ingresos", "Crecimiento de ingresos", "crecimiento", True, "pct", solo_accion=True),
     Metrica("crec_ganancias", "Crecimiento de ganancias", "crecimiento", True, "pct", solo_accion=True),
+    Metrica("crec_esperado", "Crecimiento esperado (implícito)", "crecimiento", True, "pct", solo_accion=True),
     Metrica("rend_3m", "Rendimiento 3 meses", "momentum", True, "pct"),
     Metrica("rend_6m", "Rendimiento 6 meses", "momentum", True, "pct"),
     Metrica("rend_12m", "Rendimiento 12 meses", "momentum", True, "pct"),
@@ -132,6 +156,21 @@ class Extraidas:
     sin_ganancias: bool = False
     recalculadas: list[str] = field(default_factory=list)
     descartadas_moneda: list[str] = field(default_factory=list)
+    # Valores absolutos que no se comparan contra pares pero el diagnóstico necesita (beta, payout,
+    # liquidez corriente). `None` = Yahoo no lo informó, que no es lo mismo que cero.
+    extra: dict[str, float | None] = field(default_factory=dict)
+    periodo_contable: date | None = None
+
+
+def _fecha_epoch(v) -> date | None:
+    """Fecha de un epoch en segundos (`mostRecentQuarter` de Yahoo), o None si no tiene sentido."""
+    n = _num(v)
+    if n is None or n <= 0:
+        return None
+    try:
+        return datetime.fromtimestamp(n, tz=timezone.utc).date()
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 def extraer_metricas(
@@ -146,6 +185,12 @@ def extraer_metricas(
     mcap = _pos(usd.get("market_cap"))
     v: dict[str, float | None] = {}
     out = Extraidas(valores=v)
+    out.extra = {
+        "beta": _num(m.get("beta")),
+        "payout": _num(m.get("payoutRatio")),
+        "liquidez_corriente": _pos(m.get("currentRatio")),
+    }
+    out.periodo_contable = _fecha_epoch(m.get("mostRecentQuarter"))
 
     # -- P/E --
     trailing = _num(m.get("trailingPE"))
@@ -197,7 +242,8 @@ def extraer_metricas(
         out.descartadas_moneda = ["forward_pe", "pb", "peg"] + ([] if sin_ebitda else ["ev_ebitda"])
 
     fcf_usd = _num(usd.get("freeCashflow"))
-    v["fcf_yield"] = fcf_usd / mcap if fcf_usd is not None and mcap else None
+    # El flujo de caja libre de un banco (depósitos, préstamos) no mide lo que mide en una empresa.
+    v["fcf_yield"] = None if sector == "Financiero" else (fcf_usd / mcap if fcf_usd is not None and mcap else None)
     dy = _num(m.get("dividendYield"))
     v["div_yield"] = dy / 100.0 if dy is not None and dy >= 0 else None
 
@@ -212,6 +258,12 @@ def extraer_metricas(
     v["deuda_patrimonio"] = None if sin_ebitda or de is None or de < 0 else de / 100.0
     v["crec_ingresos"] = _num(m.get("revenueGrowth"))
     v["crec_ganancias"] = _num(m.get("earningsGrowth"))
+    # Crecimiento de ganancias que el mercado ya descuenta: P/E con ganancias de los últimos 12 meses
+    # contra P/E con las estimadas = ganancia estimada ÷ ganancia actual − 1. Es una estimación (las
+    # de los analistas que sigue Yahoo), no un dato publicado; sólo si los dos P/E son comparables.
+    pe_actual, pe_estimado = _multiplo(m.get("trailingPE")), _multiplo(m.get("forwardPE"))
+    esperado = pe_actual / pe_estimado - 1.0 if ratios_confiables and pe_actual and pe_estimado else None
+    v["crec_esperado"] = esperado if esperado is not None and -0.9 < esperado < 5.0 else None
     return out
 
 
@@ -350,6 +402,10 @@ class Ficha:
     descartadas_moneda: list[str] = field(default_factory=list)
     fecha_dato: date | None = None
     momentum_aproximado: bool = False
+    sector: str | None = None
+    extra: dict[str, float | None] = field(default_factory=dict)
+    periodo_contable: date | None = None
+    fecha_serie: date | None = None    # hasta cuándo llega la serie de precios (puede ser anterior a `fecha_dato`)
 
 
 @dataclass
@@ -369,6 +425,7 @@ class ResultadoValuacion:
     metricas: list[ResultadoMetrica]
     n_pares_con_datos: int
     advertencias: list[str] = field(default_factory=list)
+    familias: list["VotoFamilia"] = field(default_factory=list)
 
 
 def _lista(nombres: list[str]) -> str:
@@ -391,6 +448,102 @@ def _pct(v: float | None) -> str:
     return f"{signo}{v * 100:.0f}%"
 
 
+@dataclass
+class VotoFamilia:
+    """Cómo votó una familia de métricas de valuación (ver `FAMILIAS`)."""
+    familia: str
+    nombre: str
+    banda: str                      # "mejor" | "peor" | "media"
+    metricas: list[str]             # claves de las métricas con banda que la componen
+    solo_apoya: bool = False        # no decide sola: ver `familias_que_solo_apoyan`
+
+
+def familias_que_solo_apoyan(sector: str | None, es_etf: bool) -> frozenset[str]:
+    """Familias que suman a una lectura pero no la deciden.
+
+    El dividendo siempre: un rendimiento alto puede ser un precio hundido y uno bajo es lo normal
+    en empresas que reinvierten. El valor libro en sectores de activos intangibles (tecnología,
+    comunicaciones, salud), donde el patrimonio contable casi no dice nada del valor.
+    """
+    apoyo = {"renta"}
+    if sector in SECTORES_PATRIMONIO_NO_DECIDE and not es_etf:
+        apoyo.add("patrimonio")
+    return frozenset(apoyo)
+
+
+def votar_familias(resultados: list[ResultadoMetrica], sector: str | None, es_etf: bool) -> list[VotoFamilia]:
+    """Un voto por familia de valuación con al menos una métrica comparable.
+
+    La familia vota lo que vota la mayoría de sus métricas con banda ("mejor" o "peor"); con empate,
+    o si todas están en el medio, queda "media". P/E, P/E estimado y PEG miden lo mismo (el precio
+    contra las ganancias): juntos valen **un** voto, no tres.
+    """
+    apoyo = familias_que_solo_apoyan(sector, es_etf)
+    votos = []
+    for clave, nombre in FAMILIAS.items():
+        con_banda = [r for r in resultados
+                     if r.grupo == "valuacion" and r.banda is not None
+                     and METRICA_POR_CLAVE[r.clave].familia == clave]
+        if not con_banda:
+            continue
+        mejores = sum(1 for r in con_banda if r.banda == "mejor")
+        peores = sum(1 for r in con_banda if r.banda == "peor")
+        banda = "mejor" if mejores > peores else "peor" if peores > mejores else "media"
+        votos.append(VotoFamilia(clave, nombre, banda, [r.clave for r in con_banda], clave in apoyo))
+    return votos
+
+
+def veredicto_valuacion(votos: list[VotoFamilia]) -> str:
+    """Barata / cara / mixta / en línea / sin datos a partir de los votos por familia.
+
+    Hacen falta dos familias con dato. Barata = 2+ familias que deciden en el cuarto más barato (o
+    una que decide más una de apoyo) y ninguna en el más caro; cara = al revés, sin contar el apoyo
+    (un dividendo bajo no prueba que esté cara); mixta = hay de las dos.
+    """
+    if len(votos) < 2:
+        return LECTURA_SIN_DATOS
+    mejores = [v for v in votos if not v.solo_apoya and v.banda == "mejor"]
+    peores = [v for v in votos if not v.solo_apoya and v.banda == "peor"]
+    apoyo_mejor = any(v.solo_apoya and v.banda == "mejor" for v in votos)
+    if mejores and peores:
+        return LECTURA_MIXTA
+    if len(mejores) + (1 if mejores and apoyo_mejor else 0) >= 2:
+        return LECTURA_BARATA
+    if len(peores) >= 2:
+        return LECTURA_CARA
+    return LECTURA_EN_LINEA
+
+
+def _criterio(rs: list[ResultadoMetrica], favorable: bool) -> str:
+    """La regla de banda que se usó de verdad para `rs`: percentil, diferencia contra el único par, o ambas."""
+    umbral = f"{UMBRAL_DIRECTO * 100:.0f}%"
+    directas = [r for r in rs if r.metodo == "directo"]
+    percentil_txt = ("percentil favorable ≥ 75 dentro del grupo" if favorable
+                     else "percentil favorable ≤ 25 dentro del grupo")
+    directo_txt = f"al menos {umbral} {'mejor' if favorable else 'peor'} que el par"
+    if rs and len(directas) == len(rs):
+        return directo_txt
+    if not directas:
+        return percentil_txt
+    return f"{percentil_txt}; en {_lista([r.nombre for r in directas])}, con un solo par con dato, {directo_txt}"
+
+
+def _regla_lectura(val_con_banda: list[ResultadoMetrica]) -> str:
+    directas = [r for r in val_con_banda if r.metodo == "directo"]
+    umbral = f"{UMBRAL_DIRECTO * 100:.0f}%"
+    if val_con_banda and len(directas) == len(val_con_banda):
+        base = (f"barata: 2+ familias de valuación al menos {umbral} mejores que el par y ninguna "
+                f"{umbral} peor; cara: al revés; mixta: hay de las dos; en línea: el resto")
+    elif not directas:
+        base = ("barata: 2+ familias de valuación en el cuarto más barato del grupo y ninguna en el más "
+                "caro; cara: al revés; mixta: hay de las dos; en línea: el resto")
+    else:
+        base = ("barata: 2+ familias de valuación en el cuarto más barato del grupo (o al menos "
+                f"{umbral} mejores que el par donde hay un solo par con dato: {_lista([r.nombre for r in directas])}) "
+                "y ninguna en el más caro; cara: al revés; mixta: hay de las dos; en línea: el resto")
+    return base + ". Familias: ganancias (P/E, P/E estimado, PEG), ventas y EBITDA, flujo de caja, valor libro; el dividendo suma pero no decide solo"
+
+
 def evaluar(objetivo: Ficha, pares: list[Ficha], hoy: date | None = None) -> ResultadoValuacion:
     hoy = hoy or date.today()
     resultados = [
@@ -404,8 +557,12 @@ def evaluar(objetivo: Ficha, pares: list[Ficha], hoy: date | None = None) -> Res
         return [r for r in resultados if r.grupo == grupo and r.banda == banda]
 
     val_con_banda = [r for r in resultados if r.grupo == "valuacion" and r.banda is not None]
-    baratas, caras = _en("valuacion", "mejor"), _en("valuacion", "peor")
-    calidad_buena = _en("calidad", "mejor") + _en("crecimiento", "mejor")
+    votos = votar_familias(resultados, objetivo.sector, objetivo.es_etf)
+    apoyo = familias_que_solo_apoyan(objetivo.sector, objetivo.es_etf)
+    baratas = _en("valuacion", "mejor")
+    # Una familia de apoyo "peor" (dividendo bajo, valor libro en tecnología) no es evidencia de que esté cara.
+    caras = [r for r in _en("valuacion", "peor") if METRICA_POR_CLAVE[r.clave].familia not in apoyo]
+    calidad_buena = _en("calidad", "mejor") + [r for r in _en("crecimiento", "mejor") if r.clave not in SOLO_DIAGNOSTICO]
     calidad_mala = _en("calidad", "peor")
     crec_ing = objetivo.valores.get("crec_ingresos")
     mom12 = por_clave.get("rend_12m")
@@ -413,67 +570,50 @@ def evaluar(objetivo: Ficha, pares: list[Ficha], hoy: date | None = None) -> Res
     frases: list[Frase] = []
     advertencias: list[str] = []
 
-    # Con un solo par, "mejor"/"peor" es una diferencia contra su valor, no un percentil: las reglas
-    # que se muestran tienen que decir lo que de verdad se usó.
-    directo = any(r.metodo == "directo" for r in resultados)
-    umbral = f"{UMBRAL_DIRECTO * 100:.0f}%"
-    r_mejor = f"al menos {umbral} mejor que el par" if directo else "percentil favorable ≥ 75 dentro del grupo"
-    r_peor = f"al menos {umbral} peor que el par" if directo else "percentil favorable ≤ 25 dentro del grupo"
-    ref = "el par" if directo else "la mediana"
-
+    # Cada frase dice la regla de las métricas que nombra: una con un solo par con dato se compara
+    # contra su valor, las demás por percentil, y las dos cosas pueden convivir en una misma lectura.
     # -- Lectura --
-    if directo:
-        regla = (f"barata: 2+ métricas de valuación al menos {umbral} mejores que el par y ninguna "
-                 f"{umbral} peor; cara: al revés; mixta: hay de las dos; en línea: el resto")
-    else:
-        regla = ("barata: 2+ métricas de valuación en el cuarto más barato del grupo y ninguna en el más "
-                 "caro; cara: al revés; mixta: hay de las dos; en línea: el resto")
-    if len(val_con_banda) < 2:
-        lectura = LECTURA_SIN_DATOS
-        regla = f"hacen falta al menos 2 métricas de valuación comparables (hay {len(val_con_banda)})"
-    elif len(baratas) >= 2 and not caras:
-        lectura = LECTURA_BARATA
-    elif len(caras) >= 2 and not baratas:
-        lectura = LECTURA_CARA
-    elif baratas and caras:
-        lectura = LECTURA_MIXTA
-    else:
-        lectura = LECTURA_EN_LINEA
+    lectura = veredicto_valuacion(votos)
+    regla = _regla_lectura(val_con_banda)
+    if lectura == LECTURA_SIN_DATOS:
+        regla = f"hacen falta al menos 2 familias de valuación comparables (hay {len(votos)})"
 
     # -- Frases de valuación --
     if baratas:
         frases.append(Frase(
             f"Más barata que sus pares en {_lista([r.nombre for r in baratas])}.",
-            r_mejor, "positivo", [r.clave for r in baratas],
+            _criterio(baratas, True), "positivo", [r.clave for r in baratas],
         ))
     if caras:
         frases.append(Frase(
             f"Más cara que sus pares en {_lista([r.nombre for r in caras])}.",
-            r_peor, "negativo", [r.clave for r in caras],
+            _criterio(caras, False), "negativo", [r.clave for r in caras],
         ))
     if lectura == LECTURA_EN_LINEA and val_con_banda:
         frases.append(Frase("Sus múltiplos están en el rango de sus pares.",
-                            "ninguna métrica de valuación en los extremos del grupo", "neutro"))
+                            "ninguna familia de valuación en los extremos del grupo", "neutro"))
 
     # -- Calidad / crecimiento --
     if calidad_buena:
         frases.append(Frase(
             f"Mejor {_lista([_en_frase(r.nombre) for r in calidad_buena])} que sus pares.",
-            f"calidad o crecimiento: {r_mejor}", "positivo", [r.clave for r in calidad_buena],
+            f"calidad o crecimiento: {_criterio(calidad_buena, True)}", "positivo", [r.clave for r in calidad_buena],
         ))
-    peores_calidad = calidad_mala + _en("crecimiento", "peor")
+    peores_calidad = calidad_mala + [r for r in _en("crecimiento", "peor") if r.clave not in SOLO_DIAGNOSTICO]
     if peores_calidad:
         frases.append(Frase(
             f"Peor {_lista([_en_frase(r.nombre) for r in peores_calidad])} que sus pares.",
-            f"calidad o crecimiento: {r_peor}", "negativo", [r.clave for r in peores_calidad],
+            f"calidad o crecimiento: {_criterio(peores_calidad, False)}", "negativo", [r.clave for r in peores_calidad],
         ))
 
     # -- Momentum --
     if mom12 and mom12.banda in ("mejor", "peor") and mom12.valor is not None:
         verbo = "Subió más que" if mom12.banda == "mejor" else "Quedó atrás de"
+        ref = "el par" if mom12.metodo == "directo" else "la mediana"
         frases.append(Frase(
             f"{verbo} sus pares en 12 meses ({_pct(mom12.valor)} vs. {ref} {_pct(mom12.mediana_pares)}).",
-            f"rendimiento 12 meses en USD, {r_mejor} o {r_peor}", "positivo" if mom12.banda == "mejor" else "negativo",
+            f"rendimiento 12 meses en USD, {_criterio([mom12], mom12.banda == 'mejor')}",
+            "positivo" if mom12.banda == "mejor" else "negativo",
             ["rend_12m"],
         ))
 
@@ -494,7 +634,7 @@ def evaluar(objetivo: Ficha, pares: list[Ficha], hoy: date | None = None) -> Res
             motivos.append("no tiene ganancias")
         if motivos:
             lectura = LECTURA_TRAMPA
-            regla = (f"barata, pero con 2+ métricas de calidad {r_peor.replace('al menos ', '')}, ingresos "
+            regla = (f"barata, pero con 2+ métricas de calidad {_criterio(calidad_mala, False)}, ingresos "
                      "cayendo, precio a 12 meses peor que sus pares o sin ganancias")
             frases.insert(0, Frase(
                 f"Ojo: está barata, pero con señales de trampa de valor: {_lista(motivos)}.",
@@ -502,7 +642,7 @@ def evaluar(objetivo: Ficha, pares: list[Ficha], hoy: date | None = None) -> Res
             ))
     elif lectura == LECTURA_CARA and len(calidad_buena) >= 2:
         lectura = LECTURA_CARA_JUSTIFICADA
-        regla = f"cara, pero con 2+ métricas de calidad o crecimiento: {r_mejor}"
+        regla = f"cara, pero con 2+ métricas de calidad o crecimiento: {_criterio(calidad_buena, True)}"
         frases.insert(0, Frase(
             "Cotiza con prima, pero sus fundamentos son mejores que los del grupo.", regla, "neutro",
         ))
@@ -522,11 +662,24 @@ def evaluar(objetivo: Ficha, pares: list[Ficha], hoy: date | None = None) -> Res
         advertencias.append("El rendimiento se midió en la moneda local del símbolo, no en USD.")
     if objetivo.fecha_dato and (hoy - objetivo.fecha_dato).days > DIAS_DATO_VIEJO:
         advertencias.append(f"Los datos son del {objetivo.fecha_dato.strftime('%d/%m/%Y')}: pueden estar desactualizados.")
+    if objetivo.fecha_serie and objetivo.fecha_dato and (objetivo.fecha_dato - objetivo.fecha_serie).days > DIAS_SERIE_ATRASADA:
+        advertencias.append(
+            f"La serie de precios llega hasta el {objetivo.fecha_serie.strftime('%d/%m/%Y')} (la última descarga no la trajo): "
+            "el rendimiento puede no incluir las últimas semanas."
+        )
     pares_con_datos = [p.ticker_base for p in pares if any(v is not None for v in p.valores.values())]
-    if any(r.metodo == "directo" for r in resultados):
+    directas = [r for r in resultados if r.metodo == "directo"]
+    umbral = f"{UMBRAL_DIRECTO * 100:.0f}%"
+    comparadas = [r for r in resultados if r.metodo is not None]
+    if directas and len(directas) == len(comparadas):
         advertencias.append(
             f"Se compara contra un solo par ({', '.join(pares_con_datos) or 'el par'}): cuenta como mejor o peor "
-            f"una diferencia de al menos {UMBRAL_DIRECTO * 100:.0f}%, no un percentil. Con más pares la lectura es más confiable."
+            f"una diferencia de al menos {umbral}, no un percentil. Con más pares la lectura es más confiable."
+        )
+    elif directas:
+        advertencias.append(
+            f"{_lista([r.nombre for r in directas])}: sólo un par tiene el dato, así que se compara contra su valor "
+            f"(al menos {umbral} de diferencia), no con un percentil. El resto se compara contra el grupo."
         )
     elif n_pares < N_MIN_PERCENTIL - 1:
         advertencias.append("Hay muy pocos pares con datos: la comparación es poco representativa.")
@@ -539,4 +692,5 @@ def evaluar(objetivo: Ficha, pares: list[Ficha], hoy: date | None = None) -> Res
         metricas=resultados,
         n_pares_con_datos=n_pares,
         advertencias=advertencias,
+        familias=votos,
     )

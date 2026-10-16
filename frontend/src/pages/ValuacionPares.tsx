@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   actualizarClasificacionLote, getEstadoClasificacion, getValuacionLista,
-  type LecturaValuacion, type UniversoValuacion, type ValuacionItem,
+  type ClaveDimension, type LecturaValuacion, type UniversoValuacion, type ValuacionItem,
 } from '../api'
 import { qk } from '../api/queryClient'
 import ScreenHeader from '../components/layout/ScreenHeader'
@@ -12,7 +12,9 @@ import Segmented from '../components/ui/Segmented'
 import EmptyState from '../components/ui/EmptyState'
 import QueryBoundary from '../components/ui/QueryBoundary'
 import InfoTooltip from '../help/components/InfoTooltip'
-import { LECTURAS_ORDEN, LecturaBadge, TEXTO_LECTURA_CORTO } from '../components/valuacion/comun'
+import {
+  EstadoDimension, LECTURAS_ORDEN, LecturaBadge, ORDEN_NIVEL_CONFIANZA, TEXTO_LECTURA_CORTO,
+} from '../components/valuacion/comun'
 
 const UNIVERSOS: { value: UniversoValuacion; label: string }[] = [
   { value: 'cartera', label: 'Mi cartera' },
@@ -20,6 +22,52 @@ const UNIVERSOS: { value: UniversoValuacion; label: string }[] = [
   { value: 'catalogo', label: 'Todo el catálogo' },
 ]
 const PAGINA = 60
+
+/** Orden de la lista: un criterio explícito a la vez, nunca una mezcla opaca. */
+type Orden = 'nombre' | 'baratas' | 'calidad' | 'crecimiento' | 'confianza'
+const ORDENES: { value: Orden; label: string }[] = [
+  { value: 'nombre', label: 'Nombre' },
+  { value: 'baratas', label: 'Más baratas' },
+  { value: 'calidad', label: 'Mejor calidad' },
+  { value: 'crecimiento', label: 'Más crecimiento' },
+  { value: 'confianza', label: 'Más confianza' },
+]
+const DIMENSION_DE_ORDEN: Partial<Record<Orden, ClaveDimension>> = {
+  baratas: 'valuacion', calidad: 'calidad', crecimiento: 'crecimiento',
+}
+// Se muestran en la tarjeta (la valuación ya es el badge de arriba).
+const DIMENSIONES_TARJETA: { clave: ClaveDimension; label: string }[] = [
+  { clave: 'calidad', label: 'Calidad' },
+  { clave: 'crecimiento', label: 'Crecimiento' },
+  { clave: 'solidez', label: 'Solidez' },
+  { clave: 'confianza', label: 'Confianza en los datos' },
+]
+
+function dimension(item: ValuacionItem, clave: ClaveDimension) {
+  return item.dimensiones.find(d => d.clave === clave)
+}
+
+function valorOrden(item: ValuacionItem, orden: Orden): number | null {
+  if (orden === 'confianza') {
+    const d = dimension(item, 'confianza')
+    return d ? ORDEN_NIVEL_CONFIANZA[d.estado.toLowerCase().replace(' ', '_')] ?? null : null
+  }
+  const clave = DIMENSION_DE_ORDEN[orden]
+  return clave ? dimension(item, clave)?.percentil ?? null : null
+}
+
+function ordenar(items: ValuacionItem[], orden: Orden): ValuacionItem[] {
+  if (orden === 'nombre') return items
+  // Sin dato va siempre al final: no es "lo peor", es lo que no se puede comparar.
+  return [...items].sort((a, b) => {
+    const va = valorOrden(a, orden)
+    const vb = valorOrden(b, orden)
+    if (va == null && vb == null) return a.ticker.localeCompare(b.ticker)
+    if (va == null) return 1
+    if (vb == null) return -1
+    return vb - va || a.ticker.localeCompare(b.ticker)
+  })
+}
 
 function FiltroChip({ activo, onClick, children }: { activo: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
@@ -50,6 +98,20 @@ function Tarjeta({ item, onClick }: { item: ValuacionItem; onClick: () => void }
         <LecturaBadge lectura={item.lectura} />
       </div>
       {detalle && item.nombre && <div className="text-label text-app-text-faint mt-1 truncate">{detalle}</div>}
+      {item.estado_datos === 'ok' && (
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-2.5">
+          {DIMENSIONES_TARJETA.map(({ clave, label }) => {
+            const d = dimension(item, clave)
+            if (!d || d.nivel === 'no_aplica') return null
+            return (
+              <div key={clave} className="min-w-0">
+                <div className="text-label text-app-text-faint truncate">{label}</div>
+                <EstadoDimension nivel={d.nivel} estado={d.estado} />
+              </div>
+            )
+          })}
+        </div>
+      )}
       {item.frases.length > 0 ? (
         <ul className="mt-2 flex flex-col gap-1">
           {item.frases.map(f => <li key={f} className="text-caption text-app-text">{f}</li>)}
@@ -58,6 +120,9 @@ function Tarjeta({ item, onClick }: { item: ValuacionItem; onClick: () => void }
         <div className="text-caption text-app-text-dim mt-2">
           {item.estado_datos === 'ok' ? 'Pocos pares con datos para comparar.' : 'Datos pendientes: la app los baja de a poco.'}
         </div>
+      )}
+      {item.fecha_dato && (
+        <div className="text-label text-app-text-faint mt-2">Datos del {item.fecha_dato.split('-').reverse().join('/')}</div>
       )}
     </button>
   )
@@ -73,6 +138,10 @@ export default function ValuacionPares() {
   const [lectura, setLectura] = useState<LecturaValuacion | null>(null)
   const [region, setRegion] = useState<string | null>(null)
   const [tipo, setTipo] = useState<string | null>(null)
+  const [orden, setOrden] = useState<Orden>('nombre')
+  const [soloCalidad, setSoloCalidad] = useState(false)
+  const [soloSolidas, setSoloSolidas] = useState(false)
+  const [soloConfiables, setSoloConfiables] = useState(false)
   const [visibles, setVisibles] = useState(PAGINA)
 
   const lista = useQuery({
@@ -91,8 +160,11 @@ export default function ValuacionPares() {
   const items = lista.data?.items ?? []
   const regiones = useMemo(() => [...new Set(items.map(i => i.region).filter(Boolean) as string[])].sort(), [items])
   const tipos = useMemo(() => [...new Set(items.map(i => i.tipo).filter(Boolean) as string[])].sort(), [items])
-  const filtrados = items.filter(i =>
-    (!lectura || i.lectura === lectura) && (!region || i.region === region) && (!tipo || i.tipo === tipo))
+  const filtrados = ordenar(items.filter(i =>
+    (!lectura || i.lectura === lectura) && (!region || i.region === region) && (!tipo || i.tipo === tipo)
+    && (!soloCalidad || dimension(i, 'calidad')?.estado === 'Alta')
+    && (!soloSolidas || dimension(i, 'solidez')?.estado === 'Sólida')
+    && (!soloConfiables || dimension(i, 'confianza')?.estado === 'Alta')), orden)
   const conteos = useMemo(() => {
     const c: Partial<Record<LecturaValuacion, number>> = {}
     for (const i of items) {
@@ -106,6 +178,9 @@ export default function ValuacionPares() {
     setLectura(null)
     setRegion(null)
     setTipo(null)
+    setSoloCalidad(false)
+    setSoloSolidas(false)
+    setSoloConfiables(false)
     setVisibles(PAGINA)
   }
 
@@ -172,6 +247,18 @@ export default function ValuacionPares() {
           ))}
         </div>
       )}
+
+      <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1 mb-1.5">
+        <FiltroChip activo={soloCalidad} onClick={() => setSoloCalidad(v => !v)}>Calidad alta</FiltroChip>
+        <FiltroChip activo={soloSolidas} onClick={() => setSoloSolidas(v => !v)}>Solidez sólida</FiltroChip>
+        <FiltroChip activo={soloConfiables} onClick={() => setSoloConfiables(v => !v)}>Confianza alta</FiltroChip>
+      </div>
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1 mb-3">
+        <span className="shrink-0 text-label font-bold text-app-text-faint">Ordenar por</span>
+        {ORDENES.map(o => (
+          <FiltroChip key={o.value} activo={orden === o.value} onClick={() => setOrden(o.value)}>{o.label}</FiltroChip>
+        ))}
+      </div>
 
       <QueryBoundary isLoading={lista.isLoading} error={lista.error} onRetry={() => void lista.refetch()}>
         {filtrados.length === 0 ? (

@@ -12,8 +12,10 @@ import { Icon } from '../../components/icons/Icons'
 import FuerzaRelativaChart from '../../components/charts/FuerzaRelativaChart'
 import EditorClasificacion from '../../components/valuacion/EditorClasificacion'
 import EditorPares from '../../components/valuacion/EditorPares'
+import DiagnosticoCard from '../../components/valuacion/DiagnosticoCard'
+import ComparadorAlternativas from '../../components/valuacion/ComparadorAlternativas'
 import {
-  FuenteBadge, LecturaBadge, NOMBRE_GRUPO, TONO_FRASE, formatMetrica, formatTamano,
+  FuenteBadge, LecturaBadge, NOMBRE_GRUPO, OrigenTag, TONO_FRASE, formatMetrica, formatTamano,
 } from '../../components/valuacion/comun'
 
 const GRUPOS = ['valuacion', 'calidad', 'crecimiento', 'momentum'] as const
@@ -71,7 +73,10 @@ function VistaPorMetrica({ v }: { v: ValuacionTicker }) {
             <div className="flex flex-col">
               {filas.map(f => (
                 <div key={f.clave} className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 py-2 border-b border-app-border-soft last:border-b-0">
-                  <div className="text-caption text-app-text truncate">{f.nombre}</div>
+                  <div className="text-caption text-app-text flex items-center gap-1.5 min-w-0">
+                    <span className="truncate">{f.nombre}</span>
+                    {f.origen !== 'observado' && <OrigenTag origen={f.origen} />}
+                  </div>
                   <div className="text-caption font-mono text-app-text text-right">
                     {formatMetrica(f.valor, f.formato)}
                     <span className="text-app-text-faint"> · {f.metodo === 'directo' && parUnico ? parUnico : 'mediana'} {formatMetrica(f.mediana_pares, f.formato)}</span>
@@ -103,7 +108,7 @@ function VistaTabla({ v }: { v: ValuacionTicker }) {
         <tbody>
           {v.tabla.filas.map(f => (
             <tr key={f.clave}>
-              <td className="sticky left-0 bg-app-surface text-app-text pr-3 py-1.5 border-t border-app-border-soft whitespace-nowrap">{f.nombre}</td>
+              <td className="sticky left-0 bg-app-surface text-app-text pr-3 py-1.5 border-t border-app-border-soft whitespace-nowrap">{f.nombre}{f.origen === 'estimado' ? ' (est.)' : ''}</td>
               {v.tabla.columnas.map((c, i) => (
                 <td key={c} className={`text-right font-mono px-2 py-1.5 border-t border-app-border-soft whitespace-nowrap ${i === 0 ? 'text-app-text font-bold' : 'text-app-text-dim'}`}>
                   {formatMetrica(f.valores[c], f.formato)}
@@ -174,6 +179,8 @@ export default function TickerParesTab({ ticker }: { ticker: string }) {
             ))}
           </Card>
 
+          {v.diagnostico.confianza !== 'sin_datos' && <DiagnosticoCard diagnostico={v.diagnostico} fechaDato={v.fecha_dato} />}
+
           <Card>
             <div className="flex items-center justify-between mb-2">
               <div className="text-strong font-bold text-app-text">Clasificación</div>
@@ -214,6 +221,8 @@ export default function TickerParesTab({ ticker }: { ticker: string }) {
               ))}
             </div>
           </Card>
+
+          <ComparadorAlternativas ticker={ticker} />
 
           {v.tabla.filas.length > 0 && (
             <Card>

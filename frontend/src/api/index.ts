@@ -2794,7 +2794,59 @@ export interface FilaValuacion {
   metodo: 'percentil' | 'directo' | null
   /** Sólo "directo": (propio − par) / |par|. */
   diferencia: number | null
+  /** De dónde sale el dato: lo informado por Yahoo, una estimación de analistas o un cálculo de la app. */
+  origen: OrigenDato
   valores: Record<string, number | null>
+}
+
+export type OrigenDato = 'observado' | 'estimado' | 'calculado'
+
+export type ClaveDimension = 'valuacion' | 'calidad' | 'crecimiento' | 'solidez' | 'confianza'
+export type NivelDimension = 'bien' | 'atencion' | 'riesgo' | 'neutro' | 'sin_datos' | 'no_aplica'
+
+export interface RazonDiagnostico {
+  texto: string
+  tono: 'positivo' | 'negativo' | 'alerta' | 'neutro'
+  origen: OrigenDato
+  metricas: string[]
+  regla: string
+}
+
+export interface VotoFamilia {
+  familia: string
+  nombre: string
+  banda: 'mejor' | 'peor' | 'media'
+  metricas: string[]
+  solo_apoya: boolean
+}
+
+export interface DimensionDiagnostico {
+  clave: ClaveDimension
+  nombre: string
+  /** Estado en palabras ("Alta", "Débil", "Sólida"…). No hay puntaje numérico. */
+  estado: string
+  nivel: NivelDimension
+  resumen: string
+  regla: string
+  razones: RazonDiagnostico[]
+  /** Lo que no está disponible (y por eso la conclusión es menos firme). */
+  faltantes: string[]
+  /** Mediana de los percentiles favorables de sus métricas: 100 = el mejor del grupo. Sólo para ordenar. */
+  percentil: number | null
+  votos: VotoFamilia[]
+}
+
+export interface DiagnosticoEmpresa {
+  version_reglas: number
+  dimensiones: DimensionDiagnostico[]
+  confianza: 'alta' | 'media' | 'baja' | 'sin_datos'
+}
+
+export interface DimensionResumen {
+  clave: ClaveDimension
+  estado: string
+  nivel: NivelDimension
+  percentil: number | null
 }
 
 export interface ParValuacion {
@@ -2831,6 +2883,7 @@ export interface ValuacionTicker {
   /** Cierres semanales en USD (hasta 5 años), sin normalizar: el gráfico re-basa desde la fecha elegida. */
   fuerza_relativa: { fecha: string; propio: number; pares: Record<string, number> }[]
   advertencias: string[]
+  diagnostico: DiagnosticoEmpresa
 }
 
 export type UniversoValuacion = 'cartera' | 'watchlist' | 'catalogo'
@@ -2851,6 +2904,7 @@ export interface ValuacionItem {
   fecha_dato: string | null
   en_cartera: boolean
   en_watchlist: boolean
+  dimensiones: DimensionResumen[]
 }
 
 export interface ValuacionLista {
@@ -2902,6 +2956,171 @@ export const getValuacionLista = (
 
 export const getValuacionTicker = (ticker: string) =>
   api.get<ValuacionTicker>(`/inversiones/valuacion/${encodeURIComponent(ticker)}`).then(r => r.data)
+
+// ── Comparador "¿qué compraría en su lugar?" ──
+
+export type NivelComparabilidad = 'alta' | 'media' | 'baja' | 'no_comparable'
+
+export interface CriterioComparabilidad {
+  clave: string
+  nombre: string
+  estado: 'favorable' | 'neutro' | 'desfavorable' | 'sin_dato'
+  texto: string
+  excluye: boolean
+  corto: string
+}
+
+export interface AlternativaComparador {
+  ticker_base: string
+  nombre: string | null
+  origen: 'grupo' | 'elegida' | 'sugerida'
+  en_grupo: boolean
+  a_mano: boolean
+  nivel: NivelComparabilidad
+  resumen: string
+  criterios: CriterioComparabilidad[]
+  notas: string[]
+  /** false = se ve en la tabla pero no cuenta para el ranking ni la conclusión. */
+  en_ranking: boolean
+  tamano_usd: number | null
+  region: string | null
+  sector: string | null
+  industria: string | null
+}
+
+export interface RechazoComparador {
+  ticker_base: string
+  nombre: string | null
+  nivel: NivelComparabilidad
+  motivo: string
+}
+
+export interface ColumnaComparador {
+  ticker_base: string
+  nombre: string | null
+  es_objetivo: boolean
+  nivel: NivelComparabilidad | null
+  en_ranking: boolean
+  fecha_dato: string | null
+  periodo_contable: string | null
+  fecha_serie: string | null
+  aviso_moneda: boolean
+  tamano_usd: number | null
+  region: string | null
+  sector: string | null
+  industria: string | null
+}
+
+export type EstadoCelda = 'dato' | 'sin_dato' | 'no_aplica' | 'sin_ganancias' | 'moneda'
+
+export interface FilaComparador {
+  clave: string
+  nombre: string
+  grupo: 'valuacion' | 'calidad' | 'crecimiento' | 'momentum'
+  formato: 'x' | 'pct'
+  unidad: string
+  /** A qué período se refiere el dato (últimos 12 meses, último balance…). */
+  periodo: string
+  mayor_es_mejor: boolean
+  /** Suma a la lectura pero no decide sola (dividendo; valor libro en tecnología, comunicaciones y salud). */
+  solo_apoya: boolean
+  celdas: Record<string, { valor: number | null; estado: EstadoCelda; origen: OrigenDato }>
+  mejor: string | null
+  peor: string | null
+}
+
+export interface TablaComparador {
+  columnas: ColumnaComparador[]
+  filas: FilaComparador[]
+  no_aplican: { nombre: string; motivo: string }[]
+  sin_dato_en_ninguna: string[]
+}
+
+export interface RankingDimension {
+  clave: 'valuacion' | 'calidad' | 'crecimiento' | 'solidez'
+  nombre: string
+  regla: string
+  puestos: { ticker_base: string; posicion: number | null; estado: string; nivel: NivelDimension; percentil: number | null }[]
+  posicion_objetivo: number | null
+  de: number
+  tercio: 'arriba' | 'medio' | 'abajo' | null
+  estado_objetivo: string
+  nivel_objetivo: NivelDimension
+}
+
+export interface LineaComparacion {
+  dimension: string
+  veredicto: 'mejor' | 'peor' | 'similar' | null
+  texto: string
+  tono: 'positivo' | 'negativo' | 'alerta' | 'neutro'
+  metricas: string[]
+  regla: string
+}
+
+export interface ComparacionPar {
+  ticker_base: string
+  orientativa: boolean
+  lineas: LineaComparacion[]
+  veredictos: Record<string, 'mejor' | 'peor' | 'similar' | null>
+  domina: 'alternativa' | 'objetivo' | null
+  texto_dominancia: string
+}
+
+export interface FraseConclusion {
+  texto: string
+  regla: string
+  tono: 'positivo' | 'negativo' | 'alerta' | 'neutro'
+  origen: OrigenDato
+  metricas: string[]
+  dimension: string | null
+}
+
+export interface ConclusionComparador {
+  regla_aplicada: string
+  titulo: string
+  frases: FraseConclusion[]
+  destacadas: FraseConclusion[]
+  /** Por qué podría merecer un múltiplo mayor / menor que sus alternativas. */
+  mayor: FraseConclusion[]
+  menor: FraseConclusion[]
+  salvedad: string
+  firmeza: 'alta' | 'media' | 'baja'
+  firmeza_razones: string[]
+  limites: string[]
+  regla: string
+}
+
+export interface Comparador {
+  version_reglas: number
+  estado: 'ok' | 'insuficiente' | 'sin_datos'
+  mensaje: string
+  minimo: number
+  faltan: number
+  modelo: string | null
+  ticker: string
+  ticker_base: string
+  nombre: string | null
+  es_etf: boolean
+  estado_datos: string
+  fecha_dato: string | null
+  objetivo: ColumnaComparador | null
+  alternativas: AlternativaComparador[]
+  sugeridas: AlternativaComparador[]
+  rechazadas: RechazoComparador[]
+  seleccion: string[]
+  elegido_por_usuario: boolean
+  tabla: TablaComparador | null
+  ranking: RankingDimension[]
+  pares: ComparacionPar[]
+  conclusion: ConclusionComparador | null
+  fuerza_relativa: { fecha: string; propio: number; pares: Record<string, number> }[]
+}
+
+/** `con` va como un solo parámetro separado por comas: axios serializa los arrays como `con[]=` y el backend no los lee. */
+export const getComparador = (ticker: string, con: string[] = []) =>
+  api.get<Comparador>(`/inversiones/valuacion/${encodeURIComponent(ticker)}/comparador`, {
+    params: con.length ? { con: con.join(',') } : {},
+  }).then(r => r.data)
 
 export const getEstadoClasificacion = () =>
   api.get<EstadoClasificacion>('/inversiones/clasificacion/estado').then(r => r.data)

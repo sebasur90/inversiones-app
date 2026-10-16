@@ -269,6 +269,18 @@ def test_error_suelto_no_borra_una_clasificacion_buena(db, llamadas, monkeypatch
     assert ko.estado == "ok" and ko.sector == "Consumo básico" and ko.intentos_fallidos == 1
 
 
+def test_actualizacion_fallida_deja_el_snapshot_anterior_intacto(db, llamadas, monkeypatch):
+    """Si Yahoo falla, no se pierde ni se pisa la última foto buena: la valuación sigue usándola (y avisa su fecha)."""
+    _correr(db, tickers=["KO"])
+    antes = db.query(FundamentalesSnapshot).filter_by(simbolo_yahoo="KO").one()
+    metricas, fecha = dict(antes.metricas), antes.fecha
+    monkeypatch.setattr(yahoo, "fetch_fundamentales",
+                        lambda s: yahoo.ResultadoYahoo(yahoo.ESTADO_ERROR, error="timeout"))
+    _correr(db, tickers=["KO"])
+    despues = db.query(FundamentalesSnapshot).filter_by(simbolo_yahoo="KO").all()
+    assert len(despues) == 1 and despues[0].metricas == metricas and despues[0].fecha == fecha
+
+
 def test_tickers_acepta_variantes(db, llamadas):
     _correr(db, tickers=["KOD"])
     assert llamadas == ["KO"]

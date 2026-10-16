@@ -11,10 +11,13 @@ from sqlalchemy.orm import Session
 from ..database import SessionLocal, get_db
 from ..schemas import (
     ActualizarClasificacionIn, ActualizarClasificacionOut, ClasificacionCorreccionIn,
-    ClasificacionTickerOut, DiferenciaClasificacionOut, EstadoClasificacionOut, ParCorreccionIn,
+    ClasificacionTickerOut, ComparadorAlternativasOut, DiferenciaClasificacionOut, EstadoClasificacionOut, ParCorreccionIn,
     ValuacionListaOut, ValuacionTickerOut,
 )
-from ..services import clasificacion_analytics, fundamentales_ingesta, scheduler, valuacion_analytics
+from ..services import (
+    clasificacion_analytics, comparador_analytics, comparador_engine, fundamentales_ingesta, scheduler,
+    valuacion_analytics,
+)
 
 router = APIRouter(prefix="/api/inversiones", tags=["clasificacion"])
 
@@ -102,6 +105,17 @@ def valuacion_ticker(ticker: str, db: Session = Depends(get_db)):
     """Ficha de valuación de un ticker contra sus pares: clasificación con fuentes, pares y el
     criterio con que se eligieron, tabla lado a lado, percentiles, frases y fuerza relativa."""
     return valuacion_analytics.get_valuacion_ticker(ticker.strip().upper(), db)
+
+
+@router.get("/valuacion/{ticker}/comparador", response_model=ComparadorAlternativasOut)
+def valuacion_comparador(ticker: str, con: str = Query("", description="Alternativas separadas por coma"),
+                         db: Session = Depends(get_db)):
+    """"¿Qué compraría en su lugar?": el ticker contra alternativas comparables, incluso fuera de su
+    grupo de pares. Sin `con` usa su grupo de pares; con `con=A,B` compara contra esas."""
+    elegidas = list(dict.fromkeys(t.strip().upper() for t in con.split(",") if t.strip()))
+    if len(elegidas) > comparador_engine.MAX_ALTERNATIVAS:
+        raise HTTPException(status_code=422, detail=f"con admite hasta {comparador_engine.MAX_ALTERNATIVAS} alternativas")
+    return comparador_analytics.get_comparador(ticker.strip().upper(), tuple(elegidas), db)
 
 
 # ── Correcciones manuales ────────────────────────────────────────────────────

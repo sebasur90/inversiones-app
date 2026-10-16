@@ -468,6 +468,8 @@ fundamentales de Yahoo (`get_info()`), y las pantallas agrupan por un único voc
 | `services/pares_engine.py` | Puro. Elige comparables |
 | `services/valuacion_engine.py` | Puro. Limpia métricas, percentiles, lecturas con regla visible |
 | `services/valuacion_analytics.py` | Adaptador DB de las dos anteriores |
+| `services/comparador_engine.py` | Puro. Comparador "¿qué compraría en su lugar?": comparabilidad, tabla por sector, ranking y conclusión (reglas v1) |
+| `services/comparador_analytics.py` | Adaptador DB del comparador (reutiliza `Universo`) |
 | `routers/clasificacion.py` | Endpoints |
 
 Tablas nuevas (`create_all`, sin migración): `clasificacion_auto`, `fundamentales_snapshot` (se
@@ -537,10 +539,95 @@ El alta en watchlist pide los datos del ticker nuevo en segundo plano.
 |---|---|---|
 | GET | `/valuacion?universo=cartera\|watchlist\|catalogo` | Lectura por emisor (filtros `tipo`, `sector`, `region`, `lectura`) |
 | GET | `/valuacion/{ticker}` | Ficha: clasificación con fuentes, pares y criterio, tabla, percentiles, frases, fuerza relativa |
+| GET | `/valuacion/{ticker}/comparador?con=A,B` | Comparador de alternativas (ver más abajo). `con` = hasta 6 tickers separados por coma; sin `con`, usa el grupo de pares |
 | GET/PUT | `/clasificacion/{ticker}` | Ver / corregir tipo, sector, industria, país, región, símbolo Yahoo |
 | DELETE | `/clasificacion/{ticker}/{campo}` | Volver al automático |
 | POST | `/pares/{ticker}` | `{par, accion: agregar\|quitar}` |
 | DELETE | `/pares/{ticker}/{par}` | Deshacer la corrección de un par |
+
+### Diagnóstico integral (reglas v2)
+
+`diagnostico_empresa_engine.py` (puro, sin DB ni red) separa lo que antes era una sola lectura en
+**cinco preguntas independientes**, cada una con estado en palabras, razones, regla visible y
+"qué falta". **No hay puntaje único.** `VERSION_REGLAS = 2` viaja en la respuesta (`diagnostico.version_reglas`);
+si cambia una regla o un umbral hay que subirla (prepara el historial de diagnósticos).
+
+| Dimensión | Estados | Cómo se decide (resumen; el texto exacto está en `regla` de la respuesta) |
+|---|---|---|
+| Valuación | la lectura de siempre | 2+ **familias** en el cuarto más barato/caro del grupo (ver abajo) |
+| Calidad | Alta / Media / Débil / Sin conclusión | familias márgenes y retornos; margen operativo/neto o ROE negativo = Débil aunque los pares estén peor |
+| Crecimiento | Alto / Medio / Bajo / En caída / Sin conclusión | ingresos y ganancias interanuales (observado); crecimiento esperado = P/E ÷ P/E estimado − 1 (estimación, suma pero no decide solo); ingresos < −2 % = En caída |
+| Solidez financiera | Sólida / Con señales de atención / Frágil | fuertes: Deuda/Patrimonio > 2, FCF negativo, sin ganancias, payout > 100 %; moderadas: liquidez corriente < 1, beta > 1,5, deuda en el cuarto peor |
+| Confianza de los datos | Alta / Media / Baja | el peor de: cobertura (≥ 70 % / ≥ 40 %), pares con datos (≥ 4 / ≥ 2), frescura (≤ 21 / ≤ 60 días), antigüedad del balance (≤ 150 / ≤ 270 días), balances de períodos distintos, conversión de moneda |
+
+Principios (están en los tests): **faltante ≠ negativo** (un dato que Yahoo no trae se lista en
+"qué falta", nunca baja un estado), **no aplica ≠ faltante** (un banco no tiene EV/EBITDA ni margen
+bruto; un ETF sólo se evalúa por valuación y confianza), y cada razón lleva su `origen`:
+`observado` (lo informó Yahoo), `estimado` (proviene de estimaciones de analistas: P/E estimado, PEG,
+crecimiento esperado) o `calculado` (lo derivó la app). Las conclusiones las calcula siempre la app.
+
+**Familias de valuación** (`valuacion_engine.FAMILIAS`): ganancias (P/E, P/E estimado, PEG), ventas y
+EBITDA, flujo de caja, valor libro, dividendo (y costos en ETFs). Cada familia vota lo que vota la
+mayoría de sus métricas con banda (empate = media): P/E, P/E estimado y PEG juntos valen **un** voto.
+El dividendo siempre, y el valor libro en Tecnología/Comunicaciones/Salud (`SECTORES_PATRIMONIO_NO_DECIDE`),
+"suman pero no deciden": no alcanzan solos y un valor "peor" ahí no se cuenta como "cara". Esto
+**cambió lecturas** respecto de la v1 (que contaba cada métrica); el motor sigue declarando en
+`regla_lectura` lo que usó de verdad.
+
+Otros cambios en este paso:
+- El método (percentil vs. comparación directa contra un único par) se decide **por métrica**: antes una
+  sola métrica con un par bastaba para que toda la regla y la advertencia hablaran de "15 % contra el par".
+- `Universo` toma la serie semanal del snapshot más nuevo **que la tenga**; si el último quedó sin serie
+  (falla o 429) ya no se pierde el momentum, y se avisa si la serie es más vieja que los fundamentales.
+- La corrección manual de industria (en castellano) ahora encuentra pares (se compara con `industria_legible`).
+- El flujo de caja libre de un banco (sector Financiero) no se usa.
+- Datos nuevos de Yahoo, **misma llamada `get_info()`, sin consultas extra**: `mostRecentQuarter` (período del
+  balance), `payoutRatio`, `currentRatio`. Entran al JSON `metricas` (sin migración de esquema) y aparecen en
+  la próxima ingesta; mientras tanto el motor los trata como ausentes, no como negativos.
+- La ficha del ticker ya no da "Ticker no encontrado" para lo que no está en el Sheet (catálogo, watchlist,
+  pares): muestra la pestaña Pares con un aviso.
+
+API (aditiva): `GET /valuacion/{ticker}` suma `diagnostico` y `origen` en cada fila de la tabla;
+`GET /valuacion` suma `dimensiones` (estado, nivel, percentil) por ítem. La lista se filtra y ordena en el
+cliente (`ValuacionPares.tsx`), un criterio explícito a la vez.
+
+### Comparador "¿qué compraría en su lugar?" (reglas v1)
+
+`comparador_engine.py` (puro) + `comparador_analytics.py` (adaptador; arma un `Universo` por request y se
+cachea con `cache_por_sync`: `con` es parte de la clave, y cualquier escritura —`ParOverride`,
+`ClasificacionOverride`— o sync lo invalida). Sin tablas ni columnas nuevas; la elección de alternativas
+es efímera (parámetro `con`), el grupo persistente sigue siendo `ParOverride`.
+
+- **Comparabilidad** (`evaluar` por criterios: emisor, tipo, modelo de negocio, industria/categoría,
+  tamaño, región, cobertura, período contable, moneda, frescura). *No comparable* (descarte duro, va a
+  `rechazadas` con el motivo): mismo emisor (mismo `ticker_base` o `simbolo_yahoo`: CEDEAR vs. subyacente,
+  ADR vs. local), ETF vs. empresa, modelo distinto (financiero / inmobiliario / operativo), sin fundamentales
+  o cobertura < 40 %. *Alta* = misma industria + tamaño 0,2-5× + misma región; *media* = misma industria con
+  una de las otras dos, o mismo sector con tamaño y región; *baja* = el resto (se ve, no cuenta). Datos de
+  otro período/moneda/frescura topean "alta" en "media"; un par agregado a mano sube "baja" a "media".
+- **Selección**: sin `con`, los pares del grupo con nivel alta/media (tope `N_DEFAULT = 4`); con `con`, esos
+  (tope `MAX_ALTERNATIVAS = 6`; dos tickers del mismo emisor cuentan una vez). `sugeridas` = candidatos
+  alta/media fuera de la selección (los `quitado` a mano no se sugieren). `MIN_ALTERNATIVAS = 2`: con menos,
+  estado `insuficiente` (tabla sí; ranking y conclusión no) y mensaje con lo que falta.
+- **Tabla**: métricas por modelo (`METRICAS_POR_MODELO`), unidad, período (`PERIODO_METRICA`), origen,
+  estado de celda (`dato | sin_dato | no_aplica | sin_ganancias | moneda`), mejor/peor por fila entre los
+  miembros que cuentan, y las que no aplican con su motivo.
+- **Ranking**: se corre `ve.evaluar` + `diagnostico_empresa_engine.diagnosticar` de cada miembro **contra
+  los demás miembros** (los percentiles de los diagnósticos individuales vienen de grupos distintos y no se
+  pueden ordenar entre sí). Posición por dimensión; tercio (arriba < 1/3, abajo > 2/3 de los puestos).
+- **Conclusión**: R1 (más cara + fundamento fuerte, sin debilidad), R2 (más cara sin respaldo), R3 (más
+  barata + debilidad), R4 (más barata sin debilidades), R5 (en el medio), R0 (sin datos de valuación), ETF
+  (costo/valuación). Fundamento fuerte = tercio mejor sin alerta propia; debilidad = tercio peor o alerta
+  propia (calidad débil, ingresos en caída, solidez frágil). Aparte, dominancia por par (±15 %). "Por qué
+  podría merecer un múltiplo mayor/menor" sale de las razones de cada dimensión (con origen). Firmeza
+  alta/media/baja según miembros, confianza de datos y períodos/monedas. Un test garantiza que ningún texto
+  dice comprá/vendé/recomendar.
+
+**Qué no se hizo (propuesto):** valor razonable y escenarios, múltiplos históricos (requiere guardar estados
+contables por período: hoy sólo hay una foto TTM y hasta 8 snapshots), simulador de compra sobre la cartera
+(tratar CEDEAR/subyacente como un emisor con `Contexto.base`), alertas por cambio de diagnóstico e historial
+(`version_reglas` de diagnóstico y de comparador ya viajan en la respuesta). Sin historia contable de varios
+años la **consistencia** de resultados no se evalúa, y la pantalla lo dice.
 
 ### Limitaciones conocidas
 

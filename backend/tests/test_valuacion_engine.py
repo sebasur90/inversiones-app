@@ -216,3 +216,70 @@ def test_ko_contra_pep_da_lectura():
     assert "15% mejores que el par" in r.regla_lectura
     assert any("un solo par (PEP)" in a for a in r.advertencias)
     assert any("vs. el par" in f.texto for f in r.frases)
+
+
+# ── método mixto: una métrica con un solo par no contamina al resto ───────
+
+def test_una_metrica_con_un_solo_par_no_cambia_la_regla_de_las_demas():
+    # El PEG sólo lo tiene el par A: se compara directo. P/E y EV/EBITDA, contra 4 pares: percentil.
+    pares = [ve.Ficha(p.ticker_base, {**p.valores, **({"peg": 2.0} if p.ticker_base == "A" else {})}) for p in PARES]
+    obj = _ficha("X", pe=12, ev_ebitda=8, peg=1.0)
+    r = ve.evaluar(obj, pares)
+    por = {m.clave: m for m in r.metricas}
+    assert por["peg"].metodo == "directo" and por["pe"].metodo == "percentil"
+    # La frase de P/E habla de percentil; la regla de la lectura aclara las dos cosas.
+    frase = next(f for f in r.frases if "P/E" in f.texto and f.tono == "positivo")
+    assert "PEG" in frase.regla and "percentil" in frase.regla and "15%" in frase.regla
+    assert "cuarto más barato del grupo" in r.regla_lectura and "PEG" in r.regla_lectura
+    # La advertencia de "un solo par" nombra sólo la métrica afectada, no toda la lectura.
+    aviso = next(a for a in r.advertencias if "un par tiene el dato" in a)
+    assert "PEG" in aviso and "P/E" not in aviso
+
+
+# ── conteo por familias ───────────────────────────────────────────────────
+
+def test_pe_forward_y_peg_son_un_solo_voto():
+    # Tres métricas de ganancias baratas, pero ninguna otra familia: no alcanza para "barata".
+    pares = [_ficha("A", pe=20, forward_pe=18, peg=2.0), _ficha("B", pe=22, forward_pe=19, peg=2.2),
+             _ficha("C", pe=25, forward_pe=21, peg=2.5), _ficha("D", pe=28, forward_pe=23, peg=2.8)]
+    obj = _ficha("X", pe=12, forward_pe=10, peg=1.0)
+    r = ve.evaluar(obj, pares)
+    assert r.lectura == ve.LECTURA_SIN_DATOS          # una sola familia con dato
+    assert [v.familia for v in r.familias] == ["ganancias"] and r.familias[0].banda == "mejor"
+
+
+def test_dos_familias_baratas_alcanzan():
+    r = ve.evaluar(_ficha("X", pe=12, forward_pe=10, ev_ebitda=8), PARES_CON_FORWARD)
+    assert r.lectura == ve.LECTURA_BARATA
+    assert {v.familia for v in r.familias} == {"ganancias", "ventas_ebitda"}
+
+
+PARES_CON_FORWARD = [ve.Ficha(p.ticker_base, {**p.valores, "forward_pe": p.valores["pe"] - 2}) for p in PARES]
+
+
+def test_dividendo_alto_suma_pero_no_decide_solo():
+    pares = [_ficha(t, pe=pe, div_yield=d) for t, pe, d in
+             (("A", 20, 0.02), ("B", 22, 0.025), ("C", 25, 0.03), ("D", 28, 0.035))]
+    # Dividendo altísimo y P/E en línea: sólo una familia "mejor" y es de apoyo => en línea.
+    r = ve.evaluar(_ficha("X", pe=24, div_yield=0.09), pares)
+    assert r.lectura == ve.LECTURA_EN_LINEA
+    # Con una familia que decide a favor, el dividendo la acompaña y alcanza.
+    assert ve.evaluar(_ficha("X", pe=12, div_yield=0.09), pares).lectura == ve.LECTURA_BARATA
+
+
+def test_dividendo_bajo_no_prueba_que_este_cara():
+    pares = [_ficha(t, pe=pe, div_yield=d) for t, pe, d in
+             (("A", 20, 0.02), ("B", 22, 0.025), ("C", 25, 0.03), ("D", 28, 0.035))]
+    r = ve.evaluar(_ficha("X", pe=40, div_yield=0.0), pares)
+    assert r.lectura != ve.LECTURA_CARA               # P/E peor, pero dividendo no cuenta como "cara"
+    assert not any("Dividendo" in f.texto for f in r.frases if f.tono == "negativo")
+
+
+def test_valor_libro_no_decide_en_tecnologia_pero_si_en_financieros():
+    pares = [ve.Ficha(t, {"pe": pe, "pb": pb}) for t, pe, pb in
+             (("A", 20, 3.0), ("B", 22, 3.5), ("C", 25, 4.0), ("D", 28, 4.5))]
+    for sector, esperada in (("Tecnología", ve.LECTURA_EN_LINEA), ("Financiero", ve.LECTURA_CARA)):
+        obj = ve.Ficha("X", {"pe": 40, "pb": 8.0}, sector=sector)
+        pares_s = [ve.Ficha(p.ticker_base, p.valores, sector=sector) for p in pares]
+        # En tecnología el P/B alto sólo "apoya" (y apoyar no sirve para decir "cara"): una familia que decide.
+        assert ve.evaluar(obj, pares_s).lectura == esperada

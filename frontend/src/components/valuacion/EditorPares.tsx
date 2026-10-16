@@ -20,6 +20,7 @@ export default function EditorPares({ valuacion, open, onClose }: { valuacion: V
   const alActualizar = (nueva: ValuacionTicker) => {
     queryClient.setQueryData(qk.de('valuacion-ticker', ticker), nueva)
     void queryClient.invalidateQueries({ queryKey: ['valuacion-lista'] })
+    void queryClient.invalidateQueries({ queryKey: ['valuacion-comparador'] })   // los candidatos dependen de los pares
   }
   const corregir = useMutation({
     mutationFn: ({ par, accion }: { par: string; accion: 'agregar' | 'quitar' }) => corregirPar(ticker, par, accion),

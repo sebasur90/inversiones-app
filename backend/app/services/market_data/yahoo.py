@@ -222,6 +222,8 @@ CLAVES_NUMERO = (
     "revenueGrowth", "earningsGrowth", "earningsQuarterlyGrowth",
     # magnitudes para recalcular ratios en otra moneda
     "netIncomeToCommon", "totalRevenue", "ebitda", "trailingEps", "forwardEps", "bookValue",
+    # período contable al que corresponden los datos (epoch en segundos), solidez del dividendo y liquidez
+    "mostRecentQuarter", "payoutRatio", "currentRatio",
     # precio y riesgo
     "currentPrice", "regularMarketPrice", "previousClose", "beta", "fiftyTwoWeekHigh",
     "fiftyTwoWeekLow",

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { isAxiosError } from 'axios'
 import { useInversionesContext } from '../context/InversionesContext'
 import { getAnalisisTicker, getRiesgoTicker, getHistoricoTicker } from '../api'
 import ScreenHeader from '../components/layout/ScreenHeader'
@@ -62,6 +63,28 @@ export default function TickerDetalle() {
       <div className="pb-4">
         <ScreenHeader title="Ticker" onBack={() => navigate(-1)} />
         <SkeletonPantalla />
+      </div>
+    )
+  }
+
+  // 404 = el ticker no está en la planilla (viene del catálogo, de la watchlist o de un par): no hay
+  // posición ni rendimiento propios que mostrar, pero la comparación contra pares sí existe.
+  const fueraDeLaPlanilla = isAxiosError(analisisQuery.error) && analisisQuery.error.response?.status === 404
+
+  if (fueraDeLaPlanilla) {
+    return (
+      <div className="pb-4">
+        <ScreenHeader title={ticker} onBack={() => navigate(-1)} />
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-[46px] h-[46px] rounded-2xl bg-app-surface-2 border border-app-border flex items-center justify-center font-mono text-caption font-bold text-app-text shrink-0">
+            {ticker.slice(0, 4)}
+          </div>
+          <div className="min-w-0">
+            <div className="font-display text-heading font-semibold text-app-text truncate">{ticker}</div>
+            <div className="text-caption text-app-text-dim">No está en tu cartera ni en tu planilla</div>
+          </div>
+        </div>
+        <TickerParesTab ticker={ticker} />
       </div>
     )
   }

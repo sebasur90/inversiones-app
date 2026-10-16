@@ -2538,6 +2538,7 @@ class FilaValuacionOut(BaseModel):
     mayor_es_mejor: bool
     metodo: Optional[str] = None       # "percentil" | "directo" (un solo par)
     diferencia: Optional[float] = None  # sólo "directo": (propio − par) / |par|
+    origen: str = "observado"           # "observado" (Yahoo) | "estimado" (analistas) | "calculado" (la app)
     valores: dict[str, Optional[float]] = Field(default_factory=dict)
 
 
@@ -2569,6 +2570,49 @@ class PuntoFuerzaRelativaOut(BaseModel):
     pares: dict[str, float] = Field(default_factory=dict)
 
 
+class RazonDiagnosticoOut(BaseModel):
+    texto: str
+    tono: str                           # "positivo" | "negativo" | "alerta" | "neutro"
+    origen: str                         # "observado" | "estimado" | "calculado"
+    metricas: list[str] = Field(default_factory=list)
+    regla: str = ""
+
+
+class VotoFamiliaOut(BaseModel):
+    familia: str
+    nombre: str
+    banda: str                          # "mejor" | "peor" | "media"
+    metricas: list[str]
+    solo_apoya: bool = False
+
+
+class DimensionDiagnosticoOut(BaseModel):
+    clave: str                          # valuacion | calidad | crecimiento | solidez | confianza
+    nombre: str
+    estado: str                         # palabra: "Alta", "Débil", "Sólida"…
+    nivel: str                          # bien | atencion | riesgo | neutro | sin_datos | no_aplica
+    resumen: str
+    regla: str
+    razones: list[RazonDiagnosticoOut] = Field(default_factory=list)
+    faltantes: list[str] = Field(default_factory=list)
+    percentil: Optional[int] = None
+    votos: list[VotoFamiliaOut] = Field(default_factory=list)
+
+
+class DiagnosticoOut(BaseModel):
+    version_reglas: int
+    dimensiones: list[DimensionDiagnosticoOut]
+    confianza: str                      # "alta" | "media" | "baja" | "sin_datos"
+
+
+class DimensionResumenOut(BaseModel):
+    """Una dimensión en la tarjeta de la lista: el estado en palabras y con qué percentil se ordena."""
+    clave: str
+    estado: str
+    nivel: str
+    percentil: Optional[int] = None
+
+
 class ValuacionTickerOut(BaseModel):
     ticker: str
     ticker_base: str
@@ -2588,6 +2632,7 @@ class ValuacionTickerOut(BaseModel):
     n_pares_con_datos: int
     fuerza_relativa: list[PuntoFuerzaRelativaOut]
     advertencias: list[str]
+    diagnostico: DiagnosticoOut
 
 
 class ValuacionItemOut(BaseModel):
@@ -2606,6 +2651,7 @@ class ValuacionItemOut(BaseModel):
     fecha_dato: Optional[date] = None
     en_cartera: bool
     en_watchlist: bool
+    dimensiones: list[DimensionResumenOut] = Field(default_factory=list)
 
 
 class ValuacionListaOut(BaseModel):
@@ -2640,3 +2686,173 @@ class ClasificacionCorreccionIn(BaseModel):
 class ParCorreccionIn(BaseModel):
     par: str = Field(min_length=1, max_length=20)
     accion: Literal["agregar", "quitar"]
+
+
+# ── Comparador "¿qué compraría en su lugar?" ─────────────────────────────────
+
+class CriterioComparabilidadOut(BaseModel):
+    clave: str
+    nombre: str
+    estado: str                         # favorable | neutro | desfavorable | sin_dato
+    texto: str
+    excluye: bool = False
+    corto: str = ""
+
+
+class AlternativaOut(BaseModel):
+    ticker_base: str
+    nombre: Optional[str] = None
+    origen: str                         # grupo | elegida | sugerida
+    en_grupo: bool
+    a_mano: bool
+    nivel: str                          # alta | media | baja
+    resumen: str
+    criterios: list[CriterioComparabilidadOut] = Field(default_factory=list)
+    notas: list[str] = Field(default_factory=list)
+    en_ranking: bool
+    tamano_usd: Optional[float] = None
+    region: Optional[str] = None
+    sector: Optional[str] = None
+    industria: Optional[str] = None
+
+
+class RechazoOut(BaseModel):
+    ticker_base: str
+    nombre: Optional[str] = None
+    nivel: str                          # no_comparable | baja
+    motivo: str
+
+
+class ColumnaComparadorOut(BaseModel):
+    ticker_base: str
+    nombre: Optional[str] = None
+    es_objetivo: bool
+    nivel: Optional[str] = None
+    en_ranking: bool
+    fecha_dato: Optional[date] = None
+    periodo_contable: Optional[date] = None
+    fecha_serie: Optional[date] = None
+    aviso_moneda: bool = False
+    tamano_usd: Optional[float] = None
+    region: Optional[str] = None
+    sector: Optional[str] = None
+    industria: Optional[str] = None
+
+
+class CeldaComparadorOut(BaseModel):
+    valor: Optional[float] = None
+    estado: str                         # dato | sin_dato | no_aplica | sin_ganancias | moneda
+    origen: str = "observado"
+
+
+class FilaComparadorOut(BaseModel):
+    clave: str
+    nombre: str
+    grupo: str
+    formato: str
+    unidad: str
+    periodo: str
+    mayor_es_mejor: bool
+    solo_apoya: bool = False
+    celdas: dict[str, CeldaComparadorOut]
+    mejor: Optional[str] = None
+    peor: Optional[str] = None
+
+
+class NoAplicaOut(BaseModel):
+    nombre: str
+    motivo: str
+
+
+class TablaComparadorOut(BaseModel):
+    columnas: list[ColumnaComparadorOut]
+    filas: list[FilaComparadorOut]
+    no_aplican: list[NoAplicaOut] = Field(default_factory=list)
+    sin_dato_en_ninguna: list[str] = Field(default_factory=list)
+
+
+class PuestoDimensionOut(BaseModel):
+    ticker_base: str
+    posicion: Optional[int] = None
+    estado: str
+    nivel: str
+    percentil: Optional[int] = None
+
+
+class RankingDimensionOut(BaseModel):
+    clave: str
+    nombre: str
+    regla: str
+    puestos: list[PuestoDimensionOut]
+    posicion_objetivo: Optional[int] = None
+    de: int
+    tercio: Optional[str] = None        # arriba | medio | abajo
+    estado_objetivo: str
+    nivel_objetivo: str
+
+
+class LineaComparacionOut(BaseModel):
+    dimension: str
+    veredicto: Optional[str] = None     # mejor | peor | similar
+    texto: str
+    tono: str
+    metricas: list[str] = Field(default_factory=list)
+    regla: str
+
+
+class ComparacionParOut(BaseModel):
+    ticker_base: str
+    orientativa: bool
+    lineas: list[LineaComparacionOut]
+    veredictos: dict[str, Optional[str]] = Field(default_factory=dict)
+    domina: Optional[str] = None        # alternativa | objetivo
+    texto_dominancia: str = ""
+
+
+class FraseConclusionOut(BaseModel):
+    texto: str
+    regla: str
+    tono: str
+    origen: str                         # observado | estimado | calculado
+    metricas: list[str] = Field(default_factory=list)
+    dimension: Optional[str] = None
+
+
+class ConclusionComparadorOut(BaseModel):
+    regla_aplicada: str
+    titulo: str
+    frases: list[FraseConclusionOut]
+    destacadas: list[FraseConclusionOut] = Field(default_factory=list)
+    mayor: list[FraseConclusionOut] = Field(default_factory=list)
+    menor: list[FraseConclusionOut] = Field(default_factory=list)
+    salvedad: str
+    firmeza: str                        # alta | media | baja
+    firmeza_razones: list[str] = Field(default_factory=list)
+    limites: list[str] = Field(default_factory=list)
+    regla: str
+
+
+class ComparadorAlternativasOut(BaseModel):
+    version_reglas: int
+    estado: str                         # ok | insuficiente | sin_datos
+    mensaje: str = ""
+    minimo: int
+    faltan: int
+    modelo: Optional[str] = None
+    ticker: str
+    ticker_base: str
+    nombre: Optional[str] = None
+    es_etf: bool
+    estado_datos: str
+    fecha_dato: Optional[date] = None
+    objetivo: Optional[ColumnaComparadorOut] = None
+    alternativas: list[AlternativaOut] = Field(default_factory=list)
+    sugeridas: list[AlternativaOut] = Field(default_factory=list)
+    rechazadas: list[RechazoOut] = Field(default_factory=list)
+    seleccion: list[str] = Field(default_factory=list)
+    elegido_por_usuario: bool = False
+    tabla: Optional[TablaComparadorOut] = None
+    ranking: list[RankingDimensionOut] = Field(default_factory=list)
+    pares: list[ComparacionParOut] = Field(default_factory=list)
+    conclusion: Optional[ConclusionComparadorOut] = None
+    fuerza_relativa: list[PuntoFuerzaRelativaOut] = Field(default_factory=list)
