@@ -26,6 +26,13 @@ services:
       # Vacío desactiva este job sin tocar el de arriba.
       - REFRESCO_HORAS=${REFRESCO_HORAS:-11,13,15,17}
       - REFRESCO_MINUTO=${REFRESCO_MINUTO:-5}
+      # Ingesta de clasificación y fundamentales desde Yahoo (sin cupo de IOL), lun-sáb. Vacío la
+      # desactiva. Requiere SCHEDULER_ENABLED.
+      - FUNDAMENTALES_HORAS=${FUNDAMENTALES_HORAS:-3,19}
+      - FUNDAMENTALES_MINUTO=${FUNDAMENTALES_MINUTO:-30}
+      - FUNDAMENTALES_MAX_POR_CORRIDA=${FUNDAMENTALES_MAX_POR_CORRIDA:-60}
+      # Clasificación automática (Yahoo + correcciones) en todas las pantallas; false = la del Sheet.
+      - CLASIFICACION_AUTO=${CLASIFICACION_AUTO:-true}
       # Alertas de precio por Telegram. El token y el chat id van en .env (gitignored), nunca acá.
       - ALERTAS_ENABLED=${ALERTAS_ENABLED:-false}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}

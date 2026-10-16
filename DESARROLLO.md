@@ -451,6 +451,97 @@ curl -X POST http://localhost:8087/api/inversiones/refrescar-precios
 
 Mismo trabajo que el job de la rueda, para verificarlo sin esperar al horario.
 
+## Clasificación de instrumentos y valuación contra pares
+
+**Qué resuelve.** Sector y país eran texto libre del Sheet (KO con `País=AR`, "Cosumo Masivo") y no
+había ningún dato fundamental. Ahora cada emisor del catálogo de IOL tiene clasificación y
+fundamentales de Yahoo (`get_info()`), y las pantallas agrupan por un único vocabulario.
+
+**Piezas**, en orden de dependencia:
+
+| Módulo | Qué hace |
+|---|---|
+| `services/clasificacion_engine.py` | Puro. Vocabulario (sectores, regiones MSCI, tipos), traducción desde Yahoo/Sheet, variantes de moneda (`AAPL`/`AAPLC`/`AAPLD` → un emisor), símbolo en Yahoo, `resolver()` campo a campo |
+| `catalogos/clasificacion_seed.json` | Excepciones versionadas: variantes raras, símbolos Yahoo distintos (`BRKB`, `.SA`, locales con ADR → ADR) y exposición país (VIST → Argentina) |
+| `services/fundamentales_ingesta.py` | Job: cola por prioridad, topes, backoff, corte por límite de tasa, conversión a USD, un solo commit |
+| `services/clasificacion_analytics.py` | Resolutor único (`clasificaciones(db)`) que leen todas las pantallas; correcciones manuales |
+| `services/pares_engine.py` | Puro. Elige comparables |
+| `services/valuacion_engine.py` | Puro. Limpia métricas, percentiles, lecturas con regla visible |
+| `services/valuacion_analytics.py` | Adaptador DB de las dos anteriores |
+| `routers/clasificacion.py` | Endpoints |
+
+Tablas nuevas (`create_all`, sin migración): `clasificacion_auto`, `fundamentales_snapshot` (se
+retienen 8 por símbolo), `clasificacion_override`, `pares_override`, `ingesta_fundamentales`.
+Ninguna tiene FK a `instrumentos_inversion`: el sync la vacía.
+
+**Precedencia** (`clasificacion_engine.resolver`): corrección manual > seed > Yahoo > Sheet, con
+tres excepciones: "Liquidez" en el sector del Sheet es un rol y gana sobre Yahoo; renta fija y FCI
+usan el Sheet (Yahoo no los cubre); el país "Argentina" del Sheet en un CEDEAR se ignora (es la
+plaza, no el emisor).
+
+**Interruptor de reversión**: `CLASIFICACION_AUTO=false` devuelve exactamente el texto del Sheet en
+todas las pantallas (sin eje Región, Descomposición por País). Antes de prenderlo en una base real:
+
+```bash
+docker compose exec backend python -m scripts.verificar_clasificacion
+```
+
+lista qué tickers cambian de tipo/sector/país y de qué fuente sale, y confirma que el total de cada
+eje no cambia (la clasificación mueve etiquetas, nunca plata). Lo mismo en
+`GET /api/inversiones/clasificacion/diferencias`.
+
+### Ingesta (job `fundamentales`)
+
+```
+FUNDAMENTALES_HORAS=3,19          # lun-sáb; vacío lo desactiva (requiere SCHEDULER_ENABLED)
+FUNDAMENTALES_MINUTO=30
+FUNDAMENTALES_MAX_POR_CORRIDA=60  # emisores por corrida (~2 llamadas a Yahoo c/u)
+FUNDAMENTALES_PAUSA_SEG=0.5
+```
+
+- ~460 emisores de renta variable: con dos corridas por día el catálogo se completa en ~4 días.
+  Prioridad: cartera y watchlist sin datos → pares de lo propio con datos vencidos → lo propio
+  vencido (>7 días) → resto nunca visto → resto vencido (>14 días).
+- **No toca IOL** ni corre dentro del sync. La red va sin lock; la escritura es un commit con
+  `sync_lock` (timeout 300 s).
+- Ante un 429/`YFRateLimitError` o 5 errores seguidos corta la corrida y guarda lo obtenido.
+  Backoff por emisor `2^n` días (tope 30); `no_encontrado` se reintenta a los 90 días.
+- Magnitudes a USD: ARS por el MEP de la base, el resto por el par de Yahoo (`EURUSD=X`). Si el
+  balance está en otra moneda que la cotización (ADRs argentinos, `.BA`), P/E y P/Ventas se
+  recalculan en USD y los ratios que no se pueden recalcular se descartan.
+- Unidades de Yahoo (verificadas): `dividendYield` y `netExpenseRatio` en %, `yield` en fracción,
+  `debtToEquity` en %.
+
+Dispararlo a mano:
+
+```bash
+curl -X POST http://localhost:8087/api/inversiones/clasificacion/actualizar-lote     # corrida normal, en segundo plano
+curl -X POST http://localhost:8087/api/inversiones/clasificacion/actualizar \
+     -H 'Content-Type: application/json' -d '{"tickers": ["KO", "GGAL"]}'          # hasta 5, sincrónico
+curl http://localhost:8087/api/inversiones/clasificacion/estado                      # cobertura
+```
+
+El alta en watchlist pide los datos del ticker nuevo en segundo plano.
+
+### Endpoints
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| GET | `/valuacion?universo=cartera\|watchlist\|catalogo` | Lectura por emisor (filtros `tipo`, `sector`, `region`, `lectura`) |
+| GET | `/valuacion/{ticker}` | Ficha: clasificación con fuentes, pares y criterio, tabla, percentiles, frases, fuerza relativa |
+| GET/PUT | `/clasificacion/{ticker}` | Ver / corregir tipo, sector, industria, país, región, símbolo Yahoo |
+| DELETE | `/clasificacion/{ticker}/{campo}` | Volver al automático |
+| POST | `/pares/{ticker}` | `{par, accion: agregar\|quitar}` |
+| DELETE | `/pares/{ticker}/{par}` | Deshacer la corrección de un par |
+
+### Limitaciones conocidas
+
+- Bonos, ONs, letras y FCI no se comparan todavía (etapa 2: curva TIR vs. duration por moneda/ley).
+- Yahoo trae ratios raros en algunos ADR (P/Valor libro de DEO, por ejemplo): se recortan outliers
+  con 5+ pares y la tabla lado a lado los deja a la vista, pero no se corrigen.
+- Para bancos ADR (balance en ARS) quedan pocos múltiplos comparables: el P/Valor libro no se
+  recalcula en USD.
+
 ## Logs
 
 `LOG_LEVEL` (default `INFO`) fija el nivel del root logger. **Antes no había configuración de
