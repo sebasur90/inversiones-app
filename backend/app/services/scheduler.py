@@ -51,6 +51,11 @@ ZONA_DEFAULT = "America/Argentina/Buenos_Aires"
 HORAS_REFRESCO_DEFAULT = "11,13,15,17"
 MINUTO_REFRESCO_DEFAULT = 5
 
+# Ingesta de fundamentales (Yahoo, sin cupo de IOL): fuera de la rueda y del sync de cierre, para
+# no competir por SQLite. Lun-sáb: el sábado completa lo que la semana dejó pendiente.
+HORAS_FUNDAMENTALES_DEFAULT = "3,19"
+MINUTO_FUNDAMENTALES_DEFAULT = 30
+
 _scheduler = None
 
 
@@ -94,16 +99,16 @@ def _evaluar_alertas() -> None:
         db.close()
 
 
-def _horas_refresco() -> str:
-    """Las horas del refresco como las espera `CronTrigger` (`"11,13,15,17"`), validadas.
+def _horas_env(nombre: str, default: str) -> str:
+    """Una lista de horas de una variable de entorno como las espera `CronTrigger` (`"11,13"`).
 
-    Vacío (`REFRESCO_HORAS=`) desactiva el job liviano sin tocar el de cierre. Una hora inválida
-    descarta la lista entera en vez de programar algo a medias: es mejor no tener refresco y verlo
-    en el log que descubrir meses después que corría sólo a una hora.
+    Vacío desactiva el job. Una hora inválida descarta la lista entera en vez de programar algo a
+    medias: es mejor no tener el job y verlo en el log que descubrir meses después que corría sólo
+    a una hora.
     """
-    crudo = os.getenv("REFRESCO_HORAS")
+    crudo = os.getenv(nombre)
     if crudo is None:
-        crudo = HORAS_REFRESCO_DEFAULT
+        crudo = default
     crudo = crudo.strip()
     if not crudo:
         return ""
@@ -117,21 +122,32 @@ def _horas_refresco() -> str:
             hora = int(parte)
         except ValueError:
             logger.warning(
-                "scheduler: REFRESCO_HORAS=%r tiene un valor no numérico (%r); se usa %r",
-                crudo, parte, HORAS_REFRESCO_DEFAULT,
+                "scheduler: %s=%r tiene un valor no numérico (%r); se usa %r",
+                nombre, crudo, parte, default,
             )
-            return HORAS_REFRESCO_DEFAULT
+            return default
         if not 0 <= hora <= 23:
             logger.warning(
-                "scheduler: REFRESCO_HORAS=%r tiene una hora fuera de rango (%d); se usa %r",
-                crudo, hora, HORAS_REFRESCO_DEFAULT,
+                "scheduler: %s=%r tiene una hora fuera de rango (%d); se usa %r",
+                nombre, crudo, hora, default,
             )
-            return HORAS_REFRESCO_DEFAULT
+            return default
         horas.append(hora)
 
     if not horas:
         return ""
     return ",".join(str(h) for h in sorted(set(horas)))
+
+
+def _horas_refresco() -> str:
+    """Las horas del refresco liviano (`REFRESCO_HORAS`). Vacío desactiva el job liviano sin
+    tocar el de cierre."""
+    return _horas_env("REFRESCO_HORAS", HORAS_REFRESCO_DEFAULT)
+
+
+def _horas_fundamentales() -> str:
+    """Las horas de la ingesta de fundamentales (`FUNDAMENTALES_HORAS`). Vacío la desactiva."""
+    return _horas_env("FUNDAMENTALES_HORAS", HORAS_FUNDAMENTALES_DEFAULT)
 
 
 def correr_sync_y_alertas() -> None:
@@ -190,6 +206,26 @@ def correr_refresco_y_alertas() -> None:
     _evaluar_alertas()
 
 
+def correr_fundamentales() -> None:
+    """Job de fundamentales: una corrida de la ingesta desde Yahoo. Nunca lanza.
+
+    No toma `sync_lock` de entrada: la ingesta hace la parte de red sin lock y lo pide sólo para
+    escribir (ver `fundamentales_ingesta`).
+    """
+    from ..database import SessionLocal
+    from . import fundamentales_ingesta
+
+    db = SessionLocal()
+    try:
+        resumen = fundamentales_ingesta.correr(db)
+        logger.info("scheduler: fundamentales %s", {k: v for k, v in resumen.items() if k != "cobertura"})
+    except Exception as exc:
+        logger.exception("scheduler: la ingesta de fundamentales falló: %s", exc)
+        db.rollback()
+    finally:
+        db.close()
+
+
 def iniciar() -> None:
     """Arranca el scheduler si está habilitado. Tolera que APScheduler no esté instalado."""
     global _scheduler
@@ -211,6 +247,8 @@ def iniciar() -> None:
     zona = (os.getenv("SCHEDULER_TZ") or ZONA_DEFAULT).strip()
     horas_refresco = _horas_refresco()
     minuto_refresco = _entero_env("REFRESCO_MINUTO", MINUTO_REFRESCO_DEFAULT, 0, 59)
+    horas_fundamentales = _horas_fundamentales()
+    minuto_fundamentales = _entero_env("FUNDAMENTALES_MINUTO", MINUTO_FUNDAMENTALES_DEFAULT, 0, 59)
 
     try:
         scheduler = BackgroundScheduler(timezone=zona)
@@ -237,6 +275,18 @@ def iniciar() -> None:
                 coalesce=True,
                 max_instances=1,
             )
+        if horas_fundamentales:
+            scheduler.add_job(
+                correr_fundamentales,
+                CronTrigger(
+                    day_of_week="mon-sat", hour=horas_fundamentales, minute=minuto_fundamentales,
+                    timezone=zona,
+                ),
+                id="fundamentales",
+                misfire_grace_time=3600,
+                coalesce=True,
+                max_instances=1,
+            )
         scheduler.start()
     except Exception as exc:
         logger.exception("scheduler: no se pudo iniciar: %s", exc)
@@ -251,6 +301,13 @@ def iniciar() -> None:
         )
     else:
         logger.info("scheduler: refresco de precios desactivado (REFRESCO_HORAS vacío)")
+    if horas_fundamentales:
+        logger.info(
+            "scheduler: fundamentales lun-sáb a las %s (minuto %02d)",
+            horas_fundamentales, minuto_fundamentales,
+        )
+    else:
+        logger.info("scheduler: fundamentales desactivado (FUNDAMENTALES_HORAS vacío)")
 
 
 def detener() -> None:

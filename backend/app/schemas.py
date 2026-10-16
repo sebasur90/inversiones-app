@@ -2449,3 +2449,43 @@ class ExplicacionResultadoOut(BaseModel):
     fx: ExplicacionFxOut
     explicacion: ExplicacionTextoOut
     advertencias: list[str] = Field(default_factory=list)
+
+
+# --- Clasificación de instrumentos y valuación contra pares ---
+
+class CoberturaFundamentalesOut(BaseModel):
+    aptos: int
+    con_datos: int
+    no_encontrados: int
+    pendientes: int
+    propios: int
+    propios_con_datos: int
+    cobertura_pct: float
+
+
+class IngestaFundamentalesOut(BaseModel):
+    timestamp: Optional[datetime] = None
+    duration_ms: int = 0
+    procesados: int = 0
+    ok: int = 0
+    fallidos: int = 0
+    rate_limited: bool = False
+    pendientes: int = 0
+    resultado: str
+
+
+class EstadoClasificacionOut(BaseModel):
+    cobertura: CoberturaFundamentalesOut
+    ultima_corrida: Optional[IngestaFundamentalesOut] = None
+    horas_programadas: str = ""
+
+
+class ActualizarClasificacionIn(BaseModel):
+    tickers: list[str] = Field(default_factory=list, max_length=5)
+
+
+class ActualizarClasificacionOut(BaseModel):
+    resultado: str
+    procesados: int = 0
+    ok: int = 0
+    fallidos: int = 0

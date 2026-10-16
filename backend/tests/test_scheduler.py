@@ -127,3 +127,30 @@ def test_un_refresco_que_falla_no_propaga_la_excepcion(monkeypatch):
     monkeypatch.setattr(scheduler, "_evaluar_alertas", lambda: None)
 
     scheduler.correr_refresco_y_alertas()  # no debe lanzar
+
+
+# --- Fundamentales -----------------------------------------------------------------------------
+
+def test_fundamentales_default_fuera_de_la_rueda(monkeypatch):
+    monkeypatch.delenv("FUNDAMENTALES_HORAS", raising=False)
+    assert scheduler._horas_fundamentales() == "3,19"
+
+
+def test_fundamentales_vacio_lo_desactiva(monkeypatch):
+    monkeypatch.setenv("FUNDAMENTALES_HORAS", "")
+    assert scheduler._horas_fundamentales() == ""
+
+
+def test_fundamentales_invalido_cae_al_default(monkeypatch):
+    monkeypatch.setenv("FUNDAMENTALES_HORAS", "3,25")
+    assert scheduler._horas_fundamentales() == scheduler.HORAS_FUNDAMENTALES_DEFAULT
+
+
+def test_una_ingesta_que_falla_no_propaga_la_excepcion(monkeypatch):
+    from app.services import fundamentales_ingesta
+
+    def explota(db):
+        raise RuntimeError("Yahoo caído")
+
+    monkeypatch.setattr(fundamentales_ingesta, "correr", explota)
+    scheduler.correr_fundamentales()  # no debe lanzar
