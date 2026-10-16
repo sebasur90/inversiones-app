@@ -251,6 +251,9 @@ export interface RebalanceoEje {
 export interface RebalanceoOut {
   ejes: RebalanceoEje[]
   avisos: ValuacionAvisos
+  /** Objetivos del Sheet cuya categoría no existe en la clasificación ni en ninguna posición
+   *  ("Sector: Soberano"): nunca se van a poder cumplir tal como están escritos. */
+  objetivos_sin_equivalente?: string[]
 }
 
 export interface ConfiguracionCartera {
@@ -2745,3 +2748,186 @@ export const getRefrescoPrecios = () =>
 
 export const refrescarPrecios = () =>
   api.post<RefrescoCotizacionesOut>('/inversiones/refrescar-precios').then(r => r.data)
+
+
+// ---- Clasificación de instrumentos y valuación contra pares ----
+// Ver backend/app/services/clasificacion_engine.py (vocabulario), valuacion_engine.py (lecturas y
+// reglas) y pares_engine.py (criterio de pares). Los datos salen de Yahoo vía una ingesta gradual.
+
+export type FuenteClasificacion = 'manual' | 'seed' | 'yahoo' | 'sheet' | null
+export type CampoClasificacion = 'tipo' | 'sector' | 'industria' | 'pais' | 'region'
+
+export interface ClasificacionResuelta {
+  tipo: string | null
+  tipo_base: string | null
+  sector: string | null
+  industria: string | null
+  pais: string | null
+  region: string | null
+  fuentes: Partial<Record<CampoClasificacion, FuenteClasificacion>>
+}
+
+export type LecturaValuacion =
+  | 'barata' | 'cara' | 'en_linea' | 'mixta' | 'barata_con_alertas' | 'cara_justificada'
+  | 'datos_insuficientes'
+
+export interface FraseValuacion {
+  texto: string
+  regla: string
+  tono: 'positivo' | 'negativo' | 'alerta' | 'neutro'
+  metricas: string[]
+}
+
+export interface FilaValuacion {
+  clave: string
+  nombre: string
+  grupo: 'valuacion' | 'calidad' | 'crecimiento' | 'momentum'
+  formato: 'x' | 'pct'
+  valor: number | null
+  mediana_pares: number | null
+  n: number
+  /** "Favorable": 100 = el mejor del grupo (en valuación, el más barato). */
+  percentil: number | null
+  banda: 'mejor' | 'peor' | 'media' | null
+  mayor_es_mejor: boolean
+  valores: Record<string, number | null>
+}
+
+export interface ParValuacion {
+  ticker_base: string
+  nombre: string | null
+  tiene_datos: boolean
+  agregado: boolean
+  tamano_usd: number | null
+}
+
+export interface ValuacionTicker {
+  ticker: string
+  ticker_base: string
+  nombre: string | null
+  simbolo_yahoo: string | null
+  metodo_mapeo: string | null
+  estado_datos: 'ok' | 'pendiente' | 'no_encontrado' | 'error' | 'no_apto' | string
+  fecha_dato: string | null
+  es_etf: boolean
+  clasificacion: ClasificacionResuelta
+  pares: {
+    criterio: string
+    items: ParValuacion[]
+    automaticos: string[]
+    agregados: string[]
+    quitados: string[]
+  }
+  lectura: LecturaValuacion
+  lectura_texto: string
+  regla_lectura: string
+  frases: FraseValuacion[]
+  tabla: { columnas: string[]; filas: FilaValuacion[] }
+  n_pares_con_datos: number
+  fuerza_relativa: { fecha: string; propio: number; mediana_pares: number | null }[]
+  advertencias: string[]
+}
+
+export type UniversoValuacion = 'cartera' | 'watchlist' | 'catalogo'
+
+export interface ValuacionItem {
+  ticker: string
+  ticker_base: string
+  nombre: string | null
+  tipo: string | null
+  sector: string | null
+  region: string | null
+  industria: string | null
+  lectura: LecturaValuacion
+  lectura_texto: string
+  frases: string[]
+  n_pares_con_datos: number
+  estado_datos: string
+  fecha_dato: string | null
+  en_cartera: boolean
+  en_watchlist: boolean
+}
+
+export interface ValuacionLista {
+  universo: UniversoValuacion
+  total: number
+  conteos: Partial<Record<LecturaValuacion, number>>
+  items: ValuacionItem[]
+}
+
+export interface EstadoClasificacion {
+  cobertura: {
+    aptos: number
+    con_datos: number
+    no_encontrados: number
+    pendientes: number
+    propios: number
+    propios_con_datos: number
+    cobertura_pct: number
+  }
+  ultima_corrida: {
+    timestamp: string | null
+    procesados: number
+    ok: number
+    fallidos: number
+    rate_limited: boolean
+    pendientes: number
+    resultado: string
+  } | null
+  horas_programadas: string
+}
+
+export interface ClasificacionTicker {
+  ticker: string
+  ticker_base: string
+  resuelta: ClasificacionResuelta
+  automatica: Partial<Record<CampoClasificacion, string | null>>
+  sheet: Partial<Record<'tipo' | 'sector' | 'pais', string | null>>
+  correcciones: Partial<Record<CampoClasificacion | 'simbolo_yahoo', string>>
+  simbolo_yahoo: string | null
+  estado_datos: string | null
+  opciones: { tipo: string[]; sector: string[]; region: string[] }
+}
+
+export const getValuacionLista = (
+  universo: UniversoValuacion,
+  filtros: { tipo?: string; sector?: string; region?: string; lectura?: string } = {},
+) =>
+  api.get<ValuacionLista>('/inversiones/valuacion', { params: { universo, ...filtros } }).then(r => r.data)
+
+export const getValuacionTicker = (ticker: string) =>
+  api.get<ValuacionTicker>(`/inversiones/valuacion/${encodeURIComponent(ticker)}`).then(r => r.data)
+
+export const getEstadoClasificacion = () =>
+  api.get<EstadoClasificacion>('/inversiones/clasificacion/estado').then(r => r.data)
+
+/** Pide ya mismo a Yahoo los datos de hasta 5 tickers. Tarda unos segundos por ticker. */
+export const actualizarClasificacion = (tickers: string[]) =>
+  api.post<{ resultado: string; procesados: number; ok: number; fallidos: number }>(
+    '/inversiones/clasificacion/actualizar', { tickers }, { timeout: 120_000 },
+  ).then(r => r.data)
+
+export const getClasificacionTicker = (ticker: string) =>
+  api.get<ClasificacionTicker>(`/inversiones/clasificacion/${encodeURIComponent(ticker)}`).then(r => r.data)
+
+export const corregirClasificacion = (
+  ticker: string, campos: Partial<Record<CampoClasificacion, string>>,
+) =>
+  api.put<ClasificacionTicker>(`/inversiones/clasificacion/${encodeURIComponent(ticker)}`, campos).then(r => r.data)
+
+export const borrarCorreccionClasificacion = (ticker: string, campo: CampoClasificacion) =>
+  api.delete<ClasificacionTicker>(
+    `/inversiones/clasificacion/${encodeURIComponent(ticker)}/${encodeURIComponent(campo)}`,
+  ).then(r => r.data)
+
+export const corregirPar = (ticker: string, par: string, accion: 'agregar' | 'quitar') =>
+  api.post<ValuacionTicker>(`/inversiones/pares/${encodeURIComponent(ticker)}`, { par, accion }).then(r => r.data)
+
+export const borrarCorreccionPar = (ticker: string, par: string) =>
+  api.delete<ValuacionTicker>(
+    `/inversiones/pares/${encodeURIComponent(ticker)}/${encodeURIComponent(par)}`,
+  ).then(r => r.data)
+
+/** Dispara una corrida normal de la ingesta en segundo plano; el avance se ve en el estado. */
+export const actualizarClasificacionLote = () =>
+  api.post<{ resultado: string }>('/inversiones/clasificacion/actualizar-lote').then(r => r.data)

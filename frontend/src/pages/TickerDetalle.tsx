@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useInversionesContext } from '../context/InversionesContext'
 import { getAnalisisTicker, getRiesgoTicker, getHistoricoTicker } from '../api'
 import ScreenHeader from '../components/layout/ScreenHeader'
@@ -11,17 +11,21 @@ import TickerResumenTab from './ticker/TickerResumenTab'
 import TickerRendimientoTab from './ticker/TickerRendimientoTab'
 import TickerRiesgoTab from './ticker/TickerRiesgoTab'
 import TickerHistoricoTab from './ticker/TickerHistoricoTab'
+import TickerParesTab from './ticker/TickerParesTab'
 import SkeletonPantalla from '../components/ui/Skeleton'
 import { qk } from '../api/queryClient'
 
-type TabKey = 'resumen' | 'rendimiento' | 'riesgo' | 'historico'
+type TabKey = 'resumen' | 'rendimiento' | 'riesgo' | 'historico' | 'pares'
 
 export default function TickerDetalle() {
   const { ticker: tickerParam } = useParams<{ ticker: string }>()
   const navigate = useNavigate()
   const { carteraSeleccionada, monedaSeleccionada } = useInversionesContext()
 
-  const [tab, setTab] = useState<TabKey>('resumen')
+  const [searchParams] = useSearchParams()
+  const TABS: TabKey[] = ['resumen', 'rendimiento', 'riesgo', 'historico', 'pares']
+  const tabInicial = searchParams.get('tab') as TabKey | null
+  const [tab, setTab] = useState<TabKey>(tabInicial && TABS.includes(tabInicial) ? tabInicial : 'resumen')
 
   const ticker = tickerParam ? decodeURIComponent(tickerParam) : ''
   const monedaBackend = monedaSeleccionada === 'ARS' ? 'ars_nominal' : 'usd'
@@ -107,6 +111,7 @@ export default function TickerDetalle() {
             { label: 'Rendimiento', value: 'rendimiento' },
             { label: 'Riesgo', value: 'riesgo' },
             { label: 'Histórico', value: 'historico' },
+            { label: 'Pares', value: 'pares' },
           ]}
           value={tab}
           onChange={v => setTab(v as TabKey)}
@@ -136,6 +141,8 @@ export default function TickerDetalle() {
           <div className="py-8 text-center text-app-text-dim text-body">No hay datos disponibles</div>
         )
       )}
+
+      {tab === 'pares' && <TickerParesTab ticker={ticker} />}
 
       <Button variant="outline" icon={<Icon name="list" className="w-4 h-4" />} className="w-full mt-4" onClick={() => navigate(`/movimientos?ticker=${encodeURIComponent(position.ticker)}`)}>
         Ver movimientos de {position.ticker}

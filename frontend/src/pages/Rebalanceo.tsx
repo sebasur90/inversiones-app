@@ -136,6 +136,15 @@ export default function Rebalanceo() {
 
               <AvisosValuacion avisos={rebalanceo.avisos} moneda={esARS ? 'ARS' : 'USD'} />
 
+              {(rebalanceo.objetivos_sin_equivalente?.length ?? 0) > 0 && (
+                <div className="mt-3 text-caption text-app-warn bg-[rgba(245,158,11,0.08)] border border-app-border rounded-xl p-3">
+                  Hay objetivos del Sheet cuya categoría no coincide con ninguna clasificación ni posición, así que
+                  nunca se van a cumplir tal como están escritos: {rebalanceo.objetivos_sin_equivalente!.join(', ')}.
+                  Revisá cómo se llaman en el Sheet (los sectores y regiones válidos están en la ficha de cualquier
+                  ticker, pestaña Pares → Corregir).
+                </div>
+              )}
+
               {eje.items.length > 0 && (
                 <div className="mt-6">
                   <Button

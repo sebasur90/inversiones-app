@@ -39,6 +39,11 @@ export type GlosarioKey =
   | 'twrBruto'
   | 'costoOperar'
   | 'modoPrivacidad'
+  | 'per'
+  | 'evEbitda'
+  | 'peg'
+  | 'fcfYield'
+  | 'gastosEtf'
 
 export const GLOSARIO_HELP: Record<GlosarioKey, HelpContent> = {
   xirr: {
@@ -253,4 +258,41 @@ export const GLOSARIO_HELP: Record<GlosarioKey, HelpContent> = {
     title: 'Retorno del activo',
     shortDescription: 'Tu rendimiento puramente por la selección y evolución de los activos en tu cartera, medido en la moneda original de cada instrumento (sin efectos cambiarios).',
   },
+  per: {
+    title: 'P/E (precio / ganancias)',
+    shortDescription:
+      'Cuántos años de ganancias actuales paga el precio de la acción. Un P/E de 20 significa que el mercado paga 20 veces lo que la empresa ganó en los últimos 12 meses.',
+    whyItMatters: 'Es el múltiplo más usado para decir si algo está "caro" o "barato", pero sólo tiene sentido comparado contra empresas parecidas.',
+    howToInterpret:
+      'Más bajo = más barato, a igualdad de todo lo demás. Si la empresa perdió plata el P/E no aplica (sería negativo). "P/E estimado" usa las ganancias que los analistas esperan para el próximo año.',
+    limitations: 'Cuando el balance está en otra moneda que la cotización (ADRs argentinos), la app lo recalcula en dólares con el MEP.',
+    relatedTerms: ['evEbitda', 'peg'],
+  },
+  evEbitda: {
+    title: 'EV/EBITDA',
+    shortDescription:
+      'El valor de la empresa entera (acciones + deuda − caja) dividido por su resultado operativo antes de amortizaciones. Compara empresas con distinta deuda mejor que el P/E.',
+    howToInterpret: 'Más bajo = más barato. No se usa para bancos ni inmobiliarias, donde la deuda es parte del negocio.',
+    relatedTerms: ['per'],
+  },
+  peg: {
+    title: 'PEG',
+    shortDescription: 'El P/E dividido por el crecimiento esperado de las ganancias. Corrige el P/E por cuánto crece la empresa.',
+    howToInterpret: 'Alrededor de 1 se considera "justo": un P/E alto puede estar justificado si las ganancias crecen rápido.',
+    relatedTerms: ['per'],
+  },
+  fcfYield: {
+    title: 'Rendimiento del flujo de caja libre (FCF)',
+    shortDescription:
+      'La caja que genera la empresa después de invertir, como porcentaje de lo que vale en bolsa. Es como un "dividendo potencial".',
+    howToInterpret: 'Más alto = más barato: el precio compra más caja generada.',
+  },
+  gastosEtf: {
+    title: 'Gastos anuales de un ETF',
+    shortDescription:
+      'Lo que el fondo cobra por año sobre lo invertido (expense ratio). Se descuenta solo del valor de la cuota.',
+    whyItMatters: 'Entre dos ETFs que replican lo mismo, el de menor gasto rinde más a largo plazo. 0,03% y 0,90% parecen poco, pero en 20 años la diferencia es grande.',
+    howToInterpret: 'Más bajo = mejor.',
+  },
+
 }

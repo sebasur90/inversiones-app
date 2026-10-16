@@ -198,7 +198,8 @@ def extraer_metricas(
     v["div_yield"] = dy / 100.0 if dy is not None and dy >= 0 else None
 
     # -- Calidad y crecimiento (no dependen de la moneda: son proporciones) --
-    v["margen_bruto"] = _num(m.get("grossMargins"))
+    # El margen bruto de un banco no existe (Yahoo lo informa como 0): no se compara.
+    v["margen_bruto"] = None if sin_ebitda else _num(m.get("grossMargins"))
     v["margen_operativo"] = _num(m.get("operatingMargins"))
     v["margen_neto"] = _num(m.get("profitMargins"))
     v["roe"] = _num(m.get("returnOnEquity"))
@@ -356,6 +357,13 @@ def _lista(nombres: list[str]) -> str:
     return ", ".join(nombres[:-1]) + " y " + nombres[-1]
 
 
+def _en_frase(nombre: str) -> str:
+    """"Margen bruto" -> "margen bruto", pero "ROE" queda "ROE" y "P/E" queda "P/E"."""
+    if len(nombre) > 1 and nombre[1].islower():
+        return nombre[0].lower() + nombre[1:]
+    return nombre
+
+
 def _pct(v: float | None) -> str:
     if v is None:
         return "—"
@@ -418,13 +426,13 @@ def evaluar(objetivo: Ficha, pares: list[Ficha], hoy: date | None = None) -> Res
     # -- Calidad / crecimiento --
     if calidad_buena:
         frases.append(Frase(
-            f"Mejor {_lista([r.nombre.lower() for r in calidad_buena])} que sus pares.",
+            f"Mejor {_lista([_en_frase(r.nombre) for r in calidad_buena])} que sus pares.",
             "calidad o crecimiento con percentil ≥ 75", "positivo", [r.clave for r in calidad_buena],
         ))
     peores_calidad = calidad_mala + _en("crecimiento", "peor")
     if peores_calidad:
         frases.append(Frase(
-            f"Peor {_lista([r.nombre.lower() for r in peores_calidad])} que sus pares.",
+            f"Peor {_lista([_en_frase(r.nombre) for r in peores_calidad])} que sus pares.",
             "calidad o crecimiento con percentil ≤ 25", "negativo", [r.clave for r in peores_calidad],
         ))
 
@@ -445,7 +453,7 @@ def evaluar(objetivo: Ficha, pares: list[Ficha], hoy: date | None = None) -> Res
     if lectura == LECTURA_BARATA:
         motivos = []
         if len(calidad_mala) >= 2:
-            motivos.append(f"calidad en el piso del grupo ({_lista([r.nombre.lower() for r in calidad_mala])})")
+            motivos.append(f"calidad en el piso del grupo ({_lista([_en_frase(r.nombre) for r in calidad_mala])})")
         if crec_ing is not None and crec_ing < 0:
             motivos.append(f"ingresos cayendo ({_pct(crec_ing)} interanual)")
         if mom12 and mom12.banda == "peor":

@@ -53,8 +53,16 @@ def test_balance_en_otra_moneda_recalcula_en_usd():
 
 def test_financieros_sin_ebitda_ni_deuda():
     raw = {"trailingPE": 10.0, "enterpriseToEbitda": 5.0, "priceToSalesTrailing12Months": 2.0, "debtToEquity": 300.0}
+    raw["grossMargins"] = 0.0
     e = ve.extraer_metricas(raw, True, False, "Financiero")
     assert e.valores["ev_ebitda"] is None and e.valores["ps"] is None and e.valores["deuda_patrimonio"] is None
+    assert e.valores["margen_bruto"] is None
+
+
+def test_frases_respetan_siglas():
+    obj = _ficha("X", pe=23, ev_ebitda=13.5, ps=3.7, roe=0.40, margen_operativo=0.40)
+    textos = " ".join(f.texto for f in ve.evaluar(obj, PARES).frases)
+    assert "Mejor margen operativo y ROE que sus pares." in textos
 
 
 # ── rendimientos ──────────────────────────────────────────────────────────

@@ -12,11 +12,14 @@ export default function SelectorInstrumento({
   onElegir,
   yaSeguidos,
   deshabilitado,
+  etiquetaYaElegido = 'Ya la seguís',
 }: {
   onElegir: (instrumento: CatalogoInstrumentoOut) => void
   /** Tickers que ya están en la watchlist: se muestran, pero no se pueden volver a agregar. */
   yaSeguidos: Set<string>
   deshabilitado?: boolean
+  /** Qué dice la fila de un instrumento que ya está en `yaSeguidos`. */
+  etiquetaYaElegido?: string
 }) {
   const [texto, setTexto] = useState('')
   const [tipo, setTipo] = useState('')
@@ -103,7 +106,7 @@ export default function SelectorInstrumento({
                     </div>
                   </div>
                   {seguido ? (
-                    <span className="shrink-0 text-label font-bold text-app-text-dim">Ya la seguís</span>
+                    <span className="shrink-0 text-label font-bold text-app-text-dim">{etiquetaYaElegido}</span>
                   ) : (
                     <Icon name="plus" className="w-4 h-4 text-app-accent shrink-0" />
                   )}

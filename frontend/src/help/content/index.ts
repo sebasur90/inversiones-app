@@ -29,8 +29,9 @@ import { DESCOMPOSICION_HELP, type DescomposicionHelpKey } from './descomposicio
 import { COSTOOPORTUNIDAD_HELP, type CostoOportunidadHelpKey } from './costooportunidad'
 import { MATRIZCORRELACIONES_HELP, type MatrizCorrelacionesHelpKey } from './matrizcorrelaciones'
 import { COMPARADORESTRATEGIAS_HELP, type ComparadorEstrategiasHelpKey } from './comparadorEstrategias'
+import { VALUACION_HELP, type ValuacionHelpKey } from './valuacion'
 
-export type HelpKey = GlosarioKey | SimuladorHelpKey | SimuladorVidaHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey | ComisionesHelpKey | RebalanceoHelpKey | FlujoCajaHelpKey | WatchlistHelpKey | AnalisisTecnicoHelpKey | EstrategiasHelpKey | AportesHelpKey | SaludHelpKey | ExplicacionResultadoHelpKey | DescomposicionHelpKey | CostoOportunidadHelpKey | MatrizCorrelacionesHelpKey | ComparadorEstrategiasHelpKey
+export type HelpKey = GlosarioKey | SimuladorHelpKey | SimuladorVidaHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey | ComisionesHelpKey | RebalanceoHelpKey | FlujoCajaHelpKey | WatchlistHelpKey | AnalisisTecnicoHelpKey | EstrategiasHelpKey | AportesHelpKey | SaludHelpKey | ExplicacionResultadoHelpKey | DescomposicionHelpKey | CostoOportunidadHelpKey | MatrizCorrelacionesHelpKey | ComparadorEstrategiasHelpKey | ValuacionHelpKey
 
 export const HELP: Record<HelpKey, HelpContent> = {
   ...GLOSARIO_HELP,
@@ -63,6 +64,7 @@ export const HELP: Record<HelpKey, HelpContent> = {
   ...COSTOOPORTUNIDAD_HELP,
   ...MATRIZCORRELACIONES_HELP,
   ...COMPARADORESTRATEGIAS_HELP,
+  ...VALUACION_HELP,
 }
 
 export {
@@ -96,4 +98,5 @@ export {
   COSTOOPORTUNIDAD_HELP,
   MATRIZCORRELACIONES_HELP,
   COMPARADORESTRATEGIAS_HELP,
+  VALUACION_HELP,
 }

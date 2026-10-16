@@ -114,6 +114,22 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
     terminos: ['screener_umbral', 'screener_dispara_ahora', 'screener_grafico_gatillo'],
   },
 
+  '/valuacion': {
+    queEs: 'Qué acciones, CEDEARs y ETFs están más baratos o más caros que sus competidores, para decidir dónde mirar antes de entrar o salir.',
+    comoLeerla: [
+      'Cada tarjeta es un instrumento con su lectura en palabras (Barata, Cara, En línea, Mixta…) y las dos razones principales.',
+      'Arriba elegís el universo: lo que tenés, lo que seguís en la watchlist, o todo el catálogo de IOL. Los chips filtran por lectura, región y tipo.',
+      '"Barata con alertas" es barata pero con calidad, crecimiento o precio flojos: puede estar barata por una buena razón.',
+      'La barra de arriba dice cuántos emisores ya tienen datos: la app los baja de Yahoo de a poco, dos veces por día.',
+    ],
+    queHacer: [
+      'Tocá una tarjeta para ver el detalle: métrica por métrica contra sus pares, quiénes son esos pares y su precio comparado.',
+      'Si falta un competidor o la clasificación está mal, corregilo desde la ficha: vale para todas las pantallas.',
+    ],
+    ojo: 'No es una recomendación de compra o venta. Los datos de Yahoo pueden estar atrasados o tener errores; la ficha muestra la fecha y las advertencias.',
+    terminos: ['valuacion_que_es', 'valuacion_percentil', 'valuacion_trampa_valor', 'valuacion_pares_criterio', 'per'],
+  },
+
   '/movimientos': {
     queEs: 'El historial completo: cada compra, venta, dividendo, cupón y amortización que cargaste en el Sheet.',
     comoLeerla: [
@@ -137,12 +153,13 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
   },
 
   '/ticker': {
-    queEs: 'Todo sobre un instrumento puntual: resumen, rendimiento, riesgo e histórico de precios.',
+    queEs: 'Todo sobre un instrumento puntual: resumen, rendimiento, riesgo, histórico de precios y cómo está valuado contra sus pares.',
     comoLeerla: [
       'Las pestañas de arriba cambian la vista sin salir de la pantalla.',
       '"Resumen" da la foto rápida; el resto son las mismas métricas que ves en Rendimiento y Riesgo, pero sólo para este ticker.',
+      '"Pares" lo compara contra competidores parecidos (misma industria y tamaño) y muestra de dónde sale su sector, país y región.',
     ],
-    terminos: ['tickerdetalle_total_pl', 'tickerdetalle_retorno_anualizado'],
+    terminos: ['tickerdetalle_total_pl', 'tickerdetalle_retorno_anualizado', 'valuacion_que_es', 'valuacion_fuentes'],
   },
 
   '/objetivo': {
@@ -270,14 +287,15 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
   },
 
   '/descomposicion': {
-    queEs: 'De qué está compuesta tu cartera, bajando de lo general a lo particular: Familia → País → Sector → Ticker.',
+    queEs: 'De qué está compuesta tu cartera, bajando de lo general a lo particular: Familia → Región → Sector → Ticker.',
     comoLeerla: [
       'Tocá una categoría para entrar a su detalle; el camino de arriba ("Cartera › …") te deja volver a un nivel anterior.',
       'El selector %/ARS/USD cambia cómo se ven los valores, no lo que se calcula.',
-      'La familia (Renta fija, Renta variable, Fondos, Liquidez) se deriva del Tipo Instrumento y el Sector que cargaste en el Sheet: no es un dato que se carga a mano.',
+      'La familia (Renta fija, Renta variable, Fondos, Liquidez) se deriva del tipo de instrumento y del sector: no es un dato que se carga a mano.',
+      'La región (EEUU, Argentina, Desarrollados ex-EEUU, Emergentes, Global) sale del país de la empresa, no de dónde cotiza: un CEDEAR de Coca-Cola es EEUU.',
     ],
-    ojo: 'Un ticker sin ficha en Instrumentos, o con País/Sector vacío, aparece como "Sin clasificar" — la app nunca inventa esa clasificación.',
-    terminos: ['descomposicion_familia', 'descomposicion_sin_clasificar'],
+    ojo: 'Sector, país y región salen de la clasificación automática (Yahoo) con el Sheet de respaldo. Lo que ninguna fuente informa aparece como "Sin clasificar": la app nunca lo inventa, y se puede corregir a mano desde la ficha del ticker.',
+    terminos: ['descomposicion_familia', 'descomposicion_sin_clasificar', 'valuacion_fuentes'],
   },
 
   '/explicacion-resultado': {
