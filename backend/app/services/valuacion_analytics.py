@@ -182,26 +182,31 @@ def _clasificacion_dict(c: ce.ClasificacionResuelta) -> dict:
 
 
 def _fuerza_relativa(u: Universo, base: str, pares: list[str]) -> list[dict]:
-    """Serie semanal base 100 del emisor contra la mediana de sus pares (todo en USD)."""
+    """Serie semanal base 100 del emisor, de cada par y de la mediana de los pares (todo en USD).
+
+    Cada par se normaliza contra su propio cierre de la primera semana del emisor: así las líneas
+    arrancan juntas en 100 y lo que se compara es cuánto se movió cada uno desde ese día.
+    """
     propia = u.serie_usd(base)
     if len(propia) < 2:
         return []
-    series_pares = []
+    series_pares: dict[str, dict] = {}
     for p in pares:
         s = dict(u.serie_usd(p))
-        if s:
-            series_pares.append(s)
+        if s.get(propia[0][0]):
+            series_pares[p] = s
     base_propia = propia[0][1]
-    bases_pares = [s.get(propia[0][0]) for s in series_pares]
+    bases_pares = {p: s[propia[0][0]] for p, s in series_pares.items()}
     salida = []
     for fecha, cierre in propia:
-        normalizados = [
-            s[fecha] / b * 100.0 for s, b in zip(series_pares, bases_pares) if b and fecha in s
-        ]
+        por_par = {
+            p: round(s[fecha] / bases_pares[p] * 100.0, 2) for p, s in series_pares.items() if fecha in s
+        }
         salida.append({
             "fecha": fecha,
             "propio": round(cierre / base_propia * 100.0, 2),
-            "mediana_pares": round(median(normalizados), 2) if normalizados else None,
+            "mediana_pares": round(median(por_par.values()), 2) if por_par else None,
+            "pares": por_par,
         })
     return salida
 
@@ -219,7 +224,8 @@ def _metrica_dict(r: valuacion_engine.ResultadoMetrica) -> dict:
     return {
         "clave": r.clave, "nombre": r.nombre, "grupo": r.grupo, "formato": r.formato,
         "valor": r.valor, "mediana_pares": r.mediana_pares, "n": r.n, "percentil": r.percentil,
-        "banda": r.banda, "mayor_es_mejor": r.mayor_es_mejor,
+        "banda": r.banda, "mayor_es_mejor": r.mayor_es_mejor, "metodo": r.metodo,
+        "diferencia": r.diferencia,
     }
 
 

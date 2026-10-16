@@ -2790,6 +2790,10 @@ export interface FilaValuacion {
   percentil: number | null
   banda: 'mejor' | 'peor' | 'media' | null
   mayor_es_mejor: boolean
+  /** "directo" = hay un solo par: se compara contra su valor (±15%), no por percentil. */
+  metodo: 'percentil' | 'directo' | null
+  /** Sólo "directo": (propio − par) / |par|. */
+  diferencia: number | null
   valores: Record<string, number | null>
 }
 
@@ -2824,7 +2828,7 @@ export interface ValuacionTicker {
   frases: FraseValuacion[]
   tabla: { columnas: string[]; filas: FilaValuacion[] }
   n_pares_con_datos: number
-  fuerza_relativa: { fecha: string; propio: number; mediana_pares: number | null }[]
+  fuerza_relativa: { fecha: string; propio: number; mediana_pares: number | null; pares: Record<string, number> }[]
   advertencias: string[]
 }
 

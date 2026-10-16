@@ -19,7 +19,7 @@ import {
 const GRUPOS = ['valuacion', 'calidad', 'crecimiento', 'momentum'] as const
 
 function textoBanda(f: FilaValuacion): string | null {
-  if (f.banda == null || f.percentil == null) return null
+  if (f.banda == null) return null
   if (f.grupo === 'valuacion') {
     return f.banda === 'mejor' ? 'más barata' : f.banda === 'peor' ? 'más cara' : 'en el medio'
   }
@@ -28,7 +28,19 @@ function textoBanda(f: FilaValuacion): string | null {
 
 /** Dónde cae el emisor dentro de su grupo: 0 = el peor, 100 = el mejor (en valuación, el más
  *  barato). La palabra al lado dice lo mismo que la posición: el color sólo acompaña. */
-function BarraPercentil({ fila }: { fila: FilaValuacion }) {
+function BarraPercentil({ fila, par }: { fila: FilaValuacion; par: string | null }) {
+  if (fila.metodo === 'directo' && fila.diferencia != null) {
+    // Un solo par: no hay posición dentro de un grupo, sólo la diferencia contra ese par.
+    const pct = Math.abs(fila.diferencia * 100)
+    const lado = fila.diferencia < 0 ? 'por debajo de' : 'por encima de'
+    const color = fila.banda === 'mejor' ? 'text-app-pos' : fila.banda === 'peor' ? 'text-app-neg' : 'text-app-text-dim'
+    return (
+      <span className="text-label">
+        <span className="text-app-text-dim">{pct < 1 ? 'igual a' : `${pct.toFixed(0)}% ${lado}`} {par ?? 'su par'}</span>
+        {' · '}<span className={`font-semibold ${color}`}>{textoBanda(fila)}</span>
+      </span>
+    )
+  }
   if (fila.percentil == null) {
     return <span className="text-label text-app-text-faint">{fila.valor == null ? 'sin dato' : `pocos pares (${fila.n})`}</span>
   }
@@ -45,6 +57,9 @@ function BarraPercentil({ fila }: { fila: FilaValuacion }) {
 }
 
 function VistaPorMetrica({ v }: { v: ValuacionTicker }) {
+  const parUnico = v.pares.items.filter(p => p.tiene_datos).length === 1
+    ? v.pares.items.find(p => p.tiene_datos)!.ticker_base
+    : null
   return (
     <div className="flex flex-col gap-4">
       {GRUPOS.map(grupo => {
@@ -59,9 +74,9 @@ function VistaPorMetrica({ v }: { v: ValuacionTicker }) {
                   <div className="text-caption text-app-text truncate">{f.nombre}</div>
                   <div className="text-caption font-mono text-app-text text-right">
                     {formatMetrica(f.valor, f.formato)}
-                    <span className="text-app-text-faint"> · mediana {formatMetrica(f.mediana_pares, f.formato)}</span>
+                    <span className="text-app-text-faint"> · {f.metodo === 'directo' && parUnico ? parUnico : 'mediana'} {formatMetrica(f.mediana_pares, f.formato)}</span>
                   </div>
-                  <div className="col-span-2"><BarraPercentil fila={f} /></div>
+                  <div className="col-span-2"><BarraPercentil fila={f} par={parUnico} /></div>
                 </div>
               ))}
             </div>
@@ -219,7 +234,12 @@ export default function TickerParesTab({ ticker }: { ticker: string }) {
           {v.fuerza_relativa.length > 1 && (
             <Card>
               <div className="text-strong font-bold text-app-text mb-2">Precio vs. sus pares (12 meses)</div>
-              <FuerzaRelativaChart puntos={v.fuerza_relativa} ticker={v.ticker_base} />
+              <FuerzaRelativaChart
+                key={v.pares.items.map(p => p.ticker_base).join(',')}
+                puntos={v.fuerza_relativa}
+                ticker={v.ticker_base}
+                pares={v.pares.items.map(p => p.ticker_base)}
+              />
             </Card>
           )}
 

@@ -111,9 +111,9 @@ def test_evaluar_metrica_invierte_si_menor_es_mejor():
     assert r.mediana_pares == pytest.approx(27.5)
 
 
-def test_sin_suficientes_pares_no_hay_percentil():
-    r = ve.evaluar_metrica(ve.METRICA_POR_CLAVE["pe"], 10.0, [20.0])
-    assert r.percentil is None and r.banda is None
+def test_sin_pares_no_hay_comparacion():
+    r = ve.evaluar_metrica(ve.METRICA_POR_CLAVE["pe"], 10.0, [None, None])
+    assert r.percentil is None and r.banda is None and r.metodo is None
 
 
 # ── lecturas ──────────────────────────────────────────────────────────────
@@ -164,7 +164,10 @@ def test_mixta_y_en_linea():
 
 
 def test_datos_insuficientes():
+    # Una sola métrica de valuación comparable no alcanza para una lectura.
     r = ve.evaluar(_ficha("X", pe=12), [_ficha("A", pe=20)])
+    assert r.lectura == ve.LECTURA_SIN_DATOS
+    r = ve.evaluar(_ficha("X", pe=12), [])
     assert r.lectura == ve.LECTURA_SIN_DATOS
     assert any("pocos pares" in a for a in r.advertencias)
 
@@ -185,3 +188,31 @@ def test_etf_usa_gastos_como_valuacion():
     r = ve.evaluar(obj, pares)
     assert r.lectura == ve.LECTURA_CARA
     assert "roe" not in {m.clave for m in r.metricas}
+
+
+# ── un solo par: comparación directa ──────────────────────────────────────
+
+def test_un_solo_par_compara_directo():
+    pe = ve.METRICA_POR_CLAVE["pe"]
+    r = ve.evaluar_metrica(pe, 20.0, [25.0])
+    assert r.metodo == "directo" and r.banda == "mejor" and r.percentil is None
+    assert r.diferencia == pytest.approx(-0.2)
+    assert ve.evaluar_metrica(pe, 24.0, [25.0]).banda == "media"
+    assert ve.evaluar_metrica(pe, 30.0, [25.0]).banda == "peor"
+
+
+def test_un_solo_par_en_metricas_pct_usa_piso():
+    crec = ve.METRICA_POR_CLAVE["crec_ingresos"]
+    # 1% vs 0,5%: relativo sería +100%, pero contra el piso de 2 puntos es +25% -> mejor
+    assert ve.evaluar_metrica(crec, 0.01, [0.005]).banda == "mejor"
+    assert ve.evaluar_metrica(crec, 0.006, [0.005]).banda == "media"
+
+
+def test_ko_contra_pep_da_lectura():
+    ko = _ficha("KO", pe=27.9, forward_pe=26.4, ps=8.0, margen_operativo=0.35, roe=0.42, rend_12m=0.39)
+    pep = _ficha("PEP", pe=20.0, forward_pe=17.0, ps=2.4, margen_operativo=0.13, roe=0.50, rend_12m=0.05)
+    r = ve.evaluar(ko, [pep])
+    assert r.lectura == ve.LECTURA_CARA
+    assert "15% mejores que el par" in r.regla_lectura
+    assert any("un solo par (PEP)" in a for a in r.advertencias)
+    assert any("vs. el par" in f.texto for f in r.frases)

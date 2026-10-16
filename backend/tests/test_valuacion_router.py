@@ -104,6 +104,10 @@ def test_ficha_de_valuacion(client):
     assert b["fuerza_relativa"][0]["propio"] == 100.0
     assert b["fuerza_relativa"][-1]["propio"] == pytest.approx(120.0)
     assert b["fuerza_relativa"][-1]["mediana_pares"] is not None
+    ultimo = b["fuerza_relativa"][-1]
+    assert set(ultimo["pares"]) == {"PEP", "MNST", "KDP", "CELH"}
+    assert ultimo["pares"]["CELH"] == pytest.approx(50.0)     # 40 -> 20
+    assert b["fuerza_relativa"][0]["pares"]["PEP"] == 100.0
 
 
 def test_ficha_de_ticker_sin_datos(client):
@@ -133,3 +137,16 @@ def test_lista_por_universo(client):
 
 def test_universo_invalido(client):
     assert client.get("/api/inversiones/valuacion", params={"universo": "x"}).status_code == 422
+
+
+def test_contra_un_solo_par_compara_directo(client):
+    r = client.post("/api/inversiones/pares/KO", json={"par": "MNST", "accion": "quitar"})
+    for p in ("KDP", "CELH", "PEP"):
+        r = client.post("/api/inversiones/pares/KO", json={"par": p, "accion": "quitar"})
+    r = client.post("/api/inversiones/pares/KO", json={"par": "PEP", "accion": "agregar"})
+    b = r.json()
+    assert [p["ticker_base"] for p in b["pares"]["items"]] == ["PEP"]
+    assert b["lectura"] != "datos_insuficientes"
+    fila_pe = next(f for f in b["tabla"]["filas"] if f["clave"] == "pe")
+    assert fila_pe["metodo"] == "directo" and fila_pe["diferencia"] == pytest.approx(14 / 24 - 1, abs=1e-3)
+    assert set(b["fuerza_relativa"][-1]["pares"]) == {"PEP"}

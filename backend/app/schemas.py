@@ -2536,6 +2536,8 @@ class FilaValuacionOut(BaseModel):
     percentil: Optional[float] = None
     banda: Optional[str] = None
     mayor_es_mejor: bool
+    metodo: Optional[str] = None       # "percentil" | "directo" (un solo par)
+    diferencia: Optional[float] = None  # sólo "directo": (propio − par) / |par|
     valores: dict[str, Optional[float]] = Field(default_factory=dict)
 
 
@@ -2564,6 +2566,7 @@ class PuntoFuerzaRelativaOut(BaseModel):
     fecha: date
     propio: float
     mediana_pares: Optional[float] = None
+    pares: dict[str, float] = Field(default_factory=dict)
 
 
 class ValuacionTickerOut(BaseModel):

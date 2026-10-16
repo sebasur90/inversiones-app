@@ -37,6 +37,10 @@ from statistics import median
 from typing import Callable
 
 N_MIN_PERCENTIL = 3
+# Con un solo par no hay percentil que valga: se compara contra su valor directo, y una diferencia
+# de al menos 15% (o 2 puntos en métricas en %) cuenta como "mejor"/"peor".
+UMBRAL_DIRECTO = 0.15
+PISO_DIRECTO_PCT = 0.02
 N_MIN_WINSORIZAR = 5
 TOPE_MULTIPLO = 300.0
 TOPE_PEG = 10.0
@@ -298,11 +302,27 @@ class ResultadoMetrica:
     percentil: float | None     # "favorable": 100 = el mejor del grupo (en valuación, el más barato)
     banda: str | None           # "mejor" | "peor" | "media" | None
     mayor_es_mejor: bool
+    metodo: str | None = None   # "percentil" | "directo" (un solo par) | None (sin comparación)
+    # Sólo en "directo": (propio − par) / |par|, con signo crudo (no orientado a "mejor").
+    diferencia: float | None = None
+
+
+def _comparacion_directa(m: Metrica, propio: float, par: float) -> ResultadoMetrica:
+    base = abs(par)
+    if m.formato == "pct":
+        base = max(base, PISO_DIRECTO_PCT)
+    diferencia = (propio - par) / base if base else 0.0
+    favorable = diferencia if m.mayor_es_mejor else -diferencia
+    banda = "mejor" if favorable >= UMBRAL_DIRECTO else "peor" if favorable <= -UMBRAL_DIRECTO else "media"
+    return ResultadoMetrica(m.clave, m.nombre, m.grupo, m.formato, propio, par, 2, None, banda,
+                            m.mayor_es_mejor, "directo", round(diferencia, 4))
 
 
 def evaluar_metrica(m: Metrica, propio: float | None, pares: list[float | None]) -> ResultadoMetrica:
     validos_pares = [p for p in pares if p is not None]
     mediana = median(validos_pares) if validos_pares else None
+    if propio is not None and len(validos_pares) == 1:
+        return _comparacion_directa(m, propio, validos_pares[0])
     if propio is None or len(validos_pares) + 1 < N_MIN_PERCENTIL:
         return ResultadoMetrica(m.clave, m.nombre, m.grupo, m.formato, propio, mediana,
                                 len(validos_pares) + (propio is not None), None, None, m.mayor_es_mejor)
@@ -312,7 +332,7 @@ def evaluar_metrica(m: Metrica, propio: float | None, pares: list[float | None])
     favorable = p if m.mayor_es_mejor else 100.0 - p
     banda = "mejor" if favorable >= BANDA_ALTA else "peor" if favorable <= BANDA_BAJA else "media"
     return ResultadoMetrica(m.clave, m.nombre, m.grupo, m.formato, propio, mediana, len(grupo),
-                            round(favorable, 1), banda, m.mayor_es_mejor)
+                            round(favorable, 1), banda, m.mayor_es_mejor, "percentil")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -393,9 +413,21 @@ def evaluar(objetivo: Ficha, pares: list[Ficha], hoy: date | None = None) -> Res
     frases: list[Frase] = []
     advertencias: list[str] = []
 
+    # Con un solo par, "mejor"/"peor" es una diferencia contra su valor, no un percentil: las reglas
+    # que se muestran tienen que decir lo que de verdad se usó.
+    directo = any(r.metodo == "directo" for r in resultados)
+    umbral = f"{UMBRAL_DIRECTO * 100:.0f}%"
+    r_mejor = f"al menos {umbral} mejor que el par" if directo else "percentil favorable ≥ 75 dentro del grupo"
+    r_peor = f"al menos {umbral} peor que el par" if directo else "percentil favorable ≤ 25 dentro del grupo"
+    ref = "el par" if directo else "la mediana"
+
     # -- Lectura --
-    regla = ("barata: 2+ métricas de valuación en el cuarto más barato del grupo y ninguna en el más "
-             "caro; cara: al revés; mixta: hay de las dos; en línea: el resto")
+    if directo:
+        regla = (f"barata: 2+ métricas de valuación al menos {umbral} mejores que el par y ninguna "
+                 f"{umbral} peor; cara: al revés; mixta: hay de las dos; en línea: el resto")
+    else:
+        regla = ("barata: 2+ métricas de valuación en el cuarto más barato del grupo y ninguna en el más "
+                 "caro; cara: al revés; mixta: hay de las dos; en línea: el resto")
     if len(val_con_banda) < 2:
         lectura = LECTURA_SIN_DATOS
         regla = f"hacen falta al menos 2 métricas de valuación comparables (hay {len(val_con_banda)})"
@@ -412,12 +444,12 @@ def evaluar(objetivo: Ficha, pares: list[Ficha], hoy: date | None = None) -> Res
     if baratas:
         frases.append(Frase(
             f"Más barata que sus pares en {_lista([r.nombre for r in baratas])}.",
-            "percentil favorable ≥ 75 dentro del grupo", "positivo", [r.clave for r in baratas],
+            r_mejor, "positivo", [r.clave for r in baratas],
         ))
     if caras:
         frases.append(Frase(
             f"Más cara que sus pares en {_lista([r.nombre for r in caras])}.",
-            "percentil favorable ≤ 25 dentro del grupo", "negativo", [r.clave for r in caras],
+            r_peor, "negativo", [r.clave for r in caras],
         ))
     if lectura == LECTURA_EN_LINEA and val_con_banda:
         frases.append(Frase("Sus múltiplos están en el rango de sus pares.",
@@ -427,21 +459,21 @@ def evaluar(objetivo: Ficha, pares: list[Ficha], hoy: date | None = None) -> Res
     if calidad_buena:
         frases.append(Frase(
             f"Mejor {_lista([_en_frase(r.nombre) for r in calidad_buena])} que sus pares.",
-            "calidad o crecimiento con percentil ≥ 75", "positivo", [r.clave for r in calidad_buena],
+            f"calidad o crecimiento: {r_mejor}", "positivo", [r.clave for r in calidad_buena],
         ))
     peores_calidad = calidad_mala + _en("crecimiento", "peor")
     if peores_calidad:
         frases.append(Frase(
             f"Peor {_lista([_en_frase(r.nombre) for r in peores_calidad])} que sus pares.",
-            "calidad o crecimiento con percentil ≤ 25", "negativo", [r.clave for r in peores_calidad],
+            f"calidad o crecimiento: {r_peor}", "negativo", [r.clave for r in peores_calidad],
         ))
 
     # -- Momentum --
     if mom12 and mom12.banda in ("mejor", "peor") and mom12.valor is not None:
         verbo = "Subió más que" if mom12.banda == "mejor" else "Quedó atrás de"
         frases.append(Frase(
-            f"{verbo} sus pares en 12 meses ({_pct(mom12.valor)} vs. mediana {_pct(mom12.mediana_pares)}).",
-            "rendimiento 12 meses en USD, percentil ≥ 75 o ≤ 25", "positivo" if mom12.banda == "mejor" else "negativo",
+            f"{verbo} sus pares en 12 meses ({_pct(mom12.valor)} vs. {ref} {_pct(mom12.mediana_pares)}).",
+            f"rendimiento 12 meses en USD, {r_mejor} o {r_peor}", "positivo" if mom12.banda == "mejor" else "negativo",
             ["rend_12m"],
         ))
 
@@ -462,15 +494,15 @@ def evaluar(objetivo: Ficha, pares: list[Ficha], hoy: date | None = None) -> Res
             motivos.append("no tiene ganancias")
         if motivos:
             lectura = LECTURA_TRAMPA
-            regla = ("barata, pero con 2+ métricas de calidad ≤ p25, ingresos cayendo, momentum 12m "
-                     "≤ p25 o sin ganancias")
+            regla = (f"barata, pero con 2+ métricas de calidad {r_peor.replace('al menos ', '')}, ingresos "
+                     "cayendo, precio a 12 meses peor que sus pares o sin ganancias")
             frases.insert(0, Frase(
                 f"Ojo: está barata, pero con señales de trampa de valor: {_lista(motivos)}.",
                 regla, "alerta",
             ))
     elif lectura == LECTURA_CARA and len(calidad_buena) >= 2:
         lectura = LECTURA_CARA_JUSTIFICADA
-        regla = "cara, pero con 2+ métricas de calidad o crecimiento ≥ p75"
+        regla = f"cara, pero con 2+ métricas de calidad o crecimiento: {r_mejor}"
         frases.insert(0, Frase(
             "Cotiza con prima, pero sus fundamentos son mejores que los del grupo.", regla, "neutro",
         ))
@@ -490,7 +522,13 @@ def evaluar(objetivo: Ficha, pares: list[Ficha], hoy: date | None = None) -> Res
         advertencias.append("El rendimiento se midió en la moneda local del símbolo, no en USD.")
     if objetivo.fecha_dato and (hoy - objetivo.fecha_dato).days > DIAS_DATO_VIEJO:
         advertencias.append(f"Los datos son del {objetivo.fecha_dato.strftime('%d/%m/%Y')}: pueden estar desactualizados.")
-    if n_pares < N_MIN_PERCENTIL - 1:
+    pares_con_datos = [p.ticker_base for p in pares if any(v is not None for v in p.valores.values())]
+    if any(r.metodo == "directo" for r in resultados):
+        advertencias.append(
+            f"Se compara contra un solo par ({', '.join(pares_con_datos) or 'el par'}): cuenta como mejor o peor "
+            f"una diferencia de al menos {UMBRAL_DIRECTO * 100:.0f}%, no un percentil. Con más pares la lectura es más confiable."
+        )
+    elif n_pares < N_MIN_PERCENTIL - 1:
         advertencias.append("Hay muy pocos pares con datos: la comparación es poco representativa.")
 
     return ResultadoValuacion(

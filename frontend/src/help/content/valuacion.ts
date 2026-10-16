@@ -28,6 +28,8 @@ export const VALUACION_HELP: Record<ValuacionHelpKey, HelpContent> = {
       'Se ordena el grupo (el ticker más sus pares) y se mira la posición del ticker, contando la mitad de los empates. Con 5 o más valores, los extremos raros se recortan (más allá de 3 veces el rango intercuartil) para que un dato absurdo no aplaste al resto. Con menos de 3 valores no se calcula.',
     howToInterpret:
       'La barra va de peor (izquierda) a mejor (derecha). La franja del medio es el 50% central: ahí está "en línea". 75 o más es "mejor" (en valuación, "más barata"); 25 o menos es "peor" ("más cara").',
+    limitations:
+      'Con un solo par con datos no hay grupo para ordenar: se compara directo contra ese par, y cuenta como "mejor" o "peor" una diferencia de al menos 15% (o 2 puntos en las métricas en %). La ficha lo avisa.',
   },
   valuacion_trampa_valor: {
     title: 'Trampa de valor',
