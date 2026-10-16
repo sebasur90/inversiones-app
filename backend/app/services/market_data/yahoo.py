@@ -195,3 +195,157 @@ def fetch_info(ticker: str) -> dict | None:
         nombre = None
 
     return {"moneda": moneda, "mercado": mercado, "nombre": nombre}
+
+
+# ---------------------------------------------------------------------------------------------
+# Fundamentales (clasificación + valuación contra pares)
+# ---------------------------------------------------------------------------------------------
+
+# Lista blanca de claves de `get_info()`. Lo que no está acá no se guarda: `get_info()` devuelve
+# ~150 claves (direcciones, empleados, resúmenes de negocio) que inflarían la DB sin uso, y fijar
+# la lista deja a la vista de qué depende la valuación si yfinance cambia nombres.
+CLAVES_TEXTO = (
+    "quoteType", "longName", "shortName", "sector", "industry", "country", "category",
+    "fundFamily", "currency", "financialCurrency", "exchange",
+)
+CLAVES_NUMERO = (
+    # tamaño
+    "marketCap", "enterpriseValue", "totalAssets", "sharesOutstanding",
+    # valuación
+    "trailingPE", "forwardPE", "priceToBook", "enterpriseToEbitda", "enterpriseToRevenue",
+    "priceToSalesTrailing12Months", "pegRatio", "trailingPegRatio", "dividendYield",
+    "trailingAnnualDividendYield", "yield", "freeCashflow",
+    # calidad
+    "grossMargins", "operatingMargins", "profitMargins", "ebitdaMargins", "returnOnEquity",
+    "returnOnAssets", "debtToEquity",
+    # crecimiento
+    "revenueGrowth", "earningsGrowth", "earningsQuarterlyGrowth",
+    # magnitudes para recalcular ratios en otra moneda
+    "netIncomeToCommon", "totalRevenue", "ebitda", "trailingEps", "forwardEps", "bookValue",
+    # precio y riesgo
+    "currentPrice", "regularMarketPrice", "previousClose", "beta", "fiftyTwoWeekHigh",
+    "fiftyTwoWeekLow",
+    # ETFs
+    "netExpenseRatio", "annualReportExpenseRatio", "ytdReturn", "threeYearAverageReturn",
+    "fiveYearAverageReturn",
+)
+
+ESTADO_OK = "ok"
+ESTADO_NO_ENCONTRADO = "no_encontrado"
+ESTADO_ERROR = "error"
+ESTADO_RATE_LIMITED = "rate_limited"
+
+
+class ResultadoYahoo:
+    """Resultado de una consulta de fundamentales. **No lanza**: el estado dice qué pasó.
+
+    `rate_limited` es distinto de `error` a propósito: ante un 429 la ingesta corta la corrida
+    entera (seguir sólo alarga el bloqueo), ante un error suelto sigue con el próximo símbolo.
+    """
+    __slots__ = ("estado", "datos", "error")
+
+    def __init__(self, estado: str, datos=None, error: str | None = None):
+        self.estado = estado
+        self.datos = datos
+        self.error = error
+
+    def __repr__(self) -> str:  # pragma: no cover - ayuda de depuración
+        return f"ResultadoYahoo({self.estado!r}, error={self.error!r})"
+
+
+def _es_rate_limit(exc: Exception) -> bool:
+    nombre = type(exc).__name__.lower()
+    texto = str(exc).lower()
+    return "ratelimit" in nombre or "429" in texto or "too many requests" in texto or "rate limit" in texto
+
+
+def _resultado_de_excepcion(simbolo: str, exc: Exception) -> "ResultadoYahoo":
+    if _es_rate_limit(exc):
+        logger.warning("yahoo: límite de tasa al pedir %s: %s", simbolo, exc)
+        return ResultadoYahoo(ESTADO_RATE_LIMITED, error=str(exc)[:300])
+    texto = str(exc).lower()
+    if "404" in texto or "not found" in texto or "no data found" in texto:
+        return ResultadoYahoo(ESTADO_NO_ENCONTRADO, error=str(exc)[:300])
+    logger.warning("yahoo: fundamentales de %s fallaron: %s", simbolo, exc)
+    return ResultadoYahoo(ESTADO_ERROR, error=str(exc)[:300])
+
+
+def fetch_fundamentales(simbolo: str) -> ResultadoYahoo:
+    """Clasificación y fundamentales de `simbolo` (símbolo de Yahoo) desde `get_info()`.
+
+    `datos` es un dict con las claves de `CLAVES_TEXTO`/`CLAVES_NUMERO` que vinieron con valor
+    (números finitos, textos no vacíos). Un símbolo sin `quoteType` ni nombre es
+    `no_encontrado`: Yahoo responde un dict casi vacío en vez de un 404 para lo que no conoce.
+    """
+    try:
+        import yfinance as yf
+    except ImportError:  # pragma: no cover
+        return ResultadoYahoo(ESTADO_ERROR, error="yfinance no instalado")
+
+    try:
+        info = yf.Ticker(simbolo).get_info() or {}
+    except Exception as exc:
+        return _resultado_de_excepcion(simbolo, exc)
+
+    if not isinstance(info, dict):
+        return ResultadoYahoo(ESTADO_ERROR, error="respuesta inesperada")
+
+    datos: dict = {}
+    for clave in CLAVES_TEXTO:
+        valor = _texto(info.get(clave))
+        if valor:
+            datos[clave] = valor
+    for clave in CLAVES_NUMERO:
+        valor = _num(info.get(clave))
+        if valor is not None:
+            datos[clave] = valor
+
+    if not datos.get("quoteType") and not (datos.get("longName") or datos.get("shortName")):
+        return ResultadoYahoo(ESTADO_NO_ENCONTRADO)
+    return ResultadoYahoo(ESTADO_OK, datos=datos)
+
+
+def fetch_cierres_semanales(simbolo: str, semanas: int = 56) -> ResultadoYahoo:
+    """Cierres semanales ajustados de las últimas `semanas`, en la moneda del símbolo.
+
+    `datos` = `[{"fecha": "YYYY-MM-DD", "cierre": float}, ...]` ordenada. Alcanza para medir el
+    rendimiento a 3, 6 y 12 meses contra los pares sin bajar la serie diaria de ~460 emisores
+    (que además no tienen lugar en `serie_ohlcv`: esa tabla es de cartera y watchlist).
+    """
+    try:
+        import yfinance as yf
+    except ImportError:  # pragma: no cover
+        return ResultadoYahoo(ESTADO_ERROR, error="yfinance no instalado")
+
+    hasta = date.today()
+    desde = hasta - timedelta(weeks=semanas)
+    try:
+        df = yf.Ticker(simbolo).history(
+            start=desde.isoformat(),
+            end=(hasta + timedelta(days=1)).isoformat(),
+            interval="1wk",
+            auto_adjust=True,
+            actions=False,
+            raise_errors=False,
+            timeout=_YF_TIMEOUT,
+        )
+    except Exception as exc:
+        return _resultado_de_excepcion(simbolo, exc)
+
+    if df is None or getattr(df, "empty", True) or "Close" not in getattr(df, "columns", ()):
+        return ResultadoYahoo(ESTADO_ERROR, error="serie semanal vacía")
+
+    serie = []
+    for idx, fila in df.iterrows():
+        try:
+            fecha = idx.date()
+        except (AttributeError, ValueError):
+            continue
+        cierre = _num(fila.get("Close"))
+        if cierre is None or cierre <= 0:
+            continue
+        serie.append({"fecha": fecha.isoformat(), "cierre": cierre})
+    serie.sort(key=lambda p: p["fecha"])
+    if not serie:
+        return ResultadoYahoo(ESTADO_ERROR, error="serie semanal sin cierres válidos")
+    return ResultadoYahoo(ESTADO_OK, datos=serie)

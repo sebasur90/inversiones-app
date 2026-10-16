@@ -38,14 +38,24 @@ def pytest_configure(config):
 @pytest.fixture(autouse=True)
 def _sin_red_yahoo_por_default(request, monkeypatch):
     """yfinance hace su propio HTTP (no pasa por `market_data.client`), así que
-    `USE_EXTERNAL_APIS=false` no lo frena. Se stubean sus dos funciones de red para que la
-    resolución/backfill del subyacente sea un no-op salvo que el test lo mockee a propósito.
+    `USE_EXTERNAL_APIS=false` no lo frena. Se stubean sus funciones de red para que la
+    resolución/backfill del subyacente y la ingesta de fundamentales sean un no-op salvo que el
+    test lo mockee a propósito.
     Los tests de `test_yahoo.py` (marcados `usa_yahoo_real`) quedan exentos."""
     if request.node.get_closest_marker("usa_yahoo_real"):
         return
     for mod in _YAHOO_MODS:
         monkeypatch.setattr(mod, "fetch_info", lambda *a, **k: None)
         monkeypatch.setattr(mod, "fetch_historico_ohlcv", lambda *a, **k: None)
+        # Fundamentales: un `ResultadoYahoo` de error (no `None`), que es el contrato de estas dos.
+        monkeypatch.setattr(
+            mod, "fetch_fundamentales",
+            lambda *a, _m=mod, **k: _m.ResultadoYahoo(_m.ESTADO_ERROR, error="red stubeada en tests"),
+        )
+        monkeypatch.setattr(
+            mod, "fetch_cierres_semanales",
+            lambda *a, _m=mod, **k: _m.ResultadoYahoo(_m.ESTADO_ERROR, error="red stubeada en tests"),
+        )
 
 
 @pytest.fixture(autouse=True)

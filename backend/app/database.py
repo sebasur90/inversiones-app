@@ -643,6 +643,129 @@ class ZonaPrecio(Base):
     __table_args__ = (UniqueConstraint("ticker", "tipo", name="uq_zona_precio_ticker_tipo"),)
 
 
+class ClasificacionAuto(Base):
+    """Clasificación de un emisor derivada de Yahoo, y estado de su ingesta.
+
+    **Una fila por `ticker_base`**: el símbolo de IOL sin la variante de moneda (`AAPL`, no
+    `AAPLD`; ver `clasificacion_engine.mapa_variantes`). Es la clave con la que el usuario corrige
+    y con la que se buscan pares. `simbolo_yahoo` es con qué se le preguntó a Yahoo; dos tickers
+    base pueden compartirlo (`PETR3` y `PBR` → `PBR`), y entonces comparten fundamentales.
+
+    Guarda el dato crudo de Yahoo (`*_raw`) además del normalizado: si cambia el vocabulario de
+    `clasificacion_engine`, se re-normaliza sin volver a pedir nada.
+
+    `estado`: 'ok' | 'no_encontrado' (Yahoo no conoce el símbolo) | 'error' | 'no_apto' (renta
+    fija, FCI: sin clasificación automática). `proximo_intento` es el backoff ante fallos.
+
+    Sin FK a `instrumentos_inversion`: el sync vacía esa tabla, y la mayoría de estos emisores ni
+    siquiera están en cartera (el universo es el catálogo de IOL).
+    """
+    __tablename__ = "clasificacion_auto"
+    ticker_base = Column(String, primary_key=True)
+    tipo_catalogo = Column(String, nullable=True)   # "CEDEAR" | "Acción" | ...
+    simbolo_yahoo = Column(String, nullable=True, index=True)
+    metodo_mapeo = Column(String, nullable=True)    # ver clasificacion_engine.METODO_*
+    nombre = Column(String, nullable=True)
+    quote_type = Column(String, nullable=True)
+    sector_raw = Column(String, nullable=True)
+    industria_raw = Column(String, nullable=True)
+    pais_raw = Column(String, nullable=True)
+    categoria_etf_raw = Column(String, nullable=True)
+    fund_family = Column(String, nullable=True)
+    tipo = Column(String, nullable=True)
+    sector = Column(String, nullable=True)
+    industria = Column(String, nullable=True)
+    pais = Column(String, nullable=True)
+    region = Column(String, nullable=True)
+    clase_msci = Column(String, nullable=True)
+    estado = Column(String, nullable=True)
+    fecha_clasificacion = Column(Date, nullable=True)
+    fecha_fundamentales = Column(Date, nullable=True)
+    intentos_fallidos = Column(Integer, nullable=False, default=0)
+    proximo_intento = Column(Date, nullable=True)
+    ultimo_error = Column(String, nullable=True)
+
+
+class FundamentalesSnapshot(Base):
+    """Foto de los fundamentales de un símbolo de Yahoo en una fecha.
+
+    `metricas` es el dict de `yahoo.fetch_fundamentales` (lista blanca de `get_info()`), crudo: la
+    limpieza (P/E negativo, topes, moneda) es de `valuacion_engine` y puede cambiar sin re-pedir
+    datos. `serie_semanal` son ~56 cierres semanales en la moneda del símbolo (`moneda`), para el
+    rendimiento relativo contra los pares.
+
+    `market_cap_usd` va en columna propia (no sólo dentro del JSON) porque es por lo que se
+    ordenan los pares por tamaño. `ratios_precio_confiables` = 0 cuando el balance está en otra
+    moneda que la cotización (típico de `.BA` y de algunos ADR): ahí P/E y compañía de Yahoo
+    mezclan monedas.
+
+    Se guardan los últimos `fundamentales_ingesta.SNAPSHOTS_RETENIDOS` por símbolo.
+    """
+    __tablename__ = "fundamentales_snapshot"
+    id = Column(Integer, primary_key=True, index=True)
+    simbolo_yahoo = Column(String, nullable=False, index=True)
+    fecha = Column(Date, nullable=False)
+    fuente = Column(String, nullable=False, default="yahoo")
+    moneda = Column(String, nullable=True)
+    market_cap_usd = Column(Numeric(24, 2), nullable=True)
+    metricas = Column(JSON, nullable=False)
+    serie_semanal = Column(JSON, nullable=True)
+    ratios_precio_confiables = Column(Integer, nullable=False, default=1)
+
+    __table_args__ = (UniqueConstraint("simbolo_yahoo", "fecha", name="uq_fundamentales_simbolo_fecha"),)
+
+
+class ClasificacionOverride(Base):
+    """Corrección manual de un campo de la clasificación, hecha desde la app.
+
+    **Una fila por `(ticker_base, campo)`** y la fila existe sólo si hay corrección (mismo criterio
+    que `NivelPrecioOverride`): su presencia *es* el override. `campo` ∈ tipo, sector, industria,
+    pais, region, simbolo_yahoo. Gana sobre el seed, Yahoo y el Sheet
+    (`clasificacion_engine.resolver`).
+    """
+    __tablename__ = "clasificacion_override"
+    id = Column(Integer, primary_key=True, index=True)
+    ticker_base = Column(String, nullable=False)
+    campo = Column(String, nullable=False)
+    valor = Column(String, nullable=False)
+    nota = Column(String, nullable=True)
+    fecha_actualizacion = Column(DateTime, nullable=False)
+
+    __table_args__ = (UniqueConstraint("ticker_base", "campo", name="uq_clasificacion_override"),)
+
+
+class ParOverride(Base):
+    """Par agregado o quitado a mano al grupo de comparables de un emisor.
+
+    El grupo final es `(automáticos − quitados) ∪ agregados` (`pares_engine`). Un `agregar` de un
+    símbolo que no está en el catálogo dispara su ingesta como extra.
+    """
+    __tablename__ = "pares_override"
+    id = Column(Integer, primary_key=True, index=True)
+    ticker_base = Column(String, nullable=False)
+    par = Column(String, nullable=False)
+    accion = Column(String, nullable=False)  # "agregar" | "quitar"
+    fecha = Column(DateTime, nullable=False)
+
+    __table_args__ = (UniqueConstraint("ticker_base", "par", name="uq_par_override"),)
+
+
+class IngestaFundamentales(Base):
+    """Última corrida del job de fundamentales (`services/fundamentales_ingesta.py`). Una sola
+    fila, como `RefrescoPrecios`, y por la misma razón no es un `SyncRun`."""
+    __tablename__ = "ingesta_fundamentales"
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime, nullable=False)
+    duration_ms = Column(Integer, nullable=False, default=0)
+    procesados = Column(Integer, nullable=False, default=0)
+    ok = Column(Integer, nullable=False, default=0)
+    fallidos = Column(Integer, nullable=False, default=0)
+    rate_limited = Column(Integer, nullable=False, default=0)
+    pendientes = Column(Integer, nullable=False, default=0)
+    resultado = Column(String, nullable=False, default="ok")
+    detalle = Column(JSON, nullable=True)
+
+
 class MigracionAplicada(Base):
     """Marca de las migraciones de **datos** que no pueden correr en cada arranque.
 

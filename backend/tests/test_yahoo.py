@@ -178,3 +178,74 @@ def test_ultimo_precio_no_lanza_si_falla_la_red(monkeypatch):
 
     _instalar_yf(monkeypatch, _Explota())
     assert yahoo.fetch_ultimo_precio("MSFT") is None
+
+
+# ── fundamentales ─────────────────────────────────────────────────────────
+
+class _RateLimitError(Exception):
+    pass
+
+
+_RateLimitError.__name__ = "YFRateLimitError"
+
+
+def test_fundamentales_filtra_lista_blanca_y_descarta_nan(monkeypatch):
+    info = {
+        "quoteType": "EQUITY", "longName": "The Coca-Cola Company", "sector": "Consumer Defensive",
+        "trailingPE": 25.3, "forwardPE": float("nan"), "marketCap": 3.0e11,
+        "longBusinessSummary": "texto largo que no se guarda", "address1": "Atlanta",
+        "industry": "  ",
+    }
+    _instalar_yf(monkeypatch, _FakeTicker(info=info))
+    r = yahoo.fetch_fundamentales("KO")
+    assert r.estado == yahoo.ESTADO_OK
+    assert r.datos["trailingPE"] == 25.3
+    assert r.datos["marketCap"] == 3.0e11
+    assert "forwardPE" not in r.datos
+    assert "industry" not in r.datos
+    assert "longBusinessSummary" not in r.datos and "address1" not in r.datos
+
+
+def test_fundamentales_dict_casi_vacio_es_no_encontrado(monkeypatch):
+    _instalar_yf(monkeypatch, _FakeTicker(info={"trailingPegRatio": None}))
+    assert yahoo.fetch_fundamentales("XXXX").estado == yahoo.ESTADO_NO_ENCONTRADO
+
+
+def test_fundamentales_rate_limit_se_distingue(monkeypatch):
+    _instalar_yf(monkeypatch, _FakeTicker(info_exc=_RateLimitError("Too Many Requests. Rate limited.")))
+    r = yahoo.fetch_fundamentales("KO")
+    assert r.estado == yahoo.ESTADO_RATE_LIMITED
+
+
+def test_fundamentales_404_es_no_encontrado(monkeypatch):
+    _instalar_yf(monkeypatch, _FakeTicker(info_exc=RuntimeError("HTTP Error 404: Not Found")))
+    assert yahoo.fetch_fundamentales("ZZZZ").estado == yahoo.ESTADO_NO_ENCONTRADO
+
+
+def test_fundamentales_error_de_red_no_lanza(monkeypatch):
+    _instalar_yf(monkeypatch, _FakeTicker(info_exc=ConnectionError("proxy caído")))
+    r = yahoo.fetch_fundamentales("KO")
+    assert r.estado == yahoo.ESTADO_ERROR
+    assert "proxy" in r.error
+
+
+def test_cierres_semanales(monkeypatch):
+    df = _df([
+        ("2026-09-07", 60.0, 61.0, 59.0, 60.5, 1_000),
+        ("2026-09-14", 60.5, 62.0, 60.0, float("nan"), 1_000),
+        ("2026-09-21", 61.0, 63.0, 60.0, 62.0, 1_000),
+    ])
+    _instalar_yf(monkeypatch, _FakeTicker(hist=df))
+    r = yahoo.fetch_cierres_semanales("KO")
+    assert r.estado == yahoo.ESTADO_OK
+    assert r.datos == [{"fecha": "2026-09-07", "cierre": 60.5}, {"fecha": "2026-09-21", "cierre": 62.0}]
+
+
+def test_cierres_semanales_vacio_es_error(monkeypatch):
+    _instalar_yf(monkeypatch, _FakeTicker(hist=pd.DataFrame()))
+    assert yahoo.fetch_cierres_semanales("KO").estado == yahoo.ESTADO_ERROR
+
+
+def test_cierres_semanales_rate_limit(monkeypatch):
+    _instalar_yf(monkeypatch, _FakeTicker(hist_exc=_RateLimitError("429")))
+    assert yahoo.fetch_cierres_semanales("KO").estado == yahoo.ESTADO_RATE_LIMITED
