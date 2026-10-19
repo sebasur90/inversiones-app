@@ -297,6 +297,47 @@ class DescomposicionOut(BaseModel):
     avisos: ValuacionAvisos = Field(default_factory=ValuacionAvisos)
 
 
+# --- Mapa de mercado (treemap por grupos, coloreado por variación) ---
+
+class MapaMercadoItem(BaseModel):
+    ticker: str                    # ticker local representativo (para enlazar a /ticker/:ticker)
+    ticker_base: str
+    nombre: Optional[str] = None
+    tipo: Optional[str] = None
+    sector: Optional[str] = None
+    industria: Optional[str] = None
+    region: Optional[str] = None
+    pais: Optional[str] = None
+    tamano_empresa: str
+    market_cap_usd: Optional[float] = None
+    # Razones (0.012 = +1,2%), en `moneda_variacion`; None si la historia no alcanza.
+    var_1d: Optional[float] = None
+    var_1s: Optional[float] = None
+    var_1m: Optional[float] = None
+    var_1a: Optional[float] = None
+    moneda_variacion: Optional[str] = None    # "USD" | "ARS" (sin MEP para convertir)
+    fecha_cierre: Optional[date] = None
+    en_cartera: bool = False
+    en_watchlist: bool = False
+    peso_cartera: Optional[float] = None      # % del total de la cartera consolidada; sin montos
+    tiene_logo: bool = False
+
+
+class MapaMercadoCobertura(BaseModel):
+    total: int
+    con_variacion: int
+    con_market_cap: int
+    con_logo: int
+    con_sector: int
+
+
+class MapaMercadoOut(BaseModel):
+    items: list[MapaMercadoItem]
+    cobertura: MapaMercadoCobertura
+    actualizado: Optional[datetime] = None
+    avisos: list[str] = Field(default_factory=list)
+
+
 class RebalanceoItem(BaseModel):
     etiqueta: str
     porcentaje_actual: float

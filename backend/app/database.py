@@ -719,6 +719,29 @@ class FundamentalesSnapshot(Base):
     __table_args__ = (UniqueConstraint("simbolo_yahoo", "fecha", name="uq_fundamentales_simbolo_fecha"),)
 
 
+class VariacionMercado(Base):
+    """Variación reciente del precio de un emisor del catálogo, para el mapa de mercado.
+
+    **Una fila por `simbolo_yahoo`, reescrita en cada corrida**: es una foto, no una serie. No se
+    escribe en `serie_ohlcv` a propósito (esa tabla alimenta indicadores y backtests y es de
+    cartera/watchlist, mismo criterio que `PrecioSubyacente`).
+
+    Las variaciones son razones (0.012 = +1,2%), en la moneda de `moneda`: USD para el subyacente
+    en EE.UU. y para lo local convertido por el MEP de cada fecha; 'ARS' sólo cuando no había MEP
+    para convertir (y el mapa lo avisa). Cualquiera puede ser NULL si la historia no alcanza.
+    """
+    __tablename__ = "variacion_mercado"
+    simbolo_yahoo = Column(String, primary_key=True)
+    fecha_cierre = Column(Date, nullable=False)
+    cierre = Column(Numeric(18, 6), nullable=False)
+    moneda = Column(String, nullable=False, default="USD", server_default="USD")
+    var_1d = Column(Numeric(12, 6), nullable=True)
+    var_1s = Column(Numeric(12, 6), nullable=True)
+    var_1m = Column(Numeric(12, 6), nullable=True)
+    var_1a = Column(Numeric(12, 6), nullable=True)
+    actualizado = Column(DateTime, nullable=False)
+
+
 class ClasificacionOverride(Base):
     """Corrección manual de un campo de la clasificación, hecha desde la app.
 

@@ -154,3 +154,15 @@ def test_una_ingesta_que_falla_no_propaga_la_excepcion(monkeypatch):
 
     monkeypatch.setattr(fundamentales_ingesta, "correr", explota)
     scheduler.correr_fundamentales()  # no debe lanzar
+
+
+def test_horas_mapa_mercado_por_defecto_despues_del_cierre_de_eeuu(monkeypatch):
+    monkeypatch.delenv("MAPA_MERCADO_HORAS", raising=False)
+    assert scheduler._horas_mapa_mercado() == "18"
+
+
+def test_horas_mapa_mercado_configurables_y_desactivables(monkeypatch):
+    monkeypatch.setenv("MAPA_MERCADO_HORAS", "18, 20")
+    assert scheduler._horas_mapa_mercado() == "18,20"
+    monkeypatch.setenv("MAPA_MERCADO_HORAS", "")
+    assert scheduler._horas_mapa_mercado() == ""

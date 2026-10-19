@@ -123,6 +123,69 @@ def fetch_historico_ohlcv(ticker: str, desde: date, hasta: date) -> list[BarraCr
     return out
 
 
+def fetch_cierres_lote(
+    simbolos: list[str], desde: date, hasta: date | None = None,
+) -> tuple[dict[str, list[tuple[date, float]]], bool]:
+    """Cierres diarios ajustados de varios símbolos en una sola llamada: `({simbolo: [(fecha, cierre)]}, rate_limited)`.
+
+    Es lo que permite medir la variación de ~460 emisores sin 460 requests. Un símbolo que Yahoo
+    no devuelve (o devuelve vacío) simplemente no aparece en el resultado: no corta al resto. Ante
+    un límite de tasa se devuelve lo que haya y `rate_limited=True`, para que quien llama deje de
+    pedir. Nunca lanza.
+    """
+    if not simbolos:
+        return {}, False
+    try:
+        import yfinance as yf
+    except ImportError:  # pragma: no cover - yfinance está en requirements
+        return {}, False
+
+    hasta = hasta or date.today()
+    try:
+        df = yf.download(
+            list(simbolos),
+            start=desde.isoformat(),
+            end=(hasta + timedelta(days=1)).isoformat(),
+            interval="1d",
+            auto_adjust=True,
+            actions=False,
+            group_by="ticker",
+            threads=False,
+            progress=False,
+            timeout=_YF_TIMEOUT,
+        )
+    except Exception as exc:
+        if _es_rate_limit(exc):
+            logger.warning("yahoo: límite de tasa en la descarga en lote: %s", exc)
+            return {}, True
+        logger.warning("yahoo: falló la descarga en lote de %d símbolos: %s", len(simbolos), exc)
+        return {}, False
+
+    if df is None or getattr(df, "empty", True):
+        return {}, False
+
+    out: dict[str, list[tuple[date, float]]] = {}
+    # Con un solo símbolo yfinance devuelve columnas planas aunque se pida group_by="ticker".
+    multi = getattr(df.columns, "nlevels", 1) > 1
+    for simbolo in simbolos:
+        try:
+            sub = df[simbolo] if multi else df
+            if "Close" not in sub.columns:
+                continue
+            serie: list[tuple[date, float]] = []
+            for idx, valor in sub["Close"].items():
+                cierre = _num(valor)
+                if cierre is None or cierre <= 0:
+                    continue
+                serie.append((idx.date(), cierre))
+        except (KeyError, AttributeError, ValueError):
+            continue
+        if serie:
+            serie.sort(key=lambda p: p[0])
+            out[simbolo] = serie
+    return out, False
+
+
 def fetch_ultimo_precio(ticker: str) -> dict | None:
     """`{"precio", "moneda"}` del último precio conocido de `ticker`, o `None` si no se pudo.
 

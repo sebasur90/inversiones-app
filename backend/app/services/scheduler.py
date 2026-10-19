@@ -55,6 +55,10 @@ MINUTO_REFRESCO_DEFAULT = 5
 # no competir por SQLite. Lun-sáb: el sábado completa lo que la semana dejó pendiente.
 HORAS_FUNDAMENTALES_DEFAULT = "3,19"
 MINUTO_FUNDAMENTALES_DEFAULT = 30
+# Variaciones del mapa de mercado: una vez, después del cierre de EE.UU. (17:00 ART en horario
+# estándar), así que el 1D que se ve a la noche es el de la rueda recién terminada.
+HORAS_MAPA_MERCADO_DEFAULT = "18"
+MINUTO_MAPA_MERCADO_DEFAULT = 30
 
 _scheduler = None
 
@@ -150,6 +154,11 @@ def _horas_fundamentales() -> str:
     return _horas_env("FUNDAMENTALES_HORAS", HORAS_FUNDAMENTALES_DEFAULT)
 
 
+def _horas_mapa_mercado() -> str:
+    """Las horas de la descarga del mapa de mercado (`MAPA_MERCADO_HORAS`). Vacío la desactiva."""
+    return _horas_env("MAPA_MERCADO_HORAS", HORAS_MAPA_MERCADO_DEFAULT)
+
+
 def correr_sync_y_alertas() -> None:
     """Job de cierre: sync completo del Sheet + alertas. Nunca lanza."""
     # Imports locales: este módulo se importa desde `main`, y a nivel de módulo arrastraría toda
@@ -228,6 +237,25 @@ def correr_fundamentales() -> None:
     _registrar_historial_diagnosticos()
 
 
+def correr_mapa_mercado() -> None:
+    """Job del mapa de mercado: una descarga en lote de variaciones desde Yahoo. Nunca lanza.
+
+    Como la ingesta de fundamentales, hace la red sin `sync_lock` y lo pide sólo para escribir.
+    """
+    from ..database import SessionLocal
+    from . import mapa_mercado_ingesta
+
+    db = SessionLocal()
+    try:
+        resumen = mapa_mercado_ingesta.correr(db)
+        logger.info("scheduler: mapa de mercado %s", resumen)
+    except Exception as exc:
+        logger.exception("scheduler: la descarga del mapa de mercado falló: %s", exc)
+        db.rollback()
+    finally:
+        db.close()
+
+
 def _registrar_historial_diagnosticos() -> None:
     """Foto del diagnóstico de cada emisor si cambió algo. Nunca lanza.
 
@@ -270,6 +298,8 @@ def iniciar() -> None:
     minuto_refresco = _entero_env("REFRESCO_MINUTO", MINUTO_REFRESCO_DEFAULT, 0, 59)
     horas_fundamentales = _horas_fundamentales()
     minuto_fundamentales = _entero_env("FUNDAMENTALES_MINUTO", MINUTO_FUNDAMENTALES_DEFAULT, 0, 59)
+    horas_mapa = _horas_mapa_mercado()
+    minuto_mapa = _entero_env("MAPA_MERCADO_MINUTO", MINUTO_MAPA_MERCADO_DEFAULT, 0, 59)
 
     try:
         scheduler = BackgroundScheduler(timezone=zona)
@@ -308,6 +338,15 @@ def iniciar() -> None:
                 coalesce=True,
                 max_instances=1,
             )
+        if horas_mapa:
+            scheduler.add_job(
+                correr_mapa_mercado,
+                CronTrigger(day_of_week="mon-fri", hour=horas_mapa, minute=minuto_mapa, timezone=zona),
+                id="mapa_mercado",
+                misfire_grace_time=3600,
+                coalesce=True,
+                max_instances=1,
+            )
         scheduler.start()
     except Exception as exc:
         logger.exception("scheduler: no se pudo iniciar: %s", exc)
@@ -329,6 +368,10 @@ def iniciar() -> None:
         )
     else:
         logger.info("scheduler: fundamentales desactivado (FUNDAMENTALES_HORAS vacío)")
+    if horas_mapa:
+        logger.info("scheduler: mapa de mercado lun-vie a las %s (minuto %02d)", horas_mapa, minuto_mapa)
+    else:
+        logger.info("scheduler: mapa de mercado desactivado (MAPA_MERCADO_HORAS vacío)")
 
 
 def detener() -> None:
