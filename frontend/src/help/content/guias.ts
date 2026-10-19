@@ -97,6 +97,7 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
     comoLeerla: [
       'Elegís un ticker y un período; si activás indicadores, sus líneas se superponen al precio.',
       'El botón ▲▼ marca tus compras y ventas reales: ▼ verde si esa venta ganó, roja si perdió. En una posición abierta, una línea punteada marca tu costo promedio. En un CEDEAR, la marca ubica tu precio en pesos sobre la vela del subyacente de ese día: sirve para ver el momento, no es el precio exacto en dólares. Las "D" de la base son dividendos o cupones cobrados, y la línea fina punteada es el VWAP anclado a tu primera compra (el precio medio del mercado desde que entraste). Al tocar una vela, la ficha suma el contexto de cada compra (RSI, distancia a la SMA200, posición en el rango anual) y qué pasó 30, 90 y 180 días después de cada venta.',
+      'El selector D / S / M cambia las velas a diarias, semanales o mensuales (los indicadores se calculan sobre esas barras; las estrategias, el backtest y las alertas siguen en diario). El botón "log" pasa el precio a escala logarítmica: la misma distancia vertical es el mismo porcentaje de variación, útil para períodos largos.',
       'La pestaña "Estrategias" te deja definir reglas (por ejemplo, cruce de medias) y correr un backtest sobre el historial.',
       'El backtest simula cómo le habría ido a esa estrategia en el pasado.',
     ],

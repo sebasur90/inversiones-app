@@ -64,18 +64,6 @@ function primerIndiceDesde(barras: BarraOut[], fecha: string): number {
   return lo < barras.length ? lo : -1
 }
 
-/** Último índice con fecha <= `fecha`, o -1. */
-function ultimoIndiceHasta(barras: BarraOut[], fecha: string): number {
-  let lo = 0
-  let hi = barras.length
-  while (lo < hi) {
-    const medio = (lo + hi) >> 1
-    if (dia(barras[medio].fecha) <= fecha) lo = medio + 1
-    else hi = medio
-  }
-  return lo - 1
-}
-
 export function ubicarOperaciones(barras: BarraOut[], datos: OperacionesGraficoOut): OperacionesUbicadas {
   const indicePorFecha = new Map<string, number>()
   barras.forEach((b, i) => indicePorFecha.set(dia(b.fecha), i))
@@ -95,7 +83,11 @@ export function ubicarOperaciones(barras: BarraOut[], datos: OperacionesGraficoO
     const primera = dia(barras[0].fecha)
     for (const ciclo of datos.ciclos) {
       const desde = primerIndiceDesde(barras, dia(ciclo.desde))
-      const hasta = ciclo.hasta ? ultimoIndiceHasta(barras, dia(ciclo.hasta)) : barras.length - 1
+      // La barra que contiene el cierre del ciclo es la primera con fecha >= `hasta`: con barras
+      // semanales o mensuales (fechadas en la última rueda del período) la última con fecha <= `hasta`
+      // dejaría afuera el tramo final, y un ciclo que cabe en una barra desaparecería.
+      const hastaBarra = ciclo.hasta ? primerIndiceDesde(barras, dia(ciclo.hasta)) : -1
+      const hasta = hastaBarra >= 0 ? hastaBarra : barras.length - 1
       if (desde < 0 || hasta < 0 || desde > hasta) continue
       const vwap = (ciclo.vwap ?? []).flatMap(p => {
         const indice = indicePorFecha.get(dia(p.fecha))
@@ -112,8 +104,14 @@ export function operacionesDeFecha(datos: OperacionesGraficoOut, fecha: string):
   return datos.operaciones.filter(o => o.fecha_barra != null && dia(o.fecha_barra) === dia(fecha))
 }
 
-/** El ciclo de tenencia que cubre la rueda `fecha`, si lo hay. */
-export function cicloDeFecha(datos: OperacionesGraficoOut, fecha: string): CicloPosicionOut | undefined {
+/** El ciclo de tenencia que cubre la barra de `fecha`, si lo hay. Una barra cubre desde la
+ * anterior (`fechaPrevia`, excluida) hasta su propia fecha: con barras diarias es la rueda misma y
+ * con semanales o mensuales, todo el período. */
+export function cicloDeFecha(
+  datos: OperacionesGraficoOut, fecha: string, fechaPrevia?: string,
+): CicloPosicionOut | undefined {
   const f = dia(fecha)
-  return datos.ciclos.find(c => dia(c.desde) <= f && (c.hasta == null || f <= dia(c.hasta)))
+  const previa = fechaPrevia ? dia(fechaPrevia) : null
+  return datos.ciclos.find(c =>
+    dia(c.desde) <= f && (c.hasta == null || (previa != null ? dia(c.hasta) > previa : f <= dia(c.hasta))))
 }

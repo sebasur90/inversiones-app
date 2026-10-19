@@ -431,3 +431,39 @@ def test_serie_vacia_reporta_el_motivo_anotado(client):
     assert "sin_serie" in advertencias
     assert "sin_fuente_historica" in advertencias
     assert "escala_desconocida" in advertencias
+
+
+def test_serie_semanal_agrega_antes_de_calcular_indicadores(client_msft):
+    diaria = client_msft.get("/api/inversiones/tecnico/MSFT/serie?variante=subyacente").json()
+    r = client_msft.get(
+        "/api/inversiones/tecnico/MSFT/serie?variante=subyacente&intervalo=S&indicadores=SMA(3)",
+    )
+    assert r.status_code == 200
+    semanal = r.json()
+    assert len(semanal["barras"]) < len(diaria["barras"]) / 4
+    # Cada barra semanal cierra en la última rueda de su semana: el cierre es el de esa rueda diaria.
+    cierre_por_fecha = {b["fecha"]: b["cierre"] for b in diaria["barras"]}
+    assert all(cierre_por_fecha[b["fecha"]] == b["cierre"] for b in semanal["barras"])
+    # La SMA(3) es de 3 barras semanales: arranca en la tercera.
+    sma = next(iter(semanal["indicadores"].values()))["valor"]
+    assert len(sma) == len(semanal["barras"])
+    assert sma[1] is None and sma[2] is not None
+
+
+def test_serie_semanal_pide_warm_up_en_barras_semanales(client_msft):
+    desde = (date.today() - timedelta(days=60)).isoformat()
+    r = client_msft.get(
+        f"/api/inversiones/tecnico/MSFT/serie?variante=subyacente&intervalo=S&desde={desde}&indicadores=SMA(4)",
+    )
+    assert r.status_code == 200
+    s = r.json()
+    assert s["indice_desde"] >= 4                      # 4 barras semanales de calentamiento antes
+    assert s["barras"][s["indice_desde"]]["fecha"] >= desde or s["barras"][s["indice_desde"] - 1]["fecha"] < desde
+    sma = next(iter(s["indicadores"].values()))["valor"]
+    assert sma[s["indice_desde"]] is not None          # el primer punto visible ya tiene valor
+
+
+def test_serie_mensual_y_intervalo_invalido(client_msft):
+    r = client_msft.get("/api/inversiones/tecnico/MSFT/serie?variante=subyacente&intervalo=M")
+    assert r.status_code == 200 and len(r.json()["barras"]) <= 7
+    assert client_msft.get("/api/inversiones/tecnico/MSFT/serie?intervalo=X").status_code == 422

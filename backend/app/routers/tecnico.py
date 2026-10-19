@@ -18,7 +18,7 @@ from ..schemas import (
     OperacionesGraficoOut,
 )
 from ..services import ohlcv_analytics, estrategias_analytics, screener_analytics, estrategias_seed
-from ..services import indicadores_engine, estrategia_engine
+from ..services import indicadores_engine, estrategia_engine, intervalos_engine
 from ..services import comparador_estrategias_analytics, comparador_estrategias_engine
 from ..services import ticker_analytics, zonas_precio, operaciones_grafico
 
@@ -136,9 +136,13 @@ def operaciones_ticker(
     variante: Optional[str] = Query(
         None, description="`local` o `subyacente`. Sin valor, la serie de referencia del ticker.",
     ),
+    intervalo: str = Query("D", pattern="^[DSM]$", description="`D` diario, `S` semanal o `M` mensual."),
     db: Session = Depends(get_db),
 ):
-    """Compras y ventas propias del ticker (consolidado de carteras), ubicadas sobre la serie."""
+    """Compras y ventas propias del ticker (consolidado de carteras), ubicadas sobre la serie.
+
+    Todo se calcula en diario; con `intervalo` S o M sólo se reubica cada marca en la barra
+    agregada que la contiene."""
     _validar_ticker_tecnico(ticker, db)
     _validar_variante(variante)
     pedida = variante
@@ -148,7 +152,7 @@ def operaciones_ticker(
         hasta = date.today()
         if not ohlcv_analytics.get_serie_barras(ticker, date.min, hasta, db, max_barras=1, variante=variante)["barras"]:
             variante = "local"
-    return operaciones_grafico.get_operaciones_grafico(ticker, variante, db)
+    return operaciones_grafico.get_operaciones_grafico(ticker, variante, db, intervalo)
 
 
 @router.get("/tecnico/{ticker}/serie", response_model=SerieTecnicaOut)
@@ -161,6 +165,7 @@ def serie_tecnica(
     variante: Optional[str] = Query(
         None, description="`local` o `subyacente`. Sin valor, la serie de referencia del ticker.",
     ),
+    intervalo: str = Query("D", pattern="^[DSM]$", description="`D` diario, `S` semanal o `M` mensual."),
     db: Session = Depends(get_db),
 ):
     _validar_ticker_tecnico(ticker, db)
@@ -190,10 +195,21 @@ def serie_tecnica(
         default=0,
     )
 
-    serie = ohlcv_analytics.get_serie_barras(
-        ticker, desde, hasta, db, barras_previas=barras_previas, max_barras=max_barras,
-        variante=variante,
-    )
+    # Con S o M se lee la serie diaria con `factor` veces más historia y se agrega *antes* de calcular
+    # los indicadores (un RSI semanal es el RSI de las barras semanales). El tope de lectura sigue
+    # siendo de 3000 barras diarias.
+    factor = intervalos_engine.FACTOR[intervalo]
+    previas_diarias = barras_previas * factor + (factor if factor > 1 else 0)
+    max_diarias = min(max_barras * factor, 3000)
+
+    def leer(variante_leida: str) -> dict:
+        serie_diaria = ohlcv_analytics.get_serie_barras(
+            ticker, desde, hasta, db, barras_previas=previas_diarias, max_barras=max_diarias,
+            variante=variante_leida,
+        )
+        return _agregar_serie(serie_diaria, intervalo, max_barras)
+
+    serie = leer(variante)
 
     # `variante=subyacente` sobre un ticker sin serie del subyacente bajada -> 404 (a diferencia de
     # `local` sin datos, que devuelve 200 con la serie vacía: la local siempre "existe"). Si el
@@ -203,10 +219,7 @@ def serie_tecnica(
         if pedida is not None:
             raise HTTPException(status_code=404, detail=f"'{ticker}' no tiene serie del subyacente en USD")
         variante = "local"
-        serie = ohlcv_analytics.get_serie_barras(
-            ticker, desde, hasta, db, barras_previas=barras_previas, max_barras=max_barras,
-            variante=variante,
-        )
+        serie = leer(variante)
         serie["advertencias"] = [*serie["advertencias"], "referencia_degradada"]
 
     resultado_indicadores: dict[str, dict[str, list]] = {}
@@ -222,6 +235,19 @@ def serie_tecnica(
         "indice_desde": serie["indice_desde"], "barras": serie["barras"],
         "indicadores": resultado_indicadores, "advertencias": serie["advertencias"],
     }
+
+
+def _agregar_serie(serie: dict, intervalo: str, max_barras: int) -> dict:
+    """Pasa la serie diaria de `get_serie_barras` al intervalo pedido. Las advertencias (huecos,
+    splits) ya se evaluaron sobre la serie diaria y se conservan tal cual."""
+    if intervalo == intervalos_engine.DIARIO or not serie["barras"]:
+        return serie
+    barras, indice_desde = intervalos_engine.agregar_serie(serie["barras"], intervalo, serie["indice_desde"])
+    if len(barras) > max_barras:
+        recorte = len(barras) - max_barras
+        barras = barras[recorte:]
+        indice_desde = max(0, indice_desde - recorte)
+    return {**serie, "barras": barras, "indice_desde": indice_desde}
 
 
 # ─── Zonas de compra / venta ──────────────────────────────────────────────────

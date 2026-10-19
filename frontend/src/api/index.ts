@@ -2285,9 +2285,15 @@ export interface SerieTecnicaOut {
 export const getTickersTecnicos = () =>
   api.get<TickerTecnicoOut[]>('/inversiones/tecnico/tickers').then(r => r.data)
 
+/** Intervalo de las barras: diario, semanal o mensual. Estrategias, backtest y alertas siguen en diario. */
+export type IntervaloSerie = 'D' | 'S' | 'M'
+
 export const getSerieTecnica = (
   ticker: string,
-  params: { desde?: string; hasta?: string; indicadores?: string[]; max_barras?: number; variante?: VarianteSerie },
+  params: {
+    desde?: string; hasta?: string; indicadores?: string[]; max_barras?: number; variante?: VarianteSerie
+    intervalo?: IntervaloSerie
+  },
 ) =>
   api.get<SerieTecnicaOut>(`/inversiones/tecnico/${encodeURIComponent(ticker)}/serie`, { params }).then(r => r.data)
 
@@ -2360,9 +2366,9 @@ export interface OperacionesGraficoOut {
   advertencias: string[]
 }
 
-export const getOperacionesTicker = (ticker: string, variante: VarianteSerie) =>
+export const getOperacionesTicker = (ticker: string, variante: VarianteSerie, intervalo: IntervaloSerie = 'D') =>
   api.get<OperacionesGraficoOut>(
-    `/inversiones/tecnico/${encodeURIComponent(ticker)}/operaciones`, { params: { variante } },
+    `/inversiones/tecnico/${encodeURIComponent(ticker)}/operaciones`, { params: { variante, intervalo } },
   ).then(r => r.data)
 
 // --- Zonas de compra / venta (se dibujan y se arrastran en el gráfico) ---

@@ -324,6 +324,27 @@ def test_vwap_none_si_la_compra_es_anterior_a_la_serie(db):
     assert og.get_operaciones_grafico("MSFT", "subyacente", db)["ciclos"][0]["vwap"] is None
 
 
+def test_intervalo_semanal_reubica_las_marcas_en_la_barra_semanal(db):
+    from app.services import intervalos_engine as ie
+    diario = og.get_operaciones_grafico("MSFT", "subyacente", db)
+    semanal = og.get_operaciones_grafico("MSFT", "subyacente", db, "S")
+    barras = [BASE + timedelta(days=i) for i in range(80)]
+
+    def ultima_rueda(f):
+        clave = ie.clave_periodo(f, "S")
+        return max(b for b in barras if ie.clave_periodo(b, "S") == clave)
+
+    for d, s in zip(diario["operaciones"], semanal["operaciones"]):
+        assert s["fecha"] == d["fecha"]                       # la fecha real no cambia
+        assert s["fecha_barra"] == ultima_rueda(d["fecha_barra"])
+        assert s["precio_grafico"] == d["precio_grafico"]     # el precio sigue siendo el diario
+        assert s["resultado_usd"] == d["resultado_usd"] and s["rsi"] == d["rsi"]
+    # El VWAP queda con un punto por semana, fechado en la última rueda.
+    fechas = [p["fecha"] for p in semanal["ciclos"][0]["vwap"]]
+    assert len(fechas) == len(set(fechas)) < len(diario["ciclos"][0]["vwap"])
+    assert all(f == ultima_rueda(f) for f in fechas)
+
+
 # ── Endpoint ─────────────────────────────────────────────────────────────────
 
 @pytest.fixture

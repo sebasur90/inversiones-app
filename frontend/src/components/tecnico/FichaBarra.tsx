@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { BarraOut, OperacionOut, OperacionPropiaOut, OperacionesGraficoOut, SenalOut } from '../../api'
+import type { BarraOut, IntervaloSerie, OperacionOut, OperacionPropiaOut, OperacionesGraficoOut, SenalOut } from '../../api'
 import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import { formatMonedaCruda, type Moneda } from '../../utils/formatoMonto'
 import {
@@ -20,7 +20,7 @@ const COLOR_BAJISTA = '#ef4444'
  * operación con sus niveles de riesgo — los que calculó el motor, no re-derivados acá.
  */
 export default function FichaBarra({
-  barras, indice, moneda, senales, operaciones, conSenales = false, misOperaciones, acciones, onQuitar,
+  barras, indice, moneda, senales, operaciones, conSenales = false, misOperaciones, intervalo = 'D', acciones, onQuitar,
 }: {
   barras: BarraOut[]
   /** Vela de la cruz; `null` = mostrar la última. */
@@ -32,6 +32,8 @@ export default function FichaBarra({
   conSenales?: boolean
   /** Compras y ventas propias del usuario: reserva una línea con la de la rueda bajo la cruz. */
   misOperaciones?: OperacionesGraficoOut | null
+  /** Con barras semanales o mensuales la variación es contra la barra anterior y se aclara. */
+  intervalo?: IntervaloSerie
   /** Botones a la derecha de la primera línea (zoom, pantalla completa). */
   acciones?: ReactNode
   onQuitar?: () => void
@@ -61,6 +63,7 @@ export default function FichaBarra({
               {variacion != null && (
                 <span className={`text-caption font-mono tabular-nums ${variacion >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
                   {formatoPct(variacion)}
+                  {intervalo !== 'D' && <span className="text-app-text-faint"> {intervalo === 'S' ? 'var. semanal' : 'var. mensual'}</span>}
                 </span>
               )}
             </>
@@ -86,7 +89,7 @@ export default function FichaBarra({
       {misOperaciones && b && (
         <>
           <div className="h-5 text-label truncate">
-            <LineaMisOperaciones datos={misOperaciones} fecha={b.fecha} />
+            <LineaMisOperaciones datos={misOperaciones} fecha={b.fecha} fechaPrevia={barras[i - 1]?.fecha} />
           </div>
           <div className="h-5 text-label truncate text-app-text-dim font-mono tabular-nums">
             <LineaContexto datos={misOperaciones} fecha={b.fecha} />
@@ -179,7 +182,7 @@ function LineaContexto({ datos, fecha }: { datos: OperacionesGraficoOut; fecha: 
 
 /** Qué hiciste esa rueda y cómo va la posición. Los importes del resultado pasan por el modo
  * privacidad; el precio al que se operó y los porcentajes se muestran siempre. */
-function LineaMisOperaciones({ datos, fecha }: { datos: OperacionesGraficoOut; fecha: string }) {
+function LineaMisOperaciones({ datos, fecha, fechaPrevia }: { datos: OperacionesGraficoOut; fecha: string; fechaPrevia?: string }) {
   const fmt = useFormatoFijo('USD')
   const ops = operacionesDeFecha(datos, fecha)
 
@@ -227,7 +230,7 @@ function LineaMisOperaciones({ datos, fecha }: { datos: OperacionesGraficoOut; f
     )
   }
 
-  const ciclo = cicloDeFecha(datos, fecha)
+  const ciclo = cicloDeFecha(datos, fecha, fechaPrevia)
   if (!ciclo) return <span className="text-app-text-faint">Sin posición</span>
 
   const pct = ciclo.abierto ? ciclo.no_realizado_pct : ciclo.resultado_pct

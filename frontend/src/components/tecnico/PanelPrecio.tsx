@@ -67,7 +67,7 @@ export function salidasGraficables(o: OverlayPrecio): [string, (number | null)[]
  * motor de backtest y viajan en la respuesta: dibujarlos re-derivándolos acá daría una línea que
  * no es la que efectivamente disparó la salida. */
 export default function PanelPrecio({
-  barras, escalaX, alto, tieneVelas, overlays, senales, operaciones, primeraBarraEvaluable, moneda, gatillo, zonas, editandoZonas, onArrastrarZona, misOperaciones, hoverIndex, onHover,
+  barras, escalaX, alto, tieneVelas, overlays, senales, operaciones, primeraBarraEvaluable, moneda, gatillo, zonas, editandoZonas, onArrastrarZona, misOperaciones, escalaLog, hoverIndex, onHover,
 }: {
   barras: BarraOut[]
   escalaX: EscalaX
@@ -86,6 +86,8 @@ export default function PanelPrecio({
   onArrastrarZona?: (tipo: TipoZona, borde: BordeZona, valor: number) => void
   /** Compras y ventas que el usuario ya hizo (ver `OperacionesPropias`). `undefined` = apagado. */
   misOperaciones?: OperacionesGraficoOut | null
+  /** Escala logarítmica en el eje de precio (los osciladores quedan lineales). */
+  escalaLog?: boolean
   hoverIndex: number | null
   onHover: (i: number | null) => void
 }) {
@@ -134,13 +136,19 @@ export default function PanelPrecio({
   const valoresZonas = valoresDeZonas(zonas).filter(v =>
     editandoZonas || ultimaBarraVisible || (v >= minSin - margenZonas && v <= maxSin + margenZonas))
   const todos = [...sinZonas, ...valoresZonas]
-  const minV = todos.length ? Math.min(...todos) : 0
-  const maxV = todos.length ? Math.max(...todos) : 1
+  // En escala log el dominio y el margen se calculan sobre log(valor), descartando los valores ≤ 0
+  // (no tienen logaritmo). Sin ningún valor positivo se cae a la escala lineal.
+  const usarLog = !!escalaLog && todos.some(v => v > 0)
+  const aEscala = (v: number) => (usarLog ? Math.log(v) : v)
+  const deEscala = (t: number) => (usarLog ? Math.exp(t) : t)
+  const enEscala = usarLog ? todos.filter(v => v > 0).map(aEscala) : todos
+  const minV = enEscala.length ? Math.min(...enEscala) : 0
+  const maxV = enEscala.length ? Math.max(...enEscala) : 1
   const pad = (maxV - minV) * 0.08 || Math.abs(maxV) * 0.05 || 1
   const [y0, y1] = dominioCongelado ?? [minV - pad, maxV + pad]
-  const yDeValor = (v: number) => alto - ((v - y0) / (y1 - y0 || 1)) * alto
+  const yDeValor = (v: number) => (usarLog && !(v > 0) ? alto : alto - ((aEscala(v) - y0) / (y1 - y0 || 1)) * alto)
   /** Inversa de `yDeValor`: la usa el arrastre de los bordes de zona. */
-  const valorDeY = (y: number) => y0 + ((alto - y) / (alto || 1)) * (y1 - y0)
+  const valorDeY = (y: number) => deEscala(y0 + ((alto - y) / (alto || 1)) * (y1 - y0))
 
   const anchoVela = Math.max(1, escalaX.pasoX * 0.62)
   const ultimoIndice = barras.length - 1

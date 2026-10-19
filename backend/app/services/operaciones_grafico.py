@@ -15,6 +15,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from ..database import MovimientoInversion
+from . import intervalos_engine
 from . import inversiones_analytics as ia
 from . import ohlcv_analytics
 from . import operaciones_grafico_engine as eng
@@ -39,8 +40,13 @@ def _vacio(ticker: str, variante: str, moneda: str, advertencias: list[str]) -> 
     }
 
 
-def get_operaciones_grafico(ticker: str, variante: str, db: Session) -> dict:
-    """`variante` es una serie concreta (`local` | `subyacente`), nunca `referencia`."""
+def get_operaciones_grafico(
+    ticker: str, variante: str, db: Session, intervalo: str = intervalos_engine.DIARIO,
+) -> dict:
+    """`variante` es una serie concreta (`local` | `subyacente`), nunca `referencia`.
+
+    Todo se calcula sobre la serie diaria (ubicación, precio equivalente, contexto, resultado). Con
+    `intervalo` semanal o mensual, al final cada marca pasa a la barra agregada que la contiene."""
     hoy = date.today()
     movs = (
         db.query(MovimientoInversion)
@@ -194,11 +200,34 @@ def get_operaciones_grafico(ticker: str, variante: str, db: Session) -> dict:
 
     if costo_incompleto:
         advertencias.append("costo_incompleto")
+    if intervalo != intervalos_engine.DIARIO:
+        _reubicar_en_intervalo(operaciones, ciclos_out, barras, intervalo)
     return {
         "ticker": ticker, "variante": variante, "moneda": moneda_serie,
         "operaciones": operaciones, "ciclos": ciclos_out,
         "fuera_de_serie": fuera_de_serie, "advertencias": advertencias,
     }
+
+
+def _reubicar_en_intervalo(operaciones: list[dict], ciclos: list[dict], barras: list, intervalo: str) -> None:
+    """Pasa `fecha_barra` (y el VWAP) de la barra diaria a la barra agregada que la contiene, cuya
+    fecha es la última rueda del período. El precio de cada marca no cambia: la vela diaria queda
+    dentro del rango de la semanal o mensual, así que sigue cayendo sobre la vela."""
+    ultima_rueda: dict[tuple, date] = {}
+    for b in barras:  # ascendentes: la última de cada período pisa a las anteriores
+        ultima_rueda[intervalos_engine.clave_periodo(b.fecha, intervalo)] = b.fecha
+
+    def reubicar(fecha: date) -> date:
+        return ultima_rueda.get(intervalos_engine.clave_periodo(fecha, intervalo), fecha)
+
+    for op in operaciones:
+        if op["fecha_barra"] is not None:
+            op["fecha_barra"] = reubicar(op["fecha_barra"])
+    for ciclo in ciclos:
+        if ciclo["vwap"]:
+            # Un punto por período: el valor de la última rueda, que es el VWAP al cierre de la barra.
+            por_periodo = {reubicar(p["fecha"]): p["valor"] for p in ciclo["vwap"]}
+            ciclo["vwap"] = [{"fecha": f, "valor": v} for f, v in por_periodo.items()]
 
 
 def _ubicar(

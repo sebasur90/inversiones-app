@@ -7,7 +7,7 @@ import {
   guardarEstrategia, actualizarEstrategia, duplicarEstrategia, eliminarEstrategiaTecnica,
   backtestEstrategia, sembrarPresetsEstrategia, getZonasTicker, guardarZonasTicker, getOperacionesTicker,
   type CategoriaPreset, type EstrategiaDsl, type EstrategiaOut, type BacktestOut,
-  type PresetEstrategiaOut, type VarianteSerie, type VarianteEstrategia, type TipoZona, type ZonaPrecioIn,
+  type PresetEstrategiaOut, type IntervaloSerie, type VarianteSerie, type VarianteEstrategia, type TipoZona, type ZonaPrecioIn,
   type ZonaPrecioOut,
 } from '../api'
 import ScreenHeader from '../components/layout/ScreenHeader'
@@ -62,12 +62,24 @@ const PERIODOS: PeriodoEvolucion[] = ['1M', '3M', '6M', '1Y', '3Y', 'YTD', 'ALL'
 let proximoIdIndicador = 1
 
 const CLAVE_MIS_OPERACIONES = 'tecnico-mis-operaciones'
+const CLAVE_ESCALA_LOG = 'tecnico-escala-log'
+const INTERVALOS: { value: IntervaloSerie; label: string }[] = [
+  { value: 'D', label: 'D' }, { value: 'S', label: 'S' }, { value: 'M', label: 'M' },
+]
 
 /** El interruptor de "mis compras y ventas" se recuerda entre visitas. Es una comodidad: si el
  * almacenamiento no está disponible (ventana privada, datos bloqueados) arranca apagado. */
 function leerVerOperaciones(): boolean {
   try {
     return localStorage.getItem(CLAVE_MIS_OPERACIONES) === '1'
+  } catch {
+    return false
+  }
+}
+
+function leerEscalaLog(): boolean {
+  try {
+    return localStorage.getItem(CLAVE_ESCALA_LOG) === '1'
   } catch {
     return false
   }
@@ -88,6 +100,8 @@ export default function AnalisisTecnico() {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const [vista, setVista] = useState<Vista>('grafico')
   const [verOperaciones, setVerOperaciones] = useState<boolean>(leerVerOperaciones)
+  const [escalaLog, setEscalaLog] = useState<boolean>(leerEscalaLog)
+  const [intervalo, setIntervalo] = useState<IntervaloSerie>('D')
   // Preferencia de variante; la efectiva se deriva contra las variantes reales del ticker actual
   // (sin useEffect, para que no haya flash al cambiar de ticker).
   const [varianteSel, setVarianteSel] = useState<VarianteSerie | null>(null)
@@ -146,8 +160,8 @@ export default function AnalisisTecnico() {
   )
 
   const serieQuery = useQuery({
-    queryKey: qk.de('tecnico-serie', ticker, desde, claves.join(','), variante, maxBarras ?? 0),
-    queryFn: () => getSerieTecnica(ticker as string, { desde, indicadores: claves, variante, max_barras: maxBarras }),
+    queryKey: qk.de('tecnico-serie', ticker, desde, claves.join(','), variante, maxBarras ?? 0, intervalo),
+    queryFn: () => getSerieTecnica(ticker as string, { desde, indicadores: claves, variante, max_barras: maxBarras, intervalo }),
     enabled: ticker !== null,
   })
   const serie = serieQuery.data
@@ -159,8 +173,8 @@ export default function AnalisisTecnico() {
   // Se pide sobre la serie que el gráfico efectivamente muestra (`serie.variante`): la referencia
   // puede haber degradado a la local, y las marcas tienen que estar en la moneda de esa serie.
   const operacionesQuery = useQuery({
-    queryKey: qk.de('tecnico-operaciones', ticker, serie?.variante),
-    queryFn: () => getOperacionesTicker(ticker as string, serie!.variante),
+    queryKey: qk.de('tecnico-operaciones', ticker, serie?.variante, intervalo),
+    queryFn: () => getOperacionesTicker(ticker as string, serie!.variante, intervalo),
     enabled: ticker !== null && serie != null && verOperaciones && puedeVerOperaciones,
   })
   const misOperaciones = verOperaciones && puedeVerOperaciones ? operacionesQuery.data ?? null : null
@@ -174,7 +188,19 @@ export default function AnalisisTecnico() {
       /* sin almacenamiento: queda sólo para esta visita */
     }
   }
+  function alternarEscalaLog() {
+    const nuevo = !escalaLog
+    setEscalaLog(nuevo)
+    try {
+      localStorage.setItem(CLAVE_ESCALA_LOG, nuevo ? '1' : '0')
+    } catch {
+      /* sin almacenamiento: queda sólo para esta visita */
+    }
+  }
   const propsOperaciones = {
+    intervalo,
+    escalaLog,
+    onToggleEscalaLog: alternarEscalaLog,
     misOperaciones,
     operacionesActivas: verOperaciones && puedeVerOperaciones,
     onToggleOperaciones: puedeVerOperaciones ? alternarOperaciones : undefined,
@@ -353,6 +379,7 @@ export default function AnalisisTecnico() {
         <>
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <Segmented options={PERIODOS.map(p => ({ value: p, label: p }))} value={periodo} onChange={setPeriodo} />
+            <Segmented options={INTERVALOS} value={intervalo} onChange={v => { setIntervalo(v); setHoverIndex(null) }} />
             {seriesDisponibles.length > 1 && (
               <Segmented
                 options={seriesDisponibles.map(s => ({
@@ -375,6 +402,12 @@ export default function AnalisisTecnico() {
               </span>
             )}
           </div>
+          {intervalo !== 'D' && (
+            <p className="mb-3 text-label text-app-text-dim">
+              Velas {intervalo === 'S' ? 'semanales' : 'mensuales'}: los indicadores se calculan sobre
+              esas barras. Las estrategias, el backtest y las alertas siguen corriendo en diario.
+            </p>
+          )}
           {seriesDisponibles.length > 1 && variante !== referencia && (
             <p className="mb-3 text-label text-app-text-dim">
               Estás viendo la serie {variante === 'local' ? 'local (el CEDEAR en pesos)' : 'del subyacente'}.

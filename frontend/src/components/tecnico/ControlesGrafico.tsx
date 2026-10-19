@@ -9,13 +9,15 @@ import { TACTIL } from './GuiaGestos'
 /** Botones de zoom y pantalla completa, compartidos por el gráfico técnico y el del backtest.
  * 36 px: lo mínimo que un dedo acierta sin tocar el de al lado. */
 export function BotonesGrafico({
-  controles, fullscreen, onToggleFullscreen, operaciones,
+  controles, fullscreen, onToggleFullscreen, operaciones, escalaLog,
 }: {
   controles: ControlesVentana
   fullscreen?: boolean
   onToggleFullscreen?: () => void
   /** Interruptor de "mis operaciones" sobre el gráfico. Sin esta prop el botón no existe. */
   operaciones?: { activo: boolean; onToggle: () => void }
+  /** Interruptor de la escala logarítmica del precio. Sin esta prop el botón no existe. */
+  escalaLog?: { activo: boolean; onToggle: () => void }
 }) {
   return (
     <>
@@ -25,6 +27,14 @@ export function BotonesGrafico({
           onClick={operaciones.onToggle} pulsado={operaciones.activo}
         >
           <span className="text-caption font-bold">▲▼</span>
+        </Boton>
+      )}
+      {escalaLog && (
+        <Boton
+          label={escalaLog.activo ? 'Volver a la escala lineal' : 'Escala logarítmica'}
+          onClick={escalaLog.onToggle} pulsado={escalaLog.activo}
+        >
+          <span className="text-label font-bold">log</span>
         </Boton>
       )}
       <Boton label="Alejar" onClick={() => controles.zoom(1 / 1.5)} disabled={controles.completa}>−</Boton>
@@ -76,12 +86,14 @@ function pistaSegunEstado(completa: boolean, conCruz: boolean): string {
 
 /** Pie del gráfico: qué tramo se está mirando, qué gesto sirve ahora y la guía completa. */
 export function PieGrafico({
-  barras, escalaX, completa, conCruz = false, onAyuda,
+  barras, escalaX, completa, conCruz = false, unidad = 'ruedas', onAyuda,
 }: {
   barras: BarraOut[]
   escalaX: EscalaX
   completa: boolean
   conCruz?: boolean
+  /** Qué es cada barra: 'ruedas', 'semanas' o 'meses'. */
+  unidad?: string
   /** Abre la guía de gestos (`GuiaGestos`). */
   onAyuda?: () => void
 }) {
@@ -89,7 +101,7 @@ export function PieGrafico({
   return (
     <div className="mt-1 flex flex-col gap-0.5 text-label text-app-text-faint">
       <span className="font-mono tabular-nums">
-        {escalaX.visibles} de {barras.length} ruedas · {fechaCorta(barras[escalaX.inicio]?.fecha)} → {fechaCorta(barras[escalaX.fin]?.fecha)}
+        {escalaX.visibles} de {barras.length} {unidad} · {fechaCorta(barras[escalaX.inicio]?.fecha)} → {fechaCorta(barras[escalaX.fin]?.fecha)}
       </span>
       <div className="flex items-start justify-between gap-2">
         <span className="min-w-0">{pistaSegunEstado(completa, conCruz)}</span>

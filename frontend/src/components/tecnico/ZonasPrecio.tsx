@@ -94,8 +94,9 @@ export default function ZonasPrecio({
   const arrastre = useRef<{ tipo: TipoZona; borde: BordeZona; desfase: number } | null>(null)
   const [activa, setActiva] = useState<string | null>(null)
 
-  /** Cuánto vale un paso del arrastre, según la escala actual del panel. */
-  const paso = pasoRedondo(Math.abs(valorDeY(0) - valorDeY(PX_POR_PASO)))
+  /** Cuánto vale un paso del arrastre en la altura `y`. Con escala logarítmica un píxel vale
+   * distinto arriba que abajo, así que se mide donde está el borde que se arrastra. */
+  const pasoEn = (y: number) => pasoRedondo(Math.abs(valorDeY(y) - valorDeY(y + PX_POR_PASO)))
 
   function alBajar(e: ReactPointerEvent, tipo: TipoZona, borde: BordeZona, yBorde: number) {
     if (!editando || !onArrastrar) return
@@ -119,6 +120,7 @@ export default function ZonasPrecio({
     const rect = svgRef.current?.getBoundingClientRect()
     if (!rect) return
     const y = Math.min(Math.max(e.clientY - rect.top + actual.desfase, 0), alto)
+    const paso = pasoEn(y)
     let valor = redondearA(valorDeY(y), paso)
     // El piso no puede pasar al techo ni al revés: el borrador quedaría inválido a mitad del gesto
     // y el usuario tendría que adivinar qué pasó.

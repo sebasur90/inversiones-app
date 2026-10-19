@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import type { BarraOut, OperacionesGraficoOut, SenalOut } from '../../api'
+import type { BarraOut, IntervaloSerie, OperacionesGraficoOut, SenalOut } from '../../api'
 import { useEscalaX } from './useEscalaX'
 import { estiloContenedorGestos, useVentanaVisible } from './useVentanaVisible'
 import { useAnchoContenedor } from './useAnchoContenedor'
@@ -23,7 +23,8 @@ import { ESPEC_POR_TIPO, claveIndicador, colorIndicador, type IndicadorActivo } 
 export default function GraficoTecnico({
   barras, indicadores, activos, tieneVelas, tieneVolumen, senales, primeraBarraEvaluable,
   moneda, fullscreen, onToggleFullscreen, zonas, editandoZonas, onArrastrarZona, edicionZonas,
-  misOperaciones, operacionesActivas, onToggleOperaciones, hoverIndex, onHover,
+  misOperaciones, operacionesActivas, onToggleOperaciones, intervalo = 'D', escalaLog, onToggleEscalaLog,
+  hoverIndex, onHover,
 }: {
   barras: BarraOut[]
   indicadores: Record<string, Record<string, (number | null)[]>>
@@ -48,6 +49,11 @@ export default function GraficoTecnico({
   operacionesActivas?: boolean
   /** Si viene, el gráfico ofrece el botón que prende y apaga `misOperaciones`. */
   onToggleOperaciones?: () => void
+  /** Qué es cada barra: diaria, semanal o mensual. */
+  intervalo?: IntervaloSerie
+  /** Escala logarítmica en el panel de precio; si viene `onToggleEscalaLog`, el gráfico ofrece el botón. */
+  escalaLog?: boolean
+  onToggleEscalaLog?: () => void
   hoverIndex: number | null
   onHover: (i: number | null) => void
 }) {
@@ -105,11 +111,12 @@ export default function GraficoTecnico({
     <div ref={containerRef} className="w-full">
       <FichaBarra
         barras={barras} indice={hoverIndex} moneda={moneda} onQuitar={() => onHover(null)}
-        misOperaciones={misOperaciones}
+        misOperaciones={misOperaciones} intervalo={intervalo}
         acciones={
           <BotonesGrafico
             controles={controles} fullscreen={fullscreen} onToggleFullscreen={onToggleFullscreen}
             operaciones={onToggleOperaciones ? { activo: !!operacionesActivas, onToggle: onToggleOperaciones } : undefined}
+            escalaLog={onToggleEscalaLog ? { activo: !!escalaLog, onToggle: onToggleEscalaLog } : undefined}
           />
         }
       />
@@ -159,7 +166,7 @@ export default function GraficoTecnico({
           barras={barras} escalaX={escalaX} alto={alto.precio} tieneVelas={tieneVelas} moneda={moneda}
           overlays={overlaysPrecio} senales={senales} primeraBarraEvaluable={primeraBarraEvaluable}
           zonas={zonas} editandoZonas={editandoZonas} onArrastrarZona={onArrastrarZona}
-          misOperaciones={misOperaciones}
+          misOperaciones={misOperaciones} escalaLog={escalaLog}
           hoverIndex={hoverIndex} onHover={onHover}
         />
         <EjeFechas barras={barras} escalaX={escalaX} />
@@ -186,7 +193,8 @@ export default function GraficoTecnico({
 
       <PieGrafico
         barras={barras} escalaX={escalaX} completa={controles.completa}
-        conCruz={hoverIndex != null} onAyuda={guia.mostrar}
+        conCruz={hoverIndex != null} unidad={intervalo === 'S' ? 'semanas' : intervalo === 'M' ? 'meses' : 'ruedas'}
+        onAyuda={guia.mostrar}
       />
     </div>
   )
