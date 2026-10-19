@@ -1,10 +1,10 @@
-const CACHE_NAME = 'inversiones-shell-v7'
+const CACHE_NAME = 'inversiones-shell-v8'
 const API_CACHE = 'inversiones-api-v1'
 // Logos de las empresas (mapa de mercado). Caché aparte y sin versión atada a la del shell: no son
 // datos del usuario, cambian casi nunca y bajarlos de nuevo en cada deploy sería gastar red por nada.
 const LOGOS_CACHE = 'inversiones-logos-v1'
 const RUTA_LOGOS = '/api/inversiones/logos/'
-const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png']
+const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/icon-v2-192.png', '/icons/icon-v2-512.png']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)))
