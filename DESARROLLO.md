@@ -510,6 +510,27 @@ FUNDAMENTALES_PAUSA_SEG=0.5
 HISTORIAL_UNIVERSO=cartera,watchlist  # qué emisores guarda el historial de diagnósticos (+ catalogo); 0 llamadas a Yahoo
 ```
 
+### Mapa de mercado (job `mapa_mercado` y logos)
+
+Pantalla `/mapa-mercado`: todo el catálogo de renta variable agrupado por sector, región, tamaño o
+tipo y coloreado por variación (1D/1S/1M/1A, **en USD**: lo local se convierte por el MEP de cada
+fecha; si falta el MEP queda en pesos y se avisa).
+
+```
+MAPA_MERCADO_HORAS=18             # lun-vie, después del cierre de EE.UU.; vacío lo desactiva
+MAPA_MERCADO_MINUTO=30
+LOGOS_MAX_POR_CORRIDA=40          # logos por corrida, enganchados al job de fundamentales
+```
+
+- Una sola descarga en lote de Yahoo (`market_data/yahoo.fetch_cierres_lote`, tandas de 100) y una
+  foto por símbolo en `variacion_mercado`. Disparo manual: `POST /api/inversiones/mapa-mercado/refrescar`.
+- **Logos**: el servidor los baja una vez (favicon grande del dominio, o `apple-touch-icon`) a
+  `backend/data/logos/` (volumen `backend_data`; `LOGOS_DIR` lo cambia) y los sirve en
+  `GET /api/inversiones/logos/{TICKER}.png`. El dominio sale del `website` que informa Yahoo: aparecen
+  a medida que la ingesta de fundamentales re-baja a cada emisor (hasta ~2 semanas para el catálogo
+  entero). Un emisor sin logo se reintenta al mes.
+- Todavía no hay forma de corregir a mano el dominio de un logo.
+
 - ~460 emisores de renta variable: con dos corridas por día el catálogo se completa en ~4 días.
   Prioridad: cartera y watchlist sin datos → pares de lo propio con datos vencidos → lo propio
   vencido (>7 días) → resto nunca visto → resto vencido (>14 días).

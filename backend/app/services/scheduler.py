@@ -234,6 +234,7 @@ def correr_fundamentales() -> None:
     finally:
         db.close()
 
+    _bajar_logos()
     _registrar_historial_diagnosticos()
 
 
@@ -251,6 +252,25 @@ def correr_mapa_mercado() -> None:
         logger.info("scheduler: mapa de mercado %s", resumen)
     except Exception as exc:
         logger.exception("scheduler: la descarga del mapa de mercado falló: %s", exc)
+        db.rollback()
+    finally:
+        db.close()
+
+
+def _bajar_logos() -> None:
+    """Logos de los emisores que la ingesta acaba de enterarse de que tienen sitio web. Nunca lanza.
+
+    Va **después** de cerrar la sesión de la ingesta y con la suya, igual que el historial: un fallo
+    de red acá no puede deshacer lo que la ingesta ya guardó.
+    """
+    from ..database import SessionLocal
+    from . import logos
+
+    db = SessionLocal()
+    try:
+        logger.info("scheduler: logos %s", logos.correr(db))
+    except Exception as exc:
+        logger.exception("scheduler: la descarga de logos falló: %s", exc)
         db.rollback()
     finally:
         db.close()

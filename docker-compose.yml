@@ -31,6 +31,11 @@ services:
       - FUNDAMENTALES_HORAS=${FUNDAMENTALES_HORAS:-3,19}
       - FUNDAMENTALES_MINUTO=${FUNDAMENTALES_MINUTO:-30}
       - FUNDAMENTALES_MAX_POR_CORRIDA=${FUNDAMENTALES_MAX_POR_CORRIDA:-60}
+      # Mapa de mercado: una descarga en lote de variaciones desde Yahoo, lun-vie, después del cierre de
+      # EE.UU. Vacío la desactiva. Los logos se bajan enganchados al job de fundamentales.
+      - MAPA_MERCADO_HORAS=${MAPA_MERCADO_HORAS:-18}
+      - MAPA_MERCADO_MINUTO=${MAPA_MERCADO_MINUTO:-30}
+      - LOGOS_MAX_POR_CORRIDA=${LOGOS_MAX_POR_CORRIDA:-40}
       # Qué emisores guarda el historial de diagnósticos tras cada ingesta (cartera, watchlist, catalogo).
       - HISTORIAL_UNIVERSO=${HISTORIAL_UNIVERSO:-cartera,watchlist}
       # Clasificación automática (Yahoo + correcciones) en todas las pantallas; false = la del Sheet.

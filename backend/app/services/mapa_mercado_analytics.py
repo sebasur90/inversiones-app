@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from ..database import ClasificacionAuto, FundamentalesSnapshot, VariacionMercado, WatchlistItem
 from . import clasificacion_engine as ce
+from . import logos
 from . import mapa_mercado_engine as eng
 from .cache import cache_por_sync
 from .clasificacion_analytics import Contexto
@@ -74,6 +75,7 @@ def get_mapa_mercado(db: Session) -> dict:
     caps = _market_caps(db)
     variaciones = {v.simbolo_yahoo: v for v in db.query(VariacionMercado)}
     pesos = _pesos_cartera(db, ctx)
+    con_logo = logos.con_logo(db)
     en_watchlist = {ctx.base(w.ticker) for w in db.query(WatchlistItem)}
     fichas = {w.ticker: w for w in db.query(WatchlistItem)}
 
@@ -114,7 +116,7 @@ def get_mapa_mercado(db: Session) -> dict:
             "en_cartera": peso is not None,
             "en_watchlist": base in en_watchlist,
             "peso_cartera": round(peso, 4) if peso is not None else None,
-            "tiene_logo": False,
+            "tiene_logo": base in con_logo,
         })
 
     avisos: list[str] = []

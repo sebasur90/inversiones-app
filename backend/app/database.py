@@ -742,6 +742,23 @@ class VariacionMercado(Base):
     actualizado = Column(DateTime, nullable=False)
 
 
+class LogoEmpresa(Base):
+    """Estado del logo de un emisor. El archivo vive en el volumen de datos (`services/logos.py`),
+    no en la base: acá sólo se sabe si hay, de qué dominio salió y cuándo reintentar.
+
+    `estado`: 'ok' (hay archivo) | 'sin_logo' (ninguna fuente tenía uno válido) | 'error' (falló
+    la red). `proximo_intento` es el backoff: un emisor sin logo se reintenta al mes, no en cada
+    corrida.
+    """
+    __tablename__ = "logo_empresa"
+    ticker_base = Column(String, primary_key=True)
+    dominio = Column(String, nullable=False)
+    estado = Column(String, nullable=False)
+    intentos = Column(Integer, nullable=False, default=0)
+    proximo_intento = Column(Date, nullable=True)
+    actualizado = Column(DateTime, nullable=False)
+
+
 class ClasificacionOverride(Base):
     """Corrección manual de un campo de la clasificación, hecha desde la app.
 

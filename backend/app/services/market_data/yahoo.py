@@ -269,7 +269,7 @@ def fetch_info(ticker: str) -> dict | None:
 # la lista deja a la vista de qué depende la valuación si yfinance cambia nombres.
 CLAVES_TEXTO = (
     "quoteType", "longName", "shortName", "sector", "industry", "country", "category",
-    "fundFamily", "currency", "financialCurrency", "exchange",
+    "fundFamily", "currency", "financialCurrency", "exchange", "website",
 )
 CLAVES_NUMERO = (
     # tamaño

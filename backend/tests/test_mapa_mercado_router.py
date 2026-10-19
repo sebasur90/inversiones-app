@@ -153,3 +153,20 @@ def test_refrescar_responde_202_y_arranca_en_segundo_plano(client, monkeypatch):
     monkeypatch.setattr(router_mm, "_corrida_en_segundo_plano", lambda: llamado.append(1))
     r = client.post("/api/inversiones/mapa-mercado/refrescar")
     assert r.status_code == 202 and r.json() == {"resultado": "iniciado"}
+
+
+def test_tiene_logo_refleja_el_archivo_y_cuenta_en_la_cobertura(client, tmp_path, monkeypatch):
+    from app.database import LogoEmpresa
+
+    monkeypatch.setenv("LOGOS_DIR", str(tmp_path))
+    (tmp_path / "KO.png").write_bytes(b"png")
+    sesion = next(app.dependency_overrides[get_db]())
+    sesion.add(LogoEmpresa(ticker_base="KO", dominio="ko.com", estado="ok", intentos=0, actualizado=datetime.utcnow()))
+    # PEP figura como ok pero su archivo no está: no se promete un logo que no se puede servir.
+    sesion.add(LogoEmpresa(ticker_base="PEP", dominio="pepsi.com", estado="ok", intentos=0, actualizado=datetime.utcnow()))
+    sesion.commit()
+
+    data, items = _items(client)
+    assert items["KO"]["tiene_logo"] is True
+    assert items["PEP"]["tiene_logo"] is False
+    assert data["cobertura"]["con_logo"] == 1
