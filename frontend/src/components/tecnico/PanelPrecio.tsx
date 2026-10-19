@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import type { BarraOut, OperacionOut, SenalOut } from '../../api'
+import { useMemo, useRef, useState } from 'react'
+import type { BarraOut, OperacionOut, OperacionesGraficoOut, SenalOut } from '../../api'
 import type { EscalaX } from './useEscalaX'
 import { manejadoresPuntero } from './crosshair'
 import { trazoDeSerie, valoresVisibles } from './trazo'
@@ -7,6 +7,8 @@ import { formatoPrecio } from './formatoEjes'
 import { COLOR_MOTIVO, GLIFO_MOTIVO } from './motivosSalida'
 import ZonasPrecio, { valoresDeZonas, type BordeZona, type ZonasDibujo } from './ZonasPrecio'
 import type { TipoZona } from '../../api'
+import { BandasCiclos, MarcasOperaciones } from './OperacionesPropias'
+import { ubicarOperaciones } from './operacionesPropias'
 
 export interface OverlayPrecio {
   clave: string
@@ -65,7 +67,7 @@ export function salidasGraficables(o: OverlayPrecio): [string, (number | null)[]
  * motor de backtest y viajan en la respuesta: dibujarlos re-derivándolos acá daría una línea que
  * no es la que efectivamente disparó la salida. */
 export default function PanelPrecio({
-  barras, escalaX, alto, tieneVelas, overlays, senales, operaciones, primeraBarraEvaluable, moneda, gatillo, zonas, editandoZonas, onArrastrarZona, hoverIndex, onHover,
+  barras, escalaX, alto, tieneVelas, overlays, senales, operaciones, primeraBarraEvaluable, moneda, gatillo, zonas, editandoZonas, onArrastrarZona, misOperaciones, hoverIndex, onHover,
 }: {
   barras: BarraOut[]
   escalaX: EscalaX
@@ -82,6 +84,8 @@ export default function PanelPrecio({
   zonas?: ZonasDibujo
   editandoZonas?: boolean
   onArrastrarZona?: (tipo: TipoZona, borde: BordeZona, valor: number) => void
+  /** Compras y ventas que el usuario ya hizo (ver `OperacionesPropias`). `undefined` = apagado. */
+  misOperaciones?: OperacionesGraficoOut | null
   hoverIndex: number | null
   onHover: (i: number | null) => void
 }) {
@@ -91,6 +95,10 @@ export default function PanelPrecio({
    * borde que define el máximo cambiaría la escala bajo el dedo y la línea se escaparía. */
   const [dominioCongelado, setDominioCongelado] = useState<[number, number] | null>(null)
   const dibujarVelas = tieneVelas && escalaX.pasoX >= PASO_MINIMO_VELAS
+  const ubicadas = useMemo(
+    () => (misOperaciones ? ubicarOperaciones(barras, misOperaciones) : null),
+    [barras, misOperaciones],
+  )
 
   const cierres = barras.map(b => b.cierre)
   const valoresBase = dibujarVelas
@@ -108,7 +116,18 @@ export default function PanelPrecio({
   // viejo, sólo las que caen cerca del precio de ese tramo: una zona a 40 % de distancia aplastaría
   // las velas contra el borde. Las que quedan afuera se señalan con una flecha en el borde del
   // panel (`ZonasPrecio`), así no desaparecen al hacer zoom.
-  const sinZonas = [...valoresBase, ...valoresOverlay, ...valoresSenales, ...valoresGatillo]
+  // Las marcas propias quedan dentro de su vela (el backend las recorta al rango), así que entran en
+  // la escala sin aplastarla. La línea de costo de una posición que empezó antes del tramo visible
+  // no entra: podría estar lejos del precio de este tramo.
+  const valoresOperaciones = ubicadas
+    ? [
+        ...ubicadas.marcas.filter(m => escalaX.visible(m.indice)).map(m => m.op.precio_grafico as number),
+        ...ubicadas.ciclos
+          .filter(c => c.ciclo.abierto && c.ciclo.costo_promedio_grafico != null && !c.empiezaAntes && escalaX.visible(c.desde))
+          .map(c => c.ciclo.costo_promedio_grafico as number),
+      ]
+    : []
+  const sinZonas = [...valoresBase, ...valoresOverlay, ...valoresSenales, ...valoresGatillo, ...valoresOperaciones]
   const minSin = sinZonas.length ? Math.min(...sinZonas) : 0
   const maxSin = sinZonas.length ? Math.max(...sinZonas) : 1
   const margenZonas = (maxSin - minSin) * 0.5
@@ -178,6 +197,8 @@ export default function PanelPrecio({
         )
       })}
 
+      {ubicadas && <BandasCiclos ubicadas={ubicadas} escalaX={escalaX} alto={alto} />}
+
       {moneda && (
         <text x={4} y={12} fontSize={10} fill={COLOR_EJE} fillOpacity={0.85} className="font-mono">
           {moneda}
@@ -227,6 +248,8 @@ export default function PanelPrecio({
           onArrastreActivo={activo => setDominioCongelado(activo ? [y0, y1] : null)}
         />
       )}
+
+      {ubicadas && <MarcasOperaciones ubicadas={ubicadas} escalaX={escalaX} alto={alto} yDeValor={yDeValor} />}
 
       {/* Niveles de riesgo por operación: stop loss y take profit son constantes; el trailing es
           una escalera que sólo sube. */}

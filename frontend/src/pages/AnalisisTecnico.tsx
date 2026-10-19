@@ -5,7 +5,7 @@ import { qk } from '../api/queryClient'
 import {
   getTickersTecnicos, getSerieTecnica, getPresetsEstrategia, listarEstrategias,
   guardarEstrategia, actualizarEstrategia, duplicarEstrategia, eliminarEstrategiaTecnica,
-  backtestEstrategia, sembrarPresetsEstrategia, getZonasTicker, guardarZonasTicker,
+  backtestEstrategia, sembrarPresetsEstrategia, getZonasTicker, guardarZonasTicker, getOperacionesTicker,
   type CategoriaPreset, type EstrategiaDsl, type EstrategiaOut, type BacktestOut,
   type PresetEstrategiaOut, type VarianteSerie, type VarianteEstrategia, type TipoZona, type ZonaPrecioIn,
   type ZonaPrecioOut,
@@ -26,6 +26,7 @@ import {
 import SelectorIndicadores from '../components/tecnico/SelectorIndicadores'
 import GraficoTecnico from '../components/tecnico/GraficoTecnico'
 import GraficoFullscreen from '../components/tecnico/GraficoFullscreen'
+import ResumenOperaciones from '../components/tecnico/ResumenOperaciones'
 import EditorEstrategia from '../components/tecnico/EditorEstrategia'
 import EditorZonas, {
   borradorADibujo, borradorDesdeOut, borradorInvalido, parsearBorde, zonaSugerida,
@@ -60,6 +61,18 @@ const PERIODOS: PeriodoEvolucion[] = ['1M', '3M', '6M', '1Y', '3Y', 'YTD', 'ALL'
 // (`colorIndicador` ordena por id para asignar el color de las repetidas).
 let proximoIdIndicador = 1
 
+const CLAVE_MIS_OPERACIONES = 'tecnico-mis-operaciones'
+
+/** El interruptor de "mis compras y ventas" se recuerda entre visitas. Es una comodidad: si el
+ * almacenamiento no está disponible (ventana privada, datos bloqueados) arranca apagado. */
+function leerVerOperaciones(): boolean {
+  try {
+    return localStorage.getItem(CLAVE_MIS_OPERACIONES) === '1'
+  } catch {
+    return false
+  }
+}
+
 export default function AnalisisTecnico() {
   // El ticker puede llegar en la URL (`/analisis-tecnico?ticker=AL30`): es como entra la watchlist.
   // Se deriva sin `useEffect` de sincronización: la elección de esta sesión manda sobre el
@@ -74,6 +87,7 @@ export default function AnalisisTecnico() {
   const [fullscreen, setFullscreen] = useState(false)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const [vista, setVista] = useState<Vista>('grafico')
+  const [verOperaciones, setVerOperaciones] = useState<boolean>(leerVerOperaciones)
   // Preferencia de variante; la efectiva se deriva contra las variantes reales del ticker actual
   // (sin useEffect, para que no haya flash al cambiar de ticker).
   const [varianteSel, setVarianteSel] = useState<VarianteSerie | null>(null)
@@ -139,6 +153,32 @@ export default function AnalisisTecnico() {
   const serie = serieQuery.data
   const ultimoCierre = serie?.barras[serie.barras.length - 1]?.cierre ?? null
   const monedaMostrada = serie?.moneda || monedaSerie
+
+  // Sólo hay operaciones propias que mostrar si el ticker está (o estuvo) en la cartera.
+  const puedeVerOperaciones = tickerMeta != null && tickerMeta.origen !== 'watchlist'
+  // Se pide sobre la serie que el gráfico efectivamente muestra (`serie.variante`): la referencia
+  // puede haber degradado a la local, y las marcas tienen que estar en la moneda de esa serie.
+  const operacionesQuery = useQuery({
+    queryKey: qk.de('tecnico-operaciones', ticker, serie?.variante),
+    queryFn: () => getOperacionesTicker(ticker as string, serie!.variante),
+    enabled: ticker !== null && serie != null && verOperaciones && puedeVerOperaciones,
+  })
+  const misOperaciones = verOperaciones && puedeVerOperaciones ? operacionesQuery.data ?? null : null
+
+  function alternarOperaciones() {
+    const nuevo = !verOperaciones
+    setVerOperaciones(nuevo)
+    try {
+      localStorage.setItem(CLAVE_MIS_OPERACIONES, nuevo ? '1' : '0')
+    } catch {
+      /* sin almacenamiento: queda sólo para esta visita */
+    }
+  }
+  const propsOperaciones = {
+    misOperaciones,
+    operacionesActivas: verOperaciones && puedeVerOperaciones,
+    onToggleOperaciones: puedeVerOperaciones ? alternarOperaciones : undefined,
+  }
 
   const zonasQuery = useQuery({
     queryKey: qk.de('tecnico-zonas', ticker),
@@ -378,6 +418,7 @@ export default function AnalisisTecnico() {
                   onToggleFullscreen={() => setFullscreen(true)}
                   zonas={zonasDibujo} editandoZonas={borrador !== null}
                   onArrastrarZona={arrastrarZona} edicionZonas={edicionZonas}
+                  {...propsOperaciones}
                   hoverIndex={hoverIndex} onHover={setHoverIndex}
                 />
               </div>
@@ -406,6 +447,18 @@ export default function AnalisisTecnico() {
                   ultimoCierre={ultimoCierre}
                   onEditar={empezarAEditarZonas}
                 />
+              )}
+            </div>
+          )}
+
+          {verOperaciones && puedeVerOperaciones && tieneGrafico && (
+            <div className="mt-3">
+              {operacionesQuery.isError ? (
+                <p className="text-label text-app-neg">No se pudieron cargar tus operaciones de este ticker.</p>
+              ) : misOperaciones ? (
+                <ResumenOperaciones datos={misOperaciones} />
+              ) : (
+                <Skeleton className="h-16 w-full" />
               )}
             </div>
           )}
@@ -451,6 +504,7 @@ export default function AnalisisTecnico() {
             fullscreen onToggleFullscreen={() => setFullscreen(false)}
             zonas={zonasDibujo} editandoZonas={borrador !== null}
             onArrastrarZona={arrastrarZona} edicionZonas={edicionZonas}
+            {...propsOperaciones}
             hoverIndex={hoverIndex} onHover={setHoverIndex}
           />
         </GraficoFullscreen>

@@ -96,6 +96,7 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
     queEs: 'Gráfico de velas con indicadores técnicos, para estudiar un ticker y probar reglas de entrada/salida.',
     comoLeerla: [
       'Elegís un ticker y un período; si activás indicadores, sus líneas se superponen al precio.',
+      'El botón ▲▼ marca tus compras y ventas reales: ▼ verde si esa venta ganó, roja si perdió. En una posición abierta, una línea punteada marca tu costo promedio. En un CEDEAR, la marca ubica tu precio en pesos sobre la vela del subyacente de ese día: sirve para ver el momento, no es el precio exacto en dólares.',
       'La pestaña "Estrategias" te deja definir reglas (por ejemplo, cruce de medias) y correr un backtest sobre el historial.',
       'El backtest simula cómo le habría ido a esa estrategia en el pasado.',
     ],

@@ -9,14 +9,24 @@ import { TACTIL } from './GuiaGestos'
 /** Botones de zoom y pantalla completa, compartidos por el gráfico técnico y el del backtest.
  * 36 px: lo mínimo que un dedo acierta sin tocar el de al lado. */
 export function BotonesGrafico({
-  controles, fullscreen, onToggleFullscreen,
+  controles, fullscreen, onToggleFullscreen, operaciones,
 }: {
   controles: ControlesVentana
   fullscreen?: boolean
   onToggleFullscreen?: () => void
+  /** Interruptor de "mis operaciones" sobre el gráfico. Sin esta prop el botón no existe. */
+  operaciones?: { activo: boolean; onToggle: () => void }
 }) {
   return (
     <>
+      {operaciones && (
+        <Boton
+          label={operaciones.activo ? 'Ocultar mis compras y ventas' : 'Mostrar mis compras y ventas'}
+          onClick={operaciones.onToggle} pulsado={operaciones.activo}
+        >
+          <span className="text-caption font-bold">▲▼</span>
+        </Boton>
+      )}
       <Boton label="Alejar" onClick={() => controles.zoom(1 / 1.5)} disabled={controles.completa}>−</Boton>
       <Boton label="Acercar" onClick={() => controles.zoom(1.5)}>+</Boton>
       <Boton label="Ver todo el período" onClick={controles.reset} disabled={controles.completa}>⤢</Boton>
@@ -30,17 +40,22 @@ export function BotonesGrafico({
 }
 
 function Boton({
-  children, label, onClick, disabled,
+  children, label, onClick, disabled, pulsado,
 }: {
   children: ReactNode
   label: string
   onClick: () => void
   disabled?: boolean
+  /** Botón de estado (interruptor): se marca cuando está activo. */
+  pulsado?: boolean
 }) {
   return (
     <button
       type="button" onClick={onClick} disabled={disabled} aria-label={label} title={label}
-      className="w-9 h-9 rounded-lg flex items-center justify-center bg-app-surface-2 text-title leading-none text-app-text-dim disabled:opacity-40"
+      aria-pressed={pulsado}
+      className={`w-9 h-9 rounded-lg flex items-center justify-center text-title leading-none disabled:opacity-40 ${
+        pulsado ? 'bg-app-accent-soft text-app-accent' : 'bg-app-surface-2 text-app-text-dim'
+      }`}
     >
       {children}
     </button>

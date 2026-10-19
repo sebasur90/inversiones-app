@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import type { BarraOut, SenalOut } from '../../api'
+import type { BarraOut, OperacionesGraficoOut, SenalOut } from '../../api'
 import { useEscalaX } from './useEscalaX'
 import { estiloContenedorGestos, useVentanaVisible } from './useVentanaVisible'
 import { useAnchoContenedor } from './useAnchoContenedor'
@@ -23,7 +23,7 @@ import { ESPEC_POR_TIPO, claveIndicador, colorIndicador, type IndicadorActivo } 
 export default function GraficoTecnico({
   barras, indicadores, activos, tieneVelas, tieneVolumen, senales, primeraBarraEvaluable,
   moneda, fullscreen, onToggleFullscreen, zonas, editandoZonas, onArrastrarZona, edicionZonas,
-  hoverIndex, onHover,
+  misOperaciones, operacionesActivas, onToggleOperaciones, hoverIndex, onHover,
 }: {
   barras: BarraOut[]
   indicadores: Record<string, Record<string, (number | null)[]>>
@@ -42,6 +42,12 @@ export default function GraficoTecnico({
   /** Guardar/cancelar la edición desde el propio gráfico: en el celular el editor queda abajo,
    * fuera de la pantalla, y en pantalla completa no está. */
   edicionZonas?: { onGuardar: () => void; onCancelar: () => void; guardando?: boolean; problema?: string | null }
+  /** Compras y ventas propias a dibujar; `null`/`undefined` = apagado. */
+  misOperaciones?: OperacionesGraficoOut | null
+  /** El interruptor está prendido (aunque los datos todavía estén cargando). */
+  operacionesActivas?: boolean
+  /** Si viene, el gráfico ofrece el botón que prende y apaga `misOperaciones`. */
+  onToggleOperaciones?: () => void
   hoverIndex: number | null
   onHover: (i: number | null) => void
 }) {
@@ -99,8 +105,12 @@ export default function GraficoTecnico({
     <div ref={containerRef} className="w-full">
       <FichaBarra
         barras={barras} indice={hoverIndex} moneda={moneda} onQuitar={() => onHover(null)}
+        misOperaciones={misOperaciones}
         acciones={
-          <BotonesGrafico controles={controles} fullscreen={fullscreen} onToggleFullscreen={onToggleFullscreen} />
+          <BotonesGrafico
+            controles={controles} fullscreen={fullscreen} onToggleFullscreen={onToggleFullscreen}
+            operaciones={onToggleOperaciones ? { activo: !!operacionesActivas, onToggle: onToggleOperaciones } : undefined}
+          />
         }
       />
 
@@ -149,6 +159,7 @@ export default function GraficoTecnico({
           barras={barras} escalaX={escalaX} alto={alto.precio} tieneVelas={tieneVelas} moneda={moneda}
           overlays={overlaysPrecio} senales={senales} primeraBarraEvaluable={primeraBarraEvaluable}
           zonas={zonas} editandoZonas={editandoZonas} onArrastrarZona={onArrastrarZona}
+          misOperaciones={misOperaciones}
           hoverIndex={hoverIndex} onHover={onHover}
         />
         <EjeFechas barras={barras} escalaX={escalaX} />

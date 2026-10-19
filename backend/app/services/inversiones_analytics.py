@@ -1964,6 +1964,35 @@ def get_rendimiento_por_ticker(cartera: str | None, db: Session) -> list[dict]:
 
 # ── P&L Realizado vs No Realizado ────────────────────────────────────────────
 
+@dataclass(frozen=True)
+class _ValuacionTenencia:
+    precio: float
+    moneda_precio: str
+    valor_usd: float | None
+    valor_ars: float | None
+
+
+def _valuar_tenencia(
+    precios_sorted: list[tuple[date, float, str]] | None, cantidad: float, fecha: date,
+    db: Session, mep_cache: dict,
+) -> _ValuacionTenencia | None:
+    """Valor de una tenencia al último precio conocido ≤ `fecha`, o None si no hay precio.
+
+    Fuente única del no realizado: `get_pnl_realizado_no_realizado` y las operaciones del
+    gráfico técnico la usan para que el resultado de una posición abierta coincida con el P&L.
+    """
+    info = _precio_conocido(precios_sorted, fecha) if precios_sorted else None
+    if info is None:
+        return None
+    _fecha_precio, precio, moneda_precio = info
+    return _ValuacionTenencia(
+        precio=precio,
+        moneda_precio=moneda_precio,
+        valor_usd=_to_usd(precio * cantidad, moneda_precio, fecha, db, mep_cache),
+        valor_ars=_convertir(precio * cantidad, moneda_precio, "ARS", fecha, db, mep_cache),
+    )
+
+
 def get_pnl_realizado_no_realizado(cartera: str | None, db: Session) -> dict:
     """P&L separado en realizado (ventas ya concretadas, costo promedio), no realizado
     (tenencia actual a valor de mercado menos su costo remanente) e ingresos (dividendos/cupones).
@@ -2016,16 +2045,13 @@ def get_pnl_realizado_no_realizado(cartera: str | None, db: Session) -> dict:
             no_realizado_usd, no_realizado_ars = 0.0, 0.0
             no_realizado_ars_real = 0.0 if ars_real_valido else None
         else:
-            precios_sorted = precios_por_ticker.get(ticker)
-            info = _precio_conocido(precios_sorted, hoy) if precios_sorted else None
-            if info is None:
+            valuacion = _valuar_tenencia(precios_por_ticker.get(ticker), cantidad_held, hoy, db, mep_cache)
+            if valuacion is None:
                 # Sin precio actual no se puede valuar la tenencia remanente, pero el
                 # realizado/ingresos ya calculados siguen siendo válidos y no deben perderse.
                 no_realizado_usd = no_realizado_ars = no_realizado_ars_real = None
             else:
-                _fecha_precio, precio_actual, moneda_precio = info
-                valor_usd = _to_usd(precio_actual * cantidad_held, moneda_precio, hoy, db, mep_cache)
-                valor_ars = _convertir(precio_actual * cantidad_held, moneda_precio, "ARS", hoy, db, mep_cache)
+                valor_usd, valor_ars = valuacion.valor_usd, valuacion.valor_ars
                 if valor_usd is None:
                     no_realizado_usd = no_realizado_ars = no_realizado_ars_real = None
                 else:

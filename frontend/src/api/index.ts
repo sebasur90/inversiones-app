@@ -2291,6 +2291,61 @@ export const getSerieTecnica = (
 ) =>
   api.get<SerieTecnicaOut>(`/inversiones/tecnico/${encodeURIComponent(ticker)}/serie`, { params }).then(r => r.data)
 
+// --- Operaciones propias sobre el gráfico (compras y ventas que ya hiciste) ---
+
+/** Una compra o venta real, ubicada sobre la serie del gráfico. Distinta de `OperacionOut`, que es
+ * una operación simulada de un backtest. `precio_grafico` está en la moneda de la serie; el
+ * resultado es siempre el real en USD MEP. Los porcentajes vienen en puntos (5 = +5 %). */
+export interface OperacionPropiaOut {
+  fecha: string
+  fecha_barra: string | null
+  tipo: 'compra' | 'venta' | 'amortizacion'
+  cartera: string
+  cantidad: number
+  precio: number
+  moneda: string
+  precio_usd_mep: number | null
+  precio_grafico: number | null
+  aproximado: boolean
+  motivo_aproximado: string | null
+  ciclo: number
+  resultado_usd: number | null
+  resultado_pct: number | null
+}
+
+/** Un ciclo de tenencia (de 0 a volver a 0). Lo que depende del precio actual puede ser null. */
+export interface CicloPosicionOut {
+  ciclo: number
+  desde: string
+  hasta: string | null
+  abierto: boolean
+  cantidad_abierta: number
+  comprado_usd: number
+  realizado_usd: number
+  no_realizado_usd: number | null
+  no_realizado_pct: number | null
+  ingresos_usd: number
+  resultado_usd: number | null
+  resultado_pct: number | null
+  costo_promedio_grafico: number | null
+  precio_actual_grafico: number | null
+}
+
+export interface OperacionesGraficoOut {
+  ticker: string
+  variante: VarianteSerie
+  moneda: string
+  operaciones: OperacionPropiaOut[]
+  ciclos: CicloPosicionOut[]
+  fuera_de_serie: number
+  advertencias: string[]
+}
+
+export const getOperacionesTicker = (ticker: string, variante: VarianteSerie) =>
+  api.get<OperacionesGraficoOut>(
+    `/inversiones/tecnico/${encodeURIComponent(ticker)}/operaciones`, { params: { variante } },
+  ).then(r => r.data)
+
 // --- Zonas de compra / venta (se dibujan y se arrastran en el gráfico) ---
 
 export type TipoZona = 'compra' | 'venta'

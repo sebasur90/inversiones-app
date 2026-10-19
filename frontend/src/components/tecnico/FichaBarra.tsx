@@ -1,5 +1,10 @@
 import type { ReactNode } from 'react'
-import type { BarraOut, OperacionOut, SenalOut } from '../../api'
+import type { BarraOut, OperacionOut, OperacionPropiaOut, OperacionesGraficoOut, SenalOut } from '../../api'
+import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
+import { formatMonedaCruda, type Moneda } from '../../utils/formatoMonto'
+import {
+  COLOR_COMPRA_PROPIA, TEXTO_APROXIMADO, cicloDeFecha, colorResultado, operacionesDeFecha,
+} from './operacionesPropias'
 import { fechaCorta, formatoPct, formatoPrecio, formatoVolumen } from './formatoEjes'
 import { COLOR_MOTIVO, ETIQUETA_MOTIVO, GLIFO_MOTIVO } from './motivosSalida'
 
@@ -15,7 +20,7 @@ const COLOR_BAJISTA = '#ef4444'
  * operación con sus niveles de riesgo — los que calculó el motor, no re-derivados acá.
  */
 export default function FichaBarra({
-  barras, indice, moneda, senales, operaciones, conSenales = false, acciones, onQuitar,
+  barras, indice, moneda, senales, operaciones, conSenales = false, misOperaciones, acciones, onQuitar,
 }: {
   barras: BarraOut[]
   /** Vela de la cruz; `null` = mostrar la última. */
@@ -25,6 +30,8 @@ export default function FichaBarra({
   operaciones?: OperacionOut[]
   /** Reserva la línea de señal/operación (gráfico del backtest). */
   conSenales?: boolean
+  /** Compras y ventas propias del usuario: reserva una línea con la de la rueda bajo la cruz. */
+  misOperaciones?: OperacionesGraficoOut | null
   /** Botones a la derecha de la primera línea (zoom, pantalla completa). */
   acciones?: ReactNode
   onQuitar?: () => void
@@ -76,6 +83,12 @@ export default function FichaBarra({
         )}
       </div>
 
+      {misOperaciones && b && (
+        <div className="h-5 text-label truncate">
+          <LineaMisOperaciones datos={misOperaciones} fecha={b.fecha} />
+        </div>
+      )}
+
       {conSenales && b && (
         <div className="h-5 text-label truncate">
           <LineaOperacion indice={i} barra={b} senales={senales ?? []} operaciones={operaciones ?? []} ultimo={barras.length - 1} />
@@ -124,6 +137,69 @@ function LineaOperacion({
       Comprado desde {fechaCorta(op.fecha_entrada)}{' '}
       <span className={`font-mono ${resultado >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>{formatoPct(resultado)}</span>
       {niveles.length > 0 && <span className="font-mono"> · {niveles.join(' · ')}</span>}
+    </span>
+  )
+}
+
+const NOMBRE_TIPO: Record<OperacionPropiaOut['tipo'], string> = {
+  compra: 'Compraste', venta: 'Vendiste', amortizacion: 'Amortizaste',
+}
+
+/** Qué hiciste esa rueda y cómo va la posición. Los importes del resultado pasan por el modo
+ * privacidad; el precio al que se operó y los porcentajes se muestran siempre. */
+function LineaMisOperaciones({ datos, fecha }: { datos: OperacionesGraficoOut; fecha: string }) {
+  const fmt = useFormatoFijo('USD')
+  const ops = operacionesDeFecha(datos, fecha)
+
+  if (ops.length > 0) {
+    return (
+      <span className="font-mono">
+        {ops.map((op, i) => {
+          const compra = op.tipo === 'compra'
+          const color = compra ? COLOR_COMPRA_PROPIA : colorResultado(op.resultado_usd)
+          const moneda: Moneda = op.moneda === 'USD' ? 'USD' : 'ARS'
+          return (
+            <span key={i}>
+              {i > 0 && <span className="text-app-text-faint"> · </span>}
+              <span style={{ color }}>
+                {compra ? (op.aproximado ? '△' : '▲') : (op.aproximado ? '▽' : '▼')} {NOMBRE_TIPO[op.tipo]} {op.cantidad}
+              </span>
+              <span className="text-app-text-dim">
+                {' '}a {formatMonedaCruda(op.precio, moneda)}
+                {op.precio_usd_mep != null && moneda === 'ARS' && ` (${formatMonedaCruda(op.precio_usd_mep, 'USD')})`}
+              </span>
+              {!compra && op.resultado_usd != null && (
+                <span style={{ color }}>
+                  {' '}· {fmt.montoConSigno(op.resultado_usd)}
+                  {op.resultado_pct != null && ` (${formatoPct(op.resultado_pct)})`}
+                </span>
+              )}
+              {op.aproximado && (
+                <span className="text-app-text-faint">
+                  {' '}· aprox.{op.motivo_aproximado && TEXTO_APROXIMADO[op.motivo_aproximado] ? ` (${TEXTO_APROXIMADO[op.motivo_aproximado]})` : ''}
+                </span>
+              )}
+            </span>
+          )
+        })}
+      </span>
+    )
+  }
+
+  const ciclo = cicloDeFecha(datos, fecha)
+  if (!ciclo) return <span className="text-app-text-faint">Sin posición</span>
+
+  const pct = ciclo.abierto ? ciclo.no_realizado_pct : ciclo.resultado_pct
+  const resultado = ciclo.abierto ? ciclo.no_realizado_usd : ciclo.resultado_usd
+  return (
+    <span className="text-app-text-dim">
+      {ciclo.abierto ? 'En posición' : 'Posición'} desde {fechaCorta(ciclo.desde)}
+      {ciclo.hasta && ` hasta ${fechaCorta(ciclo.hasta)}`}
+      {pct != null && (
+        <span className="font-mono" style={{ color: colorResultado(resultado) }}>
+          {' '}· {ciclo.abierto ? 'hoy ' : ''}{formatoPct(pct)}
+        </span>
+      )}
     </span>
   )
 }

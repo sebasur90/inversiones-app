@@ -15,11 +15,12 @@ from ..schemas import (
     ScreenerRequest, ScreenerOut,
     ComparadorRequest, ComparadorOut,
     ZonasTickerIn, ZonasTickerOut,
+    OperacionesGraficoOut,
 )
 from ..services import ohlcv_analytics, estrategias_analytics, screener_analytics, estrategias_seed
 from ..services import indicadores_engine, estrategia_engine
 from ..services import comparador_estrategias_analytics, comparador_estrategias_engine
-from ..services import ticker_analytics, zonas_precio
+from ..services import ticker_analytics, zonas_precio, operaciones_grafico
 
 router = APIRouter(prefix="/api/inversiones", tags=["tecnico"])
 
@@ -127,6 +128,27 @@ def correr_screener(body: ScreenerRequest, db: Session = Depends(get_db)):
     return screener_analytics.escanear(
         db, tuple(sorted(set(body.estrategia_ids))), body.umbral_pct, body.origen, body.variante,
     )
+
+
+@router.get("/tecnico/{ticker}/operaciones", response_model=OperacionesGraficoOut)
+def operaciones_ticker(
+    ticker: str,
+    variante: Optional[str] = Query(
+        None, description="`local` o `subyacente`. Sin valor, la serie de referencia del ticker.",
+    ),
+    db: Session = Depends(get_db),
+):
+    """Compras y ventas propias del ticker (consolidado de carteras), ubicadas sobre la serie."""
+    _validar_ticker_tecnico(ticker, db)
+    _validar_variante(variante)
+    pedida = variante
+    variante = ohlcv_analytics.variante_para(db, ticker, pedida)
+    # Mismo criterio que `/serie`: una referencia sin barras degrada a la local.
+    if variante == "subyacente" and pedida is None:
+        hasta = date.today()
+        if not ohlcv_analytics.get_serie_barras(ticker, date.min, hasta, db, max_barras=1, variante=variante)["barras"]:
+            variante = "local"
+    return operaciones_grafico.get_operaciones_grafico(ticker, variante, db)
 
 
 @router.get("/tecnico/{ticker}/serie", response_model=SerieTecnicaOut)

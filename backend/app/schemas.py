@@ -2135,6 +2135,55 @@ class SerieTecnicaOut(BaseModel):
     advertencias: list[str] = Field(default_factory=list)
 
 
+class OperacionPropiaOut(BaseModel):
+    """Una compra o venta real del usuario, ubicada sobre la serie del gráfico técnico.
+
+    No confundir con `OperacionOut`, que es una operación simulada de un backtest."""
+    fecha: date
+    fecha_barra: Optional[date] = None      # None si queda fuera de la serie
+    tipo: str                               # "compra" | "venta" | "amortizacion"
+    cartera: str
+    cantidad: float
+    precio: float                           # tal como se operó, en `moneda`
+    moneda: str
+    precio_usd_mep: Optional[float] = None  # con comisión, a MEP de la fecha
+    precio_grafico: Optional[float] = None  # en la moneda de la serie del gráfico
+    aproximado: bool = False
+    motivo_aproximado: Optional[str] = None
+    ciclo: int
+    # Sólo en ventas y amortizaciones: resultado real en USD MEP contra el costo promedio.
+    resultado_usd: Optional[float] = None
+    resultado_pct: Optional[float] = None
+
+
+class CicloPosicionOut(BaseModel):
+    """Un ciclo de tenencia: de 0 a volver a 0. Lo que depende del precio actual es opcional."""
+    ciclo: int
+    desde: date
+    hasta: Optional[date] = None
+    abierto: bool
+    cantidad_abierta: float
+    comprado_usd: float
+    realizado_usd: float
+    no_realizado_usd: Optional[float] = None
+    no_realizado_pct: Optional[float] = None
+    ingresos_usd: float
+    resultado_usd: Optional[float] = None
+    resultado_pct: Optional[float] = None
+    costo_promedio_grafico: Optional[float] = None
+    precio_actual_grafico: Optional[float] = None
+
+
+class OperacionesGraficoOut(BaseModel):
+    ticker: str
+    variante: str
+    moneda: str
+    operaciones: list[OperacionPropiaOut] = Field(default_factory=list)
+    ciclos: list[CicloPosicionOut] = Field(default_factory=list)
+    fuera_de_serie: int = 0
+    advertencias: list[str] = Field(default_factory=list)
+
+
 class SenalOut(BaseModel):
     indice: int
     fecha: date
