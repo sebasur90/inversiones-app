@@ -15,13 +15,13 @@ from ..schemas import (
     ScreenerRequest, ScreenerOut,
     ComparadorRequest, ComparadorOut,
     ZonasTickerIn, ZonasTickerOut,
-    OperacionesGraficoOut, TamanoPosicionOut, FuerzaRelativaOut,
+    OperacionesGraficoOut, TamanoPosicionOut, FuerzaRelativaOut, DibujoIn, DibujoOut,
 )
 from ..services import ohlcv_analytics, estrategias_analytics, screener_analytics, estrategias_seed
 from ..services import indicadores_engine, estrategia_engine, intervalos_engine
 from ..services import comparador_estrategias_analytics, comparador_estrategias_engine
 from ..services import ticker_analytics, zonas_precio, operaciones_grafico, tamano_posicion
-from ..services import benchmarks, fuerza_relativa_engine, niveles_auto_engine
+from ..services import benchmarks, fuerza_relativa_engine, niveles_auto_engine, dibujos_grafico
 
 router = APIRouter(prefix="/api/inversiones", tags=["tecnico"])
 
@@ -347,6 +347,50 @@ def _agregar_serie(serie: dict, intervalo: str, max_barras: int) -> dict:
         barras = barras[recorte:]
         indice_desde = max(0, indice_desde - recorte)
     return {**serie, "barras": barras, "indice_desde": indice_desde}
+
+
+# ─── Dibujos manuales ─────────────────────────────────────────────────────────
+
+@router.get("/tecnico/{ticker}/dibujos", response_model=list[DibujoOut])
+def listar_dibujos(
+    ticker: str,
+    variante: Optional[str] = Query(None, description="`local` o `subyacente`. Sin valor, todos los del ticker."),
+    db: Session = Depends(get_db),
+):
+    _validar_ticker_tecnico(ticker, db)
+    _validar_variante(variante)
+    return [dibujos_grafico.a_dict(f) for f in dibujos_grafico.listar(db, ticker, variante)]
+
+
+@router.post("/tecnico/{ticker}/dibujos", response_model=DibujoOut, status_code=201)
+def crear_dibujo(ticker: str, body: DibujoIn, db: Session = Depends(get_db)):
+    _validar_ticker_tecnico(ticker, db)
+    fila, error = dibujos_grafico.crear(db, ticker, body.model_dump())
+    if error:
+        raise HTTPException(status_code=422, detail=dibujos_grafico.MENSAJE_ERROR[error])
+    return dibujos_grafico.a_dict(fila)
+
+
+@router.put("/tecnico/{ticker}/dibujos/{dibujo_id}", response_model=DibujoOut)
+def reemplazar_dibujo(ticker: str, dibujo_id: int, body: DibujoIn, db: Session = Depends(get_db)):
+    _validar_ticker_tecnico(ticker, db)
+    fila = dibujos_grafico.obtener(db, ticker, dibujo_id)
+    if fila is None:
+        raise HTTPException(status_code=404, detail="Dibujo no encontrado")
+    error = dibujos_grafico.reemplazar(db, fila, body.model_dump())
+    if error:
+        raise HTTPException(status_code=422, detail=dibujos_grafico.MENSAJE_ERROR[error])
+    return dibujos_grafico.a_dict(fila)
+
+
+@router.delete("/tecnico/{ticker}/dibujos/{dibujo_id}", status_code=204)
+def borrar_dibujo(ticker: str, dibujo_id: int, db: Session = Depends(get_db)):
+    _validar_ticker_tecnico(ticker, db)
+    fila = dibujos_grafico.obtener(db, ticker, dibujo_id)
+    if fila is None:
+        raise HTTPException(status_code=404, detail="Dibujo no encontrado")
+    dibujos_grafico.borrar(db, fila)
+    return Response(status_code=204)
 
 
 # ─── Zonas de compra / venta ──────────────────────────────────────────────────

@@ -34,6 +34,7 @@ import EditorZonas, {
 } from '../components/tecnico/EditorZonas'
 import ResumenZonas from '../components/tecnico/ResumenZonas'
 import CalculadoraPosicion from '../components/tecnico/CalculadoraPosicion'
+import { useDibujos } from '../components/tecnico/useDibujos'
 import type { BordeZona, ZonasDibujo } from '../components/tecnico/ZonasPrecio'
 import { textoBorde } from '../components/tecnico/formatoEjes'
 import EstrategiaAvanzadaJson from '../components/tecnico/EstrategiaAvanzadaJson'
@@ -218,8 +219,10 @@ export default function AnalisisTecnico() {
       /* sin almacenamiento: queda sólo para esta visita */
     }
   }
+  const dibujos = useDibujos(ticker, serie?.variante)
   const propsOperaciones = {
     intervalo,
+    dibujos,
     // El servidor los calcula siempre (es barato); el botón sólo decide si se dibujan.
     nivelesAuto: serie?.niveles_auto ?? null,
     nivelesActivos: verNiveles,

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import type { MutableRefObject, PointerEvent as ReactPointerEvent } from 'react'
 import type { BarraOut, NivelAutoOut, OperacionOut, OperacionesGraficoOut, SenalOut } from '../../api'
 import type { EscalaX } from './useEscalaX'
 import { manejadoresPuntero } from './crosshair'
@@ -7,6 +8,9 @@ import { formatoPrecio } from './formatoEjes'
 import { COLOR_MOTIVO, GLIFO_MOTIVO } from './motivosSalida'
 import ZonasPrecio, { valoresDeZonas, type BordeZona, type ZonasDibujo } from './ZonasPrecio'
 import type { TipoZona } from '../../api'
+import DibujosGrafico from './DibujosGrafico'
+import { dibujoEnPunto } from './dibujosGrafico'
+import type { ControlDibujos } from './useDibujos'
 import { BandasCiclos, MarcasIngresos, MarcasOperaciones } from './OperacionesPropias'
 import { ubicarOperaciones } from './operacionesPropias'
 
@@ -71,7 +75,7 @@ export function salidasGraficables(o: OverlayPrecio): [string, (number | null)[]
  * motor de backtest y viajan en la respuesta: dibujarlos re-derivándolos acá daría una línea que
  * no es la que efectivamente disparó la salida. */
 export default function PanelPrecio({
-  barras, escalaX, alto, tieneVelas, overlays, senales, operaciones, primeraBarraEvaluable, moneda, gatillo, zonas, editandoZonas, onArrastrarZona, misOperaciones, escalaLog, nivelesAuto, hoverIndex, onHover,
+  barras, escalaX, alto, tieneVelas, overlays, senales, operaciones, primeraBarraEvaluable, moneda, gatillo, zonas, editandoZonas, onArrastrarZona, misOperaciones, escalaLog, nivelesAuto, dibujos, toqueRef, hoverIndex, onHover,
 }: {
   barras: BarraOut[]
   escalaX: EscalaX
@@ -95,6 +99,11 @@ export default function PanelPrecio({
   /** Soportes y resistencias automáticos. No entran en la escala Y: como una zona lejana, un nivel
    * fuera del tramo que se mira simplemente no se ve. */
   nivelesAuto?: NivelAutoOut[] | null
+  /** Dibujos manuales y la herramienta en uso (ver `useDibujos`). */
+  dibujos?: ControlDibujos
+  /** Acá se deja el manejador de toques del panel: el gráfico lo llama (con el índice de barra y la
+   * `y` del toque) y devuelve si el toque fue de un dibujo, para que no mueva también la cruz. */
+  toqueRef?: MutableRefObject<((indice: number, y: number) => boolean) | null>
   hoverIndex: number | null
   onHover: (i: number | null) => void
 }) {
@@ -102,6 +111,7 @@ export default function PanelPrecio({
   const handlers = manejadoresPuntero(svgRef, escalaX, onHover)
   /** Escala Y congelada mientras se arrastra el borde de una zona. Si se recalculara, mover el
    * borde que define el máximo cambiaría la escala bajo el dedo y la línea se escaparía. */
+  const [vistaPrevia, setVistaPrevia] = useState<{ x: number; y: number } | null>(null)
   const [dominioCongelado, setDominioCongelado] = useState<[number, number] | null>(null)
   const dibujarVelas = tieneVelas && escalaX.pasoX >= PASO_MINIMO_VELAS
   const ubicadas = useMemo(
@@ -157,6 +167,33 @@ export default function PanelPrecio({
   /** Inversa de `yDeValor`: la usa el arrastre de los bordes de zona. */
   const valorDeY = (y: number) => deEscala(y0 + ((alto - y) / (alto || 1)) * (y1 - y0))
 
+  // Toques sobre el panel (celular) y clics (mouse): con una herramienta elegida ponen el punto del
+  // dibujo; sin herramienta, seleccionan el dibujo bajo el dedo, si lo hay.
+  if (toqueRef) {
+    toqueRef.current = (indice, y) => {
+      if (!dibujos || y < 0 || y > alto) return false
+      if (dibujos.herramienta) {
+        const barra = barras[indice]
+        if (barra) dibujos.tocarPunto({ fecha: barra.fecha.slice(0, 10), precio: Number(valorDeY(y).toPrecision(8)) })
+        return true
+      }
+      const tocado = dibujoEnPunto(dibujos.lista, escalaX.xDeIndice(indice), y, barras, escalaX, yDeValor)
+      dibujos.seleccionar(tocado ? tocado.id : null)
+      return tocado != null
+    }
+  }
+  // Dónde está el mouse mientras falta el segundo punto de un dibujo: para la línea de vista previa.
+  const alMoverMouse = (e: ReactPointerEvent<SVGSVGElement>) => {
+    handlers.onPointerMove(e)
+    if (!dibujos?.primerPunto || e.pointerType !== 'mouse') return
+    const rect = svgRef.current?.getBoundingClientRect()
+    if (rect) setVistaPrevia({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+  }
+  const alSalirMouse = (e: ReactPointerEvent<SVGSVGElement>) => {
+    handlers.onPointerLeave(e)
+    setVistaPrevia(null)
+  }
+
   const anchoVela = Math.max(1, escalaX.pasoX * 0.62)
   const ultimoIndice = barras.length - 1
   const visibles: number[] = []
@@ -188,7 +225,7 @@ export default function PanelPrecio({
     .filter(e => ocupadas.every(y => Math.abs(y - e.y) > 13))
 
   return (
-    <svg ref={svgRef} width={escalaX.ancho} height={alto} className="block select-none" {...handlers}>
+    <svg ref={svgRef} width={escalaX.ancho} height={alto} className="block select-none" onPointerMove={alMoverMouse} onPointerLeave={alSalirMouse}>
       {primeraBarraEvaluable != null && primeraBarraEvaluable > 0 && escalaX.inicio < primeraBarraEvaluable && (
         <rect
           x={0} y={0}
@@ -308,6 +345,13 @@ export default function PanelPrecio({
             )
           })}
         </g>
+      )}
+
+      {dibujos && (
+        <DibujosGrafico
+          dibujos={dibujos.lista} barras={barras} escalaX={escalaX} yDeValor={yDeValor}
+          seleccionado={dibujos.seleccionado} primerPunto={dibujos.primerPunto} vistaPrevia={vistaPrevia}
+        />
       )}
 
       {ubicadas && <MarcasOperaciones ubicadas={ubicadas} escalaX={escalaX} alto={alto} yDeValor={yDeValor} />}

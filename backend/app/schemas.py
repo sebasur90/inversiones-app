@@ -2118,6 +2118,29 @@ class BarraOut(BaseModel):
     volumen: Optional[float] = None
 
 
+class DibujoIn(BaseModel):
+    """Alta o reemplazo de un dibujo. Validaciones de fondo en `services/dibujos_grafico.py`."""
+    variante: str                              # "local" | "subyacente"
+    tipo: str                                  # "horizontal" | "tendencia" | "fibonacci"
+    fecha1: date
+    precio1: float
+    fecha2: Optional[date] = None              # obligatorios salvo en la horizontal
+    precio2: Optional[float] = None
+    color: Optional[str] = None                # "#rrggbb"; sin valor, el de su tipo
+
+
+class DibujoOut(BaseModel):
+    id: int
+    ticker: str
+    variante: str
+    tipo: str
+    fecha1: date
+    precio1: float
+    fecha2: Optional[date] = None
+    precio2: Optional[float] = None
+    color: str
+
+
 class NivelAutoOut(BaseModel):
     """Un soporte o resistencia detectado automáticamente (ver `niveles_auto_engine`)."""
     precio: float

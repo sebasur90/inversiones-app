@@ -647,6 +647,31 @@ class ZonaPrecio(Base):
     __table_args__ = (UniqueConstraint("ticker", "tipo", name="uq_zona_precio_ticker_tipo"),)
 
 
+class DibujoGrafico(Base):
+    """Un dibujo manual sobre el gráfico de análisis técnico: línea horizontal, línea de tendencia
+    o retroceso de Fibonacci.
+
+    Se ancla por **fecha y precio**, no por índice de barra ni por píxel, así sobrevive a un cambio
+    de período, de zoom o de intervalo (diario/semanal/mensual). `variante` dice sobre qué serie se
+    dibujó (`local` o `subyacente`): los precios de una y otra no son comparables (pesos contra
+    dólares), así que un dibujo sólo se muestra sobre su propia serie.
+
+    `fecha2`/`precio2` son NULL en la línea horizontal (un solo punto) y obligatorios en tendencia
+    y Fibonacci. Sin FK al ticker, igual que `ZonaPrecio`: el sync vacía `instrumentos_inversion`.
+    """
+    __tablename__ = "dibujos_grafico"
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String, nullable=False, index=True)
+    variante = Column(String, nullable=False, default="local")  # "local" | "subyacente"
+    tipo = Column(String, nullable=False)  # "horizontal" | "tendencia" | "fibonacci"
+    fecha1 = Column(Date, nullable=False)
+    precio1 = Column(Numeric(18, 6), nullable=False)
+    fecha2 = Column(Date, nullable=True)
+    precio2 = Column(Numeric(18, 6), nullable=True)
+    color = Column(String, nullable=False, default="#fbbf24")
+    fecha_creacion = Column(DateTime, nullable=False)
+
+
 class ClasificacionAuto(Base):
     """Clasificación de un emisor derivada de Yahoo, y estado de su ingesta.
 

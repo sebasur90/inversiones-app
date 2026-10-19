@@ -1,8 +1,10 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import type {
-  BarraOut, BenchmarkFR, FuerzaRelativaOut, IntervaloSerie, NivelAutoOut, OperacionesGraficoOut, SenalOut,
+  BarraOut, BenchmarkFR, FuerzaRelativaOut, IntervaloSerie, NivelAutoOut, OperacionesGraficoOut, SenalOut, TipoDibujo,
 } from '../../api'
 import Segmented from '../ui/Segmented'
+import type { ControlDibujos } from './useDibujos'
+import { ETIQUETA_TIPO } from './dibujosGrafico'
 import { useEscalaX } from './useEscalaX'
 import { estiloContenedorGestos, useVentanaVisible } from './useVentanaVisible'
 import { useAnchoContenedor } from './useAnchoContenedor'
@@ -34,6 +36,16 @@ const OPCIONES_BENCHMARK: { value: BenchmarkFR; label: string }[] = [
   { value: 'SPY', label: 'S&P 500' }, { value: 'QQQ', label: 'Nasdaq' }, { value: '^MERV', label: 'Merval' },
 ]
 
+const HERRAMIENTAS_DIBUJO: { value: TipoDibujo; label: string }[] = [
+  { value: 'horizontal', label: 'Horizontal' }, { value: 'tendencia', label: 'Tendencia' }, { value: 'fibonacci', label: 'Fibonacci' },
+]
+
+function pistaDibujo(d: ControlDibujos): string | null {
+  if (d.herramienta === 'horizontal') return 'Tocá el precio donde va la línea.'
+  if (d.herramienta) return d.primerPunto ? 'Ahora tocá el segundo punto.' : 'Tocá el primer punto.'
+  return null
+}
+
 const TEXTO_ADVERTENCIA_FR: Record<string, string> = {
   sin_benchmark: 'No se pudo obtener el índice (sin conexión a Yahoo, o todavía sin datos). Probá de nuevo en un rato.',
   benchmark_incompleto: 'Al índice le faltan datos en parte del período: la línea tiene huecos.',
@@ -46,7 +58,7 @@ const TEXTO_ADVERTENCIA_FR: Record<string, string> = {
 export default function GraficoTecnico({
   barras, indicadores, activos, tieneVelas, tieneVolumen, senales, primeraBarraEvaluable,
   moneda, fullscreen, onToggleFullscreen, zonas, editandoZonas, onArrastrarZona, edicionZonas,
-  misOperaciones, operacionesActivas, onToggleOperaciones, intervalo = 'D', escalaLog, onToggleEscalaLog, nivelesAuto, nivelesActivos, onToggleNiveles, fuerzaRelativa,
+  misOperaciones, operacionesActivas, onToggleOperaciones, intervalo = 'D', escalaLog, onToggleEscalaLog, nivelesAuto, nivelesActivos, onToggleNiveles, fuerzaRelativa, dibujos,
   hoverIndex, onHover,
 }: {
   barras: BarraOut[]
@@ -83,6 +95,8 @@ export default function GraficoTecnico({
   onToggleNiveles?: () => void
   /** Panel de fuerza relativa contra un índice; sin esta prop el botón no existe. */
   fuerzaRelativa?: ControlFuerzaRelativa
+  /** Dibujo manual (horizontal, tendencia, Fibonacci); sin esta prop no hay herramienta. */
+  dibujos?: ControlDibujos
   hoverIndex: number | null
   onHover: (i: number | null) => void
 }) {
@@ -90,6 +104,12 @@ export default function GraficoTecnico({
   const gestosRef = useRef<HTMLDivElement>(null)
   const guia = useGuiaGestos()
   const aviso = useAvisoGrafico()
+  // Los toques sobre el panel de precio los resuelve `PanelPrecio` (es el que conoce la escala Y):
+  // deja acá su manejador. Con una herramienta de dibujo elegida, el toque pone un punto en vez de
+  // fijar la cruz y mantener apretado deja de recorrer velas (igual que al editar zonas).
+  const toqueRef = useRef<((indice: number, y: number) => boolean) | null>(null)
+  const dibujando = !!dibujos?.herramienta
+  const [menuDibujo, setMenuDibujo] = useState(false)
   // Gestos (desplazar, pellizcar, rueda, doble toque/clic) sobre la serie que ya está en pantalla:
   // el selector de período recarga la serie del backend, esto navega la que ya está.
   // Editando zonas el gráfico sigue navegable: las manijas se marcan como gesto propio y el hook no
@@ -97,8 +117,12 @@ export default function GraficoTecnico({
   const controles = useVentanaVisible(barras.length, ancho, gestosRef, {
     activo: true,
     // Tocar la vela que ya tiene la cruz la quita: en el celular no hay "sacar el mouse".
-    onToque: i => onHover(hoverIndex === i ? null : i),
-    onCruz: onHover,
+    onToque: (i, y) => {
+      if (toqueRef.current?.(i, y)) return
+      if (!dibujando) onHover(hoverIndex === i ? null : i)
+    },
+    onClic: (i, y) => { toqueRef.current?.(i, y) },
+    onCruz: dibujando ? undefined : onHover,
     serie: barras,
     onCambioSerie: () => onHover(null),
     onSinRecorrido: () => aviso.avisar(AVISO_SIN_RECORRIDO),
@@ -178,6 +202,17 @@ export default function GraficoTecnico({
     })
   }
 
+  if (dibujos) {
+    herramientas.push({
+      clave: 'dibujo', texto: '✎', activo: dibujando || menuDibujo,
+      label: dibujando ? 'Cancelar el dibujo' : 'Dibujar sobre el gráfico',
+      onToggle: () => {
+        if (dibujando) dibujos.elegirHerramienta(null)
+        setMenuDibujo(m => !m)
+      },
+    })
+  }
+
   const alto = useAltosGrafico(!!fullscreen, {
     osciladores: panelesOsciladores.length, equity: false, volumen: tieneVolumen,
   })
@@ -191,6 +226,12 @@ export default function GraficoTecnico({
       />
 
       <BarraHerramientas herramientas={herramientas}>
+        {dibujos && menuDibujo && !dibujando && (
+          <Segmented
+            options={HERRAMIENTAS_DIBUJO} value={'' as TipoDibujo}
+            onChange={t => { dibujos.elegirHerramienta(t); setMenuDibujo(false) }}
+          />
+        )}
         {fuerzaRelativa?.activa && (
           <Segmented
             options={OPCIONES_BENCHMARK}
@@ -199,6 +240,28 @@ export default function GraficoTecnico({
           />
         )}
       </BarraHerramientas>
+
+      {dibujos && (dibujando || dibujos.seleccionado != null || dibujos.error) && (
+        <div className="mb-1 flex items-center gap-2 text-label">
+          <span className={`min-w-0 flex-1 ${dibujos.error ? 'text-app-neg' : 'text-app-text-dim'}`}>
+            {dibujos.error
+              ?? pistaDibujo(dibujos)
+              ?? `${ETIQUETA_TIPO[dibujos.lista.find(d => d.id === dibujos.seleccionado)?.tipo ?? 'horizontal']} seleccionada`}
+          </span>
+          {dibujando ? (
+            <button type="button" onClick={() => dibujos.elegirHerramienta(null)} className="shrink-0 h-8 px-2.5 rounded-lg bg-app-surface-2 font-semibold text-app-text-dim">
+              Cancelar
+            </button>
+          ) : dibujos.seleccionado != null ? (
+            <button
+              type="button" onClick={dibujos.borrarSeleccionado} disabled={dibujos.guardando}
+              className="shrink-0 h-8 px-2.5 rounded-lg bg-app-surface-2 font-semibold text-app-neg disabled:opacity-40"
+            >
+              Borrar
+            </button>
+          ) : null}
+        </div>
+      )}
 
       {leyenda.length > 0 && (
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-1 text-label text-app-text-dim font-mono tabular-nums">
@@ -246,6 +309,7 @@ export default function GraficoTecnico({
           overlays={overlaysPrecio} senales={senales} primeraBarraEvaluable={primeraBarraEvaluable}
           zonas={zonas} editandoZonas={editandoZonas} onArrastrarZona={onArrastrarZona}
           misOperaciones={misOperaciones} escalaLog={escalaLog} nivelesAuto={nivelesActivos ? nivelesAuto : null}
+          dibujos={dibujos} toqueRef={toqueRef}
           hoverIndex={hoverIndex} onHover={onHover}
         />
         <EjeFechas barras={barras} escalaX={escalaX} />

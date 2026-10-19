@@ -26,8 +26,12 @@ export interface OpcionesGestos {
   /** `false` apaga todos los gestos. Las manijas de las zonas no lo necesitan: se marcan con
    * `ATRIBUTO_GESTO_PROPIO` y el resto del gráfico sigue navegable mientras se edita. */
   activo: boolean
-  /** Un toque corto sobre una vela (celular). */
-  onToque?: (indice: number) => void
+  /** Un toque corto sobre una vela (celular). `y` es la altura del toque respecto del borde
+   * superior del contenedor: con el panel de precio primero en el contenedor, es su `y` en el SVG. */
+  onToque?: (indice: number, y: number) => void
+  /** Un clic de mouse sin arrastre (el equivalente al toque en el escritorio, donde `onToque` no
+   * corre: ahí la cruz la maneja el hover). */
+  onClic?: (indice: number, y: number) => void
   /** Mantener apretado y arrastrar: la cruz sigue al dedo vela por vela. */
   onCruz?: (indice: number) => void
   /** La serie de la que se está mirando una ventana (la referencia del array). Otro ticker con la
@@ -230,9 +234,10 @@ export function useVentanaVisible(
     let muestras: { t: number; inicio: number }[] = []
     let cruzPendiente: number | null = null
     let frameCruz: number | null = null
-    let arrastreMouse: { x0: number; inicio0: number; visibles: number; avisado?: boolean } | null = null
+    let arrastreMouse: { x0: number; y0: number; inicio0: number; visibles: number; avisado?: boolean } | null = null
 
     const xEnPanel = (clientX: number) => clientX - contenedor.getBoundingClientRect().left
+    const yEnPanel = (clientY: number) => clientY - contenedor.getBoundingClientRect().top
     const indiceEn = (x: number) => Math.min(nRef.current - 1, Math.max(0, Math.floor(posicionEn(x))))
 
     function limpiarTimer() {
@@ -423,7 +428,7 @@ export function useVentanaVisible(
         return
       }
       toqueAnterior = { t: ahora, x: t.clientX, y: t.clientY }
-      opcionesRef.current.onToque?.(indiceEn(xEnPanel(t.clientX)))
+      opcionesRef.current.onToque?.(indiceEn(xEnPanel(t.clientX)), yEnPanel(t.clientY))
     }
 
     function onTouchCancel() {
@@ -459,7 +464,12 @@ export function useVentanaVisible(
       aplicar(acotar(inicio, a.visibles, nRef.current))
     }
 
-    function onPointerUpVentana() {
+    function onPointerUpVentana(e?: PointerEvent) {
+      const a = arrastreMouse
+      // Clic sin arrastre (cuando se llama desde el cleanup no hay evento ni clic).
+      if (a && e?.type === 'pointerup' && Math.hypot(e.clientX - a.x0, e.clientY - a.y0) < UMBRAL_MOVIMIENTO) {
+        opcionesRef.current.onClic?.(indiceEn(xEnPanel(e.clientX)), yEnPanel(e.clientY))
+      }
       arrastreMouse = null
       setArrastrando(false)
       window.removeEventListener('pointermove', onPointerMoveVentana)
@@ -472,7 +482,7 @@ export function useVentanaVisible(
       if (e.pointerType !== 'mouse' || e.button !== 0 || esGestoPropio(e.target)) return
       detenerInercia()
       const v = ventanaRef.current
-      arrastreMouse = { x0: e.clientX, inicio0: v.inicio, visibles: v.fin - v.inicio + 1 }
+      arrastreMouse = { x0: e.clientX, y0: e.clientY, inicio0: v.inicio, visibles: v.fin - v.inicio + 1 }
       setArrastrando(true)
       window.addEventListener('pointermove', onPointerMoveVentana)
       window.addEventListener('pointerup', onPointerUpVentana)

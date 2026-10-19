@@ -2335,6 +2335,37 @@ export const getFuerzaRelativa = (
     `/inversiones/tecnico/${encodeURIComponent(ticker)}/fuerza-relativa`, { params },
   ).then(r => r.data)
 
+// --- Dibujos manuales sobre el gráfico ---
+
+export type TipoDibujo = 'horizontal' | 'tendencia' | 'fibonacci'
+
+/** Un dibujo anclado por fecha y precio (sobrevive a cambios de período, zoom e intervalo). Sólo se
+ * muestra sobre la serie (`variante`) en la que se dibujó. */
+export interface DibujoOut {
+  id: number
+  ticker: string
+  variante: VarianteSerie
+  tipo: TipoDibujo
+  fecha1: string
+  precio1: number
+  fecha2: string | null
+  precio2: number | null
+  color: string
+}
+
+export type DibujoIn = Omit<DibujoOut, 'id' | 'ticker' | 'color'> & { color?: string }
+
+const rutaDibujos = (ticker: string) => `/inversiones/tecnico/${encodeURIComponent(ticker)}/dibujos`
+
+export const getDibujos = (ticker: string, variante: VarianteSerie) =>
+  api.get<DibujoOut[]>(rutaDibujos(ticker), { params: { variante } }).then(r => r.data)
+
+export const crearDibujo = (ticker: string, body: DibujoIn) =>
+  api.post<DibujoOut>(rutaDibujos(ticker), body).then(r => r.data)
+
+export const borrarDibujo = (ticker: string, id: number) =>
+  api.delete(`${rutaDibujos(ticker)}/${id}`).then(() => undefined)
+
 /** Insumos de la calculadora de tamaño de posición (la cuenta se hace en el front). */
 export interface TamanoPosicionOut {
   ticker: string

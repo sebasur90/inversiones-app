@@ -40,7 +40,7 @@ from ..database import (
     MovimientoInversion,
     PrecioWatchlist,
     WatchlistItem,
-    ZonaPrecio,
+    ZonaPrecio, DibujoGrafico,
 )
 from . import (
     catalogo_instrumentos, clasificacion_analytics, cotizacion_diaria, estado_market_data,
@@ -508,6 +508,7 @@ def eliminar(db: Session, ticker: str) -> bool:
         InstrumentoInversion.ticker == ticker
     ).first() is None:
         db.query(ZonaPrecio).filter(ZonaPrecio.ticker == ticker).delete(synchronize_session=False)
+        db.query(DibujoGrafico).filter(DibujoGrafico.ticker == ticker).delete(synchronize_session=False)
 
     # Por `ticker`, no con `db.get`: la PK de `InstrumentoInversion` es `id`.
     en_cartera = db.query(InstrumentoInversion).filter(
