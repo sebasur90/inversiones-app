@@ -21,6 +21,7 @@ export type EstrategiasHelpKey =
   | 'estrategia_cruce_medias'
   | 'estrategia_cruce_ema_corto'
   | 'estrategia_tendencia_media_larga'
+  | 'estrategia_seguir_supertrend'
   | 'estrategia_macd_cruce'
   | 'estrategia_macd_con_tendencia'
   | 'estrategia_rsi_sobreventa'
@@ -60,6 +61,14 @@ export const ESTRATEGIAS_HELP: Record<EstrategiasHelpKey, HelpContent> = {
     howToInterpret: 'Es la regla de referencia contra la que conviene medir cualquier estrategia más elaborada: si una idea complicada no le gana a ésta, la complicación no está pagando. Suele evitar los tramos peores de los mercados bajistas.',
     limitations: 'El precio oscila alrededor de la media justo cuando el mercado está indeciso, y ahí encadena entradas y salidas seguidas. Como toda estrategia de tendencia, siempre entra después de que el movimiento empezó y sale después de que terminó.',
     relatedTerms: ['estrategia_cruce_medias', 'estrategia_momentum_12m'],
+  },
+  estrategia_seguir_supertrend: {
+    title: 'Seguir SuperTrend',
+    shortDescription: 'Sigue la línea del SuperTrend: se queda comprado mientras la tendencia que marca es alcista y sale cuando la línea da vuelta.',
+    howItIsCalculated: 'Compra cuando la dirección del SuperTrend (10 ruedas, múltiplo 3 del ATR) pasa de bajista a alcista, o sea cuando el cierre perfora hacia arriba la banda superior. Vende cuando pasa de alcista a bajista. Corta pérdidas con un stop loss del 10 % por debajo del precio de entrada.',
+    howToInterpret: 'Es seguimiento de tendencia con la salida incluida: la línea sube con el precio y funciona como un stop que se va corriendo. Funciona en tendencias claras y sostenidas.',
+    limitations: 'En un mercado lateral cambia de dirección seguido y cada cambio es una operación perdedora con su comisión. Usa el máximo y el mínimo de cada rueda para el ATR: sobre una serie sin velas pierde precisión.',
+    relatedTerms: ['analisis_tecnico_supertrend', 'estrategia_cruce_medias'],
   },
   estrategia_macd_cruce: {
     title: 'Cruce de MACD',

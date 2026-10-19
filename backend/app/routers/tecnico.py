@@ -15,12 +15,12 @@ from ..schemas import (
     ScreenerRequest, ScreenerOut,
     ComparadorRequest, ComparadorOut,
     ZonasTickerIn, ZonasTickerOut,
-    OperacionesGraficoOut,
+    OperacionesGraficoOut, TamanoPosicionOut,
 )
 from ..services import ohlcv_analytics, estrategias_analytics, screener_analytics, estrategias_seed
 from ..services import indicadores_engine, estrategia_engine, intervalos_engine
 from ..services import comparador_estrategias_analytics, comparador_estrategias_engine
-from ..services import ticker_analytics, zonas_precio, operaciones_grafico
+from ..services import ticker_analytics, zonas_precio, operaciones_grafico, tamano_posicion
 
 router = APIRouter(prefix="/api/inversiones", tags=["tecnico"])
 
@@ -145,14 +145,34 @@ def operaciones_ticker(
     agregada que la contiene."""
     _validar_ticker_tecnico(ticker, db)
     _validar_variante(variante)
-    pedida = variante
-    variante = ohlcv_analytics.variante_para(db, ticker, pedida)
-    # Mismo criterio que `/serie`: una referencia sin barras degrada a la local.
-    if variante == "subyacente" and pedida is None:
-        hasta = date.today()
-        if not ohlcv_analytics.get_serie_barras(ticker, date.min, hasta, db, max_barras=1, variante=variante)["barras"]:
-            variante = "local"
+    variante = _variante_efectiva(ticker, variante, db)
     return operaciones_grafico.get_operaciones_grafico(ticker, variante, db, intervalo)
+
+
+def _variante_efectiva(ticker: str, pedida: Optional[str], db: Session) -> str:
+    """La serie concreta (`local` | `subyacente`) sobre la que responde un endpoint. Mismo criterio
+    que `/serie`: sin variante pedida rige la referencia del ticker, y una referencia sin barras
+    degrada a la local."""
+    variante = ohlcv_analytics.variante_para(db, ticker, pedida)
+    if variante == "subyacente" and pedida is None:
+        if not ohlcv_analytics.get_serie_barras(ticker, date.min, date.today(), db, max_barras=1, variante=variante)["barras"]:
+            return "local"
+    return variante
+
+
+@router.get("/tecnico/{ticker}/tamano-posicion", response_model=TamanoPosicionOut)
+def tamano_posicion_ticker(
+    ticker: str,
+    variante: Optional[str] = Query(
+        None, description="`local` o `subyacente`. Sin valor, la serie de referencia del ticker.",
+    ),
+    db: Session = Depends(get_db),
+):
+    """Los datos que la calculadora de tamaño de posición necesita del servidor: último cierre y
+    ATR(14) de la serie, último precio local, MEP y valor de la cartera. La cuenta es del frontend."""
+    _validar_ticker_tecnico(ticker, db)
+    _validar_variante(variante)
+    return tamano_posicion.get_tamano_posicion(ticker, _variante_efectiva(ticker, variante, db), db)
 
 
 @router.get("/tecnico/{ticker}/serie", response_model=SerieTecnicaOut)

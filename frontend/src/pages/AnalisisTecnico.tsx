@@ -33,6 +33,7 @@ import EditorZonas, {
   type BorradorZonas,
 } from '../components/tecnico/EditorZonas'
 import ResumenZonas from '../components/tecnico/ResumenZonas'
+import CalculadoraPosicion from '../components/tecnico/CalculadoraPosicion'
 import type { BordeZona, ZonasDibujo } from '../components/tecnico/ZonasPrecio'
 import { textoBorde } from '../components/tecnico/formatoEjes'
 import EstrategiaAvanzadaJson from '../components/tecnico/EstrategiaAvanzadaJson'
@@ -102,6 +103,8 @@ export default function AnalisisTecnico() {
   const [verOperaciones, setVerOperaciones] = useState<boolean>(leerVerOperaciones)
   const [escalaLog, setEscalaLog] = useState<boolean>(leerEscalaLog)
   const [intervalo, setIntervalo] = useState<IntervaloSerie>('D')
+  // Stop que está probando la calculadora de tamaño: se dibuja como una línea provisoria.
+  const [stopProvisorio, setStopProvisorio] = useState<number | null>(null)
   // Preferencia de variante; la efectiva se deriva contra las variantes reales del ticker actual
   // (sin useEffect, para que no haya flash al cambiar de ticker).
   const [varianteSel, setVarianteSel] = useState<VarianteSerie | null>(null)
@@ -256,6 +259,11 @@ export default function AnalisisTecnico() {
           ...nivelesDeLaPosicion,
         }
       : undefined
+
+  /** Lo que se le pasa al gráfico: las zonas más, si lo hay, el stop de la calculadora. */
+  const zonasEnGrafico: ZonasDibujo | undefined = stopProvisorio != null
+    ? { ...zonasDibujo, stopProvisorio }
+    : zonasDibujo
 
   function empezarAEditarZonas() {
     setErrorZonas(null)
@@ -449,7 +457,7 @@ export default function AnalisisTecnico() {
                   tieneVelas={serie.tiene_velas} tieneVolumen={serie.tiene_volumen}
                   moneda={monedaMostrada}
                   onToggleFullscreen={() => setFullscreen(true)}
-                  zonas={zonasDibujo} editandoZonas={borrador !== null}
+                  zonas={zonasEnGrafico} editandoZonas={borrador !== null}
                   onArrastrarZona={arrastrarZona} edicionZonas={edicionZonas}
                   {...propsOperaciones}
                   hoverIndex={hoverIndex} onHover={setHoverIndex}
@@ -481,6 +489,15 @@ export default function AnalisisTecnico() {
                   onEditar={empezarAEditarZonas}
                 />
               )}
+            </div>
+          )}
+
+          {ticker && serie && tieneGrafico && (
+            <div className="mt-3">
+              <CalculadoraPosicion
+                key={`${ticker}-${serie.variante}`} ticker={ticker} variante={serie.variante}
+                onStopProvisorio={setStopProvisorio}
+              />
             </div>
           )}
 
@@ -535,7 +552,7 @@ export default function AnalisisTecnico() {
             tieneVelas={serie.tiene_velas} tieneVolumen={serie.tiene_volumen}
             moneda={monedaMostrada}
             fullscreen onToggleFullscreen={() => setFullscreen(false)}
-            zonas={zonasDibujo} editandoZonas={borrador !== null}
+            zonas={zonasEnGrafico} editandoZonas={borrador !== null}
             onArrastrarZona={arrastrarZona} edicionZonas={edicionZonas}
             {...propsOperaciones}
             hoverIndex={hoverIndex} onHover={setHoverIndex}

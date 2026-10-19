@@ -2297,6 +2297,27 @@ export const getSerieTecnica = (
 ) =>
   api.get<SerieTecnicaOut>(`/inversiones/tecnico/${encodeURIComponent(ticker)}/serie`, { params }).then(r => r.data)
 
+/** Insumos de la calculadora de tamaño de posición (la cuenta se hace en el front). */
+export interface TamanoPosicionOut {
+  ticker: string
+  variante: VarianteSerie
+  moneda: string
+  ultimo_cierre: number | null
+  fecha_cierre: string | null
+  /** ATR(14) en la moneda de la serie. */
+  atr: number | null
+  /** Último precio del instrumento local (el CEDEAR, en pesos). */
+  precio_local: number | null
+  moneda_local: string | null
+  mep: number | null
+  valor_cartera_usd: number | null
+}
+
+export const getTamanoPosicion = (ticker: string, variante: VarianteSerie) =>
+  api.get<TamanoPosicionOut>(
+    `/inversiones/tecnico/${encodeURIComponent(ticker)}/tamano-posicion`, { params: { variante } },
+  ).then(r => r.data)
+
 // --- Operaciones propias sobre el gráfico (compras y ventas que ya hiciste) ---
 
 /** Una compra o venta real, ubicada sobre la serie del gráfico. Distinta de `OperacionOut`, que es

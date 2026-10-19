@@ -295,6 +295,142 @@ def extremos(barras: list[Barra], ventana: int = 20) -> dict:
     }
 
 
+def adx(barras: list[Barra], periodo: int = 14) -> dict:
+    """ADX de Wilder con sus dos líneas direccionales.
+
+    `+DM`/`-DM` son el avance del máximo/mínimo respecto de la barra previa (sólo cuenta el mayor de
+    los dos y si es positivo); `TR` es el mismo rango verdadero del ATR. Los tres se suavizan con el
+    método de Wilder (`s = s - s/n + x`, semilla = suma de las primeras `n`), y de ahí
+    `+DI = 100·sm(+DM)/sm(TR)`, `-DI` ídem, `DX = 100·|+DI − −DI| / (+DI + −DI)`. El `ADX` es el
+    promedio Wilder del `DX` (semilla = media de los primeros `n`).
+
+    `di_mas`/`di_menos` existen desde el índice `periodo`; `adx`, desde `2·periodo − 1`.
+    """
+    n = len(barras)
+    adx_out: list[float | None] = [None] * n
+    di_mas: list[float | None] = [None] * n
+    di_menos: list[float | None] = [None] * n
+    if periodo < 1 or n < periodo + 1:
+        return {"adx": adx_out, "di_mas": di_mas, "di_menos": di_menos}
+
+    tr = [0.0] * n
+    dm_mas = [0.0] * n
+    dm_menos = [0.0] * n
+    for i in range(1, n):
+        maximo, minimo = _hl(barras[i])
+        max_prev, min_prev = _hl(barras[i - 1])
+        cierre_prev = barras[i - 1].cierre
+        tr[i] = max(maximo - minimo, abs(maximo - cierre_prev), abs(minimo - cierre_prev))
+        arriba, abajo = maximo - max_prev, min_prev - minimo
+        if arriba > abajo and arriba > 0:
+            dm_mas[i] = arriba
+        elif abajo > arriba and abajo > 0:
+            dm_menos[i] = abajo
+
+    s_tr = sum(tr[1:periodo + 1])
+    s_mas = sum(dm_mas[1:periodo + 1])
+    s_menos = sum(dm_menos[1:periodo + 1])
+    dx: list[float | None] = [None] * n
+    for i in range(periodo, n):
+        if i > periodo:
+            s_tr += tr[i] - s_tr / periodo
+            s_mas += dm_mas[i] - s_mas / periodo
+            s_menos += dm_menos[i] - s_menos / periodo
+        mas = 100.0 * s_mas / s_tr if s_tr else 0.0
+        menos = 100.0 * s_menos / s_tr if s_tr else 0.0
+        di_mas[i], di_menos[i] = mas, menos
+        dx[i] = 100.0 * abs(mas - menos) / (mas + menos) if (mas + menos) else 0.0
+
+    primero = 2 * periodo - 1
+    if n > primero:
+        valor = sum(dx[periodo:primero + 1]) / periodo
+        adx_out[primero] = valor
+        for i in range(primero + 1, n):
+            valor = (valor * (periodo - 1) + dx[i]) / periodo
+            adx_out[i] = valor
+    return {"adx": adx_out, "di_mas": di_mas, "di_menos": di_menos}
+
+
+def supertrend(barras: list[Barra], periodo: int = 10, multiplicador: float = 3.0) -> dict:
+    """SuperTrend: bandas `(máx+mín)/2 ± multiplicador·ATR` que sólo se acercan al precio (la
+    superior no sube y la inferior no baja mientras el cierre no las cruce).
+
+    - `direccion`: `+1.0` en tendencia alcista (la línea es la banda inferior, por debajo del
+      precio) o `-1.0` en bajista (la banda superior). Cambia cuando el cierre cruza la banda.
+    - `valor`: la banda activa.
+    La dirección inicial (primera barra con ATR) sale de si el cierre está sobre o bajo el medio de
+    la barra; como viene de `None`, no cuenta como cambio de tendencia para un `cruce`.
+    """
+    n = len(barras)
+    valor: list[float | None] = [None] * n
+    direccion: list[float | None] = [None] * n
+    ranges = atr(barras, periodo)
+    sup_final = inf_final = None
+    tendencia = 0
+    for i in range(n):
+        a = ranges[i]
+        if a is None:
+            continue
+        maximo, minimo = _hl(barras[i])
+        medio = (maximo + minimo) / 2
+        sup_basica, inf_basica = medio + multiplicador * a, medio - multiplicador * a
+        cierre = barras[i].cierre
+        if sup_final is None:
+            sup_final, inf_final = sup_basica, inf_basica
+            tendencia = 1 if cierre >= medio else -1
+        else:
+            cierre_prev = barras[i - 1].cierre
+            sup_final = sup_basica if (sup_basica < sup_final or cierre_prev > sup_final) else sup_final
+            inf_final = inf_basica if (inf_basica > inf_final or cierre_prev < inf_final) else inf_final
+            if tendencia == -1 and cierre > sup_final:
+                tendencia = 1
+            elif tendencia == 1 and cierre < inf_final:
+                tendencia = -1
+        direccion[i] = float(tendencia)
+        valor[i] = inf_final if tendencia == 1 else sup_final
+    return {"valor": valor, "direccion": direccion}
+
+
+def keltner(barras: list[Barra], periodo: int = 20, multiplicador: float = 2.0) -> dict:
+    """Canal de Keltner: EMA del cierre ± `multiplicador`·ATR (ambos de `periodo` ruedas).
+    Las tres salidas arrancan juntas, cuando el ATR ya tiene valor."""
+    n = len(barras)
+    media = ema([b.cierre for b in barras], periodo)
+    rango = atr(barras, periodo)
+    out_media: list[float | None] = [None] * n
+    superior: list[float | None] = [None] * n
+    inferior: list[float | None] = [None] * n
+    for i in range(n):
+        if media[i] is None or rango[i] is None:
+            continue
+        out_media[i] = media[i]
+        superior[i] = media[i] + multiplicador * rango[i]
+        inferior[i] = media[i] - multiplicador * rango[i]
+    return {"media": out_media, "superior": superior, "inferior": inferior}
+
+
+def ichimoku(barras: list[Barra], tenkan: int = 9, kijun: int = 26, senkou: int = 52) -> dict:
+    """Ichimoku sin la línea Chikou (que mira al futuro).
+
+    - `tenkan`/`kijun`: punto medio del canal de máximos y mínimos de 9 / 26 ruedas.
+    - `senkou_a`: promedio de las dos anteriores; `senkou_b`: punto medio del canal de `senkou`
+      ruedas. Ambas se dibujan adelantadas `kijun` ruedas; acá se **alinean a la barra en la que
+      aplican**: el valor de la barra `i` es el calculado en `i − kijun`. Así la nube que se ve
+      sobre la barra de hoy sólo usa datos de hace `kijun` ruedas — nunca del futuro, y es lo que
+      puede comparar una condición del DSL sin lookahead.
+    """
+    n = len(barras)
+    t = extremos(barras, tenkan)["medio"]
+    k = extremos(barras, kijun)["medio"]
+    b_raw = extremos(barras, senkou)["medio"]
+    a_raw = [(t[i] + k[i]) / 2 if t[i] is not None and k[i] is not None else None for i in range(n)]
+
+    def desplazar(serie: list[float | None]) -> list[float | None]:
+        return [None] * min(kijun, n) + serie[:max(0, n - kijun)]
+
+    return {"tenkan": t, "kijun": k, "senkou_a": desplazar(a_raw), "senkou_b": desplazar(b_raw)}
+
+
 def percentil(cierres: list[float], ventana: int = 100) -> list[float | None]:
     """Rank real del cierre dentro de la ventana: `100·#{j: cierre[j] < cierre[i]} / (W-1)`.
 
@@ -389,6 +525,22 @@ def _fn_extremos(barras, params):
     return extremos(barras, int(params["ventana"]))
 
 
+def _fn_adx(barras, params):
+    return adx(barras, int(params["periodo"]))
+
+
+def _fn_supertrend(barras, params):
+    return supertrend(barras, int(params["periodo"]), float(params["multiplicador"]))
+
+
+def _fn_keltner(barras, params):
+    return keltner(barras, int(params["periodo"]), float(params["multiplicador"]))
+
+
+def _fn_ichimoku(barras, params):
+    return ichimoku(barras, int(params["tenkan"]), int(params["kijun"]), int(params["senkou"]))
+
+
 def _fn_percentil(barras, params):
     return {"valor": percentil([b.cierre for b in barras], int(params["ventana"]))}
 
@@ -431,6 +583,22 @@ INDICADORES: dict[str, EspecIndicador] = {
     ),
     "RETORNO": EspecIndicador(
         _fn_retorno, {"periodo": 20}, ("valor",), lambda p: int(p["periodo"]) + 1,
+    ),
+    "ADX": EspecIndicador(
+        _fn_adx, {"periodo": 14}, ("adx", "di_mas", "di_menos"), lambda p: 2 * int(p["periodo"]),
+    ),
+    "SUPERTREND": EspecIndicador(
+        _fn_supertrend, {"periodo": 10, "multiplicador": 3.0}, ("valor", "direccion"),
+        lambda p: int(p["periodo"]) + 1, {"multiplicador": (0.5, 6.0)},
+    ),
+    "KELTNER": EspecIndicador(
+        _fn_keltner, {"periodo": 20, "multiplicador": 2.0}, ("media", "superior", "inferior"),
+        lambda p: int(p["periodo"]) + 1, {"multiplicador": (0.5, 6.0)},
+    ),
+    "ICHIMOKU": EspecIndicador(
+        _fn_ichimoku, {"tenkan": 9, "kijun": 26, "senkou": 52},
+        ("tenkan", "kijun", "senkou_a", "senkou_b"),
+        lambda p: max(2 * int(p["kijun"]), int(p["senkou"]) + int(p["kijun"])),
     ),
 }
 

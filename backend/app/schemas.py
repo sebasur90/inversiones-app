@@ -2201,6 +2201,21 @@ class OperacionesGraficoOut(BaseModel):
     advertencias: list[str] = Field(default_factory=list)
 
 
+class TamanoPosicionOut(BaseModel):
+    """Insumos de la calculadora de tamaño de posición. Todo lo que depende del precio actual o de
+    la cartera es opcional: sin dato, la calculadora lo pide a mano o avisa."""
+    ticker: str
+    variante: str
+    moneda: str                                  # de la serie sobre la que se mide el stop
+    ultimo_cierre: Optional[float] = None
+    fecha_cierre: Optional[date] = None
+    atr: Optional[float] = None                  # ATR(14), en la moneda de la serie
+    precio_local: Optional[float] = None         # último precio del instrumento local (el CEDEAR, en ARS)
+    moneda_local: Optional[str] = None
+    mep: Optional[float] = None
+    valor_cartera_usd: Optional[float] = None    # valor actual consolidado; no hay concepto de cash
+
+
 class SenalOut(BaseModel):
     indice: int
     fecha: date

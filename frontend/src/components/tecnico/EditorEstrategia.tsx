@@ -71,6 +71,10 @@ const ETIQUETA_SALIDA: Record<string, Record<string, string>> = {
     maximo: 'máximo del canal', minimo: 'mínimo del canal', medio: 'medio del canal',
     dist_max_pct: 'distancia al máximo %', dist_min_pct: 'distancia al mínimo %',
   },
+  ADX: { adx: 'ADX', di_mas: '+DI', di_menos: '−DI' },
+  SUPERTREND: { valor: 'línea', direccion: 'dirección (+1 sube / −1 baja)' },
+  KELTNER: { media: 'media', superior: 'banda superior', inferior: 'banda inferior' },
+  ICHIMOKU: { tenkan: 'Tenkan', kijun: 'Kijun', senkou_a: 'nube A', senkou_b: 'nube B' },
 }
 const etiquetaSalida = (tipo: string, salida: string) => ETIQUETA_SALIDA[tipo]?.[salida] ?? salida
 

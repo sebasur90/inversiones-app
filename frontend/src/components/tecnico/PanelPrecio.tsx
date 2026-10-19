@@ -54,6 +54,8 @@ const SALIDAS_EXCLUIDAS_PRECIO: Record<string, string[]> = {
   // `dist_max_pct` (~0 a ~-40) y `dist_min_pct` (~0 a ~+80) son porcentajes: en la escala de las
   // velas aplastarían el precio contra el borde. `maximo`/`minimo`/`medio` sí son precios.
   EXTREMOS: ['dist_max_pct', 'dist_min_pct'],
+  // `direccion` es +1 / −1: no es un precio. Sólo sirve para pintar la línea de verde o de rojo.
+  SUPERTREND: ['direccion'],
 }
 export function salidasGraficables(o: OverlayPrecio): [string, (number | null)[]][] {
   const excluidas = SALIDAS_EXCLUIDAS_PRECIO[o.tipo] ?? []
@@ -236,15 +238,38 @@ export default function PanelPrecio({
         <path d={trazoDeSerie(cierres, escalaX, yDeValor)} fill="none" stroke={COLOR_PRECIO} strokeWidth={1.75} />
       )}
 
-      {overlays.map(o => salidasGraficables(o).map(([salida, vals]) => (
+      {overlays.filter(o => o.tipo === 'ICHIMOKU').map(o => {
+        const nube = trazoNube(o.series.senkou_a, o.series.senkou_b, escalaX, yDeValor)
+        return (
+          <g key={`nube-${o.clave}`} pointerEvents="none">
+            {nube.alcista && <path d={nube.alcista} fill={COLOR_ALCISTA} fillOpacity={0.14} />}
+            {nube.bajista && <path d={nube.bajista} fill={COLOR_BAJISTA} fillOpacity={0.14} />}
+          </g>
+        )
+      })}
+
+      {overlays.filter(o => o.tipo === 'SUPERTREND').map(o => {
+        const valor = o.series.valor ?? []
+        const direccion = o.series.direccion ?? []
+        const subiendo = valor.map((v, i) => (direccion[i] === 1 ? v : null))
+        const bajando = valor.map((v, i) => (direccion[i] === -1 ? v : null))
+        return (
+          <g key={o.clave} pointerEvents="none">
+            <path d={trazoDeSerie(subiendo, escalaX, yDeValor)} fill="none" stroke={COLOR_ALCISTA} strokeWidth={1.75} />
+            <path d={trazoDeSerie(bajando, escalaX, yDeValor)} fill="none" stroke={COLOR_BAJISTA} strokeWidth={1.75} />
+          </g>
+        )
+      })}
+
+      {overlays.filter(o => o.tipo !== 'SUPERTREND').map(o => salidasGraficables(o).map(([salida, vals]) => (
         <path
           key={`${o.clave}-${salida}`}
           d={trazoDeSerie(vals, escalaX, yDeValor)}
           fill="none"
           stroke={o.color}
-          strokeWidth={salida === 'superior' || salida === 'inferior' ? 1 : 1.5}
-          strokeDasharray={salida === 'superior' || salida === 'inferior' ? '4 3' : undefined}
-          opacity={salida === 'superior' || salida === 'inferior' ? 0.7 : 1}
+          strokeWidth={salida === 'superior' || salida === 'inferior' || salida.startsWith('senkou') ? 1 : 1.5}
+          strokeDasharray={salida === 'superior' || salida === 'inferior' || salida === 'kijun' ? '4 3' : undefined}
+          opacity={salida === 'superior' || salida === 'inferior' ? 0.7 : salida.startsWith('senkou') ? 0.6 : 1}
         />
       )))}
 
@@ -409,4 +434,28 @@ function trazoEscalera(
     d += ` L ${x + medio} ${y}`
   }
   return d
+}
+
+/** Relleno de la nube de Ichimoku: un cuadrilátero entre Senkou A y B por cada par de barras
+ * consecutivas donde las dos existen. Verde cuando A queda sobre B (nube alcista), rojo cuando no.
+ * Son dos paths en total, no un nodo por barra. */
+function trazoNube(
+  a: (number | null)[] | undefined, b: (number | null)[] | undefined, escalaX: EscalaX,
+  yDeValor: (v: number) => number,
+): { alcista: string; bajista: string } {
+  let alcista = ''
+  let bajista = ''
+  if (!a || !b) return { alcista, bajista }
+  const desde = Math.max(1, escalaX.inicio)
+  const hasta = Math.min(a.length - 1, b.length - 1, escalaX.fin + 1)
+  for (let i = desde; i <= hasta; i++) {
+    const [a0, a1, b0, b1] = [a[i - 1], a[i], b[i - 1], b[i]]
+    if (a0 == null || a1 == null || b0 == null || b1 == null) continue
+    const x0 = escalaX.xDeIndice(i - 1)
+    const x1 = escalaX.xDeIndice(i)
+    const poligono = `M ${x0} ${yDeValor(a0)} L ${x1} ${yDeValor(a1)} L ${x1} ${yDeValor(b1)} L ${x0} ${yDeValor(b0)} Z `
+    if (a0 + a1 >= b0 + b1) alcista += poligono
+    else bajista += poligono
+  }
+  return { alcista, bajista }
 }

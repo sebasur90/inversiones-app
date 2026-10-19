@@ -884,6 +884,24 @@ PRESETS: dict[str, EspecPreset] = {
             "ejecucion": dict(_EJECUCION_DEFAULT),
         },
     ),
+    "seguir_supertrend": EspecPreset(
+        etiqueta="Seguir SuperTrend",
+        categoria="tendencia",
+        definicion={
+            "version": 1,
+            "indicadores": [{"id": "st", "tipo": "SUPERTREND", "params": {"periodo": 10, "multiplicador": 3.0}}],
+            # `direccion` vale +1 en tendencia alcista y -1 en bajista: cruzar el 0 es el cambio de tendencia.
+            "entrada": {"op": "y", "condiciones": [
+                {"op": "cruce_arriba", "izq": {"ref": "st", "salida": "direccion"}, "der": {"const": 0}},
+            ]},
+            "salida": {"op": "y", "condiciones": [
+                {"op": "cruce_abajo", "izq": {"ref": "st", "salida": "direccion"}, "der": {"const": 0}},
+            ]},
+            "riesgo": _riesgo(stop_loss_pct=10.0),
+            "ejecucion": dict(_EJECUCION_DEFAULT),
+        },
+        requiere_velas=True,
+    ),
     "macd_cruce": EspecPreset(
         etiqueta="Cruce de MACD",
         categoria="tendencia",

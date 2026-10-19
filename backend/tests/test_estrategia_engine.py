@@ -433,6 +433,19 @@ def test_presets_declaran_metadatos_coherentes(nombre, espec):
         assert espec.requiere_velas
 
 
+def test_preset_supertrend_entra_al_girar_la_tendencia_y_sale_al_perderla():
+    base = date(2023, 1, 1)
+    # Baja, sube con fuerza y vuelve a bajar: dos giros de tendencia que el SuperTrend tiene que ver.
+    tramo = [100 - 1.5 * i for i in range(40)] + [40 + 2.0 * i for i in range(60)] + [160 - 3.0 * i for i in range(40)]
+    barras = [Barra(fecha=base + timedelta(days=i), cierre=c, apertura=c, maximo=c + 1, minimo=c - 1, volumen=1000.0)
+              for i, c in enumerate(tramo)]
+    resultado = ee.backtest(ee.resolver_preset("seguir_supertrend"), barras)
+    compras = [s for s in resultado.senales if s.tipo == "compra"]
+    ventas = [s for s in resultado.senales if s.tipo == "venta"]
+    assert len(compras) == 1 and 40 <= compras[0].indice < 60     # entra poco después del piso
+    assert ventas and ventas[0].indice > compras[0].indice
+
+
 def test_resolver_preset_devuelve_copia_del_dsl_no_la_espec():
     dsl = ee.resolver_preset("cruce_medias")
     assert isinstance(dsl, dict) and dsl["version"] == 1

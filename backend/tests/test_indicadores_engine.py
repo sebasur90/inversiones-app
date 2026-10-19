@@ -306,6 +306,11 @@ def test_clave_y_parsear_clave_son_inversas():
         ("EXTREMOS", {"ventana": 20}),
         ("PERCENTIL", {"ventana": 100}),
         ("RETORNO", {"periodo": 20}),
+        ("ADX", {"periodo": 14}),
+        ("SUPERTREND", {"periodo": 10, "multiplicador": 3.0}),
+        ("SUPERTREND", {"periodo": 7, "multiplicador": 1.5}),
+        ("KELTNER", {"periodo": 20, "multiplicador": 2.0}),
+        ("ICHIMOKU", {"tenkan": 9, "kijun": 26, "senkou": 52}),
     ]
     for nombre, params in casos:
         s = ie.clave(nombre, params)
@@ -333,3 +338,103 @@ def test_warm_up_barras():
     assert ie.warm_up_barras("SMA", {"periodo": 50}) == 50
     assert ie.warm_up_barras("RSI", {"periodo": 14}) == 15
     assert ie.warm_up_barras("MACD", {"rapida": 12, "lenta": 26, "senal": 9}) == 35
+
+
+# ── ADX / SuperTrend / Keltner / Ichimoku ─────────────────────────────────────
+
+# Máximos, mínimos y cierres de la serie corta usada para calcular a mano.
+_H = [10, 12, 13, 12, 14, 9, 8]
+_L = [8, 9, 10, 9, 11, 6, 5]
+_C = [9, 11, 12, 10, 13, 7, 6]
+
+
+def _ohlc():
+    return _barras([float(c) for c in _C], maximo=[float(h) for h in _H], minimo=[float(l) for l in _L])
+
+
+def test_adx_valores_a_mano():
+    # TR = [-, 3, 3, 3, 4]; +DM = [-, 2, 1, 0, 2]; -DM = [-, 0, 0, 1, 0]. Con periodo 2, Wilder:
+    # i=2: sTR=6, s+=3, s-=0 → +DI=50, -DI=0, DX=100.   i=3: sTR=6, s+=1.5, s-=1 → +DI=25, -DI=16.67, DX=20.
+    # ADX(3) = (100+20)/2 = 60.   i=4: sTR=7, s+=2.75, s-=0.5 → DX=69.23; ADX(4) = (60+69.23)/2.
+    out = ie.adx(_ohlc()[:5], periodo=2)
+    assert out["di_mas"][:2] == [None, None] and out["adx"][:3] == [None, None, None]
+    assert out["di_mas"][2] == pytest.approx(50.0) and out["di_menos"][2] == pytest.approx(0.0)
+    assert out["di_mas"][3] == pytest.approx(25.0) and out["di_menos"][3] == pytest.approx(100 / 6)
+    assert out["adx"][3] == pytest.approx(60.0)
+    assert out["di_mas"][4] == pytest.approx(100 * 2.75 / 7) and out["di_menos"][4] == pytest.approx(100 * 0.5 / 7)
+    assert out["adx"][4] == pytest.approx((60.0 + 100 * 2.25 / 3.25) / 2)
+
+
+def test_adx_serie_corta_devuelve_none():
+    out = ie.adx(_ohlc()[:2], periodo=5)
+    assert out["adx"] == [None, None] and out["di_mas"] == [None, None]
+
+
+def test_adx_tendencia_limpia_tiende_a_100():
+    cierres = [float(100 + 2 * i) for i in range(60)]
+    barras = _barras(cierres, maximo=[c + 1 for c in cierres], minimo=[c - 1 for c in cierres])
+    out = ie.adx(barras, periodo=14)
+    assert out["adx"][-1] > 90 and out["di_menos"][-1] == pytest.approx(0.0)
+
+
+def test_supertrend_valores_a_mano_y_cambio_de_direccion():
+    # ATR(2) = [-, -, 3, 3, 3.5, 5.25, 4.125]; multiplicador 1.
+    out = ie.supertrend(_ohlc(), periodo=2, multiplicador=1.0)
+    assert out["valor"][:2] == [None, None] and out["direccion"][:2] == [None, None]
+    assert out["direccion"][2:5] == [1.0, 1.0, 1.0]
+    assert out["valor"][2] == pytest.approx(8.5)      # banda inferior: 11.5 − 3
+    assert out["valor"][3] == pytest.approx(8.5)      # la inferior no baja
+    assert out["valor"][4] == pytest.approx(9.0)      # sube con el precio: 12.5 − 3.5
+    # En i=5 el cierre (7) perfora la inferior (9): pasa a bajista y la línea es la banda superior.
+    assert out["direccion"][5] == -1.0 and out["valor"][5] == pytest.approx(12.75)
+    assert out["direccion"][6] == -1.0 and out["valor"][6] == pytest.approx(10.625)   # la superior no sube
+
+
+def test_supertrend_el_primer_valor_no_es_un_cruce():
+    out = ie.supertrend(_ohlc(), periodo=2, multiplicador=1.0)
+    assert out["direccion"][1] is None and out["direccion"][2] == 1.0   # None → +1: no hay cruce de 0
+
+
+def test_keltner_valores_a_mano():
+    barras = _ohlc()
+    out = ie.keltner(barras, periodo=2, multiplicador=2.0)
+    # EMA(2) con semilla SMA: i=1 → 10; i=2 → 10 + (12−10)·2/3. ATR(2) en i=2 = 3.
+    assert out["media"][:2] == [None, None]
+    media = 10 + 2 * 2 / 3
+    assert out["media"][2] == pytest.approx(media)
+    assert out["superior"][2] == pytest.approx(media + 6)
+    assert out["inferior"][2] == pytest.approx(media - 6)
+
+
+def test_ichimoku_valores_a_mano_y_alineacion():
+    cierres = [10.0, 12.0, 11.0, 9.0, 13.0, 8.0, 14.0, 15.0]
+    out = ie.ichimoku(_barras(cierres), tenkan=2, kijun=3, senkou=4)
+    assert out["tenkan"][1] == pytest.approx(11.0) and out["tenkan"][7] == pytest.approx(14.5)
+    assert out["kijun"][2] == pytest.approx(11.0) and out["kijun"][7] == pytest.approx(11.5)
+    # Las nubes se desplazan `kijun` (3) barras: lo calculado en i−3 aplica en i.
+    assert out["senkou_a"][:5] == [None] * 5
+    assert out["senkou_a"][5] == pytest.approx(11.25)   # (tenkan 11.5 + kijun 11) / 2 calculado en i=2
+    assert out["senkou_a"][6] == pytest.approx(10.25)
+    assert out["senkou_b"][5] is None and out["senkou_b"][6] == pytest.approx(10.5)
+    assert out["senkou_b"][7] == pytest.approx(11.0)
+
+
+def test_ichimoku_sin_lookahead():
+    cierres = [float(100 + ((i * 7) % 13)) for i in range(80)]
+    completa = ie.ichimoku(_barras(cierres))
+    for corte in (50, 65):
+        parcial = ie.ichimoku(_barras(cierres[:corte]))
+        for salida in completa:
+            assert parcial[salida] == completa[salida][:corte]
+
+
+@pytest.mark.parametrize("nombre", ["ADX", "SUPERTREND", "KELTNER", "ICHIMOKU"])
+def test_indicadores_nuevos_respetan_su_warm_up(nombre):
+    barras = _barras([float(100 + ((i * 3) % 11)) for i in range(200)],
+                     maximo=[float(101 + ((i * 3) % 11)) for i in range(200)],
+                     minimo=[float(99 + ((i * 3) % 11)) for i in range(200)])
+    out = ie.calcular(nombre, barras)
+    warm = ie.warm_up_barras(nombre)
+    for salida, serie in out.items():
+        primero = next((i for i, v in enumerate(serie) if v is not None), None)
+        assert primero is not None and primero <= warm, (nombre, salida, primero, warm)

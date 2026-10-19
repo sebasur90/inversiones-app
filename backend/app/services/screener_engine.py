@@ -58,6 +58,10 @@ _FAMILIA_POR_TIPO: dict[str, str] = {
     "EXTREMOS": "ventana",
     "PERCENTIL": "ventana",
     "RETORNO": "exacto",
+    "ADX": "recursivo",
+    "SUPERTREND": "recursivo",
+    "KELTNER": "recursivo",
+    "ICHIMOKU": "exacto",
 }
 
 

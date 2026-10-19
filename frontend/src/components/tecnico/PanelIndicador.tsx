@@ -7,6 +7,7 @@ import { formatoValor } from './formatoEjes'
 const PALETA_SUBSERIE: Record<string, string> = {
   valor: '#8b5cf6', k: '#f59e0b', d: '#3b82f6',
   macd: '#10b981', senal: '#ef4444',
+  adx: '#f59e0b', di_mas: '#10b981', di_menos: '#ef4444',
 }
 const COLOR_GRID = '#1c1f2a'
 const COLOR_EJE = '#94a3b8'
@@ -29,7 +30,7 @@ export default function PanelIndicador({
   const svgRef = useRef<SVGSVGElement>(null)
   const handlers = manejadoresPuntero(svgRef, escalaX, onHover)
 
-  const dominioFijo = tipo === 'RSI' || tipo === 'ESTOCASTICO' || tipo === 'PERCENTIL' ? ([0, 100] as const) : null
+  const dominioFijo = tipo === 'RSI' || tipo === 'ESTOCASTICO' || tipo === 'PERCENTIL' || tipo === 'ADX' ? ([0, 100] as const) : null
   // Sólo el tramo visible: al acercar el zoom, un oscilador sin dominio fijo (MACD, ATR, RETORNO)
   // tiene que reescalar sobre lo que se está mirando.
   const valores = Object.values(series).flatMap(s => valoresVisibles(s, escalaX))
@@ -44,6 +45,7 @@ export default function PanelIndicador({
     tipo === 'RSI' ? [30, 70] :
     tipo === 'ESTOCASTICO' ? [20, 80] :
     tipo === 'PERCENTIL' ? [10, 90] :
+    tipo === 'ADX' ? [25] :
     tipo === 'MACD' || tipo === 'RETORNO' ? [0] : []
 
   const anchoBarra = Math.max(1, escalaX.pasoX * 0.6)

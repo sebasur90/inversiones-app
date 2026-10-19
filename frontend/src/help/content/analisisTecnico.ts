@@ -9,6 +9,11 @@ export type AnalisisTecnicoHelpKey =
   | 'analisis_tecnico_precio_ejecucion'
   | 'analisis_tecnico_extremos'
   | 'analisis_tecnico_percentil'
+  | 'analisis_tecnico_adx'
+  | 'analisis_tecnico_supertrend'
+  | 'analisis_tecnico_keltner'
+  | 'analisis_tecnico_ichimoku'
+  | 'calculadora_posicion'
   | 'zonas_precio'
   | 'serie_referencia'
   | 'grafico_gestos'
@@ -97,6 +102,41 @@ export const ANALISISTECNICO_HELP: Record<AnalisisTecnicoHelpKey, HelpContent> =
     howItIsCalculated: '100 × (cantidad de cierres de la ventana estrictamente menores al actual) / (tamaño de la ventana − 1). Es un rank real, no un min-max: resiste outliers y da 0 y 100 exactos en los extremos.',
     howToInterpret: 'Valores bajos (< 10) marcan que el precio está en la zona más baja de su rango histórico; valores altos (> 90), en la más alta. Las líneas de referencia del panel están en 10 y 90.',
     limitations: 'Igual que Extremos: con ventana = 0, "histórico" es desde el inicio de la serie cargada. Necesita la ventana completa antes de dar el primer valor.',
+  },
+  analisis_tecnico_adx: {
+    title: 'ADX (fuerza de la tendencia)',
+    shortDescription: 'Mide qué tan fuerte es la tendencia, no hacia dónde va: sube cuando el precio se mueve en una dirección sostenida y baja cuando anda de lado. Viene con dos líneas: +DI (fuerza compradora) y −DI (fuerza vendedora).',
+    howItIsCalculated: 'Compara el avance del máximo y del mínimo de cada rueda contra el de la anterior, lo suaviza con el método de Wilder (período 14) y lo relaciona con el rango verdadero. El ADX es el promedio suavizado de la diferencia entre +DI y −DI. Necesita unas 28 ruedas antes del primer valor.',
+    howToInterpret: 'Por encima de 25 (la línea de referencia del panel) hay tendencia; por debajo, mercado lateral. Si +DI está sobre −DI, la tendencia es alcista; si no, bajista. Sirve de filtro: las estrategias de cruce de medias funcionan con ADX alto y fallan con ADX bajo.',
+    limitations: 'Llega tarde: confirma una tendencia que ya está en marcha. Un ADX alto no distingue una suba de una caída; para eso están las líneas +DI y −DI.',
+  },
+  analisis_tecnico_supertrend: {
+    title: 'SuperTrend',
+    shortDescription: 'Una línea que acompaña al precio por debajo mientras sube (verde) y por encima mientras baja (roja), y que da vuelta cuando el precio la cruza.',
+    howItIsCalculated: 'Toma el punto medio de la vela y le suma y resta un múltiplo del ATR (por defecto 3 × ATR de 10 ruedas). La banda inferior sólo sube y la superior sólo baja mientras la tendencia dura. La salida "dirección" vale +1 en tendencia alcista y −1 en bajista, y se puede usar en una estrategia (cruce de 0).',
+    howToInterpret: 'Verde = tendencia alcista, la línea funciona como un stop que se va corriendo hacia arriba. Cuando el cierre la perfora cambia a rojo. Con un múltiplo más grande da menos señales y más lentas.',
+    limitations: 'En un mercado lateral cambia de color seguido y cada cambio es una señal falsa con su comisión. Sin velas OHLC el ATR se calcula sobre cierres y pierde precisión.',
+  },
+  analisis_tecnico_keltner: {
+    title: 'Canal de Keltner',
+    shortDescription: 'Una media móvil exponencial con una banda arriba y otra abajo cuya distancia depende de la volatilidad reciente (ATR), no del desvío de los precios.',
+    howItIsCalculated: 'Media = EMA del cierre (20 ruedas). Banda superior e inferior = media ± 2 × ATR de 20 ruedas.',
+    howToInterpret: 'Un cierre fuera de la banda superior indica fuerza (o sobreextensión); dentro del canal, el precio está en su rango normal. Comparado con Bollinger, las bandas de Keltner son más suaves porque el ATR cambia más despacio que el desvío estándar.',
+    limitations: 'No dice por sí solo si conviene comprar o vender: rupturas del canal tanto marcan arranques de tendencia como excesos que se revierten.',
+  },
+  analisis_tecnico_ichimoku: {
+    title: 'Ichimoku (sin Chikou)',
+    shortDescription: 'Un sistema que dibuja de una vez la tendencia, el soporte y la resistencia: dos líneas (Tenkan y Kijun) y una "nube" entre dos bandas (Senkou A y B).',
+    howItIsCalculated: 'Tenkan = punto medio del máximo y mínimo de 9 ruedas; Kijun, de 26. Senkou A = promedio de Tenkan y Kijun; Senkou B = punto medio de 52 ruedas. La nube se dibuja corrida 26 ruedas: acá se muestra en la barra en la que aplica (el valor calculado hace 26 ruedas), así nunca usa datos del futuro. No incluye la línea Chikou, que mira hacia adelante.',
+    howToInterpret: 'Precio por encima de la nube = tendencia alcista; por debajo, bajista; dentro, indefinida. La nube verde (A sobre B) es alcista y la roja, bajista. Un cruce de Tenkan sobre Kijun es la señal de corto plazo.',
+    limitations: 'Necesita más de 78 ruedas antes de mostrar la nube completa. Tiene muchas líneas y, con períodos cortos o series con huecos, se vuelve difícil de leer en la pantalla del celular.',
+  },
+  calculadora_posicion: {
+    title: 'Calculadora de tamaño de posición',
+    shortDescription: 'Responde cuánto comprar para que, si el precio toca tu stop, pierdas sólo lo que decidiste arriesgar.',
+    howItIsCalculated: 'Monto a invertir = riesgo ÷ distancia al stop (en %). Ejemplo: arriesgar US$ 100 con un stop a 8 % por debajo del precio significa invertir US$ 1.250. El riesgo puede ser un % del valor actual de tu cartera o un monto en dólares. El stop puede ser un precio, un % o un múltiplo del ATR. En un CEDEAR, la cantidad se calcula con el dólar MEP y el último precio del CEDEAR en pesos.',
+    howToInterpret: 'Un stop más cerca permite una posición más grande con el mismo riesgo, pero salta más seguido. Si el monto resultante supera tu cartera, el stop es demasiado ajustado para ese riesgo.',
+    limitations: 'La app no conoce tu efectivo disponible: el riesgo en % se mide sobre el valor de lo que ya tenés invertido. No incluye comisiones ni el deslizamiento: si el precio salta por debajo del stop, perdés más de lo calculado.',
   },
   screener_titulo: {
     title: 'Screener de proximidad',

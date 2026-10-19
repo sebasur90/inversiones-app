@@ -16,6 +16,8 @@ export interface ZonasDibujo {
   /** Niveles de la **posición**, ya resueltos a precio absoluto. Se dibujan, no se editan acá. */
   stopLoss?: number | null
   objetivo?: number | null
+  /** Stop que está probando la calculadora de tamaño (todavía no es de ninguna posición). */
+  stopProvisorio?: number | null
 }
 
 export type BordeZona = 'piso' | 'techo'
@@ -47,6 +49,7 @@ export function valoresDeZonas(zonas: ZonasDibujo | undefined): number[] {
   }
   if (zonas.stopLoss != null) out.push(zonas.stopLoss)
   if (zonas.objetivo != null) out.push(zonas.objetivo)
+  if (zonas.stopProvisorio != null) out.push(zonas.stopProvisorio)
   return out
 }
 
@@ -237,6 +240,7 @@ export default function ZonasPrecio({
       {([
         { valor: zonas.stopLoss, color: COLOR_NIVEL_STOP, texto: 'Stop loss' },
         { valor: zonas.objetivo, color: COLOR_NIVEL_OBJETIVO, texto: 'Objetivo' },
+        { valor: zonas.stopProvisorio, color: COLOR_NIVEL_STOP, texto: 'Stop calculado' },
       ] as const).map(({ valor, color, texto }) => (
         valor == null ? null : (
           <g key={texto} pointerEvents="none">
@@ -293,6 +297,7 @@ function IndicadoresFuera({
   for (const [valor, color, texto] of [
     [zonas.stopLoss, COLOR_NIVEL_STOP, 'Stop loss'],
     [zonas.objetivo, COLOR_NIVEL_OBJETIVO, 'Objetivo'],
+    [zonas.stopProvisorio, COLOR_NIVEL_STOP, 'Stop calculado'],
   ] as const) {
     if (valor == null) continue
     const l = lado([valor])
