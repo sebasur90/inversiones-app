@@ -3,7 +3,7 @@ import type { BarraOut, OperacionOut, OperacionPropiaOut, OperacionesGraficoOut,
 import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import { formatMonedaCruda, type Moneda } from '../../utils/formatoMonto'
 import {
-  COLOR_COMPRA_PROPIA, TEXTO_APROXIMADO, cicloDeFecha, colorResultado, operacionesDeFecha,
+  COLOR_COBRO, COLOR_COMPRA_PROPIA, TEXTO_APROXIMADO, cicloDeFecha, colorResultado, esCobro, operacionesDeFecha,
 } from './operacionesPropias'
 import { fechaCorta, formatoPct, formatoPrecio, formatoVolumen } from './formatoEjes'
 import { COLOR_MOTIVO, ETIQUETA_MOTIVO, GLIFO_MOTIVO } from './motivosSalida'
@@ -84,9 +84,14 @@ export default function FichaBarra({
       </div>
 
       {misOperaciones && b && (
-        <div className="h-5 text-label truncate">
-          <LineaMisOperaciones datos={misOperaciones} fecha={b.fecha} />
-        </div>
+        <>
+          <div className="h-5 text-label truncate">
+            <LineaMisOperaciones datos={misOperaciones} fecha={b.fecha} />
+          </div>
+          <div className="h-5 text-label truncate text-app-text-dim font-mono tabular-nums">
+            <LineaContexto datos={misOperaciones} fecha={b.fecha} />
+          </div>
+        </>
       )}
 
       {conSenales && b && (
@@ -143,6 +148,33 @@ function LineaOperacion({
 
 const NOMBRE_TIPO: Record<OperacionPropiaOut['tipo'], string> = {
   compra: 'Compraste', venta: 'Vendiste', amortizacion: 'Amortizaste',
+  dividendo: 'Cobraste dividendo', cupon: 'Cobraste cupón',
+}
+
+const signo = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(0)}%`
+
+/** Contexto de la rueda de cada compra y qué pasó después de cada venta. Son porcentajes e
+ * indicadores, no importes: se muestran siempre. Reserva su línea para que la ficha no salte. */
+function LineaContexto({ datos, fecha }: { datos: OperacionesGraficoOut; fecha: string }) {
+  const partes: string[] = []
+  for (const op of operacionesDeFecha(datos, fecha)) {
+    if (op.tipo === 'compra') {
+      const c = [
+        op.rsi != null ? `RSI ${op.rsi.toFixed(0)}` : null,
+        op.dist_sma200_pct != null ? `${signo(op.dist_sma200_pct)} vs SMA200` : null,
+        op.rango_52s_pct != null ? `${op.rango_52s_pct.toFixed(0)}% del rango anual` : null,
+      ].filter(Boolean)
+      partes.push(c.length > 0 ? c.join(' · ') : 'sin historia para el contexto')
+    } else if (op.tipo === 'venta') {
+      const c = [
+        op.post_30_pct != null ? `${signo(op.post_30_pct)} a 30d` : null,
+        op.post_90_pct != null ? `${signo(op.post_90_pct)} a 90d` : null,
+        op.post_180_pct != null ? `${signo(op.post_180_pct)} a 180d` : null,
+      ].filter(Boolean)
+      partes.push(c.length > 0 ? `después: ${c.join(' · ')}` : 'todavía no pasaron 30 días')
+    }
+  }
+  return <>{partes.join(' | ')}</>
 }
 
 /** Qué hiciste esa rueda y cómo va la posición. Los importes del resultado pasan por el modo
@@ -155,6 +187,15 @@ function LineaMisOperaciones({ datos, fecha }: { datos: OperacionesGraficoOut; f
     return (
       <span className="font-mono">
         {ops.map((op, i) => {
+          if (esCobro(op.tipo)) {
+            return (
+              <span key={i}>
+                {i > 0 && <span className="text-app-text-faint"> · </span>}
+                <span style={{ color: COLOR_COBRO }}>D {NOMBRE_TIPO[op.tipo]}</span>
+                {op.monto_usd != null && <span style={{ color: COLOR_COBRO }}> {fmt.monto(op.monto_usd)}</span>}
+              </span>
+            )
+          }
           const compra = op.tipo === 'compra'
           const color = compra ? COLOR_COMPRA_PROPIA : colorResultado(op.resultado_usd)
           const moneda: Moneda = op.moneda === 'USD' ? 'USD' : 'ARS'

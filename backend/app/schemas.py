@@ -2141,10 +2141,10 @@ class OperacionPropiaOut(BaseModel):
     No confundir con `OperacionOut`, que es una operación simulada de un backtest."""
     fecha: date
     fecha_barra: Optional[date] = None      # None si queda fuera de la serie
-    tipo: str                               # "compra" | "venta" | "amortizacion"
+    tipo: str                               # "compra" | "venta" | "amortizacion" | "dividendo" | "cupon"
     cartera: str
     cantidad: float
-    precio: float                           # tal como se operó, en `moneda`
+    precio: float                           # tal como se operó, en `moneda` (en un cobro, el monto total)
     moneda: str
     precio_usd_mep: Optional[float] = None  # con comisión, a MEP de la fecha
     precio_grafico: Optional[float] = None  # en la moneda de la serie del gráfico
@@ -2154,6 +2154,21 @@ class OperacionPropiaOut(BaseModel):
     # Sólo en ventas y amortizaciones: resultado real en USD MEP contra el costo promedio.
     resultado_usd: Optional[float] = None
     resultado_pct: Optional[float] = None
+    # Sólo en dividendos y cupones: lo cobrado en USD MEP. No tienen `precio_grafico`.
+    monto_usd: Optional[float] = None
+    # Cómo estaba el mercado en la rueda de la operación (None durante el warm-up de cada uno).
+    rsi: Optional[float] = None
+    dist_sma200_pct: Optional[float] = None   # puntos porcentuales respecto de la SMA(200)
+    rango_52s_pct: Optional[float] = None     # 0 = mínimo de 52 semanas, 100 = máximo
+    # Sólo en ventas: variación del cierre N días después (None si todavía no pasaron).
+    post_30_pct: Optional[float] = None
+    post_90_pct: Optional[float] = None
+    post_180_pct: Optional[float] = None
+
+
+class PuntoVwapOut(BaseModel):
+    fecha: date
+    valor: float
 
 
 class CicloPosicionOut(BaseModel):
@@ -2172,6 +2187,8 @@ class CicloPosicionOut(BaseModel):
     resultado_pct: Optional[float] = None
     costo_promedio_grafico: Optional[float] = None
     precio_actual_grafico: Optional[float] = None
+    # VWAP anclado a la primera compra del ciclo (None si no hay volumen o la compra es anterior a la serie).
+    vwap: Optional[list[PuntoVwapOut]] = None
 
 
 class OperacionesGraficoOut(BaseModel):

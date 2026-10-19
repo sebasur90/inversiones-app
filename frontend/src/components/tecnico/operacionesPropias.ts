@@ -7,6 +7,7 @@ import type { BarraOut, CicloPosicionOut, OperacionPropiaOut, OperacionesGrafico
  * error, el selector de período alcanza para verla. */
 
 export const COLOR_COMPRA_PROPIA = '#38bdf8'
+export const COLOR_COBRO = '#f59e0b'
 export const COLOR_GANANCIA = '#10b981'
 export const COLOR_PERDIDA = '#ef4444'
 export const COLOR_SIN_RESULTADO = '#94a3b8'
@@ -35,12 +36,19 @@ export interface CicloUbicado {
   hasta: number
   /** El ciclo ya había empezado antes de la primera barra cargada. */
   empiezaAntes: boolean
+  /** VWAP anclado a la primera compra, ya traducido a índices de barra. */
+  vwap: { indice: number; valor: number }[]
 }
 
 export interface OperacionesUbicadas {
+  /** Compras, ventas y amortizaciones: se dibujan a la altura de su precio. */
   marcas: MarcaOperacion[]
+  /** Dividendos y cupones: sin precio en el gráfico, van en la base del panel. */
+  cobros: MarcaOperacion[]
   ciclos: CicloUbicado[]
 }
+
+export const esCobro = (tipo: OperacionPropiaOut['tipo']) => tipo === 'dividendo' || tipo === 'cupon'
 
 const dia = (f: string) => f.slice(0, 10)
 
@@ -73,10 +81,13 @@ export function ubicarOperaciones(barras: BarraOut[], datos: OperacionesGraficoO
   barras.forEach((b, i) => indicePorFecha.set(dia(b.fecha), i))
 
   const marcas: MarcaOperacion[] = []
+  const cobros: MarcaOperacion[] = []
   for (const op of datos.operaciones) {
-    if (op.fecha_barra == null || op.precio_grafico == null) continue
+    if (op.fecha_barra == null) continue
     const indice = indicePorFecha.get(dia(op.fecha_barra))
-    if (indice != null) marcas.push({ indice, op })
+    if (indice == null) continue
+    if (esCobro(op.tipo)) cobros.push({ indice, op })
+    else if (op.precio_grafico != null) marcas.push({ indice, op })
   }
 
   const ciclos: CicloUbicado[] = []
@@ -86,10 +97,14 @@ export function ubicarOperaciones(barras: BarraOut[], datos: OperacionesGraficoO
       const desde = primerIndiceDesde(barras, dia(ciclo.desde))
       const hasta = ciclo.hasta ? ultimoIndiceHasta(barras, dia(ciclo.hasta)) : barras.length - 1
       if (desde < 0 || hasta < 0 || desde > hasta) continue
-      ciclos.push({ ciclo, desde, hasta, empiezaAntes: dia(ciclo.desde) < primera })
+      const vwap = (ciclo.vwap ?? []).flatMap(p => {
+        const indice = indicePorFecha.get(dia(p.fecha))
+        return indice != null ? [{ indice, valor: p.valor }] : []
+      })
+      ciclos.push({ ciclo, desde, hasta, empiezaAntes: dia(ciclo.desde) < primera, vwap })
     }
   }
-  return { marcas, ciclos }
+  return { marcas, cobros, ciclos }
 }
 
 /** Las operaciones propias de la rueda `fecha` (varias en un día es normal). */

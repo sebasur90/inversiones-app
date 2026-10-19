@@ -21,6 +21,8 @@ from . import operaciones_grafico_engine as eng
 
 MAX_BARRAS = 3000
 TIPOS_MARCA = ("compra", "venta", "amortizacion")
+# Cobros: no tienen precio unitario (`precio` es el monto total), así que se ubican sólo por fecha.
+TIPOS_COBRO = eng.TIPOS_INGRESO
 
 
 def _barras(db: Session, ticker: str, variante: str, hoy: date) -> tuple[list, str]:
@@ -62,6 +64,8 @@ def get_operaciones_grafico(ticker: str, variante: str, db: Session) -> dict:
         barras_local, moneda_local = _barras(db, ticker, "local", hoy)
 
     mep_cache: dict = {}
+    series_ctx = eng.series_contexto(barras) if barras else None
+    indice_de_fecha = {b.fecha: i for i, b in enumerate(barras)}
     ciclos = eng.partir_en_ciclos(movs)
     ciclo_de = {id(m): n for n, ciclo in enumerate(ciclos, start=1) for m in ciclo}
 
@@ -121,6 +125,7 @@ def get_operaciones_grafico(ticker: str, variante: str, db: Session) -> dict:
             "resultado_usd": round(resultado_usd, 2) if resultado_usd is not None else None,
             "resultado_pct": eng.porcentaje(resultado_usd, comprado_usd),
             "costo_promedio_grafico": None,
+            "vwap": _vwap_del_ciclo(ciclo, abierto, barras),
             "precio_actual_grafico": barras[-1].cierre if (abierto and barras) else None,
         })
 
@@ -130,8 +135,15 @@ def get_operaciones_grafico(ticker: str, variante: str, db: Session) -> dict:
     compras_por_ciclo: dict[int, list[tuple[float, float | None]]] = {}
 
     for mov in movs:
-        if mov.tipo_movimiento not in TIPOS_MARCA or id(mov) not in ciclo_de:
+        if mov.tipo_movimiento not in TIPOS_MARCA + TIPOS_COBRO or id(mov) not in ciclo_de:
             continue
+        n = ciclo_de[id(mov)]
+        if mov.tipo_movimiento in TIPOS_COBRO:
+            operaciones.append(_cobro(mov, n, barras, db, mep_cache))
+            if operaciones[-1]["fecha_barra"] is None:
+                fuera_de_serie += 1
+            continue
+
         cantidad = float(mov.cantidad or 0)
         precio = float(mov.precio)
         ubicada = _ubicar(mov, precio, barras, barras_local, moneda_serie, moneda_local, variante, db, mep_cache)
@@ -146,9 +158,20 @@ def get_operaciones_grafico(ticker: str, variante: str, db: Session) -> dict:
         precio_usd_mep = monto_usd / cantidad if (monto_usd is not None and cantidad > ia.EPS) else None
         resultado = resultado_venta.get(id(mov))
 
-        n = ciclo_de[id(mov)]
         if mov.tipo_movimiento == "compra":
             compras_por_ciclo.setdefault(n, []).append((cantidad, precio_grafico))
+
+        # Contexto de mercado y qué pasó después: sólo si la operación cayó dentro de la serie.
+        idx = indice_de_fecha.get(fecha_barra) if fecha_barra is not None else None
+        contexto = (
+            eng.contexto_en(barras, idx, series_ctx)
+            if idx is not None and series_ctx is not None
+            else {"rsi": None, "dist_sma200_pct": None, "rango_52s_pct": None}
+        )
+        posterior = {f"post_{d}_pct": None for d in eng.DIAS_POSTERIOR}
+        if mov.tipo_movimiento == "venta" and idx is not None:
+            posterior = {f"post_{d}_pct": _redondear(eng.variacion_posterior(barras, idx, d), 2)
+                         for d in eng.DIAS_POSTERIOR}
 
         operaciones.append({
             "fecha": mov.fecha, "fecha_barra": fecha_barra, "tipo": mov.tipo_movimiento,
@@ -158,6 +181,10 @@ def get_operaciones_grafico(ticker: str, variante: str, db: Session) -> dict:
             "aproximado": aproximado, "motivo_aproximado": motivo, "ciclo": n,
             "resultado_usd": round(resultado[0], 2) if resultado else None,
             "resultado_pct": resultado[1] if resultado else None,
+            "rsi": _redondear(contexto["rsi"], 1),
+            "dist_sma200_pct": _redondear(contexto["dist_sma200_pct"], 2),
+            "rango_52s_pct": _redondear(contexto["rango_52s_pct"], 1),
+            **posterior,
         })
 
     for ciclo_out in ciclos_out:
@@ -201,3 +228,44 @@ def _ubicar(
         aprox_precio = True
         motivo_precio = motivo_precio or eng.MOTIVO_FECHA_CERCANA
     return barra.fecha, precio_graf, aproximado or aprox_precio, motivo_precio or motivo
+
+
+def _redondear(valor: float | None, decimales: int) -> float | None:
+    return round(valor, decimales) if valor is not None else None
+
+
+def _cobro(mov, ciclo: int, barras: list, db: Session, mep_cache: dict) -> dict:
+    """Dividendo o cupón: sin precio en el gráfico, sólo la rueda en la que se cobró y el monto."""
+    hallada = eng.barra_de_fecha(barras, mov.fecha)
+    monto_usd = ia._monto_usd(mov, db, mep_cache)
+    return {
+        "fecha": mov.fecha, "fecha_barra": hallada[0].fecha if hallada else None,
+        "tipo": mov.tipo_movimiento, "cartera": mov.cartera, "cantidad": float(mov.cantidad or 0),
+        "precio": float(mov.precio), "moneda": mov.moneda, "precio_usd_mep": None,
+        "precio_grafico": None, "aproximado": bool(hallada and not hallada[1]),
+        "motivo_aproximado": eng.MOTIVO_FECHA_CERCANA if hallada and not hallada[1] else None,
+        "ciclo": ciclo, "resultado_usd": None, "resultado_pct": None,
+        "monto_usd": round(monto_usd, 2) if monto_usd is not None else None,
+    }
+
+
+def _vwap_del_ciclo(ciclo: list, abierto: bool, barras: list) -> list[dict] | None:
+    """VWAP anclado a la primera compra del ciclo, hasta la venta final (o hasta hoy si sigue
+    abierto). None si la compra es anterior a la serie o la serie no tiene volumen."""
+    primera = eng.barra_de_fecha(barras, ciclo[0].fecha)
+    if primera is None:
+        return None
+    desde = next(i for i, b in enumerate(barras) if b.fecha == primera[0].fecha)
+    hasta = len(barras) - 1
+    if not abierto:
+        cierres = [m for m in ciclo if m.tipo_movimiento in eng.TIPOS_CIERRE]
+        final = eng.barra_de_fecha(barras, cierres[-1].fecha) if cierres else None
+        if final is not None:
+            hasta = next(i for i, b in enumerate(barras) if b.fecha == final[0].fecha)
+    valores = eng.vwap_anclado(barras[:hasta + 1], desde)
+    if valores is None:
+        return None
+    return [
+        {"fecha": barras[desde + k].fecha, "valor": round(v, 6)}
+        for k, v in enumerate(valores) if v is not None
+    ]

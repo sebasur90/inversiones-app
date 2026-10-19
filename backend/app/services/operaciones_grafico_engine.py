@@ -15,7 +15,15 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from . import indicadores_engine as ind
+
 EPS = 1e-9
+
+# Cuántos días después de una venta se mira el precio, y la ventana de "un año" en ruedas.
+DIAS_POSTERIOR = (30, 90, 180)
+VENTANA_52_SEMANAS = 252
+PERIODO_RSI = 14
+PERIODO_SMA_TENDENCIA = 200
 
 TIPOS_APERTURA = ("compra",)
 TIPOS_CIERRE = ("venta", "amortizacion")
@@ -141,3 +149,74 @@ def porcentaje(resultado: float | None, base: float | None) -> float | None:
     if resultado is None or base is None or base <= EPS:
         return None
     return resultado / base * 100.0
+
+
+def variacion_posterior(barras: list, idx_venta: int, dias: int) -> float | None:
+    """Variación % (puntos porcentuales) del cierre `dias` después de la barra de la venta.
+
+    Compara el cierre de la primera rueda en o después de `fecha + dias` contra el cierre de la
+    barra de la venta. Se usa el cierre y no el precio pagado para que sea coherente también en un
+    CEDEAR. Devuelve None si todavía no pasaron los días (la serie no llega a esa fecha).
+    """
+    if not (0 <= idx_venta < len(barras)):
+        return None
+    venta = barras[idx_venta]
+    if not venta.cierre or venta.cierre <= 0:
+        return None
+    objetivo = venta.fecha + timedelta(days=dias)
+    hallada = barra_de_fecha(barras, objetivo)
+    # `barra_de_fecha` devuelve la última barra si la fecha está pasada del final y dentro de la
+    # tolerancia: acá eso significaría que los días todavía no pasaron.
+    if hallada is None or hallada[0].fecha < objetivo:
+        return None
+    return (hallada[0].cierre / venta.cierre - 1.0) * 100.0
+
+
+def series_contexto(barras: list) -> dict[str, list]:
+    """Series precalculadas que `contexto_en` consulta: RSI, SMA de tendencia y rango anual."""
+    cierres = [b.cierre for b in barras]
+    ext = ind.extremos(barras, VENTANA_52_SEMANAS)
+    return {
+        "rsi": ind.rsi(cierres, PERIODO_RSI),
+        "sma": ind.sma(cierres, PERIODO_SMA_TENDENCIA),
+        "maximo": ext["maximo"],
+        "minimo": ext["minimo"],
+    }
+
+
+def contexto_en(barras: list, idx: int, series: dict[str, list]) -> dict[str, float | None]:
+    """Cómo estaba el mercado en la barra `idx`: RSI(14), distancia % a la SMA(200) y posición en
+    el rango de 52 semanas (0 = mínimo anual, 100 = máximo). Cada campo es None mientras dure su
+    warm-up."""
+    vacio = {"rsi": None, "dist_sma200_pct": None, "rango_52s_pct": None}
+    if not (0 <= idx < len(barras)):
+        return vacio
+    cierre = barras[idx].cierre
+    sma = series["sma"][idx]
+    maximo, minimo = series["maximo"][idx], series["minimo"][idx]
+    return {
+        "rsi": series["rsi"][idx],
+        "dist_sma200_pct": (cierre / sma - 1.0) * 100.0 if sma else None,
+        "rango_52s_pct": (
+            (cierre - minimo) / (maximo - minimo) * 100.0
+            if maximo is not None and minimo is not None and maximo - minimo > EPS else None
+        ),
+    }
+
+
+def vwap_anclado(barras: list, idx_desde: int) -> list[float | None] | None:
+    """VWAP acumulado desde la barra `idx_desde` hasta el final: `Σ(típico·vol) / Σ vol`, con
+    `típico = (máx + mín + cierre) / 3`. Un valor por barra desde el ancla. None si ninguna barra
+    del tramo tiene volumen; las barras previas a la primera con volumen quedan en None."""
+    tramo = barras[max(idx_desde, 0):]
+    if not tramo or not any((b.volumen or 0) > 0 for b in tramo):
+        return None
+    valores: list[float | None] = []
+    pv = vol = 0.0
+    for b in tramo:
+        v = float(b.volumen or 0)
+        maximo, minimo = ind._hl(b)
+        pv += (maximo + minimo + b.cierre) / 3.0 * v
+        vol += v
+        valores.append(pv / vol if vol > EPS else None)
+    return valores

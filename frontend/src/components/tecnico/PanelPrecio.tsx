@@ -7,7 +7,7 @@ import { formatoPrecio } from './formatoEjes'
 import { COLOR_MOTIVO, GLIFO_MOTIVO } from './motivosSalida'
 import ZonasPrecio, { valoresDeZonas, type BordeZona, type ZonasDibujo } from './ZonasPrecio'
 import type { TipoZona } from '../../api'
-import { BandasCiclos, MarcasOperaciones } from './OperacionesPropias'
+import { BandasCiclos, MarcasIngresos, MarcasOperaciones } from './OperacionesPropias'
 import { ubicarOperaciones } from './operacionesPropias'
 
 export interface OverlayPrecio {
@@ -250,6 +250,7 @@ export default function PanelPrecio({
       )}
 
       {ubicadas && <MarcasOperaciones ubicadas={ubicadas} escalaX={escalaX} alto={alto} yDeValor={yDeValor} />}
+      {ubicadas && <MarcasIngresos ubicadas={ubicadas} escalaX={escalaX} alto={alto} />}
 
       {/* Niveles de riesgo por operación: stop loss y take profit son constantes; el trailing es
           una escalera que sólo sube. */}

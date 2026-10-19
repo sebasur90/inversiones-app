@@ -2299,9 +2299,10 @@ export const getSerieTecnica = (
 export interface OperacionPropiaOut {
   fecha: string
   fecha_barra: string | null
-  tipo: 'compra' | 'venta' | 'amortizacion'
+  tipo: 'compra' | 'venta' | 'amortizacion' | 'dividendo' | 'cupon'
   cartera: string
   cantidad: number
+  /** Tal como se operó; en un cobro (dividendo o cupón), el monto total. */
   precio: number
   moneda: string
   precio_usd_mep: number | null
@@ -2311,6 +2312,22 @@ export interface OperacionPropiaOut {
   ciclo: number
   resultado_usd: number | null
   resultado_pct: number | null
+  /** Sólo en dividendos y cupones: lo cobrado en USD MEP (no tienen `precio_grafico`). */
+  monto_usd: number | null
+  /** Cómo estaba el mercado ese día; null mientras dura el warm-up de cada indicador. */
+  rsi: number | null
+  dist_sma200_pct: number | null
+  /** 0 = mínimo de 52 semanas, 100 = máximo. */
+  rango_52s_pct: number | null
+  /** Sólo en ventas: variación del cierre N días después (null si todavía no pasaron). */
+  post_30_pct: number | null
+  post_90_pct: number | null
+  post_180_pct: number | null
+}
+
+export interface PuntoVwapOut {
+  fecha: string
+  valor: number
 }
 
 /** Un ciclo de tenencia (de 0 a volver a 0). Lo que depende del precio actual puede ser null. */
@@ -2329,6 +2346,8 @@ export interface CicloPosicionOut {
   resultado_pct: number | null
   costo_promedio_grafico: number | null
   precio_actual_grafico: number | null
+  /** VWAP anclado a la primera compra del ciclo; null sin volumen o con la compra anterior a la serie. */
+  vwap: PuntoVwapOut[] | null
 }
 
 export interface OperacionesGraficoOut {

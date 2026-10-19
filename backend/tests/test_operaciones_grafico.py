@@ -95,6 +95,68 @@ def test_porcentaje():
     assert eng.porcentaje(5.0, 0.0) is None and eng.porcentaje(None, 10.0) is None
 
 
+def _serie_creciente(n, base=100.0):
+    return [_barra(i, base + i) for i in range(n)]
+
+
+def test_variacion_posterior_con_y_sin_dias_suficientes():
+    barras = _serie_creciente(100)                       # cierre = 100 + i, una barra por día
+    assert eng.variacion_posterior(barras, 10, 30) == pytest.approx((140 / 110 - 1) * 100)
+    assert eng.variacion_posterior(barras, 5, 90) == pytest.approx((195 / 105 - 1) * 100)
+    # La serie termina antes de fecha + 30 días: todavía no pasaron.
+    assert eng.variacion_posterior(barras, 90, 30) is None
+    assert eng.variacion_posterior(barras, 99, 30) is None
+    assert eng.variacion_posterior(barras, 500, 30) is None
+
+
+def test_variacion_posterior_salta_al_primer_dia_habil():
+    barras = [b for b in _serie_creciente(100) if (b.fecha - date(2026, 1, 1)).days != 40]  # falta el día 40
+    idx = next(i for i, b in enumerate(barras) if b.cierre == 110.0)                          # día 10
+    assert eng.variacion_posterior(barras, idx, 30) == pytest.approx((141 / 110 - 1) * 100)
+
+
+def test_contexto_en_durante_el_warm_up():
+    barras = _serie_creciente(50)
+    ctx = eng.contexto_en(barras, 49, eng.series_contexto(barras))
+    assert ctx["rsi"] is not None                         # RSI(14) ya tiene datos
+    assert ctx["dist_sma200_pct"] is None and ctx["rango_52s_pct"] is None
+    assert eng.contexto_en(barras, 3, eng.series_contexto(barras))["rsi"] is None
+
+
+def test_contexto_en_con_historia_suficiente():
+    barras = _serie_creciente(300)                        # sube todos los días: siempre en máximos
+    series = eng.series_contexto(barras)
+    ctx = eng.contexto_en(barras, 299, series)
+    assert ctx["rango_52s_pct"] == pytest.approx(100.0)
+    sma200 = sum(b.cierre for b in barras[100:300]) / 200
+    assert ctx["dist_sma200_pct"] == pytest.approx((399 / sma200 - 1) * 100)
+    assert ctx["rsi"] == pytest.approx(100.0)
+    # Un cierre en el mínimo de la ventana anual queda en 0.
+    caida = barras[:299] + [_barra(299, 100.0 + 299 - 400)]
+    assert eng.contexto_en(caida, 299, eng.series_contexto(caida))["rango_52s_pct"] == pytest.approx(0.0)
+
+
+def test_vwap_anclado_a_mano_sobre_tres_barras():
+    def b(d, mx, mn, c, v):
+        return Barra(fecha=date(2026, 1, 1) + timedelta(days=d), cierre=c, apertura=c, maximo=mx, minimo=mn, volumen=v)
+
+    barras = [b(0, 12, 8, 10, 100), b(1, 13, 11, 12, 300), b(2, 15, 13, 14, 600)]
+    t = [10.0, 12.0, 14.0]                                # (máx + mín + cierre) / 3
+    vwap = eng.vwap_anclado(barras, 0)
+    assert vwap[0] == pytest.approx(10.0)
+    assert vwap[1] == pytest.approx((10 * 100 + 12 * 300) / 400)
+    assert vwap[2] == pytest.approx((10 * 100 + 12 * 300 + 14 * 600) / 1000)
+    # Anclado en la segunda barra: ignora la primera.
+    desde_1 = eng.vwap_anclado(barras, 1)
+    assert len(desde_1) == 2 and desde_1[0] == pytest.approx(12.0)
+    assert desde_1[1] == pytest.approx((12 * 300 + 14 * 600) / 900)
+    assert t  # (documenta los típicos usados arriba)
+
+
+def test_vwap_anclado_sin_volumen_devuelve_none():
+    assert eng.vwap_anclado(_serie_creciente(5), 0) is None
+
+
 # ── Adaptador con la base ────────────────────────────────────────────────────
 
 BASE = date.today() - timedelta(days=100)
@@ -215,6 +277,51 @@ def test_sin_precio_actual_el_no_realizado_queda_en_none(db):
     db.commit()
     abierto = og.get_operaciones_grafico("MSFT", "subyacente", db)["ciclos"][1]
     assert abierto["no_realizado_usd"] is None and abierto["resultado_usd"] is None
+
+
+def test_contexto_y_posterior_en_las_operaciones(db):
+    r = og.get_operaciones_grafico("MSFT", "subyacente", db)
+    _, _, venta, compra = r["operaciones"]
+    # La serie tiene 80 barras: hay RSI pero no SMA(200) ni rango anual.
+    assert compra["rsi"] is not None
+    assert compra["dist_sma200_pct"] is None and compra["rango_52s_pct"] is None
+    assert compra["post_30_pct"] is None                   # sólo las ventas llevan "después"
+    # Serie plana en 500: a 30 días no cambió; a 90 días la serie no llega.
+    assert venta["post_30_pct"] == pytest.approx(0.0)
+    assert venta["post_90_pct"] is None and venta["post_180_pct"] is None
+
+
+def test_dividendo_genera_marca_sin_precio_en_el_grafico(db):
+    db.add(MovimientoInversion(fecha=D2 + timedelta(days=3), cartera="c", ticker="MSFT",
+                               tipo_movimiento="dividendo", cantidad=None, precio=2000.0,
+                               moneda="ARS", comision=0.0))
+    db.commit()
+    r = og.get_operaciones_grafico("MSFT", "subyacente", db)
+    cobro = next(o for o in r["operaciones"] if o["tipo"] == "dividendo")
+    assert cobro["precio_grafico"] is None
+    assert cobro["fecha_barra"] == D2 + timedelta(days=3)
+    assert cobro["monto_usd"] == pytest.approx(2.0)        # 2000 ARS a MEP 1000
+    assert cobro["ciclo"] == 1
+    assert cobro["resultado_usd"] is None and cobro.get("post_30_pct") is None
+    # Sigue sumando a los ingresos del ciclo, como el P&L.
+    assert r["ciclos"][0]["ingresos_usd"] == pytest.approx(2.0)
+
+
+def test_vwap_del_ciclo_va_de_la_primera_compra_a_la_venta_final(db):
+    cerrado, abierto = og.get_operaciones_grafico("MSFT", "subyacente", db)["ciclos"]
+    assert [p["fecha"] for p in cerrado["vwap"]][0] == D1 and cerrado["vwap"][-1]["fecha"] == D3
+    assert len(cerrado["vwap"]) == 21
+    assert all(p["valor"] == pytest.approx(500.0) for p in cerrado["vwap"])   # (501 + 499 + 500) / 3
+    # El ciclo abierto llega hasta la última barra de la serie.
+    assert abierto["vwap"][0]["fecha"] == D4 and abierto["vwap"][-1]["fecha"] == BASE + timedelta(days=79)
+
+
+def test_vwap_none_si_la_compra_es_anterior_a_la_serie(db):
+    db.query(MovimientoInversion).delete()
+    db.add(MovimientoInversion(fecha=BASE - timedelta(days=10), cartera="c", ticker="MSFT",
+                               tipo_movimiento="compra", cantidad=1, precio=18000.0, moneda="ARS", comision=0.0))
+    db.commit()
+    assert og.get_operaciones_grafico("MSFT", "subyacente", db)["ciclos"][0]["vwap"] is None
 
 
 # ── Endpoint ─────────────────────────────────────────────────────────────────

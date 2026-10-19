@@ -1,7 +1,20 @@
-import type { OperacionesGraficoOut } from '../../api'
+import type { CicloPosicionOut, OperacionPropiaOut, OperacionesGraficoOut } from '../../api'
 import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import { colorResultado } from './operacionesPropias'
 import { fechaCorta, formatoPct } from './formatoEjes'
+
+const promedio = (valores: (number | null)[]): number | null => {
+  const v = valores.filter((x): x is number => x != null)
+  return v.length > 0 ? v.reduce((a, b) => a + b, 0) / v.length : null
+}
+
+/** Qué pasó con el precio 90 días después de la última venta de un ciclo cerrado: lo que habrías
+ * ganado o perdido de no haber vendido. Null si el ciclo sigue abierto o todavía no pasaron los días. */
+function despuesDeVender(c: CicloPosicionOut, ops: OperacionPropiaOut[]): number | null {
+  if (c.abierto) return null
+  const ventas = ops.filter(o => o.ciclo === c.ciclo && o.tipo === 'venta')
+  return ventas.length > 0 ? ventas[ventas.length - 1].post_90_pct : null
+}
 
 /**
  * Las posiciones que tuviste en este ticker, una fila por ciclo (de 0 a volver a 0), con lo que
@@ -19,6 +32,10 @@ export default function ResumenOperaciones({ datos }: { datos: OperacionesGrafic
     )
   }
 
+  const compras = datos.operaciones.filter(o => o.tipo === 'compra')
+  const rsiMedio = promedio(compras.map(o => o.rsi))
+  const distMedia = promedio(compras.map(o => o.dist_sma200_pct))
+
   return (
     <div className="flex flex-col gap-2">
       <span className="text-label font-bold text-app-text-dim uppercase">Mis posiciones</span>
@@ -26,6 +43,7 @@ export default function ResumenOperaciones({ datos }: { datos: OperacionesGrafic
       <div className="flex flex-col divide-y divide-app-border rounded-xl bg-app-surface-2">
         {[...datos.ciclos].reverse().map(c => {
           const color = colorResultado(c.resultado_usd)
+          const despues = despuesDeVender(c, datos.operaciones)
           return (
             <div key={c.ciclo} className="flex items-center justify-between gap-3 px-3 py-2">
               <div className="min-w-0">
@@ -36,6 +54,11 @@ export default function ResumenOperaciones({ datos }: { datos: OperacionesGrafic
                   Comprado {fmt.monto(c.comprado_usd)}
                   {c.abierto && ` · hoy ${c.cantidad_abierta} u.`}
                 </div>
+                {despues != null && (
+                  <div className="text-label text-app-text-dim font-mono tabular-nums">
+                    Si no vendías: <span className={despues >= 0 ? 'text-app-pos' : 'text-app-neg'}>{formatoPct(despues)}</span> a 90 días
+                  </div>
+                )}
               </div>
               <div className="shrink-0 text-right font-mono tabular-nums" style={{ color }}>
                 <div className="text-caption font-semibold">
@@ -49,6 +72,15 @@ export default function ResumenOperaciones({ datos }: { datos: OperacionesGrafic
           )
         })}
       </div>
+
+      {(rsiMedio != null || distMedia != null) && (
+        <p className="text-label text-app-text-dim">
+          Compraste en promedio
+          {rsiMedio != null && <> con RSI <span className="font-mono">{rsiMedio.toFixed(0)}</span></>}
+          {rsiMedio != null && distMedia != null && ','}
+          {distMedia != null && <> a <span className="font-mono">{formatoPct(distMedia)}</span> de la SMA200</>}.
+        </p>
+      )}
 
       <p className="text-label text-app-text-dim">
         Resultado real en USD (MEP de cada fecha), con comisiones. En un CEDEAR, las marcas ubican

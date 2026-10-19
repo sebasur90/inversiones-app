@@ -1,7 +1,7 @@
 import type { EscalaX } from './useEscalaX'
 import { formatoPct, formatoPrecio } from './formatoEjes'
 import {
-  COLOR_COMPRA_PROPIA, COLOR_SIN_RESULTADO, TEXTO_APROXIMADO, colorResultado,
+  COLOR_COBRO, COLOR_COMPRA_PROPIA, COLOR_SIN_RESULTADO, TEXTO_APROXIMADO, colorResultado,
   type OperacionesUbicadas,
 } from './operacionesPropias'
 
@@ -44,6 +44,21 @@ export function MarcasOperaciones({
 }) {
   return (
     <g>
+      {ubicadas.ciclos.map(c => {
+        const puntos = c.vwap.filter(p => escalaX.visible(p.indice))
+        if (puntos.length < 2) return null
+        const color = colorResultado(c.ciclo.resultado_usd)
+        const trazo = puntos.map((p, i) => `${i === 0 ? 'M' : 'L'}${escalaX.xDeIndice(p.indice)},${yDeValor(p.valor)}`).join(' ')
+        return (
+          <path
+            key={`vwap-${c.ciclo.ciclo}`} d={trazo} fill="none" stroke={color} strokeWidth={1}
+            strokeDasharray="2 3" opacity={0.9} pointerEvents="none"
+          >
+            <title>VWAP anclado a tu primera compra: el precio medio al que se operó en el mercado desde entonces</title>
+          </path>
+        )
+      })}
+
       {ubicadas.ciclos
         .filter(c => c.ciclo.abierto && c.ciclo.costo_promedio_grafico != null && c.hasta >= escalaX.inicio)
         .map(c => {
@@ -92,6 +107,31 @@ export function MarcasOperaciones({
           </text>
         )
       })}
+    </g>
+  )
+}
+
+/** Dividendos y cupones cobrados: una "D" chica en la base del panel (no tienen precio, no
+ * pueden ir a la altura de una vela). */
+export function MarcasIngresos({
+  ubicadas, escalaX, alto,
+}: {
+  ubicadas: OperacionesUbicadas
+  escalaX: EscalaX
+  alto: number
+}) {
+  return (
+    <g>
+      {ubicadas.cobros.filter(m => escalaX.visible(m.indice)).map((m, i) => (
+        <text
+          key={`${m.op.fecha}-${m.op.tipo}-${i}`} x={escalaX.xDeIndice(m.indice)} y={alto - 6} fontSize={10}
+          textAnchor="middle" fill={COLOR_COBRO} stroke="#121621" strokeWidth={2} paintOrder="stroke"
+          className="font-mono font-bold"
+        >
+          D
+          <title>{`${m.op.tipo === 'cupon' ? 'Cupón' : 'Dividendo'} cobrado el ${m.op.fecha}`}</title>
+        </text>
+      ))}
     </g>
   )
 }
