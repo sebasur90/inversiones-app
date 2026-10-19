@@ -8,12 +8,20 @@ const promedio = (valores: (number | null)[]): number | null => {
   return v.length > 0 ? v.reduce((a, b) => a + b, 0) / v.length : null
 }
 
-/** Qué pasó con el precio 90 días después de la última venta de un ciclo cerrado: lo que habrías
- * ganado o perdido de no haber vendido. Null si el ciclo sigue abierto o todavía no pasaron los días. */
-function despuesDeVender(c: CicloPosicionOut, ops: OperacionPropiaOut[]): number | null {
-  if (c.abierto) return null
+/** Qué pasó con el precio después de la última venta de un ciclo cerrado: lo que habrías ganado o
+ * perdido de no haber vendido. Prefiere los 90 días y, si todavía no pasaron, usa los 30. `null`
+ * en `valor` = todavía no pasaron ni 30 días (una venta reciente): se avisa en vez de callar.
+ * `undefined` = el ciclo sigue abierto, no hay nada que decir. */
+function despuesDeVender(
+  c: CicloPosicionOut, ops: OperacionPropiaOut[],
+): { valor: number | null; dias: number } | undefined {
+  if (c.abierto) return undefined
   const ventas = ops.filter(o => o.ciclo === c.ciclo && o.tipo === 'venta')
-  return ventas.length > 0 ? ventas[ventas.length - 1].post_90_pct : null
+  const ultima = ventas[ventas.length - 1]
+  if (!ultima) return undefined
+  if (ultima.post_90_pct != null) return { valor: ultima.post_90_pct, dias: 90 }
+  if (ultima.post_30_pct != null) return { valor: ultima.post_30_pct, dias: 30 }
+  return { valor: null, dias: 30 }
 }
 
 /**
@@ -56,7 +64,13 @@ export default function ResumenOperaciones({ datos }: { datos: OperacionesGrafic
                 </div>
                 {despues != null && (
                   <div className="text-label text-app-text-dim font-mono tabular-nums">
-                    Si no vendías: <span className={despues >= 0 ? 'text-app-pos' : 'text-app-neg'}>{formatoPct(despues)}</span> a 90 días
+                    {despues.valor != null ? (
+                      <>
+                        Si no vendías: <span className={despues.valor >= 0 ? 'text-app-pos' : 'text-app-neg'}>{formatoPct(despues.valor)}</span> a {despues.dias} días
+                      </>
+                    ) : (
+                      'Si no vendías: todavía no pasaron 30 días'
+                    )}
                   </div>
                 )}
               </div>
