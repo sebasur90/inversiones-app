@@ -227,6 +227,44 @@ export interface DescomposicionOut {
   avisos: ValuacionAvisos
 }
 
+export interface MapaMercadoItem {
+  ticker: string
+  ticker_base: string
+  nombre: string | null
+  tipo: string | null
+  sector: string | null
+  industria: string | null
+  region: string | null
+  pais: string | null
+  tamano_empresa: string
+  market_cap_usd: number | null
+  /** Razones (0.012 = +1,2%), en `moneda_variacion`; null si la historia no alcanza. */
+  var_1d: number | null
+  var_1s: number | null
+  var_1m: number | null
+  var_1a: number | null
+  moneda_variacion: 'USD' | 'ARS' | null
+  fecha_cierre: string | null
+  en_cartera: boolean
+  en_watchlist: boolean
+  /** % de la cartera consolidada; sin montos (los tapa el modo privacidad). */
+  peso_cartera: number | null
+  tiene_logo: boolean
+}
+
+export interface MapaMercadoOut {
+  items: MapaMercadoItem[]
+  cobertura: {
+    total: number
+    con_variacion: number
+    con_market_cap: number
+    con_logo: number
+    con_sector: number
+  }
+  actualizado: string | null
+  avisos: string[]
+}
+
 export interface RebalanceoItem {
   etiqueta: string
   porcentaje_actual: number
@@ -413,6 +451,12 @@ export const getExposicionInversiones = (cartera: string | null) =>
 
 export const getDescomposicion = (cartera: string | null) =>
   api.get<DescomposicionOut>(`${carteraPath(cartera)}/descomposicion`).then(r => r.data)
+
+export const getMapaMercado = () =>
+  api.get<MapaMercadoOut>('/inversiones/mapa-mercado').then(r => r.data)
+
+export const refrescarMapaMercado = () =>
+  api.post<{ resultado: string }>('/inversiones/mapa-mercado/refrescar').then(r => r.data)
 
 export const getRebalanceoInversiones = (cartera: string | null) =>
   api.get<RebalanceoOut>(`${carteraPath(cartera)}/rebalanceo`).then(r => r.data)

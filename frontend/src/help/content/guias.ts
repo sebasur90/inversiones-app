@@ -114,6 +114,23 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
     terminos: ['screener_umbral', 'screener_dispara_ahora', 'screener_grafico_gatillo'],
   },
 
+  '/mapa-mercado': {
+    queEs: 'Todas las acciones, CEDEARs y ETFs del mercado dibujados como un mapa: las empresas parecidas quedan juntas y el color dice cuánto subieron o bajaron.',
+    comoLeerla: [
+      'Cada rectángulo es una empresa. Verde subió, rojo bajó, y cuanto más fuerte el color, más se movió. Gris es que todavía no hay dato.',
+      'Las empresas están agrupadas por sector, región, tamaño o tipo (lo elegís arriba). Cada bloque trae su nombre y cuánto se movió en conjunto.',
+      'El tamaño del rectángulo puede ser la capitalización de la empresa, lo que pesa en tu cartera, o igual para todas.',
+      'Un borde blanco marca lo que tenés en cartera y uno azul lo que seguís en la watchlist.',
+    ],
+    queHacer: [
+      'Tocá el nombre de un bloque para entrar a sus subgrupos (de un sector a sus industrias, de una región a sus países).',
+      'Tocá un rectángulo para ver la ficha: sus variaciones a 1 día, semana, mes y año, su tamaño y su peso en tu cartera, con un atajo a la ficha completa.',
+      'Probá "Parejo" para contar cuántas subieron y cuántas bajaron sin que las gigantes tapen al resto.',
+    ],
+    ojo: 'La variación es en dólares y se actualiza una vez por día, después del cierre de EE.UU.: no es en vivo. Y que algo esté en rojo no quiere decir que esté barato: para eso está Valuación vs. pares.',
+    terminos: ['mapa_que_es', 'mapa_agrupar', 'mapa_tamano', 'mapa_variacion', 'mapa_promedio_grupo', 'mapa_sin_dato'],
+  },
+
   '/valuacion': {
     queEs: 'Qué acciones, CEDEARs y ETFs están más baratos o más caros que sus competidores, para decidir dónde mirar antes de entrar o salir.',
     comoLeerla: [

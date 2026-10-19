@@ -20,6 +20,7 @@ export type IconName =
   | 'trend'
   | 'info'
   | 'scale'
+  | 'grid'
   | 'more'
   | 'eye'
   | 'eyeOff'
@@ -116,6 +117,12 @@ export function IconSprite() {
           <path d="M5 7l-3 6a3 3 0 006 0z" />
           <path d="M19 7l-3 6a3 3 0 006 0z" />
           <line x1="8" y1="21" x2="16" y2="21" />
+        </symbol>
+        <symbol id="i-grid" viewBox="0 0 24 24">
+          <rect x="3.5" y="3.5" width="9" height="9" rx="1.5" />
+          <rect x="14.5" y="3.5" width="6" height="5" rx="1.5" />
+          <rect x="14.5" y="10.5" width="6" height="10" rx="1.5" />
+          <rect x="3.5" y="14.5" width="9" height="6" rx="1.5" />
         </symbol>
         <symbol id="i-more" viewBox="0 0 24 24">
           <rect x="4" y="4" width="6.5" height="6.5" rx="1.5" />

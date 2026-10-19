@@ -13,6 +13,7 @@ import TourBienvenida from './help/components/TourBienvenida'
 const Resumen = lazy(() => import('./pages/Resumen'))
 const Exposicion = lazy(() => import('./pages/Exposicion'))
 const Descomposicion = lazy(() => import('./pages/Descomposicion'))
+const MapaMercado = lazy(() => import('./pages/MapaMercado'))
 const Movimientos = lazy(() => import('./pages/Movimientos'))
 const Posiciones = lazy(() => import('./pages/Posiciones'))
 const Watchlist = lazy(() => import('./pages/Watchlist'))
@@ -149,6 +150,7 @@ function Root() {
             <Route path="resumen" element={<Resumen />} />
             <Route path="exposicion" element={<Exposicion />} />
             <Route path="descomposicion" element={<Descomposicion />} />
+            <Route path="mapa-mercado" element={<MapaMercado />} />
             <Route path="movimientos" element={<Movimientos />} />
             <Route path="posiciones" element={<Posiciones />} />
             <Route path="watchlist" element={<Watchlist />} />
