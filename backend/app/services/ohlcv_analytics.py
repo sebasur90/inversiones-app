@@ -311,6 +311,17 @@ def variante_para(db: Session, ticker: str, pedida: str | None) -> str:
     return resolver_variante(pedida, mapa_referencias(db).get(ticker, "local"))
 
 
+def variante_efectiva(db: Session, ticker: str, pedida: str | None) -> str:
+    """La serie concreta (`local` | `subyacente`) sobre la que responde un endpoint de análisis
+    técnico. Sin variante pedida rige la referencia del ticker, y una referencia que todavía no tiene
+    barras degrada a la local (un pedido explícito se respeta tal cual)."""
+    variante = variante_para(db, ticker, pedida)
+    if variante == "subyacente" and pedida is None:
+        if not get_serie_barras(ticker, date.min, date.today(), db, max_barras=1, variante=variante)["barras"]:
+            return "local"
+    return variante
+
+
 def ultimo_precio_subyacente(db: Session, tickers: set[str]) -> dict[str, tuple[date, float, str]]:
     """Último precio en USD del subyacente de cada ticker: `ticker -> (fecha, precio, origen)`.
 

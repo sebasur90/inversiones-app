@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import type { BarraOut, CurvaPuntoOut, IndicadorDsl, OperacionOut, SenalOut } from '../../api'
+import type { BarraOut, CurvaPuntoOut, IndicadorDsl, OperacionOut, OperacionesGraficoOut, SenalOut } from '../../api'
 import { useEscalaX } from './useEscalaX'
 import { estiloContenedorGestos, useVentanaVisible } from './useVentanaVisible'
 import { useAnchoContenedor } from './useAnchoContenedor'
@@ -11,7 +11,7 @@ import PanelIndicador from './PanelIndicador'
 import PanelVolumen from './PanelVolumen'
 import EjeFechas from './EjeFechas'
 import FichaBarra from './FichaBarra'
-import { BotonesGrafico, PieGrafico } from './ControlesGrafico'
+import { BarraHerramientas, BotonesGrafico, PieGrafico } from './ControlesGrafico'
 import { formatoValor } from './formatoEjes'
 import GuiaGestos, { AVISO_SIN_RECORRIDO, AvisoGrafico, useAvisoGrafico, useGuiaGestos } from './GuiaGestos'
 import { ESPEC_POR_TIPO, claveIndicador } from './indicadoresConfig'
@@ -40,7 +40,7 @@ export default function GraficoBacktest({
   operaciones: operacionesRaw = [], primeraBarraEvaluable,
   curvaEquity: curvaEquityRaw, curvaBuyHold: curvaBuyHoldRaw,
   indiceDesde = 0, moneda, tieneVelas, tieneVolumen, gatillo, mostrarEquity = true,
-  fullscreen = false, onToggleFullscreen,
+  fullscreen = false, onToggleFullscreen, misOperaciones, operacionesActivas, onToggleOperaciones,
 }: {
   barras: BarraOut[]
   indicadoresSeries: Record<string, Record<string, (number | null)[]>>
@@ -62,6 +62,12 @@ export default function GraficoBacktest({
   mostrarEquity?: boolean
   fullscreen?: boolean
   onToggleFullscreen?: () => void
+  /** Tus compras y ventas de este ticker para marcarlas sobre las velas; `null`/`undefined` = apagado. */
+  misOperaciones?: OperacionesGraficoOut | null
+  /** El interruptor está prendido (aunque los datos todavía estén cargando). */
+  operacionesActivas?: boolean
+  /** Si viene, el gráfico ofrece el botón ▲▼ que prende y apaga `misOperaciones`. */
+  onToggleOperaciones?: () => void
 }) {
   // Recorta el warm-up de indicadores previo a `desde` (puede ser cientos de ruedas para MM200),
   // reindexando señales, operaciones y `primera_barra_evaluable` para que sigan alineadas con
@@ -140,9 +146,18 @@ export default function GraficoBacktest({
     <div ref={containerRef} className="w-full">
       <FichaBarra
         barras={barras} indice={hoverIndex} moneda={moneda} senales={senales} operaciones={operaciones}
-        conSenales onQuitar={() => setHoverIndex(null)}
+        conSenales misOperaciones={misOperaciones} onQuitar={() => setHoverIndex(null)}
         acciones={<BotonesGrafico controles={controles} fullscreen={fullscreen} onToggleFullscreen={onToggleFullscreen} />}
       />
+
+      {onToggleOperaciones && (
+        <BarraHerramientas
+          herramientas={[{
+            clave: 'operaciones', texto: '▲▼', activo: !!operacionesActivas, onToggle: onToggleOperaciones,
+            label: operacionesActivas ? 'Ocultar mis compras y ventas' : 'Mostrar mis compras y ventas',
+          }]}
+        />
+      )}
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1.5 text-label text-app-text-dim">
         {overlaysPrecio.map(o => (
@@ -182,7 +197,7 @@ export default function GraficoBacktest({
         <PanelPrecio
           barras={barras} escalaX={escalaX} alto={alto.precio} tieneVelas={tieneVelas} moneda={moneda}
           overlays={overlaysPrecio} senales={senales} operaciones={operaciones} primeraBarraEvaluable={pbe}
-          gatillo={gatillo}
+          gatillo={gatillo} misOperaciones={misOperaciones}
           hoverIndex={hoverIndex} onHover={setHoverIndex}
         />
         <EjeFechas barras={barras} escalaX={escalaX} />

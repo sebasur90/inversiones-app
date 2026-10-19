@@ -14,6 +14,8 @@ export type AnalisisTecnicoHelpKey =
   | 'analisis_tecnico_keltner'
   | 'analisis_tecnico_ichimoku'
   | 'calculadora_posicion'
+  | 'diario_como_operas'
+  | 'backtest_vos_vs_estrategia'
   | 'zonas_precio'
   | 'serie_referencia'
   | 'grafico_gestos'
@@ -137,6 +139,20 @@ export const ANALISISTECNICO_HELP: Record<AnalisisTecnicoHelpKey, HelpContent> =
     howItIsCalculated: 'Monto a invertir = riesgo ÷ distancia al stop (en %). Ejemplo: arriesgar US$ 100 con un stop a 8 % por debajo del precio significa invertir US$ 1.250. El riesgo puede ser un % del valor actual de tu cartera o un monto en dólares. El stop puede ser un precio, un % o un múltiplo del ATR. En un CEDEAR, la cantidad se calcula con el dólar MEP y el último precio del CEDEAR en pesos.',
     howToInterpret: 'Un stop más cerca permite una posición más grande con el mismo riesgo, pero salta más seguido. Si el monto resultante supera tu cartera, el stop es demasiado ajustado para ese riesgo.',
     limitations: 'La app no conoce tu efectivo disponible: el riesgo en % se mide sobre el valor de lo que ya tenés invertido. No incluye comisiones ni el deslizamiento: si el precio salta por debajo del stop, perdés más de lo calculado.',
+  },
+  diario_como_operas: {
+    title: 'Cómo operás',
+    shortDescription: 'Un resumen en palabras de los hábitos que se ven en tus compras y ventas: en qué momento del mercado comprás, si lo hacés a favor o en contra de la tendencia y si tus ventas se adelantaron a subas.',
+    howItIsCalculated: 'Para cada operación se mira el mercado ese día en la serie de referencia del ticker (la acción en dólares para un CEDEAR): el RSI de 14 ruedas, la distancia a la media de 200 ruedas y la posición dentro del rango de las últimas 52 semanas (0 % es el mínimo anual, 100 % el máximo). Una frase aparece sólo con tres o más datos. "Se adelantó" quiere decir que 90 días después de vender el precio estaba más de 10 % arriba.',
+    howToInterpret: 'Es un espejo, no un juicio: si tendés a comprar cerca de máximos, quizás conviene esperar retrocesos; si tus ventas suelen adelantarse a subas, quizás conviene ponerles un objetivo en vez de vender por ansiedad. Con pocas operaciones, tomalo como una pista y no como una conclusión.',
+    limitations: 'Las operaciones muy recientes todavía no tienen el "después" a 90 días. El contexto necesita historia: una compra de los primeros meses de una serie no tiene media de 200 ruedas ni rango anual. Las series ajustadas por dividendos y splits (como las de EE.UU.) pueden diferir un poco del precio que viste ese día.',
+  },
+  backtest_vos_vs_estrategia: {
+    title: 'Vos vs. la estrategia vs. comprar y mantener',
+    shortDescription: 'Para cada posición que tuviste de este ticker dentro del período del backtest: qué te dio a vos, qué habría dado la estrategia entre las mismas fechas y qué habría dado comprar el primer día y mantener.',
+    howItIsCalculated: 'Tu resultado es el real en dólares MEP, con comisiones, de toda la posición. La estrategia y comprar y mantener se miden sobre el precio de la serie del backtest, entre la rueda en que entraste y la rueda en que saliste (o hoy, si seguís adentro). Si la estrategia no estaba comprada en ese tramo, su resultado es 0 %.',
+    howToInterpret: 'Si la estrategia le gana seguido a lo que hacés, quizás valga la pena seguir sus señales. Si le pierde, tus decisiones están agregando algo que la regla no ve. Mirá varias posiciones, no una sola.',
+    limitations: 'No son números idénticos: el tuyo incluye comisiones y el tipo de cambio de cada operación; el de la estrategia, el precio de la serie (en un CEDEAR, la acción en dólares). Una posición que empezó antes del período del backtest se marca como recortada: el resultado tuyo cuenta todo, el de la estrategia sólo desde que arranca el período.',
   },
   screener_titulo: {
     title: 'Screener de proximidad',

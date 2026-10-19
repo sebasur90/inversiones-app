@@ -2308,6 +2308,55 @@ export const getSerieTecnica = (
 ) =>
   api.get<SerieTecnicaOut>(`/inversiones/tecnico/${encodeURIComponent(ticker)}/serie`, { params }).then(r => r.data)
 
+// --- Diario de operaciones ---
+
+export interface DiarioOperacionOut {
+  ticker: string
+  variante: VarianteSerie
+  fecha: string
+  tipo: 'compra' | 'venta' | 'amortizacion'
+  cantidad: number
+  precio: number
+  moneda: string
+  precio_usd_mep: number | null
+  resultado_usd: number | null
+  resultado_pct: number | null
+  rsi: number | null
+  dist_sma200_pct: number | null
+  rango_52s_pct: number | null
+  post_30_pct: number | null
+  post_90_pct: number | null
+  post_180_pct: number | null
+  aproximado: boolean
+}
+
+export interface DiarioResumenOut {
+  n_compras: number
+  n_ventas: number
+  n_rsi: number
+  rsi_medio_compras: number | null
+  n_sma200: number
+  pct_compras_sobre_sma200: number | null
+  n_rango: number
+  rango_52s_medio_compras: number | null
+  n_ventas_con_post90: number
+  n_ventas_subieron: number
+  n_ciclos_cerrados: number
+  n_ciclos_ganadores: number
+  resultado_medio_ciclos_pct: number | null
+}
+
+export interface DiarioOperacionesOut {
+  /** La más reciente primero. */
+  operaciones: DiarioOperacionOut[]
+  resumen: DiarioResumenOut
+  frases: string[]
+  tickers_sin_serie: string[]
+}
+
+export const getDiarioOperaciones = () =>
+  api.get<DiarioOperacionesOut>('/inversiones/operaciones/diario').then(r => r.data)
+
 export type BenchmarkFR = 'SPY' | 'QQQ' | '^MERV'
 
 /** Ratio del activo contra un índice, base 100 en la primera barra visible. Las tres listas son
@@ -2632,7 +2681,28 @@ export interface BacktestOut {
   barras: BarraOut[]
   indicadores: Record<string, Record<string, (number | null)[]>>
   indice_desde: number
+  /** Tus ciclos de este ticker contra la estrategia en el período. `null`/ausente = nunca lo
+   * operaste; `[]` = lo operaste pero no en este período. */
+  mis_ciclos?: CicloVsEstrategiaOut[] | null
   advertencias: string[]
+}
+
+/** Un ciclo tuyo contra lo que hizo la estrategia (y comprar y mantener) en el mismo tramo. Tu
+ * resultado es real (USD MEP, con comisiones, todo el ciclo); los otros salen de las curvas del
+ * backtest entre `tramo_desde` y `tramo_hasta`. */
+export interface CicloVsEstrategiaOut {
+  ciclo: number
+  desde: string
+  hasta: string | null
+  abierto: boolean
+  tramo_desde: string
+  tramo_hasta: string
+  /** El ciclo empezó antes del período del backtest. */
+  recortado: boolean
+  tu_resultado_usd: number | null
+  tu_resultado_pct: number | null
+  estrategia_pct: number | null
+  buy_hold_pct: number | null
 }
 
 export type CategoriaPreset = 'tendencia' | 'reversion' | 'ruptura' | 'momentum'

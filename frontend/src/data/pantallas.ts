@@ -40,6 +40,7 @@ export const GRUPOS_PANTALLAS: GrupoPantallas[] = [
       { to: '/costo-oportunidad', label: 'Costo de oportunidad', desc: 'Comparación histórica de la cartera contra una referencia, en porcentaje y en dinero', icon: 'scale' },
       { to: '/contribucion', label: 'Contribución', desc: 'Qué aportó cada posición, concentración y correlaciones', icon: 'pie' },
       { to: '/correlaciones', label: 'Matriz de correlaciones', desc: 'Qué tan juntos se mueven tus instrumentos, por período y frecuencia', icon: 'scale' },
+      { to: '/diario-operaciones', label: 'Diario de operaciones', desc: 'Tus compras y ventas con el contexto de mercado de cada una, y cómo operás', icon: 'edit' },
       { to: '/explicacion-resultado', label: '¿Por qué ganó o perdió?', desc: 'Qué factores explican el resultado del período: precio, dividendos, comisiones y más', icon: 'trend' },
     ],
   },

@@ -117,6 +117,21 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
     terminos: ['screener_umbral', 'screener_dispara_ahora', 'screener_grafico_gatillo'],
   },
 
+  '/diario-operaciones': {
+    queEs: 'Todas tus compras y ventas juntas, con cómo estaba el mercado cada vez que operaste y qué pasó después de cada venta.',
+    comoLeerla: [
+      'Arriba, "Cómo operás" resume tus hábitos en frases: si tendés a comprar cerca de máximos o de mínimos, si comprás a favor de la tendencia y si tus ventas se adelantaron a subas.',
+      'Cada fila es una operación: el ticker, qué hiciste, la fecha, la cantidad y el precio. En una compra, abajo ves el RSI, la distancia a la media de 200 ruedas y la posición en el rango anual; en una venta, qué hizo el precio a 30, 90 y 180 días.',
+      'En las ventas, a la derecha está el resultado de esa posición (en dólares MEP, con comisiones).',
+    ],
+    queHacer: [
+      'Filtrá por compras o ventas, o por un ticker, para ver un patrón en particular.',
+      'Tocá una fila para abrir el gráfico técnico de ese ticker, donde esas mismas operaciones están marcadas sobre las velas (botón ▲▼).',
+    ],
+    ojo: 'Es un espejo de lo que hiciste, no una recomendación. Con pocas operaciones las frases se vuelven anécdotas: por eso aparecen sólo con tres o más datos.',
+    terminos: ['diario_como_operas'],
+  },
+
   '/mapa-mercado': {
     queEs: 'Todas las acciones, CEDEARs y ETFs del mercado dibujados como un mapa: las empresas parecidas quedan juntas y el color dice cuánto subieron o bajaron.',
     comoLeerla: [

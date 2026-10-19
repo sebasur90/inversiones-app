@@ -15,13 +15,14 @@ from ..schemas import (
     ScreenerRequest, ScreenerOut,
     ComparadorRequest, ComparadorOut,
     ZonasTickerIn, ZonasTickerOut,
-    OperacionesGraficoOut, TamanoPosicionOut, FuerzaRelativaOut, DibujoIn, DibujoOut,
+    OperacionesGraficoOut, TamanoPosicionOut, FuerzaRelativaOut, DibujoIn, DibujoOut, DiarioOperacionesOut,
 )
 from ..services import ohlcv_analytics, estrategias_analytics, screener_analytics, estrategias_seed
 from ..services import indicadores_engine, estrategia_engine, intervalos_engine
 from ..services import comparador_estrategias_analytics, comparador_estrategias_engine
 from ..services import ticker_analytics, zonas_precio, operaciones_grafico, tamano_posicion
 from ..services import benchmarks, fuerza_relativa_engine, niveles_auto_engine, dibujos_grafico
+from ..services import comparacion_propia, diario_operaciones
 
 router = APIRouter(prefix="/api/inversiones", tags=["tecnico"])
 
@@ -131,6 +132,13 @@ def correr_screener(body: ScreenerRequest, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/operaciones/diario", response_model=DiarioOperacionesOut)
+def diario_de_operaciones(db: Session = Depends(get_db)):
+    """Todas las compras y ventas del usuario con el contexto de mercado de cada una, más un resumen
+    de cómo opera (en cifras y en frases). Cada ticker sobre su serie de referencia."""
+    return diario_operaciones.get_diario(db)
+
+
 @router.get("/tecnico/{ticker}/operaciones", response_model=OperacionesGraficoOut)
 def operaciones_ticker(
     ticker: str,
@@ -151,14 +159,7 @@ def operaciones_ticker(
 
 
 def _variante_efectiva(ticker: str, pedida: Optional[str], db: Session) -> str:
-    """La serie concreta (`local` | `subyacente`) sobre la que responde un endpoint. Mismo criterio
-    que `/serie`: sin variante pedida rige la referencia del ticker, y una referencia sin barras
-    degrada a la local."""
-    variante = ohlcv_analytics.variante_para(db, ticker, pedida)
-    if variante == "subyacente" and pedida is None:
-        if not ohlcv_analytics.get_serie_barras(ticker, date.min, date.today(), db, max_barras=1, variante=variante)["barras"]:
-            return "local"
-    return variante
+    return ohlcv_analytics.variante_efectiva(db, ticker, pedida)
 
 
 @router.get("/tecnico/{ticker}/tamano-posicion", response_model=TamanoPosicionOut)
@@ -455,10 +456,13 @@ def backtest_tecnico(ticker: str, body: BacktestRequest, db: Session = Depends(g
     errores = estrategia_engine.validar_estrategia(body.definicion)
     if errores:
         raise HTTPException(status_code=422, detail="; ".join(errores))
-    return estrategias_analytics.ejecutar_backtest(
-        ticker, body.definicion, db, body.desde, body.hasta,
-        variante=ohlcv_analytics.variante_para(db, ticker, body.variante),
+    variante = ohlcv_analytics.variante_para(db, ticker, body.variante)
+    resultado = estrategias_analytics.ejecutar_backtest(
+        ticker, body.definicion, db, body.desde, body.hasta, variante=variante,
     )
+    # Tus ciclos de este ticker contra la estrategia en el mismo período (None si nunca lo operaste).
+    resultado["mis_ciclos"] = comparacion_propia.para_backtest(ticker, variante, resultado, db)
+    return resultado
 
 
 # ─── Comparador de estrategias ────────────────────────────────────────────────

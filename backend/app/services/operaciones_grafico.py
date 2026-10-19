@@ -120,7 +120,11 @@ def get_operaciones_grafico(
         ciclos_out.append({
             "ciclo": n,
             "desde": ciclo[0].fecha,
-            "hasta": None if abierto else ciclo[-1].fecha,
+            # La fecha de la última venta o amortización: un dividendo que llega después de salir
+            # se atribuye al ciclo pero no lo extiende.
+            "hasta": None if abierto else max(
+                (m.fecha for m in ciclo if m.tipo_movimiento in eng.TIPOS_CIERRE), default=ciclo[-1].fecha,
+            ),
             "abierto": abierto,
             "cantidad_abierta": est.cantidad_held if abierto else 0.0,
             "comprado_usd": round(comprado_usd, 2),

@@ -2242,6 +2242,66 @@ class CicloPosicionOut(BaseModel):
     vwap: Optional[list[PuntoVwapOut]] = None
 
 
+class CicloVsEstrategiaOut(BaseModel):
+    """Un ciclo tuyo contra lo que hizo la estrategia (y comprar y mantener) en el mismo tramo del
+    backtest. Tu resultado es real, en USD MEP y con comisiones, sobre todo el ciclo; los de la
+    estrategia y del buy & hold salen de las curvas del backtest entre `tramo_desde` y `tramo_hasta`."""
+    ciclo: int
+    desde: date
+    hasta: Optional[date] = None
+    abierto: bool
+    tramo_desde: date
+    tramo_hasta: date
+    recortado: bool = False                    # el ciclo empezó antes del período del backtest
+    tu_resultado_usd: Optional[float] = None
+    tu_resultado_pct: Optional[float] = None
+    estrategia_pct: Optional[float] = None
+    buy_hold_pct: Optional[float] = None
+
+
+class DiarioOperacionOut(BaseModel):
+    ticker: str
+    variante: str
+    fecha: date
+    tipo: str                                  # "compra" | "venta" | "amortizacion"
+    cantidad: float
+    precio: float
+    moneda: str
+    precio_usd_mep: Optional[float] = None
+    resultado_usd: Optional[float] = None
+    resultado_pct: Optional[float] = None
+    rsi: Optional[float] = None
+    dist_sma200_pct: Optional[float] = None
+    rango_52s_pct: Optional[float] = None
+    post_30_pct: Optional[float] = None
+    post_90_pct: Optional[float] = None
+    post_180_pct: Optional[float] = None
+    aproximado: bool = False
+
+
+class DiarioResumenOut(BaseModel):
+    n_compras: int
+    n_ventas: int
+    n_rsi: int
+    rsi_medio_compras: Optional[float] = None
+    n_sma200: int
+    pct_compras_sobre_sma200: Optional[float] = None
+    n_rango: int
+    rango_52s_medio_compras: Optional[float] = None
+    n_ventas_con_post90: int
+    n_ventas_subieron: int
+    n_ciclos_cerrados: int
+    n_ciclos_ganadores: int
+    resultado_medio_ciclos_pct: Optional[float] = None
+
+
+class DiarioOperacionesOut(BaseModel):
+    operaciones: list[DiarioOperacionOut] = Field(default_factory=list)   # la más reciente primero
+    resumen: DiarioResumenOut
+    frases: list[str] = Field(default_factory=list)
+    tickers_sin_serie: list[str] = Field(default_factory=list)
+
+
 class OperacionesGraficoOut(BaseModel):
     ticker: str
     variante: str
@@ -2352,6 +2412,9 @@ class BacktestOut(BaseModel):
     indicadores: dict[str, dict[str, list[Optional[float]]]] = Field(default_factory=dict)
     # Índice en `barras` donde arranca el rango pedido (`desde`); lo previo es warm-up de indicadores.
     indice_desde: int = 0
+    # Tus ciclos de tenencia de este ticker contra la estrategia, en el período del backtest. `None` si
+    # nunca operaste el ticker (no hay nada que comparar); `[]` si operaste pero no en este período.
+    mis_ciclos: Optional[list[CicloVsEstrategiaOut]] = None
     advertencias: list[str] = Field(default_factory=list)
 
 

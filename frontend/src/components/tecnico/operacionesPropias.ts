@@ -115,3 +115,60 @@ export function cicloDeFecha(
   return datos.ciclos.find(c =>
     dia(c.desde) <= f && (c.hasta == null || (previa != null ? dia(c.hasta) > previa : f <= dia(c.hasta))))
 }
+
+const signo = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(0)}%`
+
+/** Los campos de contexto que lleva toda operación (en el gráfico y en el diario). */
+export interface ContextoOperacion {
+  tipo: string
+  rsi: number | null
+  dist_sma200_pct: number | null
+  rango_52s_pct: number | null
+  post_30_pct: number | null
+  post_90_pct: number | null
+  post_180_pct: number | null
+}
+
+/** Una línea con el contexto de mercado de una compra ("RSI 28 · −12% vs SMA200 · 15% del rango
+ * anual") o con lo que pasó después de una venta ("después: +4% a 30d · +18% a 90d"). `null` para
+ * lo demás (amortizaciones, cobros). Son indicadores y porcentajes, no importes: se muestran siempre. */
+export function textoContexto(op: ContextoOperacion): string | null {
+  if (op.tipo === 'compra') {
+    const partes = [
+      op.rsi != null ? `RSI ${op.rsi.toFixed(0)}` : null,
+      op.dist_sma200_pct != null ? `${signo(op.dist_sma200_pct)} vs SMA200` : null,
+      op.rango_52s_pct != null ? `${op.rango_52s_pct.toFixed(0)}% del rango anual` : null,
+    ].filter(Boolean)
+    return partes.length > 0 ? partes.join(' · ') : 'sin historia para el contexto'
+  }
+  if (op.tipo === 'venta') {
+    const partes = [
+      op.post_30_pct != null ? `${signo(op.post_30_pct)} a 30d` : null,
+      op.post_90_pct != null ? `${signo(op.post_90_pct)} a 90d` : null,
+      op.post_180_pct != null ? `${signo(op.post_180_pct)} a 180d` : null,
+    ].filter(Boolean)
+    return partes.length > 0 ? `después: ${partes.join(' · ')}` : 'todavía no pasaron 30 días'
+  }
+  return null
+}
+
+const CLAVE_MIS_OPERACIONES = 'tecnico-mis-operaciones'
+
+/** El interruptor de "mis compras y ventas" se recuerda entre visitas (y entre el gráfico técnico y
+ * el del backtest). Es una comodidad: si el almacenamiento no está disponible (ventana privada,
+ * datos bloqueados) arranca apagado. */
+export function leerVerOperaciones(): boolean {
+  try {
+    return localStorage.getItem(CLAVE_MIS_OPERACIONES) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function guardarVerOperaciones(ver: boolean): void {
+  try {
+    localStorage.setItem(CLAVE_MIS_OPERACIONES, ver ? '1' : '0')
+  } catch {
+    /* sin almacenamiento: queda sólo para esta visita */
+  }
+}

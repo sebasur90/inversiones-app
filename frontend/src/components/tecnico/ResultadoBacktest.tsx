@@ -1,9 +1,13 @@
 import { useState } from 'react'
-import type { BacktestOut, EstrategiaDsl } from '../../api'
+import { useQuery } from '@tanstack/react-query'
+import { getOperacionesTicker, type BacktestOut, type EstrategiaDsl } from '../../api'
+import { qk } from '../../api/queryClient'
 import MetricTile from '../ui/MetricTile'
 import GraficoBacktest from './GraficoBacktest'
 import GraficoFullscreen from './GraficoFullscreen'
 import TablaOperaciones from './TablaOperaciones'
+import ComparacionConEstrategia from './ComparacionConEstrategia'
+import { guardarVerOperaciones, leerVerOperaciones } from './operacionesPropias'
 import { textosAdvertenciasSerie } from '../../utils/advertenciasSerie'
 
 function formatPctSigned(v: number | null | undefined): string {
@@ -18,6 +22,20 @@ export default function ResultadoBacktest({ resultado, dsl }: { resultado: Backt
   const tieneGrafico = resultado.barras.length > 0
   const [fullscreen, setFullscreen] = useState(false)
 
+  // Tus compras y ventas de este ticker sobre las velas del backtest, con el mismo botón ▲▼ del
+  // gráfico técnico (y el mismo interruptor recordado). Sólo si alguna vez operaste el ticker.
+  const operoElTicker = resultado.mis_ciclos != null
+  const [verOperaciones, setVerOperaciones] = useState<boolean>(leerVerOperaciones)
+  const operacionesQuery = useQuery({
+    queryKey: qk.de('tecnico-operaciones', resultado.ticker, resultado.variante, 'D'),
+    queryFn: () => getOperacionesTicker(resultado.ticker, resultado.variante),
+    enabled: operoElTicker && verOperaciones && resultado.barras.length > 0,
+  })
+  const alternarOperaciones = () => {
+    guardarVerOperaciones(!verOperaciones)
+    setVerOperaciones(v => !v)
+  }
+
   const propsGrafico = {
     barras: resultado.barras,
     indicadoresSeries: resultado.indicadores,
@@ -31,6 +49,9 @@ export default function ResultadoBacktest({ resultado, dsl }: { resultado: Backt
     moneda: resultado.moneda,
     tieneVelas: resultado.barras.some(b => b.apertura != null),
     tieneVolumen: resultado.barras.some(b => b.volumen != null),
+    misOperaciones: operoElTicker && verOperaciones ? operacionesQuery.data ?? null : null,
+    operacionesActivas: operoElTicker && verOperaciones,
+    onToggleOperaciones: operoElTicker ? alternarOperaciones : undefined,
   }
 
   return (
@@ -107,6 +128,8 @@ export default function ResultadoBacktest({ resultado, dsl }: { resultado: Backt
           <GraficoBacktest {...propsGrafico} fullscreen onToggleFullscreen={() => setFullscreen(false)} />
         </GraficoFullscreen>
       )}
+
+      {resultado.mis_ciclos != null && <ComparacionConEstrategia ciclos={resultado.mis_ciclos} />}
 
       <TablaOperaciones ticker={resultado.ticker} operaciones={resultado.operaciones} />
     </div>

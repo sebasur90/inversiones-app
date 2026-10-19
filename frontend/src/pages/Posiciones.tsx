@@ -116,6 +116,9 @@ export default function Posiciones() {
             className="flex-1 bg-transparent outline-none text-caption text-app-text placeholder:text-app-text-faint"
           />
         </div>
+        <IconButton onClick={() => navigate('/diario-operaciones')} aria-label="Diario de operaciones">
+          <Icon name="edit" className="w-4 h-4" />
+        </IconButton>
         <IconButton
           onClick={() =>
             descargarCSV(

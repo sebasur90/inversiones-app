@@ -35,6 +35,7 @@ import EditorZonas, {
 import ResumenZonas from '../components/tecnico/ResumenZonas'
 import CalculadoraPosicion from '../components/tecnico/CalculadoraPosicion'
 import { useDibujos } from '../components/tecnico/useDibujos'
+import { guardarVerOperaciones, leerVerOperaciones } from '../components/tecnico/operacionesPropias'
 import type { BordeZona, ZonasDibujo } from '../components/tecnico/ZonasPrecio'
 import { textoBorde } from '../components/tecnico/formatoEjes'
 import EstrategiaAvanzadaJson from '../components/tecnico/EstrategiaAvanzadaJson'
@@ -63,21 +64,10 @@ const PERIODOS: PeriodoEvolucion[] = ['1M', '3M', '6M', '1Y', '3Y', 'YTD', 'ALL'
 // (`colorIndicador` ordena por id para asignar el color de las repetidas).
 let proximoIdIndicador = 1
 
-const CLAVE_MIS_OPERACIONES = 'tecnico-mis-operaciones'
 const CLAVE_ESCALA_LOG = 'tecnico-escala-log'
 const INTERVALOS: { value: IntervaloSerie; label: string }[] = [
   { value: 'D', label: 'D' }, { value: 'S', label: 'S' }, { value: 'M', label: 'M' },
 ]
-
-/** El interruptor de "mis compras y ventas" se recuerda entre visitas. Es una comodidad: si el
- * almacenamiento no está disponible (ventana privada, datos bloqueados) arranca apagado. */
-function leerVerOperaciones(): boolean {
-  try {
-    return localStorage.getItem(CLAVE_MIS_OPERACIONES) === '1'
-  } catch {
-    return false
-  }
-}
 
 function leerEscalaLog(): boolean {
   try {
@@ -204,11 +194,7 @@ export default function AnalisisTecnico() {
   function alternarOperaciones() {
     const nuevo = !verOperaciones
     setVerOperaciones(nuevo)
-    try {
-      localStorage.setItem(CLAVE_MIS_OPERACIONES, nuevo ? '1' : '0')
-    } catch {
-      /* sin almacenamiento: queda sólo para esta visita */
-    }
+    guardarVerOperaciones(nuevo)
   }
   function alternarEscalaLog() {
     const nuevo = !escalaLog
