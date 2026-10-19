@@ -1,4 +1,4 @@
-const CACHE_NAME = 'inversiones-shell-v6'
+const CACHE_NAME = 'inversiones-shell-v7'
 const API_CACHE = 'inversiones-api-v1'
 // Logos de las empresas (mapa de mercado). Caché aparte y sin versión atada a la del shell: no son
 // datos del usuario, cambian casi nunca y bajarlos de nuevo en cada deploy sería gastar red por nada.
