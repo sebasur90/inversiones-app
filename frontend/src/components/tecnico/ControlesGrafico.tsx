@@ -9,34 +9,14 @@ import { TACTIL } from './GuiaGestos'
 /** Botones de zoom y pantalla completa, compartidos por el gráfico técnico y el del backtest.
  * 36 px: lo mínimo que un dedo acierta sin tocar el de al lado. */
 export function BotonesGrafico({
-  controles, fullscreen, onToggleFullscreen, operaciones, escalaLog,
+  controles, fullscreen, onToggleFullscreen,
 }: {
   controles: ControlesVentana
   fullscreen?: boolean
   onToggleFullscreen?: () => void
-  /** Interruptor de "mis operaciones" sobre el gráfico. Sin esta prop el botón no existe. */
-  operaciones?: { activo: boolean; onToggle: () => void }
-  /** Interruptor de la escala logarítmica del precio. Sin esta prop el botón no existe. */
-  escalaLog?: { activo: boolean; onToggle: () => void }
 }) {
   return (
     <>
-      {operaciones && (
-        <Boton
-          label={operaciones.activo ? 'Ocultar mis compras y ventas' : 'Mostrar mis compras y ventas'}
-          onClick={operaciones.onToggle} pulsado={operaciones.activo}
-        >
-          <span className="text-caption font-bold">▲▼</span>
-        </Boton>
-      )}
-      {escalaLog && (
-        <Boton
-          label={escalaLog.activo ? 'Volver a la escala lineal' : 'Escala logarítmica'}
-          onClick={escalaLog.onToggle} pulsado={escalaLog.activo}
-        >
-          <span className="text-label font-bold">log</span>
-        </Boton>
-      )}
       <Boton label="Alejar" onClick={() => controles.zoom(1 / 1.5)} disabled={controles.completa}>−</Boton>
       <Boton label="Acercar" onClick={() => controles.zoom(1.5)}>+</Boton>
       <Boton label="Ver todo el período" onClick={controles.reset} disabled={controles.completa}>⤢</Boton>
@@ -46,6 +26,45 @@ export function BotonesGrafico({
         </Boton>
       )}
     </>
+  )
+}
+
+/** Un interruptor de la barra de herramientas del gráfico (mis operaciones, escala log, ...). */
+export interface Herramienta {
+  clave: string
+  /** Lo que se ve en el botón. */
+  texto: string
+  /** Lo que lee un lector de pantalla y el tooltip. */
+  label: string
+  activo: boolean
+  onToggle: () => void
+}
+
+/** Fila de interruptores sobre el gráfico. Va aparte de la ficha: con siete botones en la misma
+ * línea que la fecha y el precio, en el celular no quedaba lugar para leerlos. */
+export function BarraHerramientas({
+  herramientas, children,
+}: {
+  herramientas: Herramienta[]
+  /** Controles extra a continuación de los interruptores (p.ej. el selector de índice). */
+  children?: ReactNode
+}) {
+  if (herramientas.length === 0) return null
+  return (
+    <div className="flex flex-wrap items-center gap-1 mb-1">
+      {herramientas.map(h => (
+        <button
+          key={h.clave} type="button" onClick={h.onToggle} aria-label={h.label} title={h.label}
+          aria-pressed={h.activo}
+          className={`h-8 px-2.5 rounded-lg text-label font-bold leading-none ${
+            h.activo ? 'bg-app-accent-soft text-app-accent' : 'bg-app-surface-2 text-app-text-dim'
+          }`}
+        >
+          {h.texto}
+        </button>
+      ))}
+      {children}
+    </div>
   )
 }
 

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import type { BarraOut, OperacionOut, OperacionesGraficoOut, SenalOut } from '../../api'
+import type { BarraOut, NivelAutoOut, OperacionOut, OperacionesGraficoOut, SenalOut } from '../../api'
 import type { EscalaX } from './useEscalaX'
 import { manejadoresPuntero } from './crosshair'
 import { trazoDeSerie, valoresVisibles } from './trazo'
@@ -39,6 +39,8 @@ const COLOR_TRAILING = '#fbbf24'
 const COLOR_GATILLO_COMPRA = '#10b981'
 const COLOR_GATILLO_VENTA = '#ef4444'
 const COLOR_CRUZ = '#475569'
+const COLOR_RESISTENCIA = '#fb923c'
+const COLOR_SOPORTE = '#a3e635'
 /** Halo detrás de las etiquetas del eje: se leen aunque pase una vela o una media por debajo. */
 const COLOR_HALO = '#121621'
 /** Con velas más angostas que esto, el cuerpo y la mecha se confunden en una mancha: se dibuja la
@@ -69,7 +71,7 @@ export function salidasGraficables(o: OverlayPrecio): [string, (number | null)[]
  * motor de backtest y viajan en la respuesta: dibujarlos re-derivándolos acá daría una línea que
  * no es la que efectivamente disparó la salida. */
 export default function PanelPrecio({
-  barras, escalaX, alto, tieneVelas, overlays, senales, operaciones, primeraBarraEvaluable, moneda, gatillo, zonas, editandoZonas, onArrastrarZona, misOperaciones, escalaLog, hoverIndex, onHover,
+  barras, escalaX, alto, tieneVelas, overlays, senales, operaciones, primeraBarraEvaluable, moneda, gatillo, zonas, editandoZonas, onArrastrarZona, misOperaciones, escalaLog, nivelesAuto, hoverIndex, onHover,
 }: {
   barras: BarraOut[]
   escalaX: EscalaX
@@ -90,6 +92,9 @@ export default function PanelPrecio({
   misOperaciones?: OperacionesGraficoOut | null
   /** Escala logarítmica en el eje de precio (los osciladores quedan lineales). */
   escalaLog?: boolean
+  /** Soportes y resistencias automáticos. No entran en la escala Y: como una zona lejana, un nivel
+   * fuera del tramo que se mira simplemente no se ve. */
+  nivelesAuto?: NivelAutoOut[] | null
   hoverIndex: number | null
   onHover: (i: number | null) => void
 }) {
@@ -280,6 +285,29 @@ export default function PanelPrecio({
           editando={editandoZonas} onArrastrar={onArrastrarZona}
           onArrastreActivo={activo => setDominioCongelado(activo ? [y0, y1] : null)}
         />
+      )}
+
+      {nivelesAuto && nivelesAuto.length > 0 && (
+        <g pointerEvents="none">
+          {nivelesAuto.map(n => {
+            const y = yDeValor(n.precio)
+            if (y < 0 || y > alto) return null
+            const color = n.tipo === 'resistencia' ? COLOR_RESISTENCIA : COLOR_SOPORTE
+            return (
+              <g key={`${n.tipo}-${n.precio}`}>
+                <line x1={0} x2={escalaX.ancho} y1={y} y2={y} stroke={color} strokeWidth={1} strokeDasharray="1 3" opacity={0.75}>
+                  <title>{`${n.tipo === 'resistencia' ? 'Resistencia' : 'Soporte'} ${formatoPrecio(n.precio)}: ${n.toques} toques`}</title>
+                </line>
+                <text
+                  x={4} y={y - 3} fontSize={9} fill={color} stroke={COLOR_HALO} strokeWidth={3} paintOrder="stroke"
+                  className="font-mono font-bold"
+                >
+                  {`${n.tipo === 'resistencia' ? 'R' : 'S'} · ${n.toques} toques`}
+                </text>
+              </g>
+            )
+          })}
+        </g>
       )}
 
       {ubicadas && <MarcasOperaciones ubicadas={ubicadas} escalaX={escalaX} alto={alto} yDeValor={yDeValor} />}

@@ -15,7 +15,8 @@ Qué hace este job, entonces:
 4. re-cotiza la watchlist (`watchlist_analytics.refrescar_precios`);
 5. refresca el último precio en USD del subyacente de los tickers que tienen una zona medida sobre
    esa serie o que se miran en dólares por ser CEDEARs (`_refrescar_subyacentes`);
-6. deja registro en `refresco_precios` (una fila, no un `SyncRun` -- ver el modelo).
+6. pone al día los índices de la fuerza relativa que ya se bajaron alguna vez (`benchmarks`);
+7. deja registro en `refresco_precios` (una fila, no un `SyncRun` -- ver el modelo).
 
 Qué **no** hace, y por eso es liviano: no lee el Sheet, no valida pestañas, no hace backfill
 histórico, no toca CER/MEP/benchmarks, no purga huérfanos y no escribe en el historial de calidad
@@ -38,7 +39,7 @@ from ..database import (
     PrecioSubyacente, RefrescoPrecios, ZonaPrecio,
 )
 from . import (
-    cotizacion_diaria, estado_market_data, ohlcv_analytics, watchlist_analytics, zonas_precio,
+    benchmarks, cotizacion_diaria, estado_market_data, ohlcv_analytics, watchlist_analytics, zonas_precio,
 )
 from .market_data import precios as market_data_precios
 from .market_data import iol_auth
@@ -340,6 +341,11 @@ def refrescar(db: Session) -> dict:
 
     # Subyacentes en USD de las zonas que se miden sobre esa serie (yfinance, sin cupo de IOL).
     subyacentes = _refrescar_subyacentes(db)
+    # Índices de la fuerza relativa que ya se bajaron alguna vez: una llamada por día y por índice.
+    try:
+        benchmarks.refrescar(db)
+    except Exception:  # un índice que no baja no tiene que costar el refresco de precios
+        logger.exception("refresco: no se pudieron actualizar los índices de referencia")
 
     estado_market_data.persistir(db, estado_por_ticker)
 

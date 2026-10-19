@@ -1,7 +1,7 @@
 """Endpoints de análisis técnico: universo de tickers, serie de barras + indicadores, backtest y
 CRUD de estrategias guardadas.
 """
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -15,12 +15,13 @@ from ..schemas import (
     ScreenerRequest, ScreenerOut,
     ComparadorRequest, ComparadorOut,
     ZonasTickerIn, ZonasTickerOut,
-    OperacionesGraficoOut, TamanoPosicionOut,
+    OperacionesGraficoOut, TamanoPosicionOut, FuerzaRelativaOut,
 )
 from ..services import ohlcv_analytics, estrategias_analytics, screener_analytics, estrategias_seed
 from ..services import indicadores_engine, estrategia_engine, intervalos_engine
 from ..services import comparador_estrategias_analytics, comparador_estrategias_engine
 from ..services import ticker_analytics, zonas_precio, operaciones_grafico, tamano_posicion
+from ..services import benchmarks, fuerza_relativa_engine, niveles_auto_engine
 
 router = APIRouter(prefix="/api/inversiones", tags=["tecnico"])
 
@@ -186,6 +187,7 @@ def serie_tecnica(
         None, description="`local` o `subyacente`. Sin valor, la serie de referencia del ticker.",
     ),
     intervalo: str = Query("D", pattern="^[DSM]$", description="`D` diario, `S` semanal o `M` mensual."),
+    niveles_auto: bool = Query(False, description="Suma los soportes y resistencias automáticos."),
     db: Session = Depends(get_db),
 ):
     _validar_ticker_tecnico(ticker, db)
@@ -215,19 +217,8 @@ def serie_tecnica(
         default=0,
     )
 
-    # Con S o M se lee la serie diaria con `factor` veces más historia y se agrega *antes* de calcular
-    # los indicadores (un RSI semanal es el RSI de las barras semanales). El tope de lectura sigue
-    # siendo de 3000 barras diarias.
-    factor = intervalos_engine.FACTOR[intervalo]
-    previas_diarias = barras_previas * factor + (factor if factor > 1 else 0)
-    max_diarias = min(max_barras * factor, 3000)
-
     def leer(variante_leida: str) -> dict:
-        serie_diaria = ohlcv_analytics.get_serie_barras(
-            ticker, desde, hasta, db, barras_previas=previas_diarias, max_barras=max_diarias,
-            variante=variante_leida,
-        )
-        return _agregar_serie(serie_diaria, intervalo, max_barras)
+        return _leer_serie(ticker, desde, hasta, db, barras_previas, max_barras, variante_leida, intervalo)
 
     serie = leer(variante)
 
@@ -247,14 +238,102 @@ def serie_tecnica(
         for clave_raw, nombre, params in especificaciones:
             resultado_indicadores[clave_raw] = indicadores_engine.calcular(nombre, serie["barras"], params)
 
+    # Sobre el tramo visible y la serie ya agregada: los niveles son lo que se ve en pantalla.
+    niveles = (
+        niveles_auto_engine.niveles_automaticos(serie["barras"][serie["indice_desde"]:])
+        if niveles_auto and serie["barras"] else None
+    )
+
     return {
         "ticker": serie["ticker"], "nombre": serie["nombre"], "moneda": serie["moneda"],
         "variante": serie["variante"], "mercado": serie["mercado"],
         "origen": serie["origen"], "fuente_serie": serie["fuente_serie"],
         "tiene_velas": serie["tiene_velas"], "tiene_volumen": serie["tiene_volumen"],
         "indice_desde": serie["indice_desde"], "barras": serie["barras"],
-        "indicadores": resultado_indicadores, "advertencias": serie["advertencias"],
+        "indicadores": resultado_indicadores, "niveles_auto": niveles,
+        "advertencias": serie["advertencias"],
     }
+
+
+def _leer_serie(
+    ticker: str, desde: date, hasta: date, db: Session, barras_previas: int, max_barras: int,
+    variante: str, intervalo: str,
+) -> dict:
+    """La serie de `get_serie_barras` en el intervalo pedido.
+
+    Con S o M se lee la serie diaria con `factor` veces más historia y se agrega *antes* de calcular
+    los indicadores (un RSI semanal es el RSI de las barras semanales). El tope de lectura sigue
+    siendo de 3000 barras diarias."""
+    factor = intervalos_engine.FACTOR[intervalo]
+    previas_diarias = barras_previas * factor + (factor if factor > 1 else 0)
+    max_diarias = min(max_barras * factor, 3000)
+    serie_diaria = ohlcv_analytics.get_serie_barras(
+        ticker, desde, hasta, db, barras_previas=previas_diarias, max_barras=max_diarias,
+        variante=variante,
+    )
+    return _agregar_serie(serie_diaria, intervalo, max_barras)
+
+
+@router.get("/tecnico/{ticker}/fuerza-relativa", response_model=FuerzaRelativaOut)
+def fuerza_relativa(
+    ticker: str,
+    variante: Optional[str] = Query(
+        None, description="`local` o `subyacente`. Sin valor, la serie de referencia del ticker.",
+    ),
+    benchmark: Optional[str] = Query(
+        None, description="`SPY`, `QQQ` o `^MERV`. Sin valor, según la moneda de la serie: USD → SPY, ARS → ^MERV.",
+    ),
+    desde: Optional[date] = Query(None),
+    intervalo: str = Query("D", pattern="^[DSM]$"),
+    max_barras: int = Query(ohlcv_analytics.MAX_BARRAS_DEFAULT, ge=1, le=3000),
+    db: Session = Depends(get_db),
+):
+    """Ratio del activo contra un índice (cierre / cierre del índice, base 100 en la primera barra
+    visible) y su SMA(50). Misma ventana que `/serie` con los mismos `desde`, `intervalo` y
+    `max_barras`: las dos respuestas se alinean por fecha.
+
+    La primera vez que se pide un índice se baja su historia de Yahoo (puede tardar unos segundos)."""
+    _validar_ticker_tecnico(ticker, db)
+    _validar_variante(variante)
+    if benchmark is not None and benchmark not in benchmarks.BENCHMARKS:
+        raise HTTPException(status_code=422, detail=f"índice desconocido: '{benchmark}'")
+    variante = _variante_efectiva(ticker, variante, db)
+
+    serie = _leer_serie(
+        ticker, desde or date.min, date.today(), db, fuerza_relativa_engine.PERIODO_SMA, max_barras,
+        variante, intervalo,
+    )
+    bench = benchmark or benchmarks.por_defecto(serie["moneda"])
+    meta = benchmarks.BENCHMARKS[bench]
+    salida = {
+        "ticker": ticker, "variante": variante, "moneda": serie["moneda"], "benchmark": bench,
+        "benchmark_nombre": meta["nombre"], "benchmark_moneda": meta["moneda"], "intervalo": intervalo,
+        "fechas": [], "ratio": [], "sma": [], "advertencias": [],
+    }
+    barras = serie["barras"]
+    if not barras:
+        return salida
+    if not benchmarks.asegurar(db, bench):
+        salida["advertencias"].append("sin_benchmark")
+        return salida
+
+    desde_idx = serie["indice_desde"]
+    bench_barras = benchmarks.barras(db, bench, desde=barras[0].fecha - timedelta(days=15))
+    alineado = fuerza_relativa_engine.alinear_benchmark(barras, bench_barras, intervalo)
+    calculo = fuerza_relativa_engine.fuerza_relativa([b.cierre for b in barras], alineado, desde_idx)
+    visibles = slice(desde_idx, None)
+    salida["fechas"] = [b.fecha for b in barras[visibles]]
+    salida["ratio"] = calculo["ratio"][visibles]
+    salida["sma"] = calculo["sma"][visibles]
+    cubiertas = sum(1 for v in alineado[visibles] if v is not None)
+    if cubiertas == 0:
+        salida["advertencias"].append("sin_benchmark")
+    elif cubiertas < 0.9 * len(salida["fechas"]):
+        salida["advertencias"].append("benchmark_incompleto")
+    # Una serie en pesos contra el S&P 500 (o al revés) mezcla la devaluación con el desempeño.
+    if (serie["moneda"] or "").upper() != meta["moneda"]:
+        salida["advertencias"].append("moneda_distinta")
+    return salida
 
 
 def _agregar_serie(serie: dict, intervalo: str, max_barras: int) -> dict:

@@ -2279,7 +2279,18 @@ export interface SerieTecnicaOut {
   indice_desde: number
   barras: BarraOut[]
   indicadores: Record<string, Record<string, (number | null)[]>>
+  /** Sólo se pide con `niveles_auto`: los soportes y resistencias más fuertes. */
+  niveles_auto?: NivelAutoOut[] | null
   advertencias: string[]
+}
+
+/** Un soporte o resistencia detectado automáticamente sobre el tramo visible. */
+export interface NivelAutoOut {
+  precio: number
+  toques: number
+  ultima_fecha: string
+  tipo: 'soporte' | 'resistencia'
+  puntaje: number
 }
 
 export const getTickersTecnicos = () =>
@@ -2292,10 +2303,37 @@ export const getSerieTecnica = (
   ticker: string,
   params: {
     desde?: string; hasta?: string; indicadores?: string[]; max_barras?: number; variante?: VarianteSerie
-    intervalo?: IntervaloSerie
+    intervalo?: IntervaloSerie; niveles_auto?: boolean
   },
 ) =>
   api.get<SerieTecnicaOut>(`/inversiones/tecnico/${encodeURIComponent(ticker)}/serie`, { params }).then(r => r.data)
+
+export type BenchmarkFR = 'SPY' | 'QQQ' | '^MERV'
+
+/** Ratio del activo contra un índice, base 100 en la primera barra visible. Las tres listas son
+ * paralelas y cubren sólo las barras visibles: se alinean al gráfico por fecha. */
+export interface FuerzaRelativaOut {
+  ticker: string
+  variante: VarianteSerie
+  moneda: string
+  benchmark: BenchmarkFR
+  benchmark_nombre: string
+  benchmark_moneda: string
+  intervalo: IntervaloSerie
+  fechas: string[]
+  ratio: (number | null)[]
+  /** SMA(50) del ratio. */
+  sma: (number | null)[]
+  advertencias: string[]
+}
+
+export const getFuerzaRelativa = (
+  ticker: string,
+  params: { variante: VarianteSerie; benchmark?: BenchmarkFR; desde?: string; intervalo?: IntervaloSerie; max_barras?: number },
+) =>
+  api.get<FuerzaRelativaOut>(
+    `/inversiones/tecnico/${encodeURIComponent(ticker)}/fuerza-relativa`, { params },
+  ).then(r => r.data)
 
 /** Insumos de la calculadora de tamaño de posición (la cuenta se hace en el front). */
 export interface TamanoPosicionOut {

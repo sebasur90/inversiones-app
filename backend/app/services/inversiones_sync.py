@@ -90,7 +90,9 @@ def _issues_de_splits(db: Session) -> list[ValidationIssue]:
     )
     por_ticker: dict[str, list[_BarraCierre]] = {}
     for ticker, fecha, cierre in filas:
-        if cierre is None:
+        # Los índices de referencia (`SPY@BENCH`...) no son instrumentos del usuario: un salto
+        # ahí no es algo que pueda corregir.
+        if cierre is None or ohlcv_analytics.es_clave_benchmark(ticker):
             continue
         por_ticker.setdefault(ticker, []).append(_BarraCierre(fecha, float(cierre)))
 
@@ -720,7 +722,12 @@ def sync_from_sheet(db: Session) -> dict:
                 ohlcv_analytics.clave_serie(t, "subyacente") for t in tickers_base
             }
             if tickers_ohlcv_validos:
-                db.query(BarraOHLCV).filter(BarraOHLCV.ticker.notin_(tickers_ohlcv_validos)).delete(synchronize_session=False)
+                # Los índices de referencia de la fuerza relativa (`SIMBOLO@BENCH`) no pertenecen a
+                # ningún instrumento y tampoco son huérfanos: se conservan.
+                db.query(BarraOHLCV).filter(
+                    BarraOHLCV.ticker.notin_(tickers_ohlcv_validos),
+                    ~BarraOHLCV.ticker.like(f"%{ohlcv_analytics.SUFIJO_BENCHMARK}"),
+                ).delete(synchronize_session=False)
                 db.flush()
 
         if usa_apis:

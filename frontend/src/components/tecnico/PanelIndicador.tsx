@@ -8,6 +8,7 @@ const PALETA_SUBSERIE: Record<string, string> = {
   valor: '#8b5cf6', k: '#f59e0b', d: '#3b82f6',
   macd: '#10b981', senal: '#ef4444',
   adx: '#f59e0b', di_mas: '#10b981', di_menos: '#ef4444',
+  ratio: '#22d3ee', sma: '#f59e0b',
 }
 const COLOR_GRID = '#1c1f2a'
 const COLOR_EJE = '#94a3b8'
@@ -34,8 +35,10 @@ export default function PanelIndicador({
   // Sólo el tramo visible: al acercar el zoom, un oscilador sin dominio fijo (MACD, ATR, RETORNO)
   // tiene que reescalar sobre lo que se está mirando.
   const valores = Object.values(series).flatMap(s => valoresVisibles(s, escalaX))
-  const minV = dominioFijo ? dominioFijo[0] : Math.min(0, ...(valores.length ? valores : [0]))
-  const maxV = dominioFijo ? dominioFijo[1] : Math.max(0, ...(valores.length ? valores : [1]))
+  // La fuerza relativa oscila alrededor de 100 (su base): forzar el 0 en la escala la aplastaría.
+  const piso = tipo === 'FUERZA_RELATIVA' ? 100 : 0
+  const minV = dominioFijo ? dominioFijo[0] : Math.min(piso, ...(valores.length ? valores : [piso]))
+  const maxV = dominioFijo ? dominioFijo[1] : Math.max(piso, ...(valores.length ? valores : [piso + 1]))
   const pad = dominioFijo ? 0 : (maxV - minV) * 0.12 || 1
   const y0 = minV - pad
   const y1 = maxV + pad
@@ -46,6 +49,7 @@ export default function PanelIndicador({
     tipo === 'ESTOCASTICO' ? [20, 80] :
     tipo === 'PERCENTIL' ? [10, 90] :
     tipo === 'ADX' ? [25] :
+    tipo === 'FUERZA_RELATIVA' ? [100] :
     tipo === 'MACD' || tipo === 'RETORNO' ? [0] : []
 
   const anchoBarra = Math.max(1, escalaX.pasoX * 0.6)

@@ -807,6 +807,31 @@ def test_purga_no_borra_sub_mientras_el_ticker_este_y_si_cuando_sale(monkeypatch
         db.close()
 
 
+def test_purga_no_borra_los_indices_de_referencia(monkeypatch):
+    """`SPY@BENCH`... (fuerza relativa) no pertenecen a ningún instrumento pero tampoco son
+    huérfanos: la purga de velas no se los lleva."""
+    db = _make_db()
+    _sembrar_watchlist(db, "MSFT", "CEDEAR", 26000.0)
+    original_fetch = sync_module.fetch_sheet_data
+    sync_module.fetch_sheet_data = _mock_fetch(_tabs_con_cedear_watchlist())
+    _mockear_apis_ohlcv(monkeypatch, {})
+    _mockear_yahoo(monkeypatch)
+
+    try:
+        sync_from_sheet(db)
+        db.add(BarraOHLCV(ticker="SPY@BENCH", fecha=date(2026, 8, 27), cierre=500.0, apertura=499.0,
+                          maximo=501.0, minimo=498.0, volumen=1.0, moneda="USD", fuente="yahoo"))
+        db.add(BarraOHLCV(ticker="COSA_SUELTA", fecha=date(2026, 8, 27), cierre=1.0, moneda="ARS", fuente="api"))
+        db.commit()
+        sync_from_sheet(db)
+
+        assert db.query(BarraOHLCV).filter(BarraOHLCV.ticker == "SPY@BENCH").count() == 1
+        assert db.query(BarraOHLCV).filter(BarraOHLCV.ticker == "COSA_SUELTA").count() == 0
+    finally:
+        sync_module.fetch_sheet_data = original_fetch
+        db.close()
+
+
 def test_estado_de_resolucion_sobrevive_dos_syncs(monkeypatch):
     db = _make_db()
     _sembrar_watchlist(db, "MSFT", "CEDEAR", 26000.0)

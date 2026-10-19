@@ -5,9 +5,9 @@ import { qk } from '../api/queryClient'
 import {
   getTickersTecnicos, getSerieTecnica, getPresetsEstrategia, listarEstrategias,
   guardarEstrategia, actualizarEstrategia, duplicarEstrategia, eliminarEstrategiaTecnica,
-  backtestEstrategia, sembrarPresetsEstrategia, getZonasTicker, guardarZonasTicker, getOperacionesTicker,
+  backtestEstrategia, sembrarPresetsEstrategia, getZonasTicker, guardarZonasTicker, getOperacionesTicker, getFuerzaRelativa,
   type CategoriaPreset, type EstrategiaDsl, type EstrategiaOut, type BacktestOut,
-  type PresetEstrategiaOut, type IntervaloSerie, type VarianteSerie, type VarianteEstrategia, type TipoZona, type ZonaPrecioIn,
+  type PresetEstrategiaOut, type BenchmarkFR, type IntervaloSerie, type VarianteSerie, type VarianteEstrategia, type TipoZona, type ZonaPrecioIn,
   type ZonaPrecioOut,
 } from '../api'
 import ScreenHeader from '../components/layout/ScreenHeader'
@@ -104,6 +104,10 @@ export default function AnalisisTecnico() {
   const [escalaLog, setEscalaLog] = useState<boolean>(leerEscalaLog)
   const [intervalo, setIntervalo] = useState<IntervaloSerie>('D')
   // Stop que está probando la calculadora de tamaño: se dibuja como una línea provisoria.
+  const [verNiveles, setVerNiveles] = useState(false)
+  const [verFuerzaRelativa, setVerFuerzaRelativa] = useState(false)
+  // `null` = el que corresponde a la moneda de la serie (S&P 500 en dólares, Merval en pesos).
+  const [benchmarkSel, setBenchmarkSel] = useState<BenchmarkFR | null>(null)
   const [stopProvisorio, setStopProvisorio] = useState<number | null>(null)
   // Preferencia de variante; la efectiva se deriva contra las variantes reales del ticker actual
   // (sin useEffect, para que no haya flash al cambiar de ticker).
@@ -127,6 +131,7 @@ export default function AnalisisTecnico() {
    * refresco. `replace` para no llenar el historial de atrás con cada ticker mirado. */
   function elegirTicker(nuevo: string) {
     setTickerSel(nuevo)
+    setBenchmarkSel(null)
     setVarianteSel(null)   // cada ticker abre en su propia referencia, no en la serie del anterior
     setBorrador(null)   // el borrador era de otro instrumento
     setErrorZonas(null)
@@ -164,12 +169,25 @@ export default function AnalisisTecnico() {
 
   const serieQuery = useQuery({
     queryKey: qk.de('tecnico-serie', ticker, desde, claves.join(','), variante, maxBarras ?? 0, intervalo),
-    queryFn: () => getSerieTecnica(ticker as string, { desde, indicadores: claves, variante, max_barras: maxBarras, intervalo }),
+    queryFn: () => getSerieTecnica(ticker as string, {
+      desde, indicadores: claves, variante, max_barras: maxBarras, intervalo, niveles_auto: true,
+    }),
     enabled: ticker !== null,
   })
   const serie = serieQuery.data
   const ultimoCierre = serie?.barras[serie.barras.length - 1]?.cierre ?? null
   const monedaMostrada = serie?.moneda || monedaSerie
+
+  // La fuerza relativa se pide con la misma ventana que la serie (mismos `desde`, `intervalo` y
+  // `max_barras`) y se alinea por fecha. Sólo con el panel prendido.
+  const fuerzaRelativaQuery = useQuery({
+    queryKey: qk.de('tecnico-fuerza-relativa', ticker, serie?.variante, benchmarkSel, desde, intervalo, maxBarras ?? 0),
+    queryFn: () => getFuerzaRelativa(ticker as string, {
+      variante: serie!.variante, benchmark: benchmarkSel ?? undefined, desde, intervalo, max_barras: maxBarras,
+    }),
+    enabled: ticker !== null && serie != null && verFuerzaRelativa,
+    staleTime: 5 * 60_000,
+  })
 
   // Sólo hay operaciones propias que mostrar si el ticker está (o estuvo) en la cartera.
   const puedeVerOperaciones = tickerMeta != null && tickerMeta.origen !== 'watchlist'
@@ -202,6 +220,19 @@ export default function AnalisisTecnico() {
   }
   const propsOperaciones = {
     intervalo,
+    // El servidor los calcula siempre (es barato); el botón sólo decide si se dibujan.
+    nivelesAuto: serie?.niveles_auto ?? null,
+    nivelesActivos: verNiveles,
+    onToggleNiveles: () => setVerNiveles(v => !v),
+    fuerzaRelativa: {
+      activa: verFuerzaRelativa,
+      onToggle: () => setVerFuerzaRelativa(v => !v),
+      benchmark: benchmarkSel,
+      onBenchmark: setBenchmarkSel,
+      datos: fuerzaRelativaQuery.data,
+      cargando: fuerzaRelativaQuery.isFetching,
+      error: fuerzaRelativaQuery.isError,
+    },
     escalaLog,
     onToggleEscalaLog: alternarEscalaLog,
     misOperaciones,
@@ -395,7 +426,7 @@ export default function AnalisisTecnico() {
                   label: s.variante === 'local' ? `Local (${s.moneda})` : `Subyacente (${s.moneda})`,
                 }))}
                 value={variante}
-                onChange={v => { setVarianteSel(v as VarianteSerie); setBorrador(null) }}
+                onChange={v => { setVarianteSel(v as VarianteSerie); setBorrador(null); setBenchmarkSel(null) }}
               />
             )}
             {monedaMostrada && (

@@ -2118,6 +2118,15 @@ class BarraOut(BaseModel):
     volumen: Optional[float] = None
 
 
+class NivelAutoOut(BaseModel):
+    """Un soporte o resistencia detectado automáticamente (ver `niveles_auto_engine`)."""
+    precio: float
+    toques: int
+    ultima_fecha: date
+    tipo: str                    # "soporte" | "resistencia"
+    puntaje: float
+
+
 class SerieTecnicaOut(BaseModel):
     ticker: str
     nombre: str
@@ -2132,7 +2141,26 @@ class SerieTecnicaOut(BaseModel):
     barras: list[BarraOut]
     # clave = clave() del indicador (p.ej "SMA(50)"), valor = {salida: [valores...]}
     indicadores: dict[str, dict[str, list[Optional[float]]]] = Field(default_factory=dict)
+    # Sólo con `niveles_auto=true`: los más fuertes sobre y bajo el último cierre.
+    niveles_auto: Optional[list[NivelAutoOut]] = None
     advertencias: list[str] = Field(default_factory=list)
+
+
+class FuerzaRelativaOut(BaseModel):
+    """Ratio del activo contra un índice, normalizado a 100 en la primera barra visible.
+
+    `fechas`, `ratio` y `sma` son paralelas y cubren sólo las barras visibles (desde `desde`)."""
+    ticker: str
+    variante: str
+    moneda: str
+    benchmark: str
+    benchmark_nombre: str
+    benchmark_moneda: str
+    intervalo: str
+    fechas: list[date] = Field(default_factory=list)
+    ratio: list[Optional[float]] = Field(default_factory=list)
+    sma: list[Optional[float]] = Field(default_factory=list)   # SMA(50) del ratio
+    advertencias: list[str] = Field(default_factory=list)      # "sin_benchmark" | "moneda_distinta" | "benchmark_incompleto"
 
 
 class OperacionPropiaOut(BaseModel):

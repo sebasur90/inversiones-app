@@ -80,6 +80,16 @@ def ticker_base(clave: str) -> str:
     return clave[: -len(SUFIJO_SUBYACENTE)] if clave.endswith(SUFIJO_SUBYACENTE) else clave
 
 
+# Los índices de referencia para la fuerza relativa (SPY, QQQ, ^MERV) se guardan en la misma tabla
+# bajo `SIMBOLO@BENCH`. No son del universo técnico (no se pueden graficar ni tienen movimientos):
+# `variantes_de_ticker` los ignora y el sync no los purga. Ver `benchmarks`.
+SUFIJO_BENCHMARK = "@BENCH"
+
+
+def es_clave_benchmark(clave: str) -> bool:
+    return clave.endswith(SUFIJO_BENCHMARK)
+
+
 def variante_de_clave(clave: str) -> str:
     return "subyacente" if clave.endswith(SUFIJO_SUBYACENTE) else "local"
 
@@ -182,6 +192,8 @@ def variantes_de_ticker(db: Session) -> dict[str, list[dict]]:
 
     out: dict[str, list[dict]] = {}
     for clave, moneda in moneda_dominante.items():
+        if es_clave_benchmark(clave):
+            continue
         base = ticker_base(clave)
         variante = variante_de_clave(clave)
         if variante == "local":
