@@ -194,7 +194,10 @@ def simular_escenario(
         - Los aportes y retiros se prorratea entre posiciones (o en el bucket sintético si vacío).
         - Dividendos se calculan portfolio-wide a partir del valor total del mes.
         - Capital aportado = capital_inicial + sum(aportes) - sum(retiros).
-        - Rendimiento = ganancia_perdida / capital_aportado (aportes excluidos de retorno).
+        - Ganancia = patrimonio_final - patrimonio_inicial - aportes netos del horizonte (se mide
+          desde el valor de hoy, no desde el costo histórico) y ya descuenta las comisiones.
+        - Rendimiento = ganancia / (patrimonio_inicial + aportes netos del horizonte).
+        - Comisión: porcentaje de cada aporte mensual que no llega a la cartera.
     """
     if params.horizonte_meses <= 0:
         raise ValueError("horizonte_meses debe ser > 0")
@@ -231,7 +234,9 @@ def simular_escenario(
     # Acumuladores
     valor_total = snapshot.valor_total_usd
     capital_aportado_acum = snapshot.total_invertido_usd
+    aportes_netos_acum = 0.0           # lo que entra/sale de tu bolsillo DENTRO del horizonte
     dividendos_acum = 0.0
+    dividendos_reinvertidos_acum = 0.0  # la parte de los dividendos que queda dentro del patrimonio
     comisiones_acum = 0.0
     extraordinario_acum = 0.0
     puntos = []
@@ -282,6 +287,7 @@ def simular_escenario(
 
         # 5. Aplicar modo_dividendos
         if params.modo_dividendos == "reinvertir_total":
+            dividendos_reinvertidos_acum += dividendo_mes
             # Prorratea el dividendo entre posiciones
             if tiene_posiciones and valor_total > 0:
                 for pos in posiciones.values():
@@ -291,6 +297,7 @@ def simular_escenario(
         elif params.modo_dividendos == "reinvertir_parcial":
             pct = params.pct_dividendo_reinvertido or 0.0
             reinvertido = dividendo_mes * (pct / 100)
+            dividendos_reinvertidos_acum += reinvertido
             if tiene_posiciones and valor_total > 0:
                 for pos in posiciones.values():
                     pos["valor_usd"] += reinvertido * (pos["valor_usd"] / valor_total)
@@ -321,14 +328,17 @@ def simular_escenario(
         comision_mes = aporte_mes * (params.comision_pct / 100)
         comisiones_acum += comision_mes
 
-        # 9. Agregar aporte (neto de retiro)
-        if aporte_neto != 0:
+        # 9. Agregar aporte (neto de retiro y de comisión). La comisión sale de tu bolsillo pero no
+        # llega a la cartera: antes sólo se acumulaba para mostrarla y el aporte entraba completo, así
+        # que la columna "Comisiones" no restaba nada del resultado.
+        aporte_invertido = aporte_neto - comision_mes
+        if aporte_invertido != 0:
             if tiene_posiciones and valor_total > 0:
                 # Prorratea entre posiciones
                 for pos in posiciones.values():
-                    pos["valor_usd"] += aporte_neto * (pos["valor_usd"] / valor_total)
+                    pos["valor_usd"] += aporte_invertido * (pos["valor_usd"] / valor_total)
             else:
-                valor_total += aporte_neto
+                valor_total += aporte_invertido
 
         # 10. Recalcular valor total
         if tiene_posiciones:
@@ -336,6 +346,7 @@ def simular_escenario(
 
         # 11. Actualizar acumuladores
         capital_aportado_acum += aporte_neto
+        aportes_netos_acum += aporte_neto
 
         # 12. Registrar punto
         fecha_mes = snapshot.fecha + timedelta(days=30 * mes)  # Aprox, mes de 30 días
@@ -377,11 +388,19 @@ def simular_escenario(
         resultado_sin_fx = simular_escenario(snapshot, params_sin_fx)
         efecto_dolar_usd = patrimonio_final - resultado_sin_fx.patrimonio_final_usd
 
-    ganancia_perdida = patrimonio_final - capital_aportado_acum
-    efecto_mercado = ganancia_perdida - efecto_dolar_usd - dividendos_acum
+    # Ganancia DEL ESCENARIO: lo que cambia el patrimonio en el horizonte más allá de lo que
+    # aportás/retirás. Se mide desde el valor de hoy, no desde el costo histórico (como se hacía):
+    # con costo 50k y valor 100k, un escenario sin ningún cambio mostraba "+50k, +100%, efecto
+    # mercado +50k" por una ganancia que ya existía antes de simular.
+    ganancia_perdida = patrimonio_final - patrimonio_inicial - aportes_netos_acum
+    # Efecto de mercado: la parte de la ganancia que no es dólar, dividendos reinvertidos (que sí
+    # están dentro del patrimonio) ni comisiones. Los dividendos retirados no están en el
+    # patrimonio, así que no se restan (antes se restaban igual y el efecto mercado quedaba corto).
+    efecto_mercado = ganancia_perdida - efecto_dolar_usd - dividendos_reinvertidos_acum + comisiones_acum
 
-    # Rendimiento: ganancia_perdida / capital_aportado (excluyendo aportes del retorno)
-    rendimiento_pct = (ganancia_perdida / capital_aportado_acum * 100) if capital_aportado_acum != 0 else 0.0
+    # Rendimiento sobre lo que tenías al empezar más lo que aportaste en el horizonte.
+    base_rendimiento = patrimonio_inicial + aportes_netos_acum
+    rendimiento_pct = (ganancia_perdida / base_rendimiento * 100) if abs(base_rendimiento) > 1e-9 else 0.0
 
     # Inflación (opcional)
     patrimonio_final_real = None

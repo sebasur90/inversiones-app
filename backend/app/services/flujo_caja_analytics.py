@@ -280,7 +280,7 @@ def _proyectar_cobros_ticker(
         if capital_nativo is not None:
             metodo_capital = "bullet"
             notas.append(
-                "Capital al vencimiento estimado con el precio de mercado actual del bono."
+                "Capital al vencimiento estimado con el precio de mercado actual del bono, no con su valor nominal."
             )
             if hoy < venc <= horizonte_fin:
                 cobros.append(
@@ -590,8 +590,9 @@ def _metricas_renta_fija(
                 out["duration_modificada"] = round(macaulay / (1 + tir), 3)
         if metodo == "bullet":
             notas.append(
-                "Capital al vencimiento estimado con el precio de mercado: la TIR tiende a la "
-                "TIR corriente."
+                "Capital al vencimiento estimado con el precio de mercado (no con el valor nominal): esta "
+                "TIR es sólo una aproximación. Equivale al rendimiento corriente (cupones sobre precio) y "
+                "no incluye lo que el bono sube o baja hasta llegar al par."
             )
     elif metodo == "sin_estimacion":
         notas.append("Sin precio cargado: no se puede calcular TIR ni duration.")

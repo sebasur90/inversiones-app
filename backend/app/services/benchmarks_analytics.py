@@ -233,8 +233,8 @@ def _performance_relativa_sobre_movs(movs: list, cartera: str | None, moneda: st
     costo_oportunidad_pp = (retorno_benchmark_pct - retorno_cartera_pct) * 100 if (retorno_cartera_pct is not None and retorno_benchmark_pct is not None) else None
 
     # Métricas avanzadas
-    retorno_anualizado_cartera = risk_engine.calcular_retorno_anualizado(indice_cartera)
-    retorno_anualizado_benchmark = risk_engine.calcular_retorno_anualizado(indice_benchmark)
+    retorno_anualizado_cartera = risk_engine.calcular_retorno_anualizado(indice_cartera, base=100.0)
+    retorno_anualizado_benchmark = risk_engine.calcular_retorno_anualizado(indice_benchmark, base=100.0)
     beta = risk_engine.calcular_beta(retornos_cartera_validos, retornos_benchmark_validos)
     exceso_retorno = risk_engine.calcular_exceso_retorno_medio(retornos_cartera_validos, retornos_benchmark_validos)
     tracking_error = risk_engine.calcular_tracking_error(retornos_cartera_validos, retornos_benchmark_validos)

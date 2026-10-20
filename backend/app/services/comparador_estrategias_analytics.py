@@ -162,10 +162,18 @@ def comparar_estrategias(
     retorno_bh = resultado_bh.metricas["retorno_buy_hold_pct"]
     ops_bh = [(0, largo_ventana - 1)]
 
+    # Mismo criterio que el de las estrategias (`estrategia_engine._calcular_metricas`): sin el
+    # anualizado de esta fila no había contra qué comparar el de las demás.
+    dias_bh = (fechas[-1] - fechas[0]).days
+    anualizado_bh = None
+    if dias_bh >= estrategia_engine.DIAS_MIN_PARA_ANUALIZAR and retorno_bh > -100.0:
+        anualizado_bh = ((1 + retorno_bh / 100.0) ** (365.0 / dias_bh) - 1) * 100.0
+
     fila_bh = _fila_base(None, "Comprar y mantener", referencia_id is None)
     fila_bh.update({
         "estado": "ok",
-        "retorno_total_pct": retorno_bh, "retorno_anualizado_pct": None,
+        "retorno_total_pct": retorno_bh,
+        "retorno_anualizado_pct": round(anualizado_bh, 4) if anualizado_bh is not None else None,
         **cee.dinero(retorno_bh, capital_inicial),
         "riesgo": _riesgo_bh(ventana_bh),
         "curva": curva_bh,

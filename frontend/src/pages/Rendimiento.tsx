@@ -9,6 +9,7 @@ import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
 import ComparacionChart from '../components/charts/ComparacionChart'
+import AvisoCalculo from '../components/inversiones/AvisoCalculo'
 import RendimientoHeatmap from '../components/charts/RendimientoHeatmap'
 import DescomposicionFxChart from '../components/charts/DescomposicionFxChart'
 import { Icon } from '../components/icons/Icons'
@@ -162,6 +163,7 @@ export default function Rendimiento() {
                       ⚠ La descomposición no se verifica exactamente (puede deberse a operaciones particulares)
                     </div>
                   )}
+                  <AvisoCalculo mensajes={descomposicionFx.advertencias ?? []} />
                 </div>
               </Card>
             </>
@@ -312,6 +314,7 @@ export default function Rendimiento() {
                       </div>
                       <div className="text-label text-app-text-dim tabular-nums">
                         Real. {formatMoneda(itemRealizado)} · No real. {formatMoneda(itemNoRealizado)}
+                        {item.valuado_al_costo ? ' (al costo)' : ''}
                       </div>
                     </div>
                   </button>
@@ -319,6 +322,15 @@ export default function Rendimiento() {
               })}
             </div>
           )}
+          <AvisoCalculo
+            linkCalidad
+            mensajes={[
+              pnl.valuados_al_costo && pnl.valuados_al_costo.length > 0
+                ? `${pnl.valuados_al_costo.join(', ')} sin cotización: se valúa${pnl.valuados_al_costo.length > 1 ? 'n' : ''} ` +
+                  'al costo de compra, igual que en la pantalla principal, así que su "no realizado" no es un resultado de mercado.'
+                : null,
+            ]}
+          />
         </>
       )}
       </QueryBoundary>

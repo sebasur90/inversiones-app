@@ -269,6 +269,28 @@ def test_trailing_stop_sigue_el_maximo():
     assert op.precio_salida == pytest.approx(135.0)  # 150 * (1 - 0.10)
 
 
+def test_retorno_anualizado_no_se_extrapola_en_un_periodo_corto():
+    # 15 días con +5% darían ≈ +228% anual: por debajo de 180 días no se informa.
+    cierres = [100.0 + i * (5.0 / 14) for i in range(15)]
+    barras = _barras(cierres)
+    resultado = ee.backtest(_dsl_entrada_unica({"stop_loss_pct": None, "take_profit_pct": None, "trailing_stop_pct": None, "max_barras": None}), barras)
+    assert resultado.metricas["periodo_dias"] == 14
+    assert resultado.metricas["retorno_anualizado_pct"] is None
+
+
+def test_retorno_anualizado_si_el_periodo_alcanza():
+    # Una barra a 90 y luego cruza el umbral (99) y sube de 100 a 121 en ~400 días: la estrategia
+    # entra y captura el +21%, así que el anualizado es positivo (≈ +19% anual).
+    cierres = [90.0] + [100.0 * (1.21 ** (i / 398)) for i in range(399)]
+    resultado = ee.backtest(
+        _dsl_entrada_unica({"stop_loss_pct": None, "take_profit_pct": None, "trailing_stop_pct": None, "max_barras": None}),
+        _barras(cierres),
+    )
+    assert resultado.metricas["periodo_dias"] >= 180
+    assert resultado.metricas["retorno_anualizado_pct"] is not None
+    assert resultado.metricas["retorno_anualizado_pct"] > 0
+
+
 def test_trailing_no_usa_el_maximo_de_la_misma_barra_para_sacarte():
     # Entra a 100 (barra 1) con trailing 10%. Barra 2: abre 101, máximo 115, mínimo 103. El stop
     # vigente a la apertura es 90 (100 * 0,9): el mínimo de 103 no lo toca, así que NO hay salida.

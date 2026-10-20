@@ -230,7 +230,10 @@ def _es_liquido(item: dict, hoy: date) -> bool:
     if any(s in sector for s in SECTORES_LIQUIDOS):
         return True
     venc = item.get("fecha_vencimiento")
-    if venc is not None and (venc - hoy).days < DIAS_VENCIMIENTO_LIQUIDO:
+    # Un instrumento que vence en menos de un año se vuelve efectivo pronto. Uno que YA venció no:
+    # `dias < 365` también era cierto con días negativos, y una posición vencida (cuyo cobro no se
+    # registró, o con un precio viejo) pasaba por líquida e inflaba el indicador.
+    if venc is not None and 0 <= (venc - hoy).days < DIAS_VENCIMIENTO_LIQUIDO:
         return True
     return False
 

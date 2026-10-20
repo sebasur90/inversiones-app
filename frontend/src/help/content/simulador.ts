@@ -77,9 +77,9 @@ export const SIMULADOR_HELP: Record<SimuladorHelpKey, HelpContent> = {
   },
   escenario_comision: {
     title: 'Comisión',
-    shortDescription: 'Porcentaje anual de comisión de gestión aplicado al patrimonio.',
-    whyItMatters: 'Las comisiones reducen significativamente tu retorno neto a largo plazo.',
-    example: '0.5 significa una comisión del 0.5% anual sobre tu patrimonio.',
+    shortDescription: 'Porcentaje de cada aporte mensual que se va en comisiones y no llega a la cartera.',
+    whyItMatters: 'Las comisiones reducen tu retorno neto: cada aporte invierte un poco menos de lo que pusiste.',
+    example: '0.5 significa que de cada aporte de USD 100 se invierten USD 99,50 y USD 0,50 son comisión. No es una comisión anual sobre el patrimonio.',
     limitations: 'Debe estar entre 0% y 10%.',
   },
   escenario_inflacion: {

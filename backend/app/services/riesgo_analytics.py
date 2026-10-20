@@ -70,7 +70,7 @@ def get_riesgo(cartera: str | None, moneda: str, benchmark: str | None, db: Sess
     drawdown["serie"] = risk_engine.serie_drawdown(indice) if drawdown["estado"] == "ok" else []
     volatilidad = risk_engine.calcular_volatilidad(retornos_lista)
     sortino = risk_engine.calcular_sortino(retornos_lista)
-    retorno_anualizado = risk_engine.calcular_retorno_anualizado(indice)
+    retorno_anualizado = risk_engine.calcular_retorno_anualizado(indice, base=100.0)
     calmar = risk_engine.calcular_calmar(retorno_anualizado, drawdown.get("maximo"))
     mejores_peores = risk_engine.mejores_peores_periodos(retornos_validos)
     frecuencia = risk_engine.frecuencia_positivos_negativos(retornos_lista)
@@ -86,7 +86,7 @@ def get_riesgo(cartera: str | None, moneda: str, benchmark: str | None, db: Sess
         retornos_benchmark_periodo = {k: v for k, v in retornos_benchmark.items() if k in retornos_por_mes}
         if retornos_benchmark_periodo:
             indice_benchmark = risk_engine.construir_indice(retornos_benchmark_periodo)
-            benchmark_retorno_anualizado = risk_engine.calcular_retorno_anualizado(indice_benchmark)
+            benchmark_retorno_anualizado = risk_engine.calcular_retorno_anualizado(indice_benchmark, base=100.0)
     else:
         sharpe = {"estado": "sin_benchmark", "valor": None, "benchmark": None, "n_obs": 0}
 

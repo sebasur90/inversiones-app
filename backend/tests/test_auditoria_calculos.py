@@ -17,7 +17,7 @@ from app.services.contribucion_analytics import get_contribucion
 from app.services.opportunity_cost_analytics import get_opportunity_cost
 from app.services.benchmarks_analytics import get_performance_relativa, get_performance_compare
 from app.services.escenarios_analytics import simular_escenario_cartera
-from app.services.inversiones_analytics import simular_rebalanceo
+from app.services.inversiones_analytics import simular_rebalanceo, get_pnl_realizado_no_realizado
 from app.schemas import EscenarioSimulacionRequest
 from app.services.patrimonio_analytics import get_patrimonio_summary
 
@@ -425,3 +425,244 @@ def test_rebalanceo_eje_tipo_con_objetivo_propio_no_se_duplica(db):
     r = simular_rebalanceo(None, db, "Tipo", "rebalanceo", 0.0, 0.0)
     assert r["total_a_comprar_usd"] == pytest.approx(0.0)
     assert r["total_a_vender_usd"] == pytest.approx(0.0)
+
+
+# ── 2.1 P&L consolidado vs Resumen con un ticker sin cotización ─────────────
+
+def test_pnl_valua_al_costo_el_ticker_sin_cotizacion_igual_que_el_resumen(db):
+    """El Resumen valúa lo que no cotiza al costo; el P&L lo dejaba afuera (sin aviso) y las dos
+    pantallas informaban resultados distintos para la misma cartera."""
+    _instrumento(db)                                   # AAPL con precio
+    _instrumento(db, "SINPX")                          # sin ninguna cotización
+    _mov(db, HOY - timedelta(days=100), "compra", 10, 100.0)
+    _mov(db, HOY - timedelta(days=100), "compra", 5, 40.0, ticker="SINPX")
+    _precio(db, HOY, 120.0)                            # AAPL +200; SINPX queda al costo
+    resumen = get_resumen("test", db)
+    pnl = get_pnl_realizado_no_realizado("test", db)
+    esperado = resumen["valor_actual_usd"] + resumen["ingresos_recibidos_usd"] - resumen["total_invertido_usd"]
+    assert pnl["consolidado"]["total_usd"] == pytest.approx(esperado, abs=0.01)
+    assert pnl["valuados_al_costo"] == ["SINPX"]
+    fila = next(f for f in pnl["por_ticker"] if f["ticker"] == "SINPX")
+    assert fila["valuado_al_costo"] is True
+    assert fila["no_realizado_usd"] == pytest.approx(0.0, abs=0.01)    # al costo: ni gana ni pierde
+    assert fila["total_usd"] == pytest.approx(0.0, abs=0.01)
+
+
+# ── 2.4 Descomposición FX: los meses sin cartera no cuentan ─────────────────
+
+def test_efecto_dolar_no_incluye_los_meses_sin_cartera(db):
+    """Compra a fines de enero, vende todo a fines de marzo y recompra a fines de junio de 2024; el
+    MEP sube 5% por mes. El efecto del dólar vivido son los 8 meses con cartera (feb, mar y jul–dic),
+    no los 12 del año: antes se medía MEP_fin / MEP_inicio de punta a punta (+79,6%)."""
+    from app.services.fx_decomposition_analytics import get_descomposicion_fx
+    _instrumento(db)
+    meses = [date(2023, 12, 31)] + [
+        date(2024, m, 28) + timedelta(days=4) - timedelta(days=(date(2024, m, 28) + timedelta(days=4)).day)
+        for m in range(1, 13)
+    ]
+    for k, fecha in enumerate(meses):
+        db.add(IndiceMercado(fecha=fecha, mep=1000.0 * 1.05 ** k, cer=100.0 + k))
+    db.commit()
+    _mov(db, date(2024, 1, 31), "compra", 10, 100.0)
+    _mov(db, date(2024, 3, 31), "venta", 10, 100.0)
+    _mov(db, date(2024, 6, 30), "compra", 10, 100.0)
+    _precio(db, date(2024, 1, 31), 100.0)
+    r = get_descomposicion_fx("test", date(2024, 1, 1), db)
+    assert r["estado"] == "ok"
+    assert r["advertencias"] and "meses sin cartera" in r["advertencias"][0]
+    assert r["efecto_fx_pct"] == pytest.approx(1.05 ** 8 - 1, rel=1e-3)
+    assert r["identidad_verificada"] is True
+
+
+def test_fx_por_posicion_usa_solo_la_posicion_abierta(db):
+    """Compra con MEP 1000, vende todo, recompra con MEP 1400: el MEP promedio de la posición
+    abierta es 1400 (antes 1200, por promediar el lote ya vendido)."""
+    from app.services.fx_decomposition_analytics import get_descomposicion_fx_por_posicion
+    _instrumento(db)
+    d1, d2, d3 = HOY - timedelta(days=300), HOY - timedelta(days=200), HOY - timedelta(days=100)
+    for fecha, mep in ((d1, 1000.0), (d2, 1200.0), (d3, 1400.0), (HOY, 1400.0)):
+        db.add(IndiceMercado(fecha=fecha, mep=mep, cer=100.0))
+    db.commit()
+    _mov(db, d1, "compra", 10, 100.0)
+    _mov(db, d2, "venta", 10, 100.0)
+    _mov(db, d3, "compra", 10, 100.0)
+    _precio(db, HOY, 100.0)
+    r = get_descomposicion_fx_por_posicion("test", db)
+    pos = next(p for p in r["posiciones"] if p["ticker"] == "AAPL")
+    assert pos["efecto_fx_pct"] == pytest.approx(0.0, abs=1e-6)       # MEP actual 1400 vs. promedio 1400
+
+
+def test_efecto_dolar_sin_huecos_no_cambia(db):
+    from app.services.fx_decomposition_analytics import get_descomposicion_fx
+    _instrumento(db)
+    for k, fecha in enumerate([date(2023, 12, 31), date(2024, 1, 31), date(2024, 2, 29), date(2024, 3, 31)]):
+        db.add(IndiceMercado(fecha=fecha, mep=1000.0 * 1.05 ** k, cer=100.0 + k))
+    db.commit()
+    _mov(db, date(2024, 1, 31), "compra", 10, 100.0)
+    _precio(db, date(2024, 1, 31), 100.0)
+    r = get_descomposicion_fx("test", date(2024, 1, 1), db)
+    assert r["advertencias"] == []
+
+
+# ── 2.8 Simulador: ganancia desde hoy, comisión efectiva, dividendos retirados ──
+
+def _snap(valor, invertido):
+    from app.services.escenario_engine import PortfolioSnapshot, PosicionSnapshot
+    return PortfolioSnapshot(
+        fecha=HOY, posiciones=[PosicionSnapshot(ticker="X", valor_usd=valor, moneda="USD")],
+        mep_actual=1000.0, valor_total_usd=valor, total_invertido_usd=invertido,
+    )
+
+
+def _params(**kw):
+    from app.services.escenario_engine import EscenarioParams
+    base = dict(
+        horizonte_meses=12, variacion_dolar_pct=0.0, variacion_por_instrumento={},
+        variacion_por_defecto_pct=0.0, aporte_mensual_usd=0.0, crecimiento_aporte_anual_pct=0.0,
+        retiro_mensual_usd=0.0, modo_dividendos="reinvertir_total", dividend_yield_anual_pct=0.0,
+        pct_dividendo_reinvertido=None, comision_pct=0.0, inflacion_anual_pct=None,
+    )
+    base.update(kw)
+    return EscenarioParams(**base)
+
+
+def test_un_escenario_plano_no_muestra_la_ganancia_historica_como_si_fuera_suya():
+    """Costo 50.000, valor 100.000 y 0% de cambio: el escenario no gana ni pierde nada.
+    Antes mostraba +50.000, +100% y 'efecto mercado' +50.000."""
+    from app.services.escenario_engine import simular_escenario
+    r = simular_escenario(_snap(100_000.0, 50_000.0), _params())
+    assert r.ganancia_perdida_usd == pytest.approx(0.0, abs=1e-6)
+    assert r.rendimiento_pct == pytest.approx(0.0, abs=1e-6)
+    assert r.efecto_mercado_usd == pytest.approx(0.0, abs=1e-6)
+    assert r.capital_aportado_usd == pytest.approx(50_000.0)       # el capital histórico sigue visible
+
+
+def test_la_comision_se_descuenta_del_aporte():
+    """USD 1000/mes con 1% de comisión durante 12 meses: se pagan USD 120 y no llegan a la cartera."""
+    from app.services.escenario_engine import simular_escenario
+    r = simular_escenario(_snap(1_000.0, 1_000.0), _params(aporte_mensual_usd=1_000.0, comision_pct=1.0))
+    assert r.comisiones_usd == pytest.approx(120.0)
+    assert r.patrimonio_final_usd == pytest.approx(1_000.0 + 12_000.0 - 120.0)
+    assert r.ganancia_perdida_usd == pytest.approx(-120.0)
+    assert r.efecto_mercado_usd == pytest.approx(0.0, abs=1e-6)    # la comisión no es efecto de mercado
+
+
+def test_dividendos_retirados_no_se_restan_dos_veces_del_efecto_mercado():
+    """Precio sin cambio y dividendos que se retiran: la cartera no cambia, el efecto mercado es 0."""
+    from app.services.escenario_engine import simular_escenario
+    r = simular_escenario(_snap(1_000.0, 1_000.0), _params(modo_dividendos="retirar", dividend_yield_anual_pct=12.0))
+    assert r.dividendos_usd > 100                                    # se cobraron igual
+    assert r.patrimonio_final_usd == pytest.approx(1_000.0)
+    assert r.ganancia_perdida_usd == pytest.approx(0.0, abs=1e-6)
+    assert r.efecto_mercado_usd == pytest.approx(0.0, abs=1e-6)
+
+
+def test_dividendos_reinvertidos_si_son_parte_de_la_ganancia_pero_no_del_mercado():
+    from app.services.escenario_engine import simular_escenario
+    r = simular_escenario(_snap(1_000.0, 1_000.0), _params(modo_dividendos="reinvertir_total", dividend_yield_anual_pct=12.0))
+    assert r.ganancia_perdida_usd > 100
+    assert r.efecto_mercado_usd == pytest.approx(0.0, abs=1e-6)
+
+
+# ── 2.10 Ciclos propios vs. estrategia: el recorte también por el final ─────
+
+def test_ciclo_que_sigue_despues_del_fin_del_backtest_se_marca():
+    from app.services.comparacion_propia import comparar
+    fechas = [date(2024, 1, 1) + timedelta(days=i) for i in range(180)]       # termina a fines de junio de 2024
+    curva = [100.0 + i for i in range(180)]
+    ciclos = [
+        {"ciclo": 1, "desde": date(2024, 2, 1), "hasta": date(2024, 3, 1), "abierto": False,
+         "resultado_usd": 10.0, "resultado_pct": 5.0},
+        {"ciclo": 2, "desde": date(2024, 4, 1), "hasta": date(2024, 9, 1), "abierto": False,
+         "resultado_usd": 10.0, "resultado_pct": 5.0},        # termina después del backtest
+        {"ciclo": 3, "desde": date(2024, 5, 1), "hasta": None, "abierto": True,
+         "resultado_usd": 10.0, "resultado_pct": 5.0},        # sigue abierto hoy, mucho después
+    ]
+    filas = {f["ciclo"]: f for f in comparar(ciclos, fechas, 0, curva, curva)}
+    assert filas[1]["recortado_fin"] is False
+    assert filas[2]["recortado_fin"] is True
+    assert filas[3]["recortado_fin"] is True
+
+
+def test_ciclo_abierto_con_serie_al_dia_no_se_marca():
+    from app.services.comparacion_propia import comparar
+    fechas = [HOY - timedelta(days=99 - i) for i in range(100)]              # termina hoy
+    curva = [100.0 + i for i in range(100)]
+    ciclos = [{"ciclo": 1, "desde": HOY - timedelta(days=50), "hasta": None, "abierto": True,
+               "resultado_usd": 1.0, "resultado_pct": 1.0}]
+    assert comparar(ciclos, fechas, 0, curva, curva)[0]["recortado_fin"] is False
+
+
+# ── 2.13 Salud: un bono vencido no es líquido ───────────────────────────────
+
+def test_un_bono_ya_vencido_no_cuenta_como_liquido():
+    from app.services.salud_engine import calcular_pct_liquido
+    inventario = [
+        {"valor_usd": 500.0, "tipo_instrumento": "Bono", "fecha_vencimiento": HOY + timedelta(days=100)},
+        {"valor_usd": 500.0, "tipo_instrumento": "Bono", "fecha_vencimiento": HOY - timedelta(days=100)},
+    ]
+    assert calcular_pct_liquido(inventario, HOY) == pytest.approx(50.0)   # sólo el que vence en 100 días
+
+
+# ── 2.7 CAGR: el primer mes también cuenta ──────────────────────────────────
+
+def test_cagr_incluye_el_retorno_del_primer_mes():
+    """−20% el primer mes y +25% el segundo dejan el acumulado en 0%: el CAGR también debe ser 0.
+    Medido desde el primer punto del índice (80), daba (100/80)^12 − 1 ≈ +1.355%."""
+    from app.services import risk_engine
+    indice = risk_engine.construir_indice({(2024, 1): -0.20, (2024, 2): 0.25}, base=100.0)
+    assert risk_engine.calcular_retorno_anualizado(indice, base=100.0) == pytest.approx(0.0, abs=1e-9)
+
+
+def test_cagr_con_base_coincide_con_el_retorno_acumulado_en_un_anio():
+    from app.services import risk_engine
+    retornos = {(2024, m): 0.01 for m in range(1, 13)}                 # 12 meses de +1%
+    indice = risk_engine.construir_indice(retornos, base=100.0)
+    acumulado = indice[-1][1] / 100.0 - 1
+    assert risk_engine.calcular_retorno_anualizado(indice, base=100.0) == pytest.approx(acumulado, rel=1e-9)
+
+
+def test_cagr_sin_base_conserva_su_comportamiento():
+    from datetime import date as _d
+    from app.services import risk_engine
+    indice = [(_d(2022, 1, 31), 100.0), (_d(2024, 1, 31), 144.0)]
+    assert risk_engine.calcular_retorno_anualizado(indice) == pytest.approx(0.2)
+
+
+# ── 2.2 Movimientos sin tipo de cambio en el Resumen ────────────────────────
+
+def test_movimiento_sin_mep_no_infla_el_rendimiento_en_usd(db):
+    """Compra en pesos anterior al primer MEP cargado: su tenencia está en el valor actual pero su
+    capital no se puede pasar a dólares. Antes quedaba fuera del capital y el % en USD se inflaba
+    sin aviso (y su monto en pesos, que no necesita MEP, se descartaba también)."""
+    _instrumento(db, "GGAL", moneda="ARS")
+    db.add(IndiceMercado(fecha=HOY - timedelta(days=100), mep=1000.0, cer=100.0))
+    db.commit()
+    _mov(db, HOY - timedelta(days=200), "compra", 10, 1000.0, ticker="GGAL", moneda="ARS")
+    _precio(db, HOY, 1200.0, ticker="GGAL", moneda="ARS")
+    r = get_resumen("test", db)
+    assert r["movimientos_sin_tipo_cambio"] == 1
+    assert r["rendimiento_simple_usd"] is None
+    assert r["xirr_usd"] is None and r["twr_usd"] is None
+    assert r["rendimiento_no_calculable"]["usd"] == "tipo_cambio_faltante"
+    # En pesos no hace falta MEP: el rendimiento se calcula con todo el capital.
+    assert r["total_invertido_ars"] == pytest.approx(10000.0)
+    assert r["rendimiento_simple_ars"] == pytest.approx(0.20)
+
+
+def test_sin_faltantes_de_tipo_de_cambio_no_se_marca_nada(db):
+    _instrumento(db)
+    _mov(db, HOY - timedelta(days=100), "compra", 10, 100.0)
+    _precio(db, HOY, 120.0)
+    r = get_resumen("test", db)
+    assert r["movimientos_sin_tipo_cambio"] == 0
+    assert "usd" not in r["rendimiento_no_calculable"]
+
+
+def test_pnl_sin_tickers_sin_cotizacion_no_marca_nada(db):
+    _instrumento(db)
+    _mov(db, HOY - timedelta(days=100), "compra", 10, 100.0)
+    _precio(db, HOY, 120.0)
+    pnl = get_pnl_realizado_no_realizado("test", db)
+    assert pnl["valuados_al_costo"] == []
+    assert pnl["por_ticker"][0]["valuado_al_costo"] is False

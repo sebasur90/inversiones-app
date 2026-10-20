@@ -39,6 +39,11 @@ export default function ComparacionConEstrategia({ ciclos }: { ciclos: CicloVsEs
                       empezó antes del período
                     </span>
                   )}
+                  {c.recortado_fin && (
+                    <span className="text-label text-app-text-faint" title="La posición sigue (o terminó) después de la última fecha del backtest: tu resultado cuenta hasta hoy o hasta tu venta; el de la estrategia, sólo hasta el fin del período.">
+                      sigue después del período
+                    </span>
+                  )}
                 </div>
                 <div className="grid grid-cols-3 gap-2 font-mono tabular-nums">
                   <Celda

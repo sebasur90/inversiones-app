@@ -242,6 +242,9 @@ class InversionesResumen(BaseModel):
     # aunque haya compras: "capital_neto_negativo" (vendiste más de lo que pusiste) o
     # "capital_neto_chico" (queda menos del 10% de lo comprado). La pantalla lo explica.
     rendimiento_no_calculable: dict[str, str] = {}
+    # Movimientos que no se pudieron expresar en dólares por falta del MEP de su fecha. Con alguno,
+    # el rendimiento/TIR/TWR en USD quedan en None ("tipo_cambio_faltante").
+    movimientos_sin_tipo_cambio: int = 0
 
 
 class ExposicionItem(BaseModel):
@@ -1542,6 +1545,9 @@ class PnlConsolidado(BaseModel):
 class PnlPorTickerItem(BaseModel):
     ticker: str
     nombre: str
+    # True = sin cotización: la tenencia se valuó al costo promedio de compra (igual que el Resumen),
+    # así que el no realizado de esta fila no es un resultado de mercado.
+    valuado_al_costo: bool = False
     realizado_usd: float
     no_realizado_usd: Optional[float] = None
     ingresos_usd: float
@@ -1555,6 +1561,7 @@ class PnlPorTickerItem(BaseModel):
 class PnlRealizadoNoRealizadoOut(BaseModel):
     consolidado: PnlConsolidado
     por_ticker: list[PnlPorTickerItem]
+    valuados_al_costo: list[str] = []
 
 
 # --- Vista fiscal por año ---
@@ -1921,6 +1928,9 @@ class DescomposicionFxOut(BaseModel):
     mep_inicio: Optional[float] = None
     mep_fin: Optional[float] = None
     mep_aproximado: bool = False
+    # Avisos de cálculo (p. ej. períodos con meses sin cartera, donde el efecto del dólar se compone
+    # sólo con los meses en que había posiciones).
+    advertencias: list[str] = []
     identidad_verificada: bool = True
 
 
@@ -2272,6 +2282,7 @@ class CicloVsEstrategiaOut(BaseModel):
     tramo_desde: date
     tramo_hasta: date
     recortado: bool = False                    # el ciclo empezó antes del período del backtest
+    recortado_fin: bool = False                # el ciclo sigue (o terminó) después del fin del backtest
     tu_resultado_usd: Optional[float] = None
     tu_resultado_pct: Optional[float] = None
     estrategia_pct: Optional[float] = None
@@ -2397,6 +2408,8 @@ class BacktestMetricasOut(BaseModel):
     duracion_media_barras: Optional[float] = None
     exposicion_pct: float
     comisiones_pct_acum: float
+    # Duración de la ventana medida: por debajo de 180 días no se anualiza el retorno.
+    periodo_dias: int = 0
 
 
 class CurvaPuntoOut(BaseModel):

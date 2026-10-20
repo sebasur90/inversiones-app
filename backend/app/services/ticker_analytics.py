@@ -211,7 +211,8 @@ def get_ticker_performance(ticker: str, cartera: Optional[str], db: Session) -> 
         **pnl_item,
         "comisiones_usd": com_item["total_usd"] if com_item else 0.0,
         "comisiones_ars": com_item["total_ars"] if com_item else 0.0,
-        "precio_actual_faltante": pnl_item.get("no_realizado_usd") is None,
+        # Valuada al costo cuenta como "sin precio": su no realizado no es resultado de mercado.
+        "precio_actual_faltante": bool(pnl_item.get("valuado_al_costo")) or pnl_item.get("no_realizado_usd") is None,
     }
 
 
@@ -252,7 +253,7 @@ def get_ticker_riesgo(
     drawdown["serie"] = risk_engine.serie_drawdown(indice) if drawdown["estado"] == "ok" else []
     volatilidad = risk_engine.calcular_volatilidad(retornos_lista)
     sortino = risk_engine.calcular_sortino(retornos_lista)
-    retorno_anualizado = risk_engine.calcular_retorno_anualizado(indice)
+    retorno_anualizado = risk_engine.calcular_retorno_anualizado(indice, base=100.0)
     calmar = risk_engine.calcular_calmar(retorno_anualizado, drawdown.get("maximo"))
     mejores_peores = risk_engine.mejores_peores_periodos(retornos_validos)
     frecuencia = risk_engine.frecuencia_positivos_negativos(retornos_lista)
@@ -266,7 +267,7 @@ def get_ticker_riesgo(
         sharpe = risk_engine.calcular_sharpe_vs_benchmark(retornos_validos, retornos_benchmark, benchmark)
         if retornos_benchmark and sharpe["estado"] == "ok":
             indice_benchmark = risk_engine.construir_indice(retornos_benchmark)
-            benchmark_retorno_anualizado = risk_engine.calcular_retorno_anualizado(indice_benchmark)
+            benchmark_retorno_anualizado = risk_engine.calcular_retorno_anualizado(indice_benchmark, base=100.0)
     else:
         sharpe = {"estado": "sin_benchmark", "valor": None, "benchmark": None, "n_obs": 0}
 

@@ -77,7 +77,11 @@ export default function ResultadoBacktest({ resultado, dsl }: { resultado: Backt
           label="Exceso vs. buy & hold" tone={m.exceso_vs_buy_hold_pp >= 0 ? 'pos' : 'neg'}
           value={`${m.exceso_vs_buy_hold_pp >= 0 ? '+' : ''}${m.exceso_vs_buy_hold_pp.toFixed(2)} pp`}
         />
-        <MetricTile label="Retorno anualizado" value={formatPctSigned(m.retorno_anualizado_pct)} />
+        <MetricTile
+          label="Retorno anualizado"
+          value={m.retorno_anualizado_pct != null ? formatPctSigned(m.retorno_anualizado_pct) : '—'}
+          sub={m.retorno_anualizado_pct == null ? 'Período menor a 6 meses: no se anualiza' : undefined}
+        />
         <MetricTile
           label="Operaciones" value={String(m.operaciones)}
           sub={`${m.ganadoras} ganadoras / ${m.perdedoras} perdedoras${m.operaciones_cerradas < m.operaciones ? ' · 1 abierta' : ''}`}

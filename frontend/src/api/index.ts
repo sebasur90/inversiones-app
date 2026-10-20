@@ -173,6 +173,7 @@ export interface InversionesResumen {
   tiene_precios_desactualizados: boolean
   // Moneda ("usd" | "ars" | "ars_real") → motivo por el que el rendimiento simple viene en null.
   rendimiento_no_calculable?: Record<string, string>
+  movimientos_sin_tipo_cambio?: number
 }
 
 export interface ExposicionItem {
@@ -1232,6 +1233,7 @@ export interface PnlConsolidado {
 export interface PnlPorTickerItem {
   ticker: string
   nombre: string
+  valuado_al_costo?: boolean
   realizado_usd: number
   no_realizado_usd: number | null
   ingresos_usd: number
@@ -1245,6 +1247,7 @@ export interface PnlPorTickerItem {
 export interface PnlRealizadoNoRealizadoOut {
   consolidado: PnlConsolidado
   por_ticker: PnlPorTickerItem[]
+  valuados_al_costo?: string[]
 }
 
 export const getPnlRealizadoNoRealizado = (cartera: string | null) =>
@@ -1917,6 +1920,7 @@ export interface DescomposicionFxOut {
   mep_inicio: number | null
   mep_fin: number | null
   mep_aproximado: boolean
+  advertencias?: string[]
   identidad_verificada: boolean
 }
 
@@ -2665,6 +2669,7 @@ export interface BacktestMetricasOut {
   duracion_media_barras: number | null
   exposicion_pct: number
   comisiones_pct_acum: number
+  periodo_dias?: number
 }
 
 export interface CurvaPuntoOut {
@@ -2705,6 +2710,8 @@ export interface CicloVsEstrategiaOut {
   tramo_hasta: string
   /** El ciclo empezó antes del período del backtest. */
   recortado: boolean
+  /** El ciclo sigue (o terminó) después de la última barra del backtest. */
+  recortado_fin?: boolean
   tu_resultado_usd: number | null
   tu_resultado_pct: number | null
   estrategia_pct: number | null

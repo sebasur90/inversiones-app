@@ -267,13 +267,26 @@ def calcular_sortino(retornos: list[float], mar: float = 0.0) -> dict:
     return {"estado": "ok", "valor": round(sortino, 4), "n_obs": n}
 
 
-def calcular_retorno_anualizado(indice: list[tuple[date, float]]) -> float | None:
-    """CAGR sobre el índice NAV completo. `None` si hay menos de 2 puntos o el rango es 0 meses."""
+def calcular_retorno_anualizado(indice: list[tuple[date, float]], base: float | None = None) -> float | None:
+    """CAGR sobre el índice NAV completo. `None` si hay menos de 2 puntos o el rango es 0 meses.
+
+    Sin `base`, el período va del primer al último punto del índice. Con `base` (el valor inicial
+    con el que se armó el índice en `construir_indice`), el primer punto YA incluye el retorno de
+    su mes: el origen es `base` a fin del mes anterior. Medirlo desde el primer punto (como se
+    hacía) descartaba ese mes del CAGR mientras el retorno acumulado de la misma pantalla sí lo
+    contaba: con un primer mes de −20% ambos números se contradecían.
+    """
     if len(indice) < 2:
         return None
-    nav_inicial = indice[0][1]
     nav_final = indice[-1][1]
-    n_meses = _meses_entre(indice[0][0], indice[-1][0])
+    if base is not None:
+        nav_inicial = base
+        primer = indice[0][0]
+        origen = _ultimo_dia_mes(primer.year, primer.month - 1) if primer.month > 1 else _ultimo_dia_mes(primer.year - 1, 12)
+    else:
+        nav_inicial = indice[0][1]
+        origen = indice[0][0]
+    n_meses = _meses_entre(origen, indice[-1][0])
     if nav_inicial <= 0 or n_meses <= 0:
         return None
     return (nav_final / nav_inicial) ** (PERIODOS_POR_ANIO / n_meses) - 1

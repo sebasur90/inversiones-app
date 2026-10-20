@@ -4,7 +4,7 @@
  * en un solo lugar y la pantalla nunca muestra un porcentaje con cara de dato cuando el
  * cálculo no tiene sentido.
  */
-export type MotivoRendimiento = 'capital_neto_negativo' | 'capital_neto_chico'
+export type MotivoRendimiento = 'capital_neto_negativo' | 'capital_neto_chico' | 'tipo_cambio_faltante'
 
 const TEXTOS_RENDIMIENTO: Record<MotivoRendimiento, string> = {
   capital_neto_negativo:
@@ -13,6 +13,9 @@ const TEXTOS_RENDIMIENTO: Record<MotivoRendimiento, string> = {
   capital_neto_chico:
     'Te queda muy poco capital invertido en neto respecto de lo que compraste: el % sobre ese ' +
     'capital se dispara y no es comparable. Mirá la TIR y la ganancia en dinero.',
+  tipo_cambio_faltante:
+    'Falta el tipo de cambio (MEP) de la fecha de algún movimiento, así que no se puede expresar todo ' +
+    'el capital en dólares: el rendimiento, la TIR y el TWR en USD no se calculan. En pesos sí.',
 }
 
 export function avisoRendimiento(

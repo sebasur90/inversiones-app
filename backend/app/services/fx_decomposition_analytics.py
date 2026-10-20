@@ -38,6 +38,44 @@ def _dias_carry_forward(fecha_lookup: date, fecha_observada: date) -> int:
     return (fecha_lookup - fecha_observada).days
 
 
+def _ultimo_dia(anio: int, mes: int) -> date:
+    return date(anio, mes, calendar.monthrange(anio, mes)[1])
+
+
+def _mes_anterior(anio: int, mes: int) -> tuple[int, int]:
+    return (anio - 1, 12) if mes == 1 else (anio, mes - 1)
+
+
+def _tiene_huecos(claves_con_tenencia: list[tuple[int, int]]) -> bool:
+    """True si entre el primer y el último mes con tenencia hay algún mes sin ella."""
+    if len(claves_con_tenencia) < 2:
+        return False
+    primero, ultimo = claves_con_tenencia[0], claves_con_tenencia[-1]
+    meses_totales = (ultimo[0] - primero[0]) * 12 + (ultimo[1] - primero[1]) + 1
+    return meses_totales != len(claves_con_tenencia)
+
+
+def _variacion_mep_solo_con_tenencia(
+    claves_con_tenencia: list[tuple[int, int]], db: Session, mep_cache: dict,
+) -> float | None:
+    """Variación compuesta del MEP sumando únicamente los meses en que había cartera.
+
+    Si el período incluye meses sin tenencia, el índice de la cartera queda plano en esos meses
+    pero el MEP sigue moviéndose: medir `MEP_fin / MEP_inicio` de punta a punta le atribuía a la
+    cartera una suba del dólar que no vivió (por ejemplo, vendés todo en 2024 y recomprás en 2025).
+    Devuelve `None` si falta el MEP de algún mes.
+    """
+    factor = 1.0
+    for anio, mes in claves_con_tenencia:
+        mep_fin_mes = _mep_sheet(_ultimo_dia(anio, mes), db, mep_cache)
+        a_prev, m_prev = _mes_anterior(anio, mes)
+        mep_ini_mes = _mep_sheet(_ultimo_dia(a_prev, m_prev), db, mep_cache)
+        if mep_fin_mes is None or mep_ini_mes is None or mep_ini_mes <= 0:
+            return None
+        factor *= mep_fin_mes / mep_ini_mes
+    return factor - 1.0
+
+
 
 
 def get_descomposicion_fx(
@@ -140,18 +178,44 @@ def get_descomposicion_fx(
         if dias_cf > UMBRAL_APROXIMADO_DIAS:
             mep_aproximado = True
 
+    # Meses del período en que había cartera (con retorno medido).
+    claves_con_tenencia = sorted(
+        k for k, v in twr_usd_filtrado.items() if v is not None and twr_ars_filtrado.get(k) is not None
+    )
+    advertencias: list[str] = []
+    mep_para_motor = (mep_inicio, mep_fin)
+    if _tiene_huecos(claves_con_tenencia):
+        variacion = _variacion_mep_solo_con_tenencia(claves_con_tenencia, db, mep_cache)
+        if variacion is not None:
+            # El motor sólo usa el cociente: se le pasa la variación compuesta de los meses con cartera.
+            mep_para_motor = (1.0, 1.0 + variacion)
+            advertencias.append(
+                "En este período hubo meses sin cartera (vendiste todo y volviste a comprar). El efecto del "
+                "dólar cuenta sólo los meses en que tenías posiciones."
+            )
+        else:
+            advertencias.append(
+                "En este período hubo meses sin cartera y falta el MEP de alguno: el efecto del dólar "
+                "incluye meses en que no tenías posiciones y puede estar sobrestimado."
+            )
+
     # Llamar motor puro
     resultado = fx_decomposition_engine.descomponer_retorno_periodo(
         twr_ars=twr_ars_periodo,
         twr_usd=twr_usd_periodo,
-        mep_inicio=mep_inicio,
-        mep_fin=mep_fin,
+        mep_inicio=mep_para_motor[0],
+        mep_fin=mep_para_motor[1],
     )
 
     # Completar campos extras
     resultado["periodo_desde"] = periodo_desde
     resultado["periodo_hasta"] = periodo_hasta
     resultado["mep_aproximado"] = resultado["mep_aproximado"] or mep_aproximado
+    # Los MEP que se muestran siguen siendo los de las puntas del período.
+    if resultado["estado"] == "ok":
+        resultado["mep_inicio"] = mep_inicio
+        resultado["mep_fin"] = mep_fin
+    resultado["advertencias"] = advertencias
 
     return resultado
 
@@ -171,42 +235,34 @@ def get_descomposicion_fx_por_posicion(
     movs = _movimientos_ordenados(db, cartera)
     mep_cache: dict = {}
 
-    # Construir un diccionario de MEP promedio por ticker
-    mep_promedio_por_ticker: dict[str, float] = {}
+    # MEP promedio de compra de la POSICIÓN ABIERTA de cada ticker, ponderado por USD. Cada venta o
+    # amortización quita la fracción vendida del capital (igual que el costo remanente de
+    # `_recorrer_movs_ticker`) y, al cerrarse la posición, el promedio se reinicia: antes se
+    # promediaban todas las compras de la historia, incluidas las de lotes ya vendidos, y tras
+    # cerrar y recomprar el efecto FX de la posición no correspondía a la tenencia actual.
+    estado_por_ticker: dict[str, dict[str, float]] = {}
     for mov in movs:
-        if mov.tipo_movimiento != "compra":
-            continue
-        mep = _mep_sheet(mov.fecha, db, mep_cache)
-        if mep is None:
-            continue
+        st = estado_por_ticker.setdefault(mov.ticker, {"cant": 0.0, "usd": 0.0, "mep_x_usd": 0.0})
+        cant = float(mov.cantidad or 0)
+        if mov.tipo_movimiento == "compra":
+            st["cant"] += cant
+            mep = _mep_sheet(mov.fecha, db, mep_cache)
+            monto_usd = _monto_usd(mov, db, mep_cache)
+            if mep is not None and monto_usd is not None:
+                st["usd"] += monto_usd
+                st["mep_x_usd"] += mep * monto_usd
+        elif mov.tipo_movimiento in ("venta", "amortizacion"):
+            if st["cant"] > 1e-9:
+                resto = 1.0 - min(cant / st["cant"], 1.0)
+                st["usd"] *= resto
+                st["mep_x_usd"] *= resto
+            st["cant"] = max(st["cant"] - cant, 0.0)
 
-        monto_usd = _monto_usd(mov, db, mep_cache)
-        if monto_usd is None:
-            continue
-
-        ticker = mov.ticker
-        if ticker not in mep_promedio_por_ticker:
-            mep_promedio_por_ticker[ticker] = 0.0
-
-        # Acumular valor ponderado
-        mep_promedio_por_ticker[ticker] += mep * monto_usd
-
-    # Normalizar pesos (calcular promedio)
-    total_usd_por_ticker: dict[str, float] = {}
-    for mov in movs:
-        if mov.tipo_movimiento != "compra":
-            continue
-        monto_usd = _monto_usd(mov, db, mep_cache)
-        if monto_usd is None:
-            continue
-        ticker = mov.ticker
-        if ticker not in total_usd_por_ticker:
-            total_usd_por_ticker[ticker] = 0.0
-        total_usd_por_ticker[ticker] += monto_usd
-
-    for ticker in mep_promedio_por_ticker:
-        if total_usd_por_ticker.get(ticker, 0) > 0:
-            mep_promedio_por_ticker[ticker] /= total_usd_por_ticker[ticker]
+    mep_promedio_por_ticker: dict[str, float] = {
+        ticker: st["mep_x_usd"] / st["usd"]
+        for ticker, st in estado_por_ticker.items()
+        if st["usd"] > 1e-9
+    }
 
     # Resolver MEP actual
     hoy = date.today()

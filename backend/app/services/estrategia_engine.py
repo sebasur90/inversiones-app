@@ -37,6 +37,9 @@ from . import indicadores_engine
 from . import risk_engine
 from .indicadores_engine import Barra
 
+# Por debajo de este período (medio año) no se anualiza el retorno: extrapolarlo da cifras absurdas.
+DIAS_MIN_PARA_ANUALIZAR = 180
+
 __all__ = [
     "Barra", "Compilado", "Senal", "Operacion", "ResultadoBacktest",
     "compilar", "backtest", "validar_estrategia", "barras_minimas",
@@ -393,7 +396,9 @@ def _calcular_metricas(
     retorno_buy_hold_pct = ventana_buy_hold[-1][1] - 100.0
     dias = (ventana_equity[-1][0] - ventana_equity[0][0]).days
     retorno_anualizado_pct = None
-    if dias > 0 and ventana_equity[-1][1] > 0:
+    # Anualizar un período corto lo extrapola sin sentido: +5% en 15 días daba ≈ +228% anual. Por
+    # debajo del piso no se informa (la pantalla lo explica con `periodo_dias`).
+    if dias >= DIAS_MIN_PARA_ANUALIZAR and ventana_equity[-1][1] > 0:
         retorno_anualizado_pct = ((ventana_equity[-1][1] / 100.0) ** (365.0 / dias) - 1) * 100.0
 
     drawdown = risk_engine.calcular_drawdown(ventana_equity)
@@ -462,6 +467,7 @@ def _calcular_metricas(
         "duracion_media_barras": round(duracion_media_barras, 2) if duracion_media_barras is not None else None,
         "exposicion_pct": round(exposicion_pct, 2),
         "comisiones_pct_acum": round(comisiones_pct_acum, 4),
+        "periodo_dias": dias,
     }
 
 

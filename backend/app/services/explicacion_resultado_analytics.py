@@ -213,6 +213,12 @@ def get_explicacion_resultado(cartera: str | None, desde: date | None, moneda: s
         inst = instrumentos.get(it["ticker"])
         it["nombre"] = inst.nombre if inst else it["ticker"]
 
+    # Los totales (v0, v1, P&L, aportes) suman sólo los instrumentos disponibles. El TWR y la TIR
+    # tienen que medir ese mismo conjunto: con todos los movimientos, la TIR incluía los flujos de
+    # un instrumento cuyo valor no entraba en v0/v1 y salía distorsionada.
+    no_disp_tickers = {it["ticker"] for it in items if not it["disponible"]}
+    movs_calc = [m for m in movs if m.ticker not in no_disp_tickers] if no_disp_tickers else movs
+
     v0_total = _total(items, "v0")
     v1_total = _total(items, "v1")
     pnl_total = _total(items, "pnl")
@@ -255,17 +261,17 @@ def get_explicacion_resultado(cartera: str | None, desde: date | None, moneda: s
     # con la ventana `(desde, hoy]` (ver extensión de `_calcular_twr_encadenado`).
     mep_cache_periodo: dict = {}
     if moneda_destino == "USD":
-        twr_periodo, _, _ = _calcular_twr(movs, precios_por_ticker, db, mep_cache_periodo, hoy, desde=desde)
+        twr_periodo, _, _ = _calcular_twr(movs_calc, precios_por_ticker, db, mep_cache_periodo, hoy, desde=desde)
     else:
-        twr_periodo, _, _ = _calcular_twr_ars(movs, precios_por_ticker, db, mep_cache_periodo, hoy, desde=desde)
+        twr_periodo, _, _ = _calcular_twr_ars(movs_calc, precios_por_ticker, db, mep_cache_periodo, hoy, desde=desde)
 
     monto_fn = _monto_usd if moneda_destino == "USD" else _monto_ars
-    movs_periodo = [m for m in movs if desde is None or m.fecha > desde]
+    movs_periodo = [m for m in movs_calc if desde is None or m.fecha > desde]
     flujos = _flujos_cashflow(movs_periodo, lambda mov: monto_fn(mov, db, mep_cache_periodo))
     if desde is not None:
         flujos = [(desde, -(v0_total or 0.0))] + flujos
     flujos = flujos + [(hoy, v1_total or 0.0)]
-    dias_periodo = (hoy - desde).days if desde is not None else _dias_periodo_medido(movs, hoy)
+    dias_periodo = (hoy - desde).days if desde is not None else _dias_periodo_medido(movs_calc, hoy)
     xirr = _calcular_xirr(flujos) if dias_periodo > 0 else None
     xirr_periodo = _xirr_a_periodo(xirr, dias_periodo) if dias_periodo > 0 else None
 
@@ -305,8 +311,8 @@ def get_explicacion_resultado(cartera: str | None, desde: date | None, moneda: s
         mep_hoy = _mep_sheet(hoy, db, mep_cache_periodo)
         fx_dinero = explicacion_resultado_engine.descomponer_fx_periodo(pnl_total, pnl_total_usd, mep_hoy)
 
-        twr_usd_periodo, _, _ = _calcular_twr(movs, precios_por_ticker, db, mep_cache_periodo, hoy, desde=desde)
-        fecha_mep_inicio = desde if desde is not None else movs[0].fecha
+        twr_usd_periodo, _, _ = _calcular_twr(movs_calc, precios_por_ticker, db, mep_cache_periodo, hoy, desde=desde)
+        fecha_mep_inicio = desde if desde is not None else (movs_calc[0].fecha if movs_calc else movs[0].fecha)
         mep_inicio = _mep_sheet(fecha_mep_inicio, db, mep_cache_periodo)
         fx_pct = fx_decomposition_engine.descomponer_retorno_periodo(twr_periodo, twr_usd_periodo, mep_inicio, mep_hoy)
         fx = {
@@ -328,8 +334,10 @@ def get_explicacion_resultado(cartera: str | None, desde: date | None, moneda: s
     if aproximado:
         advertencias.append("Algunos precios usados tienen más de 45 días de antigüedad (carry-forward).")
     if no_disponibles:
+        nombres = ", ".join(nd["ticker"] for nd in no_disponibles)
         advertencias.append(
-            f"{len(no_disponibles)} instrumento(s) no se pudieron calcular con precisión (ver 'No disponible')."
+            f"Calculado SIN {nombres}: no se pudieron valuar (falta precio o tipo de cambio). El resultado, "
+            "los porcentajes, el rendimiento del período y la TIR no los incluyen (ver 'No disponible')."
         )
 
     if aviso_base:

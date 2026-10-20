@@ -18,6 +18,10 @@ from sqlalchemy.orm import Session
 
 from ..database import MovimientoInversion
 
+# Cuántos días puede distar la última barra del backtest de hoy sin considerar que el período
+# "terminó antes" de tu posición abierta (fin de semana largo + rezago de carga).
+_TOLERANCIA_DIAS_FIN_SERIE = 5
+
 
 def _indice_desde(fechas: list[date], fecha: date) -> int | None:
     """Primera barra con fecha >= `fecha`, o None si es posterior a la última."""
@@ -48,6 +52,14 @@ def comparar(
         if c["desde"] > fin or hasta < inicio:
             continue
         recortado = c["desde"] < inicio
+        # El otro extremo: un ciclo que sigue (o terminó) después de la última barra del backtest.
+        # Tu resultado se mide hasta hoy / hasta tu venta y las curvas cortan en `fin`: sin avisarlo
+        # se comparaban períodos distintos. Un día o dos de rezago de la serie respecto de hoy no
+        # cuentan (la última rueda cargada suele ser la de ayer).
+        if c["hasta"] is None:
+            recortado_fin = (date.today() - fin).days > _TOLERANCIA_DIAS_FIN_SERIE
+        else:
+            recortado_fin = c["hasta"] > fin
         i0 = max(_indice_desde(fechas, c["desde"]) or 0, indice_desde)
         i1 = _indice_desde(fechas, hasta)
         i1 = len(fechas) - 1 if i1 is None else i1
@@ -56,6 +68,7 @@ def comparar(
         filas.append({
             "ciclo": c["ciclo"], "desde": c["desde"], "hasta": c["hasta"], "abierto": c["abierto"],
             "tramo_desde": fechas[i0], "tramo_hasta": fechas[i1], "recortado": recortado,
+            "recortado_fin": recortado_fin,
             "tu_resultado_usd": c["resultado_usd"], "tu_resultado_pct": c["resultado_pct"],
             "estrategia_pct": _retorno(curva_estrategia, i0, i1),
             "buy_hold_pct": _retorno(curva_buy_hold, i0, i1),
