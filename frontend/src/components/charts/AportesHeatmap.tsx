@@ -18,7 +18,7 @@ function detalleMes(item: AporteMesItem, conObjetivo: boolean, ocultos: boolean)
   return `${base}\nObjetivo ${ocultos ? MASCARA : item.objetivo_usd.toFixed(0)} USD${pct} · ${estado}`
 }
 
-/** Calendario año × mes del aporte neto. Misma tabla que `RendimientoHeatmap`, pero la
+/** Calendario año × mes del aporte neto. Misma idea que el mapa de `MesAMes` (pantalla Rendimiento), pero la
  *  intensidad es relativa al mejor mes cerrado (el récord satura, el resto escala), no un % fijo.
  *
  *  Con `mostrarObjetivo`, los meses que alcanzaron el objetivo vigente llevan un anillo: la

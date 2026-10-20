@@ -46,13 +46,14 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
   '/rendimiento': {
     queEs: 'Cuánto ganaste o perdiste en total, medido de varias formas distintas.',
     comoLeerla: [
-      '"Realizado" es lo que ya cobraste al vender; "no realizado" es la ganancia en papel de lo que todavía tenés.',
-      'La tabla compara el mismo período en pesos nominales, pesos ajustados por inflación (CER) y dólares (MEP): son tres fotos distintas de la misma plata.',
-      'La TIR (XIRR) tiene en cuenta cuándo pusiste o sacaste plata; el TWRR mide sólo cómo rindió la estrategia, sin que tus aportes lo distorsionen.',
-      'El mapa de calor mensual marca cada mes como positivo (verde) o negativo (coral), de un vistazo.',
+      'Arriba está el número que importa: cuánto rindió tu cartera, en la moneda que elegiste en el encabezado, y si le ganaste o no a la referencia.',
+      '"Lo que tenés en cartera" es la ganancia en papel; "lo que ya vendiste" es la que ya cobraste al vender; los dividendos y cupones van aparte.',
+      '"¿Activos o dólar?" separa cuánto ganaste porque tus inversiones subieron y cuánto porque subió el dólar.',
+      'Cada mes del mapa tiene su número escrito; el color sólo ayuda a ver los buenos y los malos de un vistazo.',
+      'En "Métricas detalladas" están las demás formas de medirlo: la TIR tiene en cuenta cuándo pusiste o sacaste plata; el TWR mide sólo cómo rindieron tus decisiones, sin que tus aportes lo distorsionen.',
     ],
-    queHacer: ['Si sólo querés "cuánto gané", mirá "Simple (período)" o el Total.'],
-    ojo: 'La TIR anualizada extrapola tu historial a 12 meses: con pocos meses de actividad puede verse exageradamente alta o baja.',
+    queHacer: ['Si sólo querés "cuánto gané", mirá la ganancia total de arriba.'],
+    ojo: 'La cifra "llevado a un año" extrapola tu historial a 12 meses: con pocos meses de actividad puede verse exageradamente alta o baja.',
     terminos: ['xirr', 'twr', 'simple', 'realizado', 'noRealizado'],
   },
 
