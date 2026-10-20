@@ -77,11 +77,15 @@ def get_riesgo(cartera: str | None, moneda: str, benchmark: str | None, db: Sess
 
     benchmark_retorno_anualizado = None
     if benchmark:
-        from .benchmarks_analytics import _resolver_fuente
-        retornos_benchmark = _resolver_fuente(benchmark, db, hoy)
+        from .benchmarks_analytics import _resolver_fuente_en_moneda
+        # El benchmark se expresa en la moneda de la cartera (ver `_resolver_fuente_en_moneda`) y
+        # su retorno anualizado se mide sólo sobre los meses de la cartera: con toda su historia
+        # (el MEP arranca años antes) se mostraba un CAGR de otro período al lado del de la cartera.
+        retornos_benchmark = _resolver_fuente_en_moneda(benchmark, moneda, db, hoy)
         sharpe = risk_engine.calcular_sharpe_vs_benchmark(retornos_validos, retornos_benchmark, benchmark)
-        if retornos_benchmark:
-            indice_benchmark = risk_engine.construir_indice(retornos_benchmark)
+        retornos_benchmark_periodo = {k: v for k, v in retornos_benchmark.items() if k in retornos_por_mes}
+        if retornos_benchmark_periodo:
+            indice_benchmark = risk_engine.construir_indice(retornos_benchmark_periodo)
             benchmark_retorno_anualizado = risk_engine.calcular_retorno_anualizado(indice_benchmark)
     else:
         sharpe = {"estado": "sin_benchmark", "valor": None, "benchmark": None, "n_obs": 0}

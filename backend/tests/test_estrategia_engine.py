@@ -269,6 +269,24 @@ def test_trailing_stop_sigue_el_maximo():
     assert op.precio_salida == pytest.approx(135.0)  # 150 * (1 - 0.10)
 
 
+def test_trailing_no_usa_el_maximo_de_la_misma_barra_para_sacarte():
+    # Entra a 100 (barra 1) con trailing 10%. Barra 2: abre 101, máximo 115, mínimo 103. El stop
+    # vigente a la apertura es 90 (100 * 0,9): el mínimo de 103 no lo toca, así que NO hay salida.
+    # Antes el máximo de la propia barra subía el stop a 103,5 y salía a 101 (apertura): una
+    # salida con un nivel que no existía cuando abrió la rueda.
+    cierres = [90.0, 100.0, 110.0, 112.0]
+    aperturas = [90.0, 100.0, 101.0, 111.0]
+    maximos = [90.0, 100.0, 115.0, 113.0]
+    minimos = [90.0, 100.0, 103.0, 110.0]
+    barras = _barras(cierres, aperturas=aperturas, maximos=maximos, minimos=minimos)
+    dsl = _dsl_entrada_unica({"stop_loss_pct": None, "take_profit_pct": None, "trailing_stop_pct": 10.0, "max_barras": None})
+    resultado = ee.backtest(dsl, barras)
+    op = resultado.operaciones[0]
+    assert op.abierta                                   # nunca se activó el stop
+    # Desde la barra siguiente el stop sí sube con el máximo de 115: 115 * 0,9 = 103,5.
+    assert op.trailing[-1] == pytest.approx(115.0 * 0.9)
+
+
 # ── apertura_siguiente desplaza una barra (sin sesgo de lookahead) ───────────────────────────
 
 def test_apertura_siguiente_desplaza_la_ejecucion_una_barra():

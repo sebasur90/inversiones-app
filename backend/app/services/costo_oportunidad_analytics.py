@@ -1,8 +1,7 @@
 """Adaptador para comparar históricamente una cartera contra una referencia (benchmark),
 en la misma moneda, en porcentaje y en dinero.
 
-A diferencia de `benchmarks_analytics.get_performance_relativa` (no toca la moneda de la
-referencia) y de `opportunity_cost_analytics.get_opportunity_cost` (sólo da el valor final,
+A diferencia de `opportunity_cost_analytics.get_opportunity_cost` (sólo da el valor final,
 no la serie), este módulo:
 
 1. Normaliza la serie de niveles de la referencia a la moneda elegida
@@ -13,9 +12,8 @@ no la serie), este módulo:
    series (cartera y referencia) al mismo capital inicial y a los mismos aportes/retiros.
 3. Arma las advertencias de homogeneidad que la pantalla muestra explícitamente.
 
-No se modifica `benchmarks_analytics._resolver_fuente` ni los endpoints existentes:
-`/performance-relativa`, `/benchmarks-comparacion` y `/opportunity-cost` siguen devolviendo
-exactamente lo mismo que antes.
+`/opportunity-cost` (pantalla vieja) comparte el mismo motor de normalización de moneda; el
+resto de los endpoints de benchmarks usa `benchmarks_analytics._resolver_fuente_en_moneda`.
 """
 from datetime import date
 from sqlalchemy.orm import Session

@@ -527,10 +527,12 @@ def backtest(dsl: dict, barras: list[Barra], indice_inicio: int = 0) -> Resultad
             i += 1
             continue
 
-        maximo_desde_entrada = max(maximo_desde_entrada, _maximo_barra(barras[i]))
         if trailing_serie is not None:
-            # Se agrega antes de chequear la salida, con el máximo ya actualizado por la barra en
-            # curso: es exactamente el nivel contra el que `_chequear_salida` compara acá.
+            # Nivel vigente para ESTA barra: se arma con el máximo hasta la barra anterior, que es
+            # lo único conocido al abrir. Incluir el máximo de la propia barra (como se hacía)
+            # inventaba un nivel que no existía a la apertura: con apertura 101 y máximo 115 el stop
+            # saltaba a 103,5 y la salida se registraba a 101 aunque el mínimo hubiera ocurrido
+            # antes del máximo. Es exactamente el nivel contra el que `_chequear_salida` compara.
             trailing_serie.append(maximo_desde_entrada * (1 - trailing_stop_pct / 100))
         resultado_salida = _chequear_salida(
             barras, i, precio_entrada, maximo_desde_entrada,
@@ -560,6 +562,9 @@ def backtest(dsl: dict, barras: list[Barra], indice_inicio: int = 0) -> Resultad
             trailing_serie = None
             nivel_stop_loss = None
             nivel_take_profit = None
+        else:
+            # Sin salida: recién ahora el máximo de esta barra mueve el trailing para las siguientes.
+            maximo_desde_entrada = max(maximo_desde_entrada, _maximo_barra(barras[i]))
         i += 1
 
     if estado == "dentro":

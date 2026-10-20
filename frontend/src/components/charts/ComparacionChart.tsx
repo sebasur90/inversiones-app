@@ -10,6 +10,8 @@ interface BarData {
   'Valor actual': number
   'Si comprabas USD': number | null
   'Si ajustabas por CER': number | null
+  /** Dividendos y cupones cobrados: forman parte del resultado de "Valor actual". */
+  ingresos: number
 }
 
 const COLORS = {
@@ -25,11 +27,15 @@ const renderCustomLabel = (props: any): React.ReactElement | null => {
   const value = payload?.[dataKey]
   const invertido = payload?.Invertido ?? 0
 
-  if (isInvertido || value === null || invertido === 0 || value === 0) {
+  // Con capital neto ≤ 0 (vendiste más de lo que pusiste) un % sobre "invertido" cambia de signo
+  // y no significa nada: no se dibuja.
+  if (isInvertido || value === null || invertido <= 0 || value === 0) {
     return null
   }
 
-  const delta = ((value - invertido) / invertido) * 100
+  // El resultado de "Valor actual" incluye lo cobrado; los benchmarks no tienen ese concepto.
+  const cobrado = dataKey === 'Valor actual' ? (payload?.ingresos ?? 0) : 0
+  const delta = ((value + cobrado - invertido) / invertido) * 100
   const isPositive = delta > 0
   const color = isPositive ? '#10b981' : '#ef4444'
 
@@ -55,6 +61,7 @@ export default function ComparacionChart({ resumen }: { resumen: InversionesResu
       'Valor actual': resumen.valor_actual_ars,
       'Si comprabas USD': resumen.valor_benchmark_usd_ars ?? null,
       'Si ajustabas por CER': resumen.total_invertido_ars_real ?? null,
+      ingresos: resumen.ingresos_recibidos_ars,
     },
   ]
 
@@ -93,7 +100,10 @@ export default function ComparacionChart({ resumen }: { resumen: InversionesResu
         </BarChart>
       </ResponsiveContainer>
       <div className="mt-3 text-label text-app-text-dim space-y-0.5">
-        {resumen.valor_benchmark_usd_ars === null && <div>⚠ Sin MEP disponible para hoy</div>}
+        {resumen.total_invertido_ars <= 0 && (
+          <div>⚠ Vendiste más de lo que invertiste en neto: los % sobre lo invertido no se calculan.</div>
+        )}
+        {resumen.valor_benchmark_usd_ars === null && resumen.total_invertido_ars > 0 && <div>⚠ Sin MEP disponible para hoy</div>}
         {resumen.total_invertido_ars_real === null && <div>⚠ Sin CER disponible para algunos períodos</div>}
       </div>
     </div>

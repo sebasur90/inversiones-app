@@ -204,4 +204,24 @@ def validar_movimientos(
         tenencias[key] = actual
         validos.append(mov)
 
+    # Un mismo ticker comprado en monedas distintas: el precio promedio y el costo de la posición
+    # se calculan sobre precios unitarios que no son comparables entre sí.
+    monedas_por_posicion: dict[tuple[str, str], dict[str, int]] = {}
+    for mov in validos:
+        if mov["tipo_movimiento"] != "compra":
+            continue
+        por_moneda = monedas_por_posicion.setdefault((mov["cartera"], mov["ticker"]), {})
+        por_moneda.setdefault(mov["moneda"], mov["row_num"])
+    for (cartera, ticker), por_moneda in monedas_por_posicion.items():
+        if len(por_moneda) > 1:
+            monedas = " y ".join(sorted(por_moneda))
+            issues.append(ValidationIssue(
+                tab="Movimientos", fila=min(por_moneda.values()), campo="Moneda",
+                regla="moneda_mixta_en_ticker",
+                mensaje=f"{ticker} en '{cartera}' tiene compras en {monedas}",
+                impacto="El precio promedio y el costo de la posición mezclan monedas: el rendimiento "
+                        "de este ticker puede no ser comparable. Cargá todas las compras en la misma moneda.",
+                severidad=Severity.ADVERTENCIA,
+            ))
+
     return validos, cer_mep_datos, issues

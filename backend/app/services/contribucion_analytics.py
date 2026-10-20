@@ -12,7 +12,9 @@ from ..database import InstrumentoInversion
 from . import clasificacion_analytics, contribucion_engine
 from .etiquetas import SIN_CLASIFICAR, SIN_PAIS, SIN_SECTOR
 from .inversiones_analytics import (
+    CAPITAL_NETO_MINIMO_RATIO,
     EPS,
+    TIPOS_RETIRO,
     _atributo,
     _movimientos_ordenados,
     _precios_por_ticker,
@@ -95,22 +97,41 @@ def get_contribucion(cartera: str | None, db: Session) -> dict:
     }
 
     costo_total_por_ticker: dict[str, float] = {}
+    retirado_usd = 0.0
     for mov in movs:
-        if mov.tipo_movimiento != "compra":
-            continue
         monto_usd = _monto_usd(mov, db, mep_cache)
         if monto_usd is None:
             continue
-        costo_total_por_ticker[mov.ticker] = costo_total_por_ticker.get(mov.ticker, 0.0) + monto_usd
+        if mov.tipo_movimiento == "compra":
+            costo_total_por_ticker[mov.ticker] = costo_total_por_ticker.get(mov.ticker, 0.0) + monto_usd
+        elif mov.tipo_movimiento in TIPOS_RETIRO:
+            retirado_usd += monto_usd
 
     costo_total_portfolio = sum(costo_total_por_ticker.values())
     tickers_todos = set(peso_promedio_pct) | set(pnl_por_ticker) | set(costo_total_por_ticker)
 
+    # Denominador de la contribución. El P&L total de la cartera es valor + ventas + cobros −
+    # compras, y el rendimiento de la pantalla principal lo divide por el capital NETO
+    # (compras − ventas): usar ese mismo denominador hace que la suma de contribuciones
+    # reconcilie exactamente con ese rendimiento. Dividir por la suma bruta de compras (como se
+    # hacía) subestimaba todo en cuanto reciclabas capital (vender y volver a comprar).
+    # Si el neto es ≤ 0 o muy chico el cociente no tiene sentido (igual que en Resumen): se mide
+    # sobre lo comprado y la pantalla lo avisa, porque ahí la suma ya no reconcilia.
+    capital_neto = costo_total_portfolio - retirado_usd
+    if capital_neto > EPS and capital_neto >= costo_total_portfolio * CAPITAL_NETO_MINIMO_RATIO:
+        denominador, base, aviso = capital_neto, "capital_neto", None
+    else:
+        denominador, base = costo_total_portfolio, "total_comprado"
+        aviso = (
+            "Vendiste más de lo que invertiste en neto (o te queda muy poco invertido), así que no hay un "
+            "capital neto sobre el cual medir. Las contribuciones se calculan sobre el total comprado y "
+            "no suman el rendimiento total de la cartera."
+            if costo_total_portfolio > EPS else None
+        )
+
     def _item(etiqueta: str, pnl: float, costo: float, peso: float) -> dict:
         rentabilidad = (pnl / costo * 100) if abs(costo) > EPS else None
-        # Mismo denominador para todos los tickers: la suma de contribucion_pct reconcilia
-        # exactamente con el retorno simple total de la cartera (no es TWR/XIRR).
-        contribucion = (pnl / costo_total_portfolio * 100) if abs(costo_total_portfolio) > EPS else 0.0
+        contribucion = (pnl / denominador * 100) if abs(denominador) > EPS else 0.0
         return {
             "etiqueta": etiqueta,
             "peso_promedio_pct": round(peso, 2),
@@ -154,7 +175,12 @@ def get_contribucion(cartera: str | None, db: Session) -> dict:
     _rollup("Sector", "sector", bucket_sin_dato=SIN_SECTOR)
     _rollup("Mercado", "mercado")
 
-    return {"contribucion": ejes, "concentracion": get_concentracion(cartera, db)}
+    return {
+        "contribucion": ejes,
+        "concentracion": get_concentracion(cartera, db),
+        "base_contribucion": base,
+        "aviso_contribucion": aviso,
+    }
 
 
 # ── Concentración (HHI) ──────────────────────────────────────────────────────

@@ -28,9 +28,10 @@ export const PATRIMONIO_HELP: Record<PatrimonioHelpKey, HelpContent> = {
     whyItMatters: 'Sin este componente, el costo de las comisiones queda mezclado dentro de "Rendimiento", haciendo parecer que el mercado rindió peor de lo que realmente rindió.',
   },
   patrimonio_descomposicion_total: {
-    title: 'Total del período',
-    shortDescription: 'La suma de Aportes + Rendimiento + Dividendos + Otros ajustes: la variación total de tu patrimonio durante el período seleccionado.',
+    title: 'Variación del valor',
+    shortDescription: 'La suma de Aportes + Rendimiento + Otros ajustes: cuánto cambió el valor de tu cartera durante el período seleccionado.',
     whyItMatters: 'Coincide con la "Variación del período" que se muestra arriba del gráfico; acá se desglosa en sus componentes.',
+    limitations: 'Los dividendos y cupones cobrados no entran: ese efectivo sale de la tenencia y no está en el valor de la cartera, por eso se informan aparte.',
   },
   patrimonio_valor_mercado: {
     title: 'Valor de mercado',

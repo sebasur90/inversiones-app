@@ -5,6 +5,7 @@ import Button from '../ui/Button'
 import { EscenarioSimulacionItem, EscenarioParamsIn } from '../../api'
 import FormHelp from '../../help/components/FormHelp'
 import { ESCENARIO_PARAM_LIMITS } from '../../help/errors/escenarioLimits'
+import { parametrosEfectivos } from '../../utils/escenarioPresets'
 
 interface EscenarioConfigPanelProps {
   escenario: EscenarioSimulacionItem
@@ -127,20 +128,8 @@ export default function EscenarioConfigPanel({
   tickersDisponibles = [],
 }: EscenarioConfigPanelProps) {
   const [mostrarAvanzado, setMostrarAvanzado] = useState(false)
-  const params = escenario.parametros || {
-    horizonte_meses: 60,
-    variacion_dolar_pct: 0,
-    variacion_por_instrumento: {},
-    variacion_por_defecto_pct: 0,
-    aporte_mensual_usd: 0,
-    crecimiento_aporte_anual_pct: 0,
-    retiro_mensual_usd: 0,
-    modo_dividendos: 'reinvertir_total',
-    dividend_yield_anual_pct: 0,
-    pct_dividendo_reinvertido: null,
-    comision_pct: 0,
-    inflacion_anual_pct: null,
-  } as EscenarioParamsIn
+  // Lo que se va a simular: neutros < valores del preset < lo que el usuario editó.
+  const params = parametrosEfectivos(escenario.tipo_preset, escenario.parametros)
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onChangeName(e.target.value)

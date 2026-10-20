@@ -399,79 +399,86 @@ export default function Patrimonio() {
 
       {patrimonioSummary && (
         <>
-          <div className="mt-6 mb-4">
-            <div className="text-label text-app-text-faint uppercase tracking-wide font-semibold mb-2">Máximo histórico y drawdown</div>
-            <div className="grid grid-cols-2 gap-2">
-              <MetricTile
-                label="Máximo histórico"
-                infoTerm="maximoHistorico"
-                value={compacto(vista === 'usd' ? (patrimonioSummary.maximo.valor_usd ?? 0) : (patrimonioSummary.maximo.valor_ars ?? 0))}
-                insuficiente={false}
-              />
-              {(() => {
-                const drawdownNominal = vista === 'usd' ? (patrimonioSummary.maximo.drawdown_usd ?? 0) : (patrimonioSummary.maximo.drawdown_ars ?? 0)
-                return (
-                  <MetricTile
-                    label="Drawdown nominal"
-                    infoTerm="drawdown"
-                    value={(drawdownNominal * 100).toFixed(1) + '%'}
-                    insuficiente={false}
-                    tone={drawdownNominal > 0.1 ? 'neg' : 'pos'}
-                  />
-                )
-              })()}
-            </div>
-          </div>
+          {(() => {
+            // Cada vista usa sus propios campos: "ARS real" (ajustada por CER) no es lo mismo que
+            // pesos nominales, y un dato que falta se muestra como tal, nunca como 0.
+            const sufijo = vista === 'usd' ? 'usd' : vista === 'ars' ? 'ars' : 'ars_real'
+            const mx = patrimonioSummary.maximo as unknown as Record<string, number | null>
+            const dc = patrimonioSummary.descomposicion as unknown as Record<string, number | null>
+            const maximo = mx[`valor_${sufijo}`] ?? null
+            const drawdown = mx[`drawdown_${sufijo}`] ?? null
+            const aportes = dc[`aportes_${sufijo}`] ?? null
+            const rendimiento = dc[`rendimiento_${sufijo}`] ?? null
+            const dividendos = dc[`dividendos_${sufijo}`] ?? null
+            const otros = dc[`otros_ajustes_${sufijo}`] ?? null
+            // Aportes + Rendimiento + Otros ajustes = variación del valor. Los cobros no forman
+            // parte del valor de la cartera (salen de la tenencia), así que van aparte.
+            const variacion = aportes != null && rendimiento != null && otros != null ? aportes + rendimiento + otros : null
+            const cobros = (v: number | null) => (v == null ? '—' : compacto(v))
+            return (
+              <>
+                <div className="mt-6 mb-4">
+                  <div className="text-label text-app-text-faint uppercase tracking-wide font-semibold mb-2">Máximo histórico y drawdown</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <MetricTile
+                      label="Máximo histórico"
+                      infoTerm="maximoHistorico"
+                      value={maximo != null ? compacto(maximo) : '—'}
+                      insuficiente={maximo == null}
+                    />
+                    <MetricTile
+                      label={vista === 'ars_real' ? 'Drawdown real' : 'Drawdown nominal'}
+                      infoTerm="drawdown"
+                      value={drawdown != null ? (drawdown * 100).toFixed(1) + '%' : '—'}
+                      insuficiente={drawdown == null}
+                      tone={drawdown != null && drawdown > 0.1 ? 'neg' : 'pos'}
+                    />
+                  </div>
+                </div>
 
-          <div className="mt-6 mb-4">
-            <div className="text-label text-app-text-faint uppercase tracking-wide font-semibold mb-2">Descomposición del período</div>
-            <div className="space-y-2 text-label">
-              <div className="flex justify-between">
-                <span className="text-app-text-dim">
-                  <InfoTooltip term="patrimonio_descomposicion_aportes" label="Aportes:" className="text-app-text-dim" />
-                </span>
-                <span className="text-app-text font-mono">{compacto(vista === 'usd' ? patrimonioSummary.descomposicion.aportes_usd : patrimonioSummary.descomposicion.aportes_ars)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-app-text-dim">
-                  <InfoTooltip term="patrimonio_descomposicion_rendimiento" label="Rendimiento:" className="text-app-text-dim" />
-                </span>
-                <span className={`font-mono ${(vista === 'usd' ? patrimonioSummary.descomposicion.rendimiento_usd : patrimonioSummary.descomposicion.rendimiento_ars) >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
-                  {compacto(vista === 'usd' ? patrimonioSummary.descomposicion.rendimiento_usd : patrimonioSummary.descomposicion.rendimiento_ars)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-app-text-dim">
-                  <InfoTooltip term="ingresos" label="Dividendos:" className="text-app-text-dim" />
-                </span>
-                <span className="text-app-text font-mono">{compacto(vista === 'usd' ? patrimonioSummary.descomposicion.dividendos_usd : patrimonioSummary.descomposicion.dividendos_ars)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-app-text-dim">
-                  <InfoTooltip term="patrimonio_descomposicion_otros_ajustes" label="Otros ajustes (comisiones):" className="text-app-text-dim" />
-                </span>
-                <span className="text-app-text font-mono">{compacto(vista === 'usd' ? patrimonioSummary.descomposicion.otros_ajustes_usd : patrimonioSummary.descomposicion.otros_ajustes_ars)}</span>
-              </div>
-              <div className="flex justify-between border-t border-app-border-soft pt-2 mt-2">
-                <span className="text-app-text-dim font-semibold">
-                  <InfoTooltip term="patrimonio_descomposicion_total" label="Total:" className="text-app-text-dim font-semibold" />
-                </span>
-                <span className="text-app-text font-mono font-bold">
-                  {compacto(
-                    vista === 'usd'
-                      ? patrimonioSummary.descomposicion.aportes_usd +
-                        patrimonioSummary.descomposicion.rendimiento_usd +
-                        patrimonioSummary.descomposicion.dividendos_usd +
-                        patrimonioSummary.descomposicion.otros_ajustes_usd
-                      : patrimonioSummary.descomposicion.aportes_ars +
-                        patrimonioSummary.descomposicion.rendimiento_ars +
-                        patrimonioSummary.descomposicion.dividendos_ars +
-                        patrimonioSummary.descomposicion.otros_ajustes_ars,
-                  )}
-                </span>
-              </div>
-            </div>
-          </div>
+                <div className="mt-6 mb-4">
+                  <div className="text-label text-app-text-faint uppercase tracking-wide font-semibold mb-2">Descomposición del período</div>
+                  <div className="space-y-2 text-label">
+                    <div className="flex justify-between">
+                      <span className="text-app-text-dim">
+                        <InfoTooltip term="patrimonio_descomposicion_aportes" label="Aportes:" className="text-app-text-dim" />
+                      </span>
+                      <span className="text-app-text font-mono">{cobros(aportes)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-app-text-dim">
+                        <InfoTooltip term="patrimonio_descomposicion_rendimiento" label="Rendimiento:" className="text-app-text-dim" />
+                      </span>
+                      <span className={`font-mono ${(rendimiento ?? 0) >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
+                        {cobros(rendimiento)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-app-text-dim">
+                        <InfoTooltip term="patrimonio_descomposicion_otros_ajustes" label="Otros ajustes (comisiones):" className="text-app-text-dim" />
+                      </span>
+                      <span className="text-app-text font-mono">{cobros(otros)}</span>
+                    </div>
+                    <div className="flex justify-between border-t border-app-border-soft pt-2 mt-2">
+                      <span className="text-app-text-dim font-semibold">
+                        <InfoTooltip term="patrimonio_descomposicion_total" label="Variación del valor:" className="text-app-text-dim font-semibold" />
+                      </span>
+                      <span className="text-app-text font-mono font-bold">{cobros(variacion)}</span>
+                    </div>
+                    <div className="flex justify-between pt-1">
+                      <span className="text-app-text-dim">
+                        <InfoTooltip term="ingresos" label="Dividendos y cupones cobrados:" className="text-app-text-dim" />
+                      </span>
+                      <span className="text-app-text font-mono">{cobros(dividendos)}</span>
+                    </div>
+                    <div className="text-label text-app-text-faint">
+                      Lo cobrado en dividendos y cupones no está en el valor de la cartera, por eso no suma en la variación.
+                    </div>
+                  </div>
+                </div>
+              </>
+            )
+          })()}
 
           {patrimonioHistoria.length > 0 && (
             <div className="mt-6">

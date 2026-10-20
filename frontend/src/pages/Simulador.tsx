@@ -27,6 +27,7 @@ import ScenarioIntentBanner from '../help/components/ScenarioIntentBanner'
 import ErrorBanner from '../help/components/ErrorBanner'
 import ResultInterpretation from '../help/components/ResultInterpretation'
 import { parseApiError } from '../help/errors/apiErrors'
+import { PARAMS_VACIOS, parametrosEfectivos } from '../utils/escenarioPresets'
 import type { ParsedApiError } from '../help/errors/apiErrors'
 
 export default function Simulador() {
@@ -64,8 +65,10 @@ export default function Simulador() {
   // Estados
   const [escenarios, setEscenarios] = useState<EscenarioSimulacionItem[]>([
     { tipo_preset: 'personalizado', nombre: 'Base', parametros: defaultParams },
-    { tipo_preset: 'alcista', nombre: 'Alcista', parametros: defaultParams },
-    { tipo_preset: 'bajista', nombre: 'Bajista', parametros: defaultParams },
+    // Los presets arrancan SIN parámetros: así el backend aplica los suyos. Mandar `defaultParams`
+    // (todo en cero) los anulaba y Alcista/Bajista daban lo mismo que Base.
+    { tipo_preset: 'alcista', nombre: 'Alcista' },
+    { tipo_preset: 'bajista', nombre: 'Bajista' },
   ])
   const [resultado, setResultado] = useState<EscenarioSimulacionOut | null>(null)
   const [cargando, setCargando] = useState(false)
@@ -190,20 +193,11 @@ export default function Simulador() {
     setEscenarios(prev => {
       const updated = [...prev]
       const item = { ...updated[index] }
-      const params = item.parametros || {
-        horizonte_meses: 60,
-        variacion_dolar_pct: 0,
-        variacion_por_instrumento: {},
-        variacion_por_defecto_pct: 0,
-        aporte_mensual_usd: 0,
-        crecimiento_aporte_anual_pct: 0,
-        retiro_mensual_usd: 0,
-        modo_dividendos: 'reinvertir_total',
-        dividend_yield_anual_pct: 0,
-        pct_dividendo_reinvertido: null,
-        comision_pct: 0,
-        inflacion_anual_pct: null,
-      } as EscenarioParamsIn
+      // En un preset sólo se guarda lo que el usuario editó; el resto sigue siendo del preset.
+      // En 'personalizado' se parte de los valores neutros.
+      const params = item.tipo_preset === 'personalizado'
+        ? { ...PARAMS_VACIOS, ...(item.parametros ?? {}) }
+        : { ...(item.parametros ?? {}) }
       item.parametros = { ...params, [campo]: valor }
       updated[index] = item
       return updated
@@ -213,28 +207,15 @@ export default function Simulador() {
   // Guardar escenario
   const handleGuardarEscenario = async (escenarioIndex: number) => {
     const esc = escenarios[escenarioIndex]
-    if (!esc.parametros) {
+    if (esc.tipo_preset === 'personalizado' && !esc.parametros) {
       setError({ message: 'Configura los parámetros antes de guardar' })
       return
     }
 
     try {
       const nombre = esc.nombre || `Escenario ${new Date().toLocaleString()}`
-      // Asegurar que todos los parámetros requeridos estén presentes
-      const parametrosCompletos: EscenarioParamsIn = {
-        horizonte_meses: esc.parametros.horizonte_meses || 60,
-        variacion_dolar_pct: esc.parametros.variacion_dolar_pct ?? 0,
-        variacion_por_instrumento: esc.parametros.variacion_por_instrumento || {},
-        variacion_por_defecto_pct: esc.parametros.variacion_por_defecto_pct ?? 0,
-        aporte_mensual_usd: esc.parametros.aporte_mensual_usd ?? 0,
-        crecimiento_aporte_anual_pct: esc.parametros.crecimiento_aporte_anual_pct ?? 0,
-        retiro_mensual_usd: esc.parametros.retiro_mensual_usd ?? 0,
-        modo_dividendos: esc.parametros.modo_dividendos || 'reinvertir_total',
-        dividend_yield_anual_pct: esc.parametros.dividend_yield_anual_pct ?? 0,
-        pct_dividendo_reinvertido: esc.parametros.pct_dividendo_reinvertido ?? null,
-        comision_pct: esc.parametros.comision_pct ?? 0,
-        inflacion_anual_pct: esc.parametros.inflacion_anual_pct ?? null,
-      }
+      // Se guarda lo que realmente se simula: neutros < preset < lo que el usuario editó.
+      const parametrosCompletos: EscenarioParamsIn = parametrosEfectivos(esc.tipo_preset, esc.parametros)
       await guardarEscenario({
         cartera: carteraSeleccionada,
         nombre,

@@ -112,8 +112,8 @@ def test_ars_real_es_aceptada_como_moneda(client: TestClient):
 
 
 class TestNoRegresionPantallasExistentes:
-    """`_resolver_fuente` (benchmarks_analytics) y `opportunity_cost_analytics` no se tocan:
-    las pantallas que ya los consumen tienen que devolver exactamente lo mismo que antes."""
+    """`/performance-relativa` sigue devolviendo lo mismo; `/opportunity-cost` conserva su forma
+    pero ahora expresa cada moneda con la referencia normalizada a esa moneda."""
 
     def test_performance_relativa_no_cambia(self, client: TestClient):
         r = client.get(
@@ -126,7 +126,7 @@ class TestNoRegresionPantallasExistentes:
         assert data["benchmark_usado"] == "Dólar (MEP)"
         assert data["moneda"] == "usd"
 
-    def test_opportunity_cost_no_cambia(self, client: TestClient):
+    def test_opportunity_cost_expresa_el_dolar_en_dolares(self, client: TestClient):
         r = client.get(
             "/api/inversiones/carteras/test/opportunity-cost",
             params={"benchmark": "Dólar (MEP)"},
@@ -135,6 +135,9 @@ class TestNoRegresionPantallasExistentes:
         data = r.json()
         assert data["estado"] == "ok"
         assert data["benchmark_usado"] == "Dólar (MEP)"
-        # Bug conocido y no corregido a propósito (queda para el tab viejo, que no se toca):
-        # el shadow value se calcula sobre montos en USD creciendo por el MEP en ARS.
-        assert data["valor_shadow_usd"] is not None
+        # El dólar medido en dólares no rinde nada: los USD 1000 invertidos valen USD 1000, y la
+        # cartera (AAPL 100 → 120) vale 1200. Antes el shadow crecía con el MEP en pesos y el
+        # resultado no era ni dólares ni pesos.
+        assert data["valor_shadow_usd"] == pytest.approx(1000.0)
+        assert data["valor_actual_usd"] == pytest.approx(1200.0)
+        assert data["costo_oportunidad_usd"] == pytest.approx(-200.0)

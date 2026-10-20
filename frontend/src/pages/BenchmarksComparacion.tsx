@@ -20,6 +20,7 @@ import MetricTile from '../components/ui/MetricTile'
 import EmptyState from '../components/ui/EmptyState'
 import QueryBoundary from '../components/ui/QueryBoundary'
 import BenchmarkComparisonTable from '../components/inversiones/BenchmarkComparisonTable'
+import AvisoCalculo from '../components/inversiones/AvisoCalculo'
 import PerformanceCompareChart from '../components/charts/PerformanceCompareChart'
 import FormHelp from '../help/components/FormHelp'
 
@@ -197,6 +198,7 @@ export default function BenchmarksComparacion() {
                 <h3 className="text-body font-bold text-app-text mb-3">Rendimientos</h3>
                 <Card className="p-3">
                   <BenchmarkComparisonTable filas={performance.filas} />
+                  <AvisoCalculo mensajes={performance.advertencias ?? []} />
                 </Card>
               </div>
 

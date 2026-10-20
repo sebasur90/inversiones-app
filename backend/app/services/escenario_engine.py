@@ -24,6 +24,9 @@ class PosicionSnapshot:
     ticker: str
     valor_usd: float
     moneda: str  # Moneda nativa del instrumento: "ARS" o "USD"
+    # CEDEARs y similares: cotizan en pesos pero siguen al dólar (su precio en ARS sube con el MEP),
+    # así que su valor en USD no cae cuando el dólar sube.
+    sigue_dolar: bool = False
 
 
 @dataclass
@@ -201,7 +204,7 @@ def simular_escenario(
     # ─── Setup inicial ─────────────────────────────────────────────────────
 
     # Posiciones iniciales: si está vacía, usamos un bucket sintético
-    posiciones = {pos.ticker: {"valor_usd": pos.valor_usd, "moneda": pos.moneda}
+    posiciones = {pos.ticker: {"valor_usd": pos.valor_usd, "moneda": pos.moneda, "sigue_dolar": pos.sigue_dolar}
                   for pos in snapshot.posiciones}
     tiene_posiciones = len(posiciones) > 0
 
@@ -257,15 +260,17 @@ def simular_escenario(
         # 2. MEP: interpolación lineal mes a mes
         if snapshot.mep_actual is not None:
             mep_mes = mep_inicio + (mep_horizonte - mep_inicio) * (mes / params.horizonte_meses)
-            # Ajustar posiciones ARS por el cambio de MEP
-            # (incremento de MEP = ganancia en USD para posiciones ARS)
+            # Un activo en pesos vale en dólares su precio en ARS dividido por el MEP: si el dólar
+            # sube, vale MENOS dólares (el signo estaba invertido: el shock de "crisis" hacía ganar
+            # 60% a las posiciones en pesos). Los CEDEARs, que cotizan en pesos pero siguen al
+            # dólar, quedan neutros.
             if tiene_posiciones:
                 mep_mes_anterior = (mep_inicio + (mep_horizonte - mep_inicio) *
                                     ((mes - 1) / params.horizonte_meses))
                 mep_cambio_ratio = mep_mes / mep_mes_anterior if mep_mes_anterior > 0 else 1.0
                 for pos in posiciones.values():
-                    if pos["moneda"] == "ARS":
-                        pos["valor_usd"] *= mep_cambio_ratio
+                    if pos["moneda"] == "ARS" and not pos["sigue_dolar"] and mep_cambio_ratio > 0:
+                        pos["valor_usd"] /= mep_cambio_ratio
 
         # 3. Recalcular valor total
         if tiene_posiciones:

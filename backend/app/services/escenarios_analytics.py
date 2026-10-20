@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import EscenarioSimulacion
 from app.services import escenario_engine
 from app.services.inversiones_analytics import (
+    _atributo,
     _clasificados_valorizados,
     get_resumen,
     get_mep_actual,
@@ -35,10 +36,12 @@ def construir_snapshot(
             continue
         instrumento = instrumentos.get(ticker)
         moneda = instrumento.moneda if instrumento else "USD"
+        tipo = _atributo(instrumentos, ticker, "tipo_instrumento", pos.clasif) or ""
         posiciones.append(escenario_engine.PosicionSnapshot(
             ticker=ticker,
             valor_usd=valor_usd,
             moneda=moneda,
+            sigue_dolar=str(tipo).upper().startswith("CEDEAR"),
         ))
 
     # Obtener total invertido
@@ -162,12 +165,14 @@ def simular_escenario_cartera(
     # Procesar cada escenario
     resultados = []
     advertencias_set = set()
+    hubo_shock_dolar = False
 
     for item in request.escenarios:
         # Resolver parámetros (llenar defaults si es preset)
         parametros_dict = escenario_engine.resolver_preset(
             item.tipo_preset,
-            item.parametros.model_dump() if item.parametros else None,
+            # Sólo los campos enviados: los que el cliente no tocó los pone el preset.
+            item.parametros.model_dump(exclude_unset=True) if item.parametros else None,
         )
 
         # Convertir a EscenarioParams (puede tener defaults)
@@ -186,6 +191,8 @@ def simular_escenario_cartera(
             comision_pct=params_in.comision_pct,
             inflacion_anual_pct=params_in.inflacion_anual_pct,
         )
+
+        hubo_shock_dolar = hubo_shock_dolar or params.variacion_dolar_pct != 0
 
         # Simular
         resultado_engine = escenario_engine.simular_escenario(snapshot, params)
@@ -223,21 +230,9 @@ def simular_escenario_cartera(
         }
         resultados.append(resultado_out)
 
-    # Advertencias
-    if snapshot.mep_actual is None and any(e.variacion_dolar_pct != 0 for e in [escenario_engine.EscenarioParams(
-        horizonte_meses=p["horizonte_meses"],
-        variacion_dolar_pct=p.get("variacion_dolar_pct", 0),
-        variacion_por_instrumento=p.get("variacion_por_instrumento", {}),
-        variacion_por_defecto_pct=p.get("variacion_por_defecto_pct", 0),
-        aporte_mensual_usd=p.get("aporte_mensual_usd", 0),
-        crecimiento_aporte_anual_pct=p.get("crecimiento_aporte_anual_pct", 0),
-        retiro_mensual_usd=p.get("retiro_mensual_usd", 0),
-        modo_dividendos=p.get("modo_dividendos", "reinvertir_total"),
-        dividend_yield_anual_pct=p.get("dividend_yield_anual_pct", 0),
-        pct_dividendo_reinvertido=p.get("pct_dividendo_reinvertido"),
-        comision_pct=p.get("comision_pct", 0),
-        inflacion_anual_pct=p.get("inflacion_anual_pct"),
-    ) for p in [item.parametros.model_dump() if item.parametros else {} for item in request.escenarios]]):
+    # Advertencias. El shock de dólar se evalúa sobre los parámetros YA resueltos (incluye el del
+    # preset), no sobre lo que mandó el cliente: éste puede no traer parámetros.
+    if snapshot.mep_actual is None and hubo_shock_dolar:
         advertencias_set.add("MEP no disponible: shock de dólar no aplicado a instrumentos ARS")
 
     if len(snapshot.posiciones) == 0 and snapshot.valor_total_usd == 0:

@@ -238,6 +238,10 @@ class InversionesResumen(BaseModel):
     twr_ars_bruto: Optional[float] = None
     valor_benchmark_usd_ars: Optional[float] = None
     tiene_precios_desactualizados: bool = False
+    # Moneda ("usd" | "ars" | "ars_real") → motivo por el que `rendimiento_simple_*` viene en None
+    # aunque haya compras: "capital_neto_negativo" (vendiste más de lo que pusiste) o
+    # "capital_neto_chico" (queda menos del 10% de lo comprado). La pantalla lo explica.
+    rendimiento_no_calculable: dict[str, str] = {}
 
 
 class ExposicionItem(BaseModel):
@@ -400,10 +404,20 @@ class EscenarioParamsIn(BaseModel):
     inflacion_anual_pct: Optional[float] = Field(None, ge=0.0, le=1000.0)
 
 
+class EscenarioParamsParcialIn(EscenarioParamsIn):
+    """Parámetros de un escenario a simular: sólo pisan al preset los campos que se envían.
+
+    `horizonte_meses` es opcional porque cada preset trae el suyo. Con el modelo completo, un
+    cliente que mandaba todos los campos con sus valores por defecto (ceros) anulaba sin querer
+    el preset: Alcista y Bajista daban lo mismo que Base.
+    """
+    horizonte_meses: Optional[int] = Field(None, ge=1, le=600)
+
+
 class EscenarioSimulacionItem(BaseModel):
     tipo_preset: str
     nombre: Optional[str] = None
-    parametros: Optional[EscenarioParamsIn] = None
+    parametros: Optional[EscenarioParamsParcialIn] = None
 
 
 class EscenarioSimulacionRequest(BaseModel):
@@ -1719,6 +1733,10 @@ class ConcentracionItem(BaseModel):
 class ContribucionOut(BaseModel):
     contribucion: list[ContribucionEje]
     concentracion: list[ConcentracionItem]
+    # "capital_neto": la suma de contribuciones reconcilia con el rendimiento simple del Resumen.
+    # "total_comprado": el capital neto no sirve de denominador (≤ 0 o muy chico) y no reconcilia.
+    base_contribucion: str = "capital_neto"
+    aviso_contribucion: Optional[str] = None
 
 
 class CorrelacionParItem(BaseModel):
@@ -2020,6 +2038,7 @@ class PerformanceCompareOut(BaseModel):
     periodo_hasta: Optional[date] = None
     filas: list[ComparacionBenchmarkOut] = []
     serie: list[dict[str, Any]] = []
+    advertencias: list[str] = []
 
 
 class OpportunityCostPosicionOut(BaseModel):

@@ -15,6 +15,7 @@ import Segmented from '../components/ui/Segmented'
 import InfoTooltip from '../help/components/InfoTooltip'
 import MetricTile from '../components/ui/MetricTile'
 import CorrelacionMatriz from '../components/charts/CorrelacionMatriz'
+import AvisoCalculo from '../components/inversiones/AvisoCalculo'
 import { Icon } from '../components/icons/Icons'
 import { SkeletonFilas } from '../components/ui/Skeleton'
 import QueryBoundary from '../components/ui/QueryBoundary'
@@ -124,6 +125,7 @@ export default function Contribucion() {
             {itemsContribucion.map(item => (
               <ContribucionBar key={item.etiqueta} item={item} maxAbs={maxAbsContribucion} />
             ))}
+            <AvisoCalculo mensajes={[contribucion.aviso_contribucion]} className="" />
           </div>
         </>
       )}

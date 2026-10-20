@@ -68,8 +68,7 @@ export default function Objetivo() {
       objetivo.monto_usd,
       objetivo.fecha_limite,
       aportesHistoricos.curva[0]?.mes ?? null,
-      tasaBaseResuelto.valor,
-      objetivo.valor_actual_usd
+      tasaBaseResuelto.valor
     )
   }, [objetivo, aportesHistoricos, tasaBaseResuelto.valor])
 

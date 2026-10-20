@@ -86,6 +86,31 @@ def _resolver_fuente(nombre: str, db: Session, hasta: date) -> dict[tuple[int, i
         return _benchmark_retornos_mensuales(nombre, db, hasta)
 
 
+def _resolver_fuente_en_moneda(nombre: str, moneda: str, db: Session, hasta: date) -> dict[tuple[int, int], float]:
+    """Retornos mensuales de la fuente EXPRESADOS en `moneda` ("usd" | "ars_nominal" | "ars_real").
+
+    `_resolver_fuente` devuelve los retornos en la moneda nativa de la fuente: el Dólar (MEP) y el
+    CER vienen en pesos, el S&P 500 en dólares. Compararlos así contra una cartera en otra moneda
+    mezcla unidades (el dólar "rinde" 40% medido en dólares; la inflación se restaba a retornos en
+    USD; un retorno real se comparaba contra uno nominal). Acá la serie se lleva punto a punto a la
+    moneda de la cartera con el mismo motor que `/costo-oportunidad`.
+    """
+    from . import costo_oportunidad_analytics as co, costo_oportunidad_engine    # import diferido: ciclo
+    from .opportunity_cost_analytics import _mep_indice_serie, _cer_indice_serie
+
+    serie_nativa, _ = co._serie_nativa_referencia(nombre, db)
+    if not serie_nativa:
+        return {}
+    cer_hoy = _cer_indice(hasta, db, {}) if moneda == "ars_real" else None
+    serie_norm, _ = costo_oportunidad_engine.normalizar_serie(
+        serie_nativa, moneda, _mep_indice_serie(db), _cer_indice_serie(db), cer_hoy
+    )
+    if not serie_norm:
+        return {}
+    boundaries = _fin_de_mes_range(serie_norm[0][0], hasta)
+    return risk_engine.serie_retornos_mensuales_desde_niveles(serie_norm, boundaries)
+
+
 def _twr_mensual_por_moneda(moneda: str, movs: list, precios_por_ticker: dict, db: Session, mep_cache: dict, cer_cache: dict, hoy: date) -> dict:
     """Selecciona y ejecuta el cálculo de TWR mensual según la moneda."""
     if moneda == "usd":
@@ -159,7 +184,7 @@ def _performance_relativa_sobre_movs(movs: list, cartera: str | None, moneda: st
     retornos_cartera = _filtrar_desde(retornos_cartera, desde)
 
     # Calcular retornos mensuales del benchmark
-    retornos_benchmark = _resolver_fuente(benchmark_resuelto, db, hoy)
+    retornos_benchmark = _resolver_fuente_en_moneda(benchmark_resuelto, moneda, db, hoy)
     retornos_benchmark = _filtrar_desde(retornos_benchmark, desde)
 
     # Restricción a meses comunes (intersección)
@@ -266,8 +291,6 @@ def get_performance_compare(
 
     retornos_cartera = _twr_mensual_por_moneda(moneda, movs, precios_por_ticker, db, mep_cache, cer_cache, hoy)
     retornos_cartera = _filtrar_desde(retornos_cartera, desde)
-    indice_cartera_completo = risk_engine.construir_indice(retornos_cartera, base=100.0) if retornos_cartera else []
-
     fuentes = []
     if benchmarks:
         fuentes.extend(benchmarks)
@@ -284,22 +307,51 @@ def get_performance_compare(
             "serie": [],
         }
 
+    def _tipo(fuente: str) -> str:
+        es_benchmark_virtual = fuente in (BENCHMARK_DOLAR, BENCHMARK_INFLACION)
+        es_ticker = bool(db.query(InstrumentoInversion).filter(InstrumentoInversion.ticker == fuente).first())
+        return "benchmark" if es_benchmark_virtual else ("ticker" if es_ticker else "benchmark")
+
+    # Primera pasada: los meses que cada fuente comparte con la cartera.
+    retornos_por_fuente: dict[str, dict] = {}
+    comunes_por_fuente: dict[str, list] = {}
+    for fuente in fuentes:
+        retornos_fuente = _filtrar_desde(_resolver_fuente_en_moneda(fuente, moneda, db, hoy), desde)
+        retornos_por_fuente[fuente] = retornos_fuente
+        comunes_por_fuente[fuente] = (
+            sorted(set(retornos_cartera) & set(retornos_fuente)) if retornos_cartera and retornos_fuente else []
+        )
+
+    # Todas las filas se miden sobre el MISMO período: desde el primer mes en que hay datos de la
+    # cartera y de todas las fuentes. Si cada fila usara su propia ventana, un ticker con 3 años de
+    # precios se restaba de una cartera medida desde hace 6 y el ranking comparaba períodos distintos.
+    primeros = [claves[0] for claves in comunes_por_fuente.values() if claves]
+    inicio_comun = max(primeros) if primeros else None
+    advertencias: list[str] = []
+    if inicio_comun is not None and retornos_cartera and inicio_comun > min(retornos_cartera):
+        advertencias.append(
+            f"Todo se compara desde {inicio_comun[1]:02d}/{inicio_comun[0]}, el primer mes con datos de la "
+            "cartera y de todas las fuentes elegidas; antes de esa fecha no hay con qué comparar."
+        )
+    retornos_cartera_ventana = (
+        {k: v for k, v in retornos_cartera.items() if inicio_comun is None or k >= inicio_comun}
+        if retornos_cartera else {}
+    )
+    indice_cartera_completo = (
+        risk_engine.construir_indice(retornos_cartera_ventana, base=100.0) if retornos_cartera_ventana else []
+    )
+    fechas_globales = set(retornos_cartera_ventana.keys())
+
     filas = []
     indices_by_fuente = {}
-    fechas_globales = set(retornos_cartera.keys()) if retornos_cartera else set()
-
     for fuente in fuentes:
-        retornos_fuente = _resolver_fuente(fuente, db, hoy)
-        retornos_fuente = _filtrar_desde(retornos_fuente, desde)
-
-        claves_comunes = sorted(set(retornos_cartera) & set(retornos_fuente)) if retornos_cartera and retornos_fuente else []
+        retornos_fuente = retornos_por_fuente[fuente]
+        claves_comunes = [k for k in comunes_por_fuente[fuente] if inicio_comun is not None and k >= inicio_comun]
 
         if not claves_comunes:
-            es_benchmark_virtual = fuente in (BENCHMARK_DOLAR, BENCHMARK_INFLACION)
-            es_ticker = bool(db.query(InstrumentoInversion).filter(InstrumentoInversion.ticker == fuente).first())
             filas.append({
                 "fuente": fuente,
-                "tipo": "benchmark" if es_benchmark_virtual else ("ticker" if es_ticker else "benchmark"),
+                "tipo": _tipo(fuente),
                 "estado": "datos_insuficientes",
                 "retorno_pct": None,
                 "delta_pp": None,
@@ -314,21 +366,19 @@ def get_performance_compare(
         indices_by_fuente[fuente] = indice_fuente
 
         retorno_fuente_pct = (indice_fuente[-1][1] / 100.0) - 1 if indice_fuente else None
-        retorno_cartera_pct = None
-        if indice_cartera_completo:
-            cartera_at_end = next((v for f, v in indice_cartera_completo if f == indice_fuente[-1][0]), None)
-            if cartera_at_end:
-                retorno_cartera_pct = (cartera_at_end / 100.0) - 1
+        # La cartera sobre exactamente los mismos meses que la fuente.
+        indice_cartera_fuente = risk_engine.construir_indice(
+            {k: retornos_cartera[k] for k in claves_comunes}, base=100.0
+        )
+        retorno_cartera_pct = (indice_cartera_fuente[-1][1] / 100.0) - 1 if indice_cartera_fuente else None
 
         delta_pp = (retorno_cartera_pct - retorno_fuente_pct) * 100 if (retorno_cartera_pct is not None and retorno_fuente_pct is not None) else None
 
         fechas_globales.update(claves_comunes)
 
-        es_benchmark_virtual = fuente in (BENCHMARK_DOLAR, BENCHMARK_INFLACION)
-        es_ticker = bool(db.query(InstrumentoInversion).filter(InstrumentoInversion.ticker == fuente).first())
         filas.append({
             "fuente": fuente,
-            "tipo": "benchmark" if es_benchmark_virtual else ("ticker" if es_ticker else "benchmark"),
+            "tipo": _tipo(fuente),
             "estado": "ok",
             "retorno_pct": round(retorno_fuente_pct, 4) if retorno_fuente_pct is not None else None,
             "delta_pp": round(delta_pp, 2) if delta_pp is not None else None,
@@ -378,4 +428,5 @@ def get_performance_compare(
         "periodo_hasta": periodo_hasta_date,
         "filas": filas,
         "serie": serie,
+        "advertencias": advertencias,
     }

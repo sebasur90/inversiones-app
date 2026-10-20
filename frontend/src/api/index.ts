@@ -171,6 +171,8 @@ export interface InversionesResumen {
   twr_ars_bruto: number | null
   valor_benchmark_usd_ars: number | null
   tiene_precios_desactualizados: boolean
+  // Moneda ("usd" | "ars" | "ars_real") → motivo por el que el rendimiento simple viene en null.
+  rendimiento_no_calculable?: Record<string, string>
 }
 
 export interface ExposicionItem {
@@ -1478,6 +1480,7 @@ export interface PerformanceCompareOut {
   periodo_hasta: string | null
   filas: ComparacionBenchmarkOut[]
   serie: Record<string, any>[]
+  advertencias?: string[]
 }
 
 export const getPerformanceCompare = (
@@ -1611,6 +1614,8 @@ export interface ConcentracionItem {
 export interface ContribucionOut {
   contribucion: ContribucionEje[]
   concentracion: ConcentracionItem[]
+  base_contribucion?: 'capital_neto' | 'total_comprado'
+  aviso_contribucion?: string | null
 }
 
 export const getContribucion = (cartera: string | null) =>
@@ -2064,7 +2069,8 @@ export interface EscenarioParamsIn {
 export interface EscenarioSimulacionItem {
   tipo_preset: 'alcista' | 'bajista' | 'crisis' | 'personalizado'
   nombre?: string
-  parametros?: EscenarioParamsIn
+  // En un preset, sólo los campos que el usuario editó: el resto lo pone el preset en el backend.
+  parametros?: Partial<EscenarioParamsIn>
 }
 
 export interface EscenarioSimulacionRequest {

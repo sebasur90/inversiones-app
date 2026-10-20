@@ -93,7 +93,9 @@ def generar_propuesta(
     items: list[PropuestaItem] = []
 
     if eje == "Ticker":
-        tickers = {p.ticker: p.valor_usd for p in posiciones}
+        tickers: dict[str, float] = {}
+        for p in posiciones:
+            tickers[p.ticker] = tickers.get(p.ticker, 0.0) + p.valor_usd
         todos = set(tickers.keys()) | set(objetivos_ticker.keys())
         for ticker in todos:
             valor_actual = tickers.get(ticker, 0.0)

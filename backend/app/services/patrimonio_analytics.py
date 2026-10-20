@@ -325,11 +325,17 @@ def get_patrimonio_summary(
         if primer_punto["valor_ars_real"] is not None and ultimo_punto["valor_ars_real"] is not None:
             delta_valor_ars_real = ultimo_punto["valor_ars_real"] - primer_punto["valor_ars_real"]
 
-        rendimiento_usd = delta_valor_usd - aportes_usd - dividendos_usd - otros_ajustes_usd
-        rendimiento_ars = delta_valor_ars - aportes_ars - dividendos_ars - otros_ajustes_ars
+        # El valor de la cartera NO incluye el efectivo cobrado (dividendos/cupones): sale de la
+        # tenencia y no vuelve a entrar como valor. Por eso la variación del valor se explica sólo
+        # con aportes + efecto de mercado + comisiones, y los cobros se informan aparte. Restarlos
+        # acá (como se hacía) le quitaba al rendimiento exactamente lo cobrado.
+        # `otros_ajustes` son las comisiones (negativas): ya vienen sumadas dentro de `aportes`,
+        # así que el rendimiento "de mercado" las repone para no mezclarlas con el precio.
+        rendimiento_usd = delta_valor_usd - aportes_usd - otros_ajustes_usd
+        rendimiento_ars = delta_valor_ars - aportes_ars - otros_ajustes_ars
         rendimiento_ars_real = None
-        if delta_valor_ars_real is not None and aportes_ars_real is not None:
-            rendimiento_ars_real = delta_valor_ars_real - aportes_ars_real - dividendos_ars_real - otros_ajustes_ars_real if dividendos_ars_real is not None and otros_ajustes_ars_real is not None else None
+        if delta_valor_ars_real is not None and aportes_ars_real is not None and otros_ajustes_ars_real is not None:
+            rendimiento_ars_real = delta_valor_ars_real - aportes_ars_real - otros_ajustes_ars_real
 
     else:
         aportes_usd = aportes_ars = aportes_ars_real = 0.0

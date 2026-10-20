@@ -6,6 +6,8 @@ import {
 } from '../../api'
 import { qk } from '../../api/queryClient'
 import { formatCantidad, formatPctRatio, formatPrecio } from '../../utils'
+import { avisoRendimiento } from '../../utils/avisosCalculo'
+import AvisoCalculo from '../../components/inversiones/AvisoCalculo'
 import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import Sparkline from '../../components/charts/Sparkline'
 import MetricTile from '../../components/ui/MetricTile'
@@ -80,6 +82,7 @@ export default function TickerResumenTab({ position, cartera, monedaSeleccionada
   const valorActual = esARS ? position.valor_actual_ars : position.valor_actual_usd
   const rendimiento = esARS ? position.rendimiento_simple_ars : position.rendimiento_simple_usd
   const positivo = (rendimiento ?? 0) >= 0
+  const avisoRend = avisoRendimiento(position.rendimiento_no_calculable, esARS ? 'ars' : 'usd')
 
   return (
     <div className="pb-4">
@@ -91,6 +94,7 @@ export default function TickerResumenTab({ position, cartera, monedaSeleccionada
             {formatPctRatio(rendimiento)} desde promedio
           </span>
         )}
+        <AvisoCalculo mensajes={[avisoRend]} />
         {alerta && (
           <div className="flex flex-wrap gap-1.5 mt-2">
             <AlertaPrecioBadge estado={alerta} pct={pctDelEstado(position, alerta)} className="px-2 py-1" />

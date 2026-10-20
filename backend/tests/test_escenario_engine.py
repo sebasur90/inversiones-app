@@ -139,9 +139,10 @@ def test_simulacion_aportes_mensales_no_son_rendimiento(snapshot_simple):
 
 
 def test_efecto_dolar_en_posicion_ars(snapshot_con_ars):
-    """Posición ARS con 0% mercado, +20% dólar.
+    """Posición en pesos con 0% de mercado y el dólar +20%: vale MENOS dólares.
 
-    Efecto dólar debe explicar toda la ganancia.
+    Un activo en ARS vale en USD su precio en pesos dividido por el MEP, así que si el MEP sube 20%
+    la posición pasa a valer 1/1,2 (−16,7%). El motor tenía el signo invertido y la hacía ganar 20%.
     """
     params = EscenarioParams(
         horizonte_meses=12,
@@ -160,13 +161,34 @@ def test_efecto_dolar_en_posicion_ars(snapshot_con_ars):
 
     resultado = simular_escenario(snapshot_con_ars, params)
 
-    # MEP sube 20%: $100 USD * 1.20 ≈ $120 USD de ganancia
-    ganancia_esperada = snapshot_con_ars.valor_total_usd * 0.20
-    assert abs(resultado.ganancia_perdida_usd - ganancia_esperada) < 1.0
-    # Efecto dólar debe ser casi toda la ganancia (0% de mercado)
-    assert abs(resultado.efecto_dolar_usd - ganancia_esperada) < 1.0
+    perdida_esperada = snapshot_con_ars.valor_total_usd * (1 / 1.20 - 1)
+    assert resultado.ganancia_perdida_usd < 0
+    assert abs(resultado.ganancia_perdida_usd - perdida_esperada) < 1.0
+    # Efecto dólar debe ser casi toda la pérdida (0% de mercado)
+    assert abs(resultado.efecto_dolar_usd - perdida_esperada) < 1.0
     # Efecto mercado ≈ 0
     assert abs(resultado.efecto_mercado_usd) < 1.0
+
+
+def test_cedear_no_pierde_valor_en_usd_cuando_sube_el_dolar():
+    """Un CEDEAR cotiza en pesos pero sigue al dólar: su valor en USD queda neutro al shock."""
+    snapshot = PortfolioSnapshot(
+        fecha=date(2024, 1, 1),
+        posiciones=[
+            PosicionSnapshot(ticker="AAPL", valor_usd=1000.0, moneda="ARS", sigue_dolar=True),
+            PosicionSnapshot(ticker="GGAL", valor_usd=1000.0, moneda="ARS"),
+        ],
+        mep_actual=1000.0, valor_total_usd=2000.0, total_invertido_usd=2000.0,
+    )
+    params = EscenarioParams(
+        horizonte_meses=12, variacion_dolar_pct=60.0, variacion_por_instrumento={},
+        variacion_por_defecto_pct=0.0, aporte_mensual_usd=0.0, crecimiento_aporte_anual_pct=0.0,
+        retiro_mensual_usd=0.0, modo_dividendos="reinvertir_total", dividend_yield_anual_pct=0.0,
+        pct_dividendo_reinvertido=None, comision_pct=0.0, inflacion_anual_pct=None,
+    )
+    r = simular_escenario(snapshot, params)
+    # Sólo GGAL (acción local en pesos) pierde: 1000 → 1000/1,6 = 625; el CEDEAR queda en 1000.
+    assert abs(r.patrimonio_final_usd - 1625.0) < 1.0
 
 
 def test_dividendos_reinvertir_total_vs_retirar():

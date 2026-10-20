@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from ..database import InstrumentoInversion
 from . import explicacion_resultado_engine, fx_decomposition_engine
 from .inversiones_analytics import (
+    CAPITAL_NETO_MINIMO_RATIO,
     EPS,
     UMBRAL_APROXIMADO_DIAS,
     _movimientos_ordenados,
@@ -227,7 +228,24 @@ def get_explicacion_resultado(cartera: str | None, desde: date | None, moneda: s
         if dividendos_total is not None and cupones_total is not None else None
     )
 
-    base_periodo = (v0_total or 0.0) + (aportes_total or 0.0)
+    # Base de los porcentajes: el capital NETO del período (lo que tenías al empezar + compras −
+    # ventas − amortizaciones), el mismo criterio que el rendimiento del Resumen y la Contribución,
+    # para que las tres pantallas digan lo mismo. Sumar sólo las compras (como se hacía) infla la
+    # base en cuanto reciclás capital. Con neto ≤ 0 o muy chico el cociente no tiene sentido y se
+    # vuelve a la base bruta, avisándolo.
+    capital_bruto = (v0_total or 0.0) + (aportes_total or 0.0)
+    capital_neto = capital_bruto - (retiros_total or 0.0) - (amortizaciones_total or 0.0)
+    aviso_base = None
+    if capital_neto > EPS and capital_neto >= capital_bruto * CAPITAL_NETO_MINIMO_RATIO:
+        base_periodo = capital_neto
+    else:
+        base_periodo = capital_bruto
+        if (retiros_total or 0.0) + (amortizaciones_total or 0.0) > EPS:
+            aviso_base = (
+                "Vendiste más de lo que tenías y aportaste en este período, así que no hay un capital neto "
+                "sobre el cual medir: los porcentajes se calculan sobre el total puesto y no suman el "
+                "rendimiento del período."
+            )
     rendimiento_simple_pct = (
         round(pnl_total / base_periodo * 100, 2)
         if pnl_total is not None and abs(base_periodo) > EPS else None
@@ -313,6 +331,9 @@ def get_explicacion_resultado(cartera: str | None, desde: date | None, moneda: s
         advertencias.append(
             f"{len(no_disponibles)} instrumento(s) no se pudieron calcular con precisión (ver 'No disponible')."
         )
+
+    if aviso_base:
+        advertencias.append(aviso_base)
 
     estado = "sin_datos" if not items else ("parcial" if no_disponibles else "ok")
 

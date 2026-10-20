@@ -222,8 +222,7 @@ export function derivarPlanObjetivo(
   montoObjetivoUsd: number,
   fechaLimite: string,
   primerMesCurva: string | null,
-  tasaBaseAnualPct: number,
-  valorActualUsd: number = 0
+  tasaBaseAnualPct: number
 ): PlanObjetivo | null {
   if (!primerMesCurva) return null
 
@@ -235,8 +234,12 @@ export function derivarPlanObjetivo(
   const mesesTotales = Math.ceil(dayjsDiffMeses(fechaInicio, fechaLimiteDay))
   if (mesesTotales <= 0) return null
 
+  // El plan arranca en el primer mes con aportes y la curva se simula desde cero (ver `puntosPlan`
+  // en Objetivo.tsx): el aporte que lo hace llegar a la meta se calcula con ese mismo punto de
+  // partida. Con el valor de hoy como capital inicial, la línea del plan terminaba por debajo de
+  // la meta y la comparación contra el patrimonio real quedaba corrida.
   const resolver = resolverAporteMensual(montoObjetivoUsd, mesesTotales, {
-    valorInicialUsd: valorActualUsd,
+    valorInicialUsd: 0,
     crecimientoAporteAnualPct: 0,
     tasaAnualPct: tasaBaseAnualPct,
   })
