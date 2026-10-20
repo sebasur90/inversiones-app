@@ -18,6 +18,7 @@ import EjeFechas from './EjeFechas'
 import FichaBarra from './FichaBarra'
 import { BarraHerramientas, BotonesGrafico, PieGrafico, type Herramienta } from './ControlesGrafico'
 import { formatoValor } from './formatoEjes'
+import { Icon } from '../icons/Icons'
 import GuiaGestos, { AVISO_SIN_RECORRIDO, AvisoGrafico, useAvisoGrafico, useGuiaGestos } from './GuiaGestos'
 import { ESPEC_POR_TIPO, claveIndicador, colorIndicador, type IndicadorActivo } from './indicadoresConfig'
 
@@ -58,6 +59,7 @@ const TEXTO_ADVERTENCIA_FR: Record<string, string> = {
 export default function GraficoTecnico({
   barras, indicadores, activos, tieneVelas, tieneVolumen, senales, primeraBarraEvaluable,
   moneda, fullscreen, onToggleFullscreen, zonas, editandoZonas, onArrastrarZona, edicionZonas,
+  zonasVisibles, onToggleZonas, onAbrirIndicadores, onQuitarIndicador,
   misOperaciones, operacionesActivas, onToggleOperaciones, intervalo = 'D', escalaLog, onToggleEscalaLog, nivelesAuto, nivelesActivos, onToggleNiveles, fuerzaRelativa, dibujos,
   hoverIndex, onHover,
 }: {
@@ -78,6 +80,15 @@ export default function GraficoTecnico({
   /** Guardar/cancelar la edición desde el propio gráfico: en el celular el editor queda abajo,
    * fuera de la pantalla, y en pantalla completa no está. */
   edicionZonas?: { onGuardar: () => void; onCancelar: () => void; guardando?: boolean; problema?: string | null }
+  /** Con `onToggleZonas` la barra ofrece mostrar u ocultar las zonas y niveles; quien llama decide
+   * qué pasa en `zonas` (mientras se editan se siguen viendo). */
+  zonasVisibles?: boolean
+  onToggleZonas?: () => void
+  /** Si viene, la leyenda termina con "+ Indicador" (abre el selector). */
+  onAbrirIndicadores?: () => void
+  /** Si viene, cada chip de la leyenda tiene una ✕ que quita ese indicador (todas sus instancias
+   * con esa clave: dos iguales se dibujan como una). */
+  onQuitarIndicador?: (clave: string) => void
   /** Compras y ventas propias a dibujar; `null`/`undefined` = apagado. */
   misOperaciones?: OperacionesGraficoOut | null
   /** El interruptor está prendido (aunque los datos todavía estén cargando). */
@@ -131,7 +142,7 @@ export default function GraficoTecnico({
 
   const overlaysPrecio: OverlayPrecio[] = []
   const overlaysVolumen: { clave: string; color: string; series: Record<string, (number | null)[]> }[] = []
-  const panelesOsciladores: { tipo: string; clave: string; series: Record<string, (number | null)[]> }[] = []
+  const panelesOsciladores: { tipo: string; clave: string; color: string; series: Record<string, (number | null)[]> }[] = []
 
   // Dos instancias con los mismos parámetros (SMA(50) dos veces) piden la misma serie: se dibuja
   // una sola, si no habría paths con la misma key encimados.
@@ -146,14 +157,16 @@ export default function GraficoTecnico({
     const color = colorIndicador(activos, a)
     if (espec.destino === 'precio') overlaysPrecio.push({ clave, tipo: a.tipo, color, series })
     else if (espec.destino === 'volumen') overlaysVolumen.push({ clave, color, series })
-    else panelesOsciladores.push({ tipo: a.tipo, clave, series })
+    else panelesOsciladores.push({ tipo: a.tipo, clave, color, series })
   }
   // La leyenda lleva el valor de cada overlay en la vela de la cruz (o la última): con dos medias
   // del mismo tipo el color es lo único que las distingue, y el número es lo que no se ve a ojo.
+  // Los osciladores tienen su valor en su propio panel: en la leyenda van sólo para poder quitarlos.
   const indiceLeyenda = hoverIndex ?? barras.length - 1
   const leyenda = [
     ...overlaysPrecio.map(o => ({ clave: o.clave, color: o.color, valores: salidasGraficables(o).map(([, s]) => s[indiceLeyenda]) })),
     ...overlaysVolumen.map(o => ({ clave: o.clave, color: o.color, valores: Object.values(o.series).map(s => s[indiceLeyenda]) })),
+    ...(onQuitarIndicador ? panelesOsciladores.map(p => ({ clave: p.clave, color: p.color, valores: [] as (number | null)[] })) : []),
   ]
 
   // La fuerza relativa llega con su propia lista de fechas (sólo las barras visibles): se alinea al
@@ -177,34 +190,40 @@ export default function GraficoTecnico({
   ]
 
   const herramientas: Herramienta[] = []
-  if (onToggleOperaciones) {
+  if (onToggleZonas) {
     herramientas.push({
-      clave: 'operaciones', texto: '▲▼', activo: !!operacionesActivas, onToggle: onToggleOperaciones,
-      label: operacionesActivas ? 'Ocultar mis compras y ventas' : 'Mostrar mis compras y ventas',
+      clave: 'zonas', texto: 'Zonas', icono: 'bands', activo: !!zonasVisibles, onToggle: onToggleZonas,
+      label: zonasVisibles ? 'Ocultar zonas y niveles' : 'Mostrar zonas y niveles',
     })
   }
-  if (onToggleEscalaLog) {
+  if (onToggleOperaciones) {
     herramientas.push({
-      clave: 'log', texto: 'log', activo: !!escalaLog, onToggle: onToggleEscalaLog,
-      label: escalaLog ? 'Volver a la escala lineal' : 'Escala logarítmica',
+      clave: 'operaciones', texto: 'Mis ops', icono: 'marks', activo: !!operacionesActivas, onToggle: onToggleOperaciones,
+      label: operacionesActivas ? 'Ocultar mis compras y ventas' : 'Mostrar mis compras y ventas',
     })
   }
   if (onToggleNiveles) {
     herramientas.push({
-      clave: 'niveles', texto: 'S/R', activo: !!nivelesActivos, onToggle: onToggleNiveles,
+      clave: 'niveles', texto: 'Sop./Res.', icono: 'levels', activo: !!nivelesActivos, onToggle: onToggleNiveles,
       label: nivelesActivos ? 'Ocultar soportes y resistencias' : 'Mostrar soportes y resistencias automáticos',
     })
   }
   if (fuerzaRelativa) {
     herramientas.push({
-      clave: 'fuerza-relativa', texto: 'Fuerza rel.', activo: fuerzaRelativa.activa, onToggle: fuerzaRelativa.onToggle,
+      clave: 'fuerza-relativa', texto: 'Fuerza rel.', icono: 'relative', activo: fuerzaRelativa.activa, onToggle: fuerzaRelativa.onToggle,
       label: fuerzaRelativa.activa ? 'Ocultar la fuerza relativa' : 'Mostrar la fuerza relativa contra un índice',
+    })
+  }
+  if (onToggleEscalaLog) {
+    herramientas.push({
+      clave: 'log', texto: 'Log', icono: 'curve', activo: !!escalaLog, onToggle: onToggleEscalaLog,
+      label: escalaLog ? 'Volver a la escala lineal' : 'Escala logarítmica',
     })
   }
 
   if (dibujos) {
     herramientas.push({
-      clave: 'dibujo', texto: '✎', activo: dibujando || menuDibujo,
+      clave: 'dibujo', texto: 'Dibujar', icono: 'edit', activo: dibujando || menuDibujo,
       label: dibujando ? 'Cancelar el dibujo' : 'Dibujar sobre el gráfico',
       onToggle: () => {
         if (dibujando) dibujos.elegirHerramienta(null)
@@ -224,22 +243,6 @@ export default function GraficoTecnico({
         misOperaciones={misOperaciones} intervalo={intervalo}
         acciones={<BotonesGrafico controles={controles} fullscreen={fullscreen} onToggleFullscreen={onToggleFullscreen} />}
       />
-
-      <BarraHerramientas herramientas={herramientas}>
-        {dibujos && menuDibujo && !dibujando && (
-          <Segmented
-            options={HERRAMIENTAS_DIBUJO} value={'' as TipoDibujo}
-            onChange={t => { dibujos.elegirHerramienta(t); setMenuDibujo(false) }}
-          />
-        )}
-        {fuerzaRelativa?.activa && (
-          <Segmented
-            options={OPCIONES_BENCHMARK}
-            value={fuerzaRelativa.benchmark ?? fuerzaRelativa.datos?.benchmark ?? 'SPY'}
-            onChange={fuerzaRelativa.onBenchmark}
-          />
-        )}
-      </BarraHerramientas>
 
       {dibujos && (dibujando || dibujos.seleccionado != null || dibujos.error) && (
         <div className="mb-1 flex items-center gap-2 text-label">
@@ -263,15 +266,37 @@ export default function GraficoTecnico({
         </div>
       )}
 
-      {leyenda.length > 0 && (
-        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-1 text-label text-app-text-dim font-mono tabular-nums">
+      {(leyenda.length > 0 || onAbrirIndicadores) && (
+        <div className="flex flex-wrap gap-1.5 mb-1.5">
           {leyenda.map(o => (
-            <span key={o.clave} className="flex items-center gap-1">
+            <span
+              key={o.clave}
+              className={`inline-flex items-center gap-1.5 h-8 pl-2 rounded-lg bg-app-surface-2 text-label text-app-text-dim font-mono tabular-nums ${onQuitarIndicador ? 'pr-0.5' : 'pr-2'}`}
+            >
               <span className="w-2 h-2 rounded-full shrink-0" style={{ background: o.color }} />
               {o.clave}
-              <span style={{ color: o.color }}>{o.valores.map(v => formatoValor(v)).join(' / ')}</span>
+              {o.valores.length > 0 && (
+                <span style={{ color: o.color }}>{o.valores.map(v => formatoValor(v)).join(' / ')}</span>
+              )}
+              {onQuitarIndicador && (
+                <button
+                  type="button" onClick={() => onQuitarIndicador(o.clave)} aria-label={`Quitar ${o.clave}`}
+                  className="w-7 h-7 rounded-md flex items-center justify-center text-app-text-faint hover:text-app-text"
+                >
+                  <Icon name="close" className="w-3 h-3" />
+                </button>
+              )}
             </span>
           ))}
+          {onAbrirIndicadores && (
+            <button
+              type="button" onClick={onAbrirIndicadores}
+              className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg border border-dashed border-app-border text-label font-semibold text-app-accent"
+            >
+              <Icon name="plus" className="w-3.5 h-3.5" />
+              Indicador
+            </button>
+          )}
         </div>
       )}
 
@@ -352,6 +377,26 @@ export default function GraficoTecnico({
       </div>
 
       {advertenciasFR.map(t => <p key={t} className="mt-1 text-label text-app-text-dim">{t}</p>)}
+
+      {/* Debajo del gráfico y no arriba: así la primera pantalla del celular es el precio, y los
+          interruptores quedan a mano del pulgar justo bajo lo que modifican. */}
+      <div className="mt-2">
+        <BarraHerramientas herramientas={herramientas}>
+          {dibujos && menuDibujo && !dibujando && (
+            <Segmented
+              options={HERRAMIENTAS_DIBUJO} value={'' as TipoDibujo}
+              onChange={t => { dibujos.elegirHerramienta(t); setMenuDibujo(false) }}
+            />
+          )}
+          {fuerzaRelativa?.activa && (
+            <Segmented
+              options={OPCIONES_BENCHMARK}
+              value={fuerzaRelativa.benchmark ?? fuerzaRelativa.datos?.benchmark ?? 'SPY'}
+              onChange={fuerzaRelativa.onBenchmark}
+            />
+          )}
+        </BarraHerramientas>
+      </div>
 
       <PieGrafico
         barras={barras} escalaX={escalaX} completa={controles.completa}

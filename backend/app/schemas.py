@@ -2198,6 +2198,53 @@ class SerieTecnicaOut(BaseModel):
     advertencias: list[str] = Field(default_factory=list)
 
 
+class LecturaTendenciaOut(BaseModel):
+    estado: str                  # "alcista" | "bajista" | "mixta"
+    sma: float
+    periodo_sma: int
+    distancia_pct: float         # cierre vs. la media
+    pendiente_pct: float         # la media hoy vs. `ruedas_pendiente` ruedas atrás
+    ruedas_pendiente: int
+
+
+class LecturaMomentumOut(BaseModel):
+    estado: str                  # "sobrecompra" | "sobreventa" | "neutral"
+    rsi: float
+    periodo_rsi: int
+
+
+class LecturaNivelOut(BaseModel):
+    precio: float
+    toques: int
+    ultima_fecha: date
+    distancia_pct: float         # nivel vs. el último cierre
+
+
+class LecturaFuerzaRelativaOut(BaseModel):
+    estado: str                  # "mejor" | "peor" | "parecida"
+    retorno_pct: float
+    retorno_benchmark_pct: float
+    diferencia_puntos: float
+    ruedas: int
+
+
+class LecturaTecnicaOut(BaseModel):
+    """"Qué dice el gráfico": estados con nombre sobre la serie diaria (ver `lectura_tecnica_engine`)."""
+    ticker: str
+    variante: str
+    moneda: str
+    fecha: Optional[date] = None
+    ultimo_cierre: Optional[float] = None
+    tendencia: Optional[LecturaTendenciaOut] = None
+    momentum: Optional[LecturaMomentumOut] = None
+    soporte: Optional[LecturaNivelOut] = None
+    resistencia: Optional[LecturaNivelOut] = None
+    # Sólo si el índice ya está en la base: la lectura no sale a bajarlo (eso lo hace el panel).
+    benchmark: Optional[str] = None
+    benchmark_nombre: Optional[str] = None
+    fuerza_relativa: Optional[LecturaFuerzaRelativaOut] = None
+
+
 class FuerzaRelativaOut(BaseModel):
     """Ratio del activo contra un índice, normalizado a 100 en la primera barra visible.
 

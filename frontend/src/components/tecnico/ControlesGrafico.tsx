@@ -1,9 +1,9 @@
-import type { ReactNode } from 'react'
+import { Children, type ReactNode } from 'react'
 import type { BarraOut } from '../../api'
 import type { EscalaX } from './useEscalaX'
 import type { ControlesVentana } from './useVentanaVisible'
 import { fechaCorta } from './formatoEjes'
-import { Icon } from '../icons/Icons'
+import { Icon, type IconName } from '../icons/Icons'
 import { TACTIL } from './GuiaGestos'
 
 /** Botones de zoom y pantalla completa, compartidos por el gráfico técnico y el del backtest.
@@ -38,10 +38,16 @@ export interface Herramienta {
   label: string
   activo: boolean
   onToggle: () => void
+  /** Con ícono, el botón va con el ícono arriba y `texto` abajo, como una barra de pestañas. */
+  icono?: IconName
 }
 
-/** Fila de interruptores sobre el gráfico. Va aparte de la ficha: con siete botones en la misma
- * línea que la fecha y el precio, en el celular no quedaba lugar para leerlos. */
+/** Fila de interruptores del gráfico. Va aparte de la ficha: con siete botones en la misma línea
+ * que la fecha y el precio, en el celular no quedaba lugar para leerlos.
+ *
+ * Con íconos (el gráfico técnico) es una barra de botones de 48 px de alto, cada uno con su
+ * nombre: "log" o "S/R" sueltos no decían qué hacían. Sin íconos (el gráfico del backtest) queda
+ * la fila compacta de siempre. */
 export function BarraHerramientas({
   herramientas, children,
 }: {
@@ -50,6 +56,28 @@ export function BarraHerramientas({
   children?: ReactNode
 }) {
   if (herramientas.length === 0) return null
+  if (herramientas.some(h => h.icono)) {
+    const extras = Children.toArray(children)
+    return (
+      <div className="flex flex-col gap-1.5">
+        <div role="toolbar" aria-label="Herramientas del gráfico" className="flex gap-1 overflow-x-auto no-scrollbar">
+          {herramientas.map(h => (
+            <button
+              key={h.clave} type="button" onClick={h.onToggle} aria-label={h.label} title={h.label}
+              aria-pressed={h.activo}
+              className={`flex-1 min-w-[58px] h-12 px-1.5 flex flex-col items-center justify-center gap-1 rounded-xl text-label font-semibold leading-none whitespace-nowrap transition-colors ${
+                h.activo ? 'bg-app-accent-soft text-app-accent' : 'bg-app-surface-2 text-app-text-dim'
+              }`}
+            >
+              {h.icono && <Icon name={h.icono} className="w-[18px] h-[18px]" />}
+              {h.texto}
+            </button>
+          ))}
+        </div>
+        {extras.length > 0 && <div className="flex flex-wrap items-center gap-1">{extras}</div>}
+      </div>
+    )
+  }
   return (
     <div className="flex flex-wrap items-center gap-1 mb-1">
       {herramientas.map(h => (

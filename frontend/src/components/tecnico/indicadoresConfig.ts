@@ -15,6 +15,8 @@ export interface ParamEspec {
 export interface EspecIndicadorUi {
   tipo: string
   label: string
+  /** Qué mide, en una línea y en palabras: es lo que se lee en el selector. */
+  descripcion: string
   destino: DestinoIndicador
   /** Espejo de `EspecIndicador.salidas` del backend: los nombres de serie que produce el
    * indicador. Un solo elemento (`['valor']`) = mono-salida. Es la única fuente de verdad para
@@ -29,65 +31,81 @@ export interface EspecIndicadorUi {
 }
 
 export const INDICADORES_UI: EspecIndicadorUi[] = [
-  { tipo: 'SMA', label: 'Media móvil simple', destino: 'precio', color: '#3b82f6', salidas: ['valor'],
+  { tipo: 'SMA', label: 'Media móvil simple', descripcion: 'Promedio de los últimos N cierres: marca la tendencia.',
+    destino: 'precio', color: '#3b82f6', salidas: ['valor'],
     params: [{ nombre: 'periodo', label: 'Período', default: 50, min: 2, max: 500 }] },
-  { tipo: 'EMA', label: 'Media móvil exponencial', destino: 'precio', color: '#f59e0b', salidas: ['valor'],
+  { tipo: 'EMA', label: 'Media móvil exponencial', descripcion: 'Como la simple, pero reacciona antes a los cambios.',
+    destino: 'precio', color: '#f59e0b', salidas: ['valor'],
     params: [{ nombre: 'periodo', label: 'Período', default: 20, min: 2, max: 500 }] },
-  { tipo: 'BOLLINGER', label: 'Bandas de Bollinger', destino: 'precio', color: '#8b5cf6',
+  { tipo: 'BOLLINGER', label: 'Bandas de Bollinger', descripcion: 'Qué tan lejos está el precio de lo habitual (desvíos).',
+    destino: 'precio', color: '#8b5cf6',
     salidas: ['media', 'superior', 'inferior', 'ancho_pct', 'pctb'],
     params: [
       { nombre: 'periodo', label: 'Período', default: 20, min: 2, max: 500 },
       { nombre: 'desvios', label: 'Desvíos', default: 2, min: 0.5, max: 4, step: 0.5 },
     ] },
-  { tipo: 'EXTREMOS', label: 'Extremos (canal)', destino: 'precio', color: '#fbbf24',
+  { tipo: 'EXTREMOS', label: 'Extremos (canal)', descripcion: 'Máximo y mínimo de las últimas N ruedas: el canal.',
+    destino: 'precio', color: '#fbbf24',
     salidas: ['maximo', 'minimo', 'medio', 'dist_max_pct', 'dist_min_pct'],
     ayuda: 'analisis_tecnico_extremos',
     params: [{ nombre: 'ventana', label: 'Ventana', default: 20, min: 0, max: 500 }] },
-  { tipo: 'SUPERTREND', label: 'SuperTrend', destino: 'precio', color: '#10b981', salidas: ['valor', 'direccion'],
+  { tipo: 'SUPERTREND', label: 'SuperTrend', descripcion: 'Línea que cambia de lado cuando gira la tendencia.',
+    destino: 'precio', color: '#10b981', salidas: ['valor', 'direccion'],
     ayuda: 'analisis_tecnico_supertrend',
     params: [
       { nombre: 'periodo', label: 'Período ATR', default: 10, min: 2, max: 500 },
       { nombre: 'multiplicador', label: 'Multiplicador', default: 3, min: 0.5, max: 6, step: 0.5 },
     ] },
-  { tipo: 'KELTNER', label: 'Canal de Keltner', destino: 'precio', color: '#06b6d4', salidas: ['media', 'superior', 'inferior'],
+  { tipo: 'KELTNER', label: 'Canal de Keltner', descripcion: 'Canal alrededor de una media según la volatilidad (ATR).',
+    destino: 'precio', color: '#06b6d4', salidas: ['media', 'superior', 'inferior'],
     ayuda: 'analisis_tecnico_keltner',
     params: [
       { nombre: 'periodo', label: 'Período', default: 20, min: 2, max: 500 },
       { nombre: 'multiplicador', label: 'Multiplicador', default: 2, min: 0.5, max: 6, step: 0.5 },
     ] },
-  { tipo: 'ICHIMOKU', label: 'Ichimoku', destino: 'precio', color: '#ec4899',
+  { tipo: 'ICHIMOKU', label: 'Ichimoku', descripcion: 'Nube de soportes y resistencias con medias propias.',
+    destino: 'precio', color: '#ec4899',
     salidas: ['tenkan', 'kijun', 'senkou_a', 'senkou_b'], ayuda: 'analisis_tecnico_ichimoku',
     params: [
       { nombre: 'tenkan', label: 'Tenkan', default: 9, min: 1, max: 500 },
       { nombre: 'kijun', label: 'Kijun', default: 26, min: 2, max: 500 },
       { nombre: 'senkou', label: 'Senkou B', default: 52, min: 2, max: 500 },
     ] },
-  { tipo: 'ADX', label: 'ADX', destino: 'oscilador', color: '#f59e0b', salidas: ['adx', 'di_mas', 'di_menos'],
+  { tipo: 'ADX', label: 'ADX', descripcion: 'Si hay tendencia y qué tan fuerte es (no su dirección).',
+    destino: 'oscilador', color: '#f59e0b', salidas: ['adx', 'di_mas', 'di_menos'],
     ayuda: 'analisis_tecnico_adx',
     params: [{ nombre: 'periodo', label: 'Período', default: 14, min: 2, max: 250 }] },
-  { tipo: 'RSI', label: 'RSI', destino: 'oscilador', color: '#8b5cf6', salidas: ['valor'],
+  { tipo: 'RSI', label: 'RSI', descripcion: 'Fuerza de las subas contra las bajas, de 0 a 100.',
+    destino: 'oscilador', color: '#8b5cf6', salidas: ['valor'],
     params: [{ nombre: 'periodo', label: 'Período', default: 14, min: 2, max: 500 }] },
-  { tipo: 'MACD', label: 'MACD', destino: 'oscilador', color: '#10b981', salidas: ['macd', 'senal', 'histograma'],
+  { tipo: 'MACD', label: 'MACD', descripcion: 'Cruce de dos medias exponenciales: cambios de impulso.',
+    destino: 'oscilador', color: '#10b981', salidas: ['macd', 'senal', 'histograma'],
     params: [
       { nombre: 'rapida', label: 'Rápida', default: 12, min: 1, max: 500 },
       { nombre: 'lenta', label: 'Lenta', default: 26, min: 2, max: 500 },
       { nombre: 'senal', label: 'Señal', default: 9, min: 1, max: 500 },
     ] },
-  { tipo: 'ESTOCASTICO', label: 'Estocástico', destino: 'oscilador', color: '#f59e0b', salidas: ['k', 'd'],
+  { tipo: 'ESTOCASTICO', label: 'Estocástico', descripcion: 'Dónde cerró el precio dentro de su rango reciente.',
+    destino: 'oscilador', color: '#f59e0b', salidas: ['k', 'd'],
     params: [
       { nombre: 'periodo_k', label: '%K', default: 14, min: 1, max: 500 },
       { nombre: 'suavizado_k', label: 'Suavizado %K', default: 3, min: 1, max: 100 },
       { nombre: 'periodo_d', label: '%D', default: 3, min: 1, max: 100 },
     ] },
-  { tipo: 'ATR', label: 'ATR', destino: 'oscilador', color: '#ef4444', salidas: ['valor'],
+  { tipo: 'ATR', label: 'ATR', descripcion: 'Cuánto se mueve el precio por rueda, en promedio.',
+    destino: 'oscilador', color: '#ef4444', salidas: ['valor'],
     params: [{ nombre: 'periodo', label: 'Período', default: 14, min: 2, max: 500 }] },
-  { tipo: 'PERCENTIL', label: 'Percentil', destino: 'oscilador', color: '#34d399', salidas: ['valor'],
+  { tipo: 'PERCENTIL', label: 'Percentil', descripcion: 'Qué tan caro está contra su propia historia, de 0 a 100.',
+    destino: 'oscilador', color: '#34d399', salidas: ['valor'],
     ayuda: 'analisis_tecnico_percentil',
     params: [{ nombre: 'ventana', label: 'Ventana', default: 100, min: 0, max: 500 }] },
-  { tipo: 'RETORNO', label: 'Retorno %', destino: 'oscilador', color: '#a78bfa', salidas: ['valor'],
+  { tipo: 'RETORNO', label: 'Retorno %', descripcion: 'Cuánto subió o bajó en las últimas N ruedas.',
+    destino: 'oscilador', color: '#a78bfa', salidas: ['valor'],
     params: [{ nombre: 'periodo', label: 'Período', default: 20, min: 1, max: 500 }] },
-  { tipo: 'OBV', label: 'On Balance Volume', destino: 'volumen', color: '#10b981', salidas: ['valor'], necesitaVolumen: true, params: [] },
-  { tipo: 'VOLUMEN_PROMEDIO', label: 'Volumen promedio', destino: 'volumen', color: '#3b82f6', salidas: ['valor'],
+  { tipo: 'OBV', label: 'On Balance Volume', descripcion: 'Volumen acumulado según el precio suba o baje.',
+    destino: 'volumen', color: '#10b981', salidas: ['valor'], necesitaVolumen: true, params: [] },
+  { tipo: 'VOLUMEN_PROMEDIO', label: 'Volumen promedio', descripcion: 'Promedio del volumen operado.',
+    destino: 'volumen', color: '#3b82f6', salidas: ['valor'],
     params: [{ nombre: 'periodo', label: 'Período', default: 20, min: 2, max: 500 }], necesitaVolumen: true },
 ]
 

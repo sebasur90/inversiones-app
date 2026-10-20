@@ -24,6 +24,11 @@ export type IconName =
   | 'more'
   | 'eye'
   | 'eyeOff'
+  | 'bands'
+  | 'marks'
+  | 'levels'
+  | 'curve'
+  | 'relative'
 
 export function IconSprite() {
   return (
@@ -139,6 +144,28 @@ export function IconSprite() {
           <path d="M2.5 12S6 5.5 12 5.5s9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z" />
           <circle cx="12" cy="12" r="3" />
           <line x1="4" y1="20" x2="20" y2="4" />
+        </symbol>
+        {/* Barra de herramientas del gráfico técnico. */}
+        <symbol id="i-bands" viewBox="0 0 24 24">
+          <rect x="3" y="5.5" width="18" height="5" rx="1" />
+          <rect x="3" y="13.5" width="18" height="5" rx="1" />
+        </symbol>
+        <symbol id="i-marks" viewBox="0 0 24 24">
+          <path d="M7 4l4.5 7h-9z" />
+          <path d="M17 20l-4.5-7h9z" />
+        </symbol>
+        <symbol id="i-levels" viewBox="0 0 24 24">
+          <path d="M3 7h18" strokeDasharray="2 3" />
+          <path d="M3 17h18" strokeDasharray="2 3" />
+          <path d="M6 14l4-4 3 2 5-5" />
+        </symbol>
+        <symbol id="i-curve" viewBox="0 0 24 24">
+          <path d="M4 20c5 0 7-3 9-7s4-9 7-9" />
+          <path d="M4 4v16h16" />
+        </symbol>
+        <symbol id="i-relative" viewBox="0 0 24 24">
+          <path d="M3 17l5-5 4 3 8-8" />
+          <path d="M3 19l5-3 4 1 8-4" strokeDasharray="2 2.5" />
         </symbol>
       </defs>
     </svg>

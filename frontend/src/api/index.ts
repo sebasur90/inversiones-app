@@ -2303,6 +2303,46 @@ export interface NivelAutoOut {
   puntaje: number
 }
 
+/** "Qué dice el gráfico": estados con nombre sobre la serie diaria (ver `lectura_tecnica_engine`). */
+export interface LecturaTecnicaOut {
+  ticker: string
+  variante: VarianteSerie
+  moneda: string
+  fecha: string | null
+  ultimo_cierre: number | null
+  tendencia: {
+    estado: 'alcista' | 'bajista' | 'mixta'
+    sma: number
+    periodo_sma: number
+    distancia_pct: number
+    pendiente_pct: number
+    ruedas_pendiente: number
+  } | null
+  momentum: { estado: 'sobrecompra' | 'sobreventa' | 'neutral'; rsi: number; periodo_rsi: number } | null
+  soporte: LecturaNivelOut | null
+  resistencia: LecturaNivelOut | null
+  benchmark: BenchmarkFR | null
+  benchmark_nombre: string | null
+  fuerza_relativa: {
+    estado: 'mejor' | 'peor' | 'parecida'
+    retorno_pct: number
+    retorno_benchmark_pct: number
+    diferencia_puntos: number
+    ruedas: number
+  } | null
+}
+
+export interface LecturaNivelOut {
+  precio: number
+  toques: number
+  ultima_fecha: string
+  distancia_pct: number
+}
+
+export const getLecturaTecnica = (ticker: string, variante?: VarianteSerie) =>
+  api.get<LecturaTecnicaOut>(`/inversiones/tecnico/${encodeURIComponent(ticker)}/lectura`, { params: { variante } })
+    .then(r => r.data)
+
 export const getTickersTecnicos = () =>
   api.get<TickerTecnicoOut[]>('/inversiones/tecnico/tickers').then(r => r.data)
 

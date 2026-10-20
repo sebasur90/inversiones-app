@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { qk } from '../api/queryClient'
 import {
   getTickersTecnicos, getSerieTecnica, getPresetsEstrategia, listarEstrategias,
   guardarEstrategia, actualizarEstrategia, duplicarEstrategia, eliminarEstrategiaTecnica,
   backtestEstrategia, sembrarPresetsEstrategia, getZonasTicker, guardarZonasTicker, getOperacionesTicker, getFuerzaRelativa,
+  getLecturaTecnica,
   type CategoriaPreset, type EstrategiaDsl, type EstrategiaOut, type BacktestOut,
   type PresetEstrategiaOut, type BenchmarkFR, type IntervaloSerie, type VarianteSerie, type VarianteEstrategia, type TipoZona, type ZonaPrecioIn,
   type ZonaPrecioOut,
@@ -34,6 +35,8 @@ import EditorZonas, {
 } from '../components/tecnico/EditorZonas'
 import ResumenZonas from '../components/tecnico/ResumenZonas'
 import CalculadoraPosicion from '../components/tecnico/CalculadoraPosicion'
+import EncabezadoTicker from '../components/tecnico/EncabezadoTicker'
+import LecturaGrafico from '../components/tecnico/LecturaGrafico'
 import { useDibujos } from '../components/tecnico/useDibujos'
 import { guardarVerOperaciones, leerVerOperaciones } from '../components/tecnico/operacionesPropias'
 import type { BordeZona, ZonasDibujo } from '../components/tecnico/ZonasPrecio'
@@ -59,6 +62,9 @@ function erroresDesde(e: unknown): string[] {
 
 type Vista = 'grafico' | 'estrategias'
 const PERIODOS: PeriodoEvolucion[] = ['1M', '3M', '6M', '1Y', '3Y', 'YTD', 'ALL']
+// En castellano y cortos: los siete tienen que entrar en una fila junto al D / S / M.
+const ETIQUETA_PERIODO: Partial<Record<PeriodoEvolucion, string>> = { '1Y': '1A', '3Y': '3A', ALL: 'Todo' }
+const NOMBRE_INTERVALO: Record<IntervaloSerie, string> = { D: 'Velas diarias', S: 'Velas semanales', M: 'Velas mensuales' }
 
 // Ids de instancias de indicador: sólo tienen que ser únicos y crecientes dentro de la sesión
 // (`colorIndicador` ordena por id para asignar el color de las repetidas).
@@ -107,7 +113,11 @@ export default function AnalisisTecnico() {
   // dibujarlo mientras se arrastra: son dos vistas del mismo valor.
   const [borrador, setBorrador] = useState<BorradorZonas | null>(null)
   const [errorZonas, setErrorZonas] = useState<string | null>(null)
+  // Ocultar zonas y niveles despeja el gráfico; mientras se editan se ven igual (es lo que se mueve).
+  const [verZonas, setVerZonas] = useState(true)
+  const [indicadoresAbierto, setIndicadoresAbierto] = useState(false)
   const graficoRef = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate()
 
   const queryClient = useQueryClient()
   const tickersQuery = useQuery({ queryKey: qk.de('tecnico-tickers'), queryFn: getTickersTecnicos })
@@ -179,6 +189,22 @@ export default function AnalisisTecnico() {
     enabled: ticker !== null && serie != null && verFuerzaRelativa,
     staleTime: 5 * 60_000,
   })
+
+  // La lectura va sobre la serie que el gráfico efectivamente muestra (la referencia puede haber
+  // degradado a la local) y siempre en diario, sin importar período ni intervalo: no los lleva en
+  // la clave para no volver a pedirla al cambiarlos.
+  const lecturaQuery = useQuery({
+    queryKey: qk.de('tecnico-lectura', ticker, serie?.variante),
+    queryFn: () => getLecturaTecnica(ticker as string, serie!.variante),
+    enabled: ticker !== null && serie != null,
+    staleTime: 5 * 60_000,
+  })
+  // La lectura no sale a bajar el índice; el panel de fuerza relativa sí. Cuando el panel termina,
+  // la lectura ya puede tener su fila de fuerza relativa.
+  const fuerzaRelativaLista = fuerzaRelativaQuery.isSuccess
+  useEffect(() => {
+    if (fuerzaRelativaLista) void queryClient.invalidateQueries({ queryKey: qk.de('tecnico-lectura', ticker) })
+  }, [fuerzaRelativaLista, ticker, queryClient])
 
   // Sólo hay operaciones propias que mostrar si el ticker está (o estuvo) en la cartera.
   const puedeVerOperaciones = tickerMeta != null && tickerMeta.origen !== 'watchlist'
@@ -280,10 +306,13 @@ export default function AnalisisTecnico() {
         }
       : undefined
 
-  /** Lo que se le pasa al gráfico: las zonas más, si lo hay, el stop de la calculadora. */
+  /** Lo que se le pasa al gráfico: las zonas (si están a la vista o se están editando) más, si lo
+   * hay, el stop de la calculadora, que se ve siempre: es lo que se está probando. */
+  const zonasVisibles = verZonas || borrador !== null
+  const zonasMostradas = zonasVisibles ? zonasDibujo : undefined
   const zonasEnGrafico: ZonasDibujo | undefined = stopProvisorio != null
-    ? { ...zonasDibujo, stopProvisorio }
-    : zonasDibujo
+    ? { ...zonasMostradas, stopProvisorio }
+    : zonasMostradas
 
   function empezarAEditarZonas() {
     setErrorZonas(null)
@@ -348,6 +377,11 @@ export default function AnalisisTecnico() {
   function cambiarParamIndicador(id: number, nombre: string, valor: number) {
     setActivos(prev => prev.map(a => (a.id === id ? { ...a, params: { ...a.params, [nombre]: valor } } : a)))
   }
+  /** Desde la leyenda del gráfico: dos instancias con la misma clave se dibujan como una, así que
+   * la ✕ saca las dos. */
+  function quitarIndicadorPorClave(clave: string) {
+    setActivos(prev => prev.filter(a => claveIndicador(a.tipo, a.params) !== clave))
+  }
 
   const edicionZonas = {
     onGuardar: guardarZonas,
@@ -378,86 +412,89 @@ export default function AnalisisTecnico() {
 
   const tieneGrafico = !!serie && serie.barras.length > 0
 
+  // Notas que explican cómo leer la serie, no problemas de los datos: van plegadas para no empujar
+  // el gráfico. Las advertencias de la serie (huecos, splits…) siguen a la vista.
+  const notasSerie = [
+    ...(intervalo !== 'D'
+      ? [`Velas ${intervalo === 'S' ? 'semanales' : 'mensuales'}: los indicadores se calculan sobre esas barras. Las estrategias, el backtest, las alertas y la lectura siguen corriendo en diario.`]
+      : []),
+    ...(variante === 'subyacente' && (zonasGuardadas?.nivel_stop_loss != null || zonasGuardadas?.nivel_objetivo != null)
+      ? ['El stop loss y el objetivo de tu posición están en pesos, sobre el precio al que compraste el CEDEAR: se ven en la serie Local. Para vigilar una venta en dólares, dibujá una zona de venta acá.']
+      : []),
+  ]
+
   return (
     <div className="pb-4">
       <ScreenHeader title="Análisis técnico" />
 
-      <div className="mb-3 flex items-center gap-2">
-        <Segmented
-          options={[{ value: 'grafico', label: 'Gráfico' }, { value: 'estrategias', label: 'Estrategias' }]}
-          value={vista} onChange={setVista}
+      {ticker && (
+        <EncabezadoTicker
+          tickers={tickers} ticker={ticker} onElegir={elegirTicker}
+          barras={serie?.barras} moneda={monedaMostrada} intervalo={intervalo}
+          seriesDisponibles={seriesDisponibles} variante={variante} referencia={referencia}
+          onVariante={v => { setVarianteSel(v); setBorrador(null); setBenchmarkSel(null) }}
         />
-        <InfoTooltip term="analisis_tecnico_titulo" />
-      </div>
+      )}
 
-      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 mb-3 -mx-4 px-4">
-        {tickers.map(t => (
-          <button
-            key={t.ticker} onClick={() => elegirTicker(t.ticker)}
-            className={`shrink-0 font-semibold text-caption px-3 py-1.5 rounded-[10px] border transition-colors ${
-              t.ticker === ticker ? 'bg-app-accent-soft border-app-accent text-app-accent' : 'bg-app-surface border-app-border text-app-text-dim'
-            }`}
-          >
-            {t.ticker}
-          </button>
-        ))}
+      <div className="mb-3 flex items-center border-b border-app-border">
+        <div role="tablist" aria-label="Vista" className="flex flex-[2]">
+          {(['grafico', 'estrategias'] as const).map(v => (
+            <button
+              key={v} type="button" role="tab" aria-selected={vista === v} onClick={() => setVista(v)}
+              className={`flex-1 h-11 text-body font-semibold transition-colors ${
+                vista === v ? 'text-app-text shadow-[inset_0_-2px_0_var(--color-app-accent)]' : 'text-app-text-dim'
+              }`}
+            >
+              {v === 'grafico' ? 'Gráfico' : 'Estrategias'}
+            </button>
+          ))}
+        </div>
+        {/* El diario es una pantalla aparte (todas tus operaciones, no las de este ticker): es un
+            link, no una pestaña. */}
+        <button
+          type="button" onClick={() => navigate('/diario-operaciones')}
+          className="flex-1 h-11 inline-flex items-center justify-center gap-0.5 text-body font-semibold text-app-text-dim"
+        >
+          Diario
+          <Icon name="chevron" className="w-3.5 h-3.5 -rotate-90" />
+        </button>
+        <InfoTooltip term="analisis_tecnico_titulo" />
       </div>
 
       {vista === 'grafico' ? (
         <>
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <Segmented options={PERIODOS.map(p => ({ value: p, label: p }))} value={periodo} onChange={setPeriodo} />
-            <Segmented options={INTERVALOS} value={intervalo} onChange={v => { setIntervalo(v); setHoverIndex(null) }} />
-            {seriesDisponibles.length > 1 && (
-              <Segmented
-                options={seriesDisponibles.map(s => ({
-                  value: s.variante,
-                  label: s.variante === 'local' ? `Local (${s.moneda})` : `Subyacente (${s.moneda})`,
-                }))}
-                value={variante}
-                onChange={v => { setVarianteSel(v as VarianteSerie); setBorrador(null); setBenchmarkSel(null) }}
-              />
-            )}
-            {monedaMostrada && (
-              <span className="text-label font-semibold px-1.5 py-0.5 rounded border border-app-border text-app-text-dim">
-                {monedaMostrada}
-              </span>
-            )}
-            {seriesDisponibles.length > 1 && variante === referencia && (
-              <span className="inline-flex items-center gap-1 text-label font-semibold px-1.5 py-0.5 rounded border border-app-accent/40 text-app-accent">
-                Referencia
-                <InfoTooltip term="serie_referencia" />
-              </span>
-            )}
-          </div>
-          {intervalo !== 'D' && (
-            <p className="mb-3 text-label text-app-text-dim">
-              Velas {intervalo === 'S' ? 'semanales' : 'mensuales'}: los indicadores se calculan sobre
-              esas barras. Las estrategias, el backtest y las alertas siguen corriendo en diario.
-            </p>
-          )}
-          {seriesDisponibles.length > 1 && variante !== referencia && (
-            <p className="mb-3 text-label text-app-text-dim">
-              Estás viendo la serie {variante === 'local' ? 'local (el CEDEAR en pesos)' : 'del subyacente'}.
-              Para decidir, la referencia de {ticker} es{' '}
-              {referencia === 'subyacente' ? 'el precio en dólares de la acción en EE.UU.' : 'la serie local'}.
-            </p>
-          )}
-          <div className="mb-3">
-            <div className="flex items-center gap-1 text-label font-bold text-app-text-dim uppercase mb-1.5">
-              Indicadores
-              <InfoTooltip term="analisis_tecnico_indicadores" />
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div role="group" aria-label="Período" className="flex gap-0.5 min-w-0 overflow-x-auto no-scrollbar">
+              {PERIODOS.map(p => (
+                <button
+                  key={p} type="button" onClick={() => setPeriodo(p)} aria-pressed={periodo === p}
+                  className={`shrink-0 h-9 min-w-[32px] px-1 rounded-lg font-mono text-caption font-semibold transition-colors ${
+                    periodo === p ? 'bg-app-accent-soft text-app-accent' : 'text-app-text-dim'
+                  }`}
+                >
+                  {ETIQUETA_PERIODO[p] ?? p}
+                </button>
+              ))}
             </div>
-            <SelectorIndicadores
-              activos={activos} onAgregar={agregarIndicador} onQuitar={quitarIndicador}
-              onQuitarTipo={quitarTipoIndicador} onCambiarParam={cambiarParamIndicador}
-              tieneVolumen={serie?.tiene_volumen ?? true}
-            />
+            <div role="group" aria-label="Velas" className="shrink-0 flex p-0.5 rounded-[10px] bg-app-surface border border-app-border">
+              {INTERVALOS.map(i => (
+                <button
+                  key={i.value} type="button" aria-label={NOMBRE_INTERVALO[i.value]} title={NOMBRE_INTERVALO[i.value]}
+                  aria-pressed={intervalo === i.value}
+                  onClick={() => { setIntervalo(i.value); setHoverIndex(null) }}
+                  className={`w-8 h-8 rounded-lg font-mono text-caption font-bold transition-colors ${
+                    intervalo === i.value ? 'bg-app-surface-2 text-app-text' : 'text-app-text-dim'
+                  }`}
+                >
+                  {i.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <QueryBoundary
             isLoading={serieQuery.isLoading} error={serieQuery.error}
-            onRetry={() => void serieQuery.refetch()} fallback={<Skeleton className="h-[240px] rounded-xl" />}
+            onRetry={() => void serieQuery.refetch()} fallback={<Skeleton className="h-[320px] rounded-2xl" />}
           >
             {serie && serie.barras.length === 0 ? (
               <EmptyState
@@ -471,7 +508,7 @@ export default function AnalisisTecnico() {
                 }
               />
             ) : serie ? (
-              <div ref={graficoRef} className="scroll-mt-16">
+              <div ref={graficoRef} className="scroll-mt-16 -mx-1 rounded-2xl border border-app-border bg-app-surface p-2">
                 <GraficoTecnico
                   barras={serie.barras} indicadores={serie.indicadores} activos={activos}
                   tieneVelas={serie.tiene_velas} tieneVolumen={serie.tiene_volumen}
@@ -479,6 +516,8 @@ export default function AnalisisTecnico() {
                   onToggleFullscreen={() => setFullscreen(true)}
                   zonas={zonasEnGrafico} editandoZonas={borrador !== null}
                   onArrastrarZona={arrastrarZona} edicionZonas={edicionZonas}
+                  zonasVisibles={zonasVisibles} onToggleZonas={borrador ? undefined : () => setVerZonas(v => !v)}
+                  onAbrirIndicadores={() => setIndicadoresAbierto(true)} onQuitarIndicador={quitarIndicadorPorClave}
                   {...propsOperaciones}
                   hoverIndex={hoverIndex} onHover={setHoverIndex}
                 />
@@ -486,10 +525,26 @@ export default function AnalisisTecnico() {
             ) : null}
           </QueryBoundary>
 
-          {/* Las zonas se dibujan sobre el precio, así que el editor vive junto al gráfico y no en
+          {serie && serie.barras.length > 0 && serie.advertencias.length > 0 && (
+            <ul className="mt-2 text-label text-app-text-dim list-disc pl-4 space-y-0.5">
+              {textosAdvertenciasSerie(serie.advertencias).map(texto => (
+                <li key={texto}>{texto}</li>
+              ))}
+            </ul>
+          )}
+
+          {ticker && tieneGrafico && (
+            <div className="mt-4">
+              <LecturaGrafico
+                lectura={lecturaQuery.data} cargando={lecturaQuery.isLoading} error={lecturaQuery.isError}
+                onActivarFuerzaRelativa={verFuerzaRelativa ? undefined : () => setVerFuerzaRelativa(true)}
+              />
+            </div>
+          )}
+
+          {/* Las zonas se dibujan sobre el precio, así que el editor vive cerca del gráfico y no en
               una pantalla aparte: arrastrar el borde y escribir el número son dos vistas de lo
-              mismo. Sólo con serie: una zona sobre un gráfico vacío no se puede ubicar. Va pegado
-              al gráfico (antes de los avisos de la serie) para que en el celular quede a mano. */}
+              mismo. Sólo con serie: una zona sobre un gráfico vacío no se puede ubicar. */}
           {ticker && tieneGrafico && (
             <div className="mt-3">
               {borrador ? (
@@ -503,11 +558,13 @@ export default function AnalisisTecnico() {
                   error={errorZonas}
                 />
               ) : (
-                <ResumenZonas
-                  zonas={zonasGuardadas} variante={variante} moneda={monedaMostrada}
-                  ultimoCierre={ultimoCierre}
-                  onEditar={empezarAEditarZonas}
-                />
+                <div className="rounded-2xl border border-app-border bg-app-surface p-3.5">
+                  <ResumenZonas
+                    zonas={zonasGuardadas} variante={variante} moneda={monedaMostrada}
+                    ultimoCierre={ultimoCierre}
+                    onEditar={empezarAEditarZonas}
+                  />
+                </div>
               )}
             </div>
           )}
@@ -533,23 +590,27 @@ export default function AnalisisTecnico() {
             </div>
           )}
 
-          {variante === 'subyacente'
-            && (zonasGuardadas?.nivel_stop_loss != null || zonasGuardadas?.nivel_objetivo != null) && (
-            <p className="mt-2 text-label text-app-text-dim">
-              El stop loss y el objetivo de tu posición están en pesos, sobre el precio al que
-              compraste el CEDEAR: se ven en la serie Local. Para vigilar una venta en dólares,
-              dibujá una zona de venta acá.
-            </p>
+          {tieneGrafico && notasSerie.length > 0 && (
+            <details className="mt-3 rounded-xl border border-app-border px-3.5">
+              <summary className="min-h-[44px] flex items-center cursor-pointer text-caption font-semibold text-app-text-dim">
+                {notasSerie.length === 1 ? '1 nota sobre esta serie' : `${notasSerie.length} notas sobre esta serie`}
+              </summary>
+              <ul className="pb-3 pl-4 list-disc text-label text-app-text-dim space-y-1">
+                {notasSerie.map(t => <li key={t}>{t}</li>)}
+              </ul>
+            </details>
           )}
 
-          {serie && serie.barras.length > 0 && serie.advertencias.length > 0 && (
-            <ul className="mt-2 text-label text-app-text-dim list-disc pl-4 space-y-0.5">
-              {textosAdvertenciasSerie(serie.advertencias).map(texto => (
-                <li key={texto}>{texto}</li>
-              ))}
-            </ul>
-          )}
-
+          <Modal open={indicadoresAbierto} onClose={() => setIndicadoresAbierto(false)} title="Indicadores">
+            <div className="flex flex-col gap-2">
+              <InfoTooltip term="analisis_tecnico_indicadores" label="Qué es un indicador" />
+              <SelectorIndicadores
+                activos={activos} onAgregar={agregarIndicador} onQuitar={quitarIndicador}
+                onQuitarTipo={quitarTipoIndicador} onCambiarParam={cambiarParamIndicador}
+                tieneVolumen={serie?.tiene_volumen ?? true}
+              />
+            </div>
+          </Modal>
         </>
       ) : (
         ticker && (
@@ -574,6 +635,8 @@ export default function AnalisisTecnico() {
             fullscreen onToggleFullscreen={() => setFullscreen(false)}
             zonas={zonasEnGrafico} editandoZonas={borrador !== null}
             onArrastrarZona={arrastrarZona} edicionZonas={edicionZonas}
+            zonasVisibles={zonasVisibles} onToggleZonas={borrador ? undefined : () => setVerZonas(v => !v)}
+            onQuitarIndicador={quitarIndicadorPorClave}
             {...propsOperaciones}
             hoverIndex={hoverIndex} onHover={setHoverIndex}
           />

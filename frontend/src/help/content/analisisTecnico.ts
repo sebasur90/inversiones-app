@@ -18,6 +18,7 @@ export type AnalisisTecnicoHelpKey =
   | 'backtest_vos_vs_estrategia'
   | 'zonas_precio'
   | 'serie_referencia'
+  | 'lectura_grafico'
   | 'grafico_gestos'
   | 'screener_titulo'
   | 'screener_universo'
@@ -30,6 +31,13 @@ export type AnalisisTecnicoHelpKey =
   | 'screener_grafico_gatillo'
 
 export const ANALISISTECNICO_HELP: Record<AnalisisTecnicoHelpKey, HelpContent> = {
+  lectura_grafico: {
+    title: 'Qué dice el gráfico',
+    shortDescription: 'Cuatro lecturas del precio con reglas fijas y el número que decide cada una al lado: tendencia, momentum, niveles cercanos y fuerza relativa contra un índice.',
+    howToInterpret: 'Tendencia: alcista si el cierre está arriba de la SMA 50 y la media está más alta que hace 10 ruedas; bajista si las dos cosas van al revés; "sin dirección clara" si no coinciden (el precio cruzó la media pero la media todavía no giró). Momentum: RSI 14 arriba de 70 es sobrecompra, abajo de 30 sobreventa. Niveles: el soporte más alto por debajo del cierre y la resistencia más baja por encima, entre los automáticos del último año (al menos dos toques). Fuerza relativa: lo que rindió el ticker en las últimas 63 ruedas menos lo que rindió el índice (S&P 500 para series en dólares, Merval para series en pesos); con menos de un punto de diferencia se considera parecido.',
+    limitations: 'Siempre se calcula sobre velas diarias y la serie que estás mirando (local o subyacente), aunque el gráfico muestre velas semanales o un período corto: es la misma serie con la que corren las estrategias y las alertas. Es una descripción de lo que ya pasó, no una recomendación ni una predicción. La fuerza relativa sólo aparece si la historia del índice ya está bajada; el botón «Fuerza rel.» del gráfico la baja la primera vez.',
+    relatedTerms: ['analisis_tecnico_indicadores', 'serie_referencia'],
+  },
   grafico_gestos: {
     title: 'Cómo moverse por el gráfico',
     shortDescription: 'En el celular: deslizá de costado para recorrer la historia, pellizcá para acercar o alejar y tocá una vela para ver sus números. Deslizar hacia arriba o abajo mueve la pantalla, no el gráfico.',

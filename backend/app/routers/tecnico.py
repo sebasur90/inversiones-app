@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db, InstrumentoInversion, WatchlistItem
 from ..schemas import (
-    TickerTecnicoOut, SerieTecnicaOut,
+    TickerTecnicoOut, SerieTecnicaOut, LecturaTecnicaOut,
     BacktestRequest, BacktestOut, PresetEstrategiaOut, SenalTickerOut,
     EstrategiaGuardarRequest, EstrategiaOut, SiembraPresetsOut,
     ScreenerRequest, ScreenerOut,
@@ -22,7 +22,7 @@ from ..services import indicadores_engine, estrategia_engine, intervalos_engine
 from ..services import comparador_estrategias_analytics, comparador_estrategias_engine
 from ..services import ticker_analytics, zonas_precio, operaciones_grafico, tamano_posicion
 from ..services import benchmarks, fuerza_relativa_engine, niveles_auto_engine, dibujos_grafico
-from ..services import comparacion_propia, diario_operaciones
+from ..services import comparacion_propia, diario_operaciones, lectura_tecnica_engine
 
 router = APIRouter(prefix="/api/inversiones", tags=["tecnico"])
 
@@ -273,6 +273,43 @@ def _leer_serie(
         variante=variante,
     )
     return _agregar_serie(serie_diaria, intervalo, max_barras)
+
+
+@router.get("/tecnico/{ticker}/lectura", response_model=LecturaTecnicaOut)
+def lectura_tecnica(
+    ticker: str,
+    variante: Optional[str] = Query(
+        None, description="`local` o `subyacente`. Sin valor, la serie de referencia del ticker.",
+    ),
+    db: Session = Depends(get_db),
+):
+    """"Qué dice el gráfico": tendencia, momentum, soporte y resistencia más cercanos y fuerza
+    relativa, cada uno como un estado con los números que lo deciden.
+
+    Siempre sobre la serie **diaria** (como estrategias y alertas), sin importar el período o el
+    intervalo del gráfico. La fuerza relativa usa el índice por defecto de la moneda de la serie y
+    sólo si ya está en la base: no sale a bajarlo."""
+    _validar_ticker_tecnico(ticker, db)
+    _validar_variante(variante)
+    variante = _variante_efectiva(ticker, variante, db)
+    serie = ohlcv_analytics.get_serie_barras(
+        ticker, date.min, date.today(), db,
+        max_barras=lectura_tecnica_engine.BARRAS_NECESARIAS, variante=variante,
+    )
+    barras = serie["barras"]
+    bench = benchmarks.por_defecto(serie["moneda"])
+    bench_barras = (
+        benchmarks.barras(db, bench, desde=barras[0].fecha - timedelta(days=15)) if barras else []
+    )
+    alineado = (
+        fuerza_relativa_engine.alinear_benchmark(barras, bench_barras) if bench_barras else None
+    )
+    return {
+        "ticker": ticker, "variante": variante, "moneda": serie["moneda"],
+        **lectura_tecnica_engine.leer(barras, alineado),
+        "benchmark": bench if alineado else None,
+        "benchmark_nombre": benchmarks.BENCHMARKS[bench]["nombre"] if alineado else None,
+    }
 
 
 @router.get("/tecnico/{ticker}/fuerza-relativa", response_model=FuerzaRelativaOut)
