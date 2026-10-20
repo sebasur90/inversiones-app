@@ -51,17 +51,23 @@ function mergeSeries(series: PrecioHistoricoOut[], vista: Vista): Fila[] {
 }
 
 function aBase100(filas: Fila[], tickers: string[]): Fila[] {
+  // Base común: la primera fecha en que TODOS los tickers tienen dato. Si cada uno arrancara en 100
+  // en su propia primera fecha, dos tickers con historias distintas quedarían en base 100 en días
+  // distintos y las curvas no se podrían comparar. Si no hay ninguna fecha en común (no se
+  // superponen), se vuelve a la base propia de cada uno.
+  const comun = filas.find(f => tickers.every(t => f[t] != null))
   const base: Record<string, number | null> = {}
   for (const t of tickers) {
-    const primera = filas.find(f => f[t] != null)
-    base[t] = primera ? (primera[t] as number) : null
+    const primera = comun ?? filas.find(f => f[t] != null)
+    base[t] = primera && primera[t] != null ? (primera[t] as number) : null
   }
   return filas.map(fila => {
     const out: Fila = { fecha: fila.fecha }
+    const antesDeLaBase = comun != null && fila.fecha < comun.fecha
     for (const t of tickers) {
       const b = base[t]
       const v = fila[t]
-      out[t] = v != null && b ? (Number(v) / b) * 100 : null
+      out[t] = !antesDeLaBase && v != null && b ? (Number(v) / b) * 100 : null
     }
     return out
   })

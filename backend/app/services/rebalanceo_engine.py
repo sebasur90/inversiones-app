@@ -244,7 +244,10 @@ def generar_propuesta(
                     categoria=categoria,
                     peso_actual_pct=peso_actual_t,
                     peso_objetivo_pct=peso_objetivo_t,
-                    delta_pp=delta_categoria_pp,
+                    # Desvío PROPIO del ticker (objetivo − actual): mostrar el de la categoría hacía
+                    # que cada ticker figurara con todo el movimiento de su grupo. La necesidad
+                    # (necesario/opcional) sí se decide a nivel categoría, que es donde está el objetivo.
+                    delta_pp=round(peso_objetivo_t - peso_actual_t, 2),
                     valor_actual_usd=round(t.valor_usd, 2),
                     valor_objetivo_usd=round(valor_objetivo_t, 2),
                     importe_sugerido_usd=round(importe_t, 2),

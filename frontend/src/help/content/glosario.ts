@@ -196,6 +196,7 @@ export const GLOSARIO_HELP: Record<GlosarioKey, HelpContent> = {
   sharpe: {
     title: 'Sharpe (vs. benchmark)',
     shortDescription: 'Compara el retorno de tu cartera contra un benchmark elegido, ajustado por lo volátil que fue esa diferencia. Un Sharpe más alto significa que ganaste más que el benchmark sin asumir demasiada volatilidad extra para lograrlo.',
+    limitations: 'No es el Sharpe clásico: en vez de restar una tasa libre de riesgo, resta el retorno del benchmark que elegiste (en lo técnico es un "ratio de información"). Por eso cambia según el benchmark y no es comparable con el Sharpe que publican otras herramientas.',
   },
   sortino: {
     title: 'Sortino',

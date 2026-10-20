@@ -14,11 +14,14 @@ const promedio = (valores: (number | null)[]): number | null => {
  * `undefined` = el ciclo sigue abierto, no hay nada que decir. */
 function despuesDeVender(
   c: CicloPosicionOut, ops: OperacionPropiaOut[],
-): { valor: number | null; dias: number } | undefined {
+): { valor: number | null; dias: number; sinSerie?: boolean } | undefined {
   if (c.abierto) return undefined
   const ventas = ops.filter(o => o.ciclo === c.ciclo && o.tipo === 'venta')
   const ultima = ventas[ventas.length - 1]
   if (!ultima) return undefined
+  // La venta cae antes del inicio del gráfico: no hay velas para medir qué pasó después. Sin esto se
+  // decía "todavía no pasaron 30 días" para una venta de hace años.
+  if (ultima.fecha_barra == null) return { valor: null, dias: 30, sinSerie: true }
   if (ultima.post_90_pct != null) return { valor: ultima.post_90_pct, dias: 90 }
   if (ultima.post_30_pct != null) return { valor: ultima.post_30_pct, dias: 30 }
   return { valor: null, dias: 30 }
@@ -68,6 +71,8 @@ export default function ResumenOperaciones({ datos }: { datos: OperacionesGrafic
                       <>
                         Si no vendías: <span className={despues.valor >= 0 ? 'text-app-pos' : 'text-app-neg'}>{formatoPct(despues.valor)}</span> a {despues.dias} días
                       </>
+                    ) : despues.sinSerie ? (
+                      'Si no vendías: sin dato (la venta es anterior al inicio del gráfico)'
                     ) : (
                       'Si no vendías: todavía no pasaron 30 días'
                     )}

@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts'
-import { fechaCorta } from '../../utils/fechas'
+import { fechaCorta, mesAnioCorto } from '../../utils/fechas'
 import { EscenarioSimulacionOut } from '../../api'
 import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 
@@ -40,7 +40,8 @@ export default function EscenarioProyeccionChart({ resultado }: EscenarioProyecc
     // Agregar valor de cada escenario
     resultado.resultados.forEach(res => {
       const p = res.puntos[idx]
-      row[res.nombre] = p?.valor_usd || 0
+      // Un punto que falta es un hueco, no un patrimonio de cero.
+      row[res.nombre] = p?.valor_usd ?? null
     })
 
     return row
@@ -54,10 +55,9 @@ export default function EscenarioProyeccionChart({ resultado }: EscenarioProyecc
           dataKey="fecha"
           tick={{ fontSize: 10 }}
           stroke="#94a3b8"
-          tickFormatter={(date: string) => {
-            const d = new Date(date)
-            return `${d.getMonth() + 1}/${d.getFullYear().toString().slice(-2)}`
-          }}
+          // `new Date('YYYY-MM-DD')` se interpreta en UTC: en Argentina (UTC−3) caía el día anterior,
+          // y una fecha de día 1 mostraba el mes anterior. Los helpers de fechas parsean en hora local.
+          tickFormatter={(date: string) => mesAnioCorto(date)}
           interval={Math.floor(data.length / 6)}
         />
         <YAxis
@@ -74,13 +74,7 @@ export default function EscenarioProyeccionChart({ resultado }: EscenarioProyecc
           }}
           labelStyle={{ color: '#ccc' }}
           formatter={(val: any) => monto(val as number)}
-          labelFormatter={(label) => {
-            if (typeof label === 'string') {
-              const d = new Date(label)
-              return fechaCorta(d)
-            }
-            return label
-          }}
+          labelFormatter={(label) => (typeof label === 'string' ? fechaCorta(label) : label)}
         />
 
         {/* Línea actual de referencia (punteada) */}

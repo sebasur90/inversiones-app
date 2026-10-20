@@ -82,6 +82,10 @@ export default function IndicadoresMacro() {
         ? datos?.variacion_riesgo_pais_pct
         : null
   const positivo = (variacion ?? 0) >= 0
+  // La flecha marca la dirección; el color dice si es buena o mala noticia. Para el riesgo país y la
+  // inflación (CER) una suba es MALA, así que va en rojo (antes iba en verde). El dólar no es ni
+  // bueno ni malo en sí: color neutro.
+  const colorVariacion = vista === 'mep' ? 'text-app-text-dim' : positivo ? 'text-app-neg' : 'text-app-pos'
   const ultimoPunto = datosGrafico.length > 0 ? datosGrafico[datosGrafico.length - 1] : undefined
 
   const hayAlgo = datos && (datos.puntos.length > 0 || datos.inflacion_mensual.length > 0)
@@ -130,7 +134,7 @@ export default function IndicadoresMacro() {
               {meta.formato(ultimoPunto.valor)}{meta.unidad && !esInflacion ? ` ${meta.unidad}` : ''}
             </div>
             {!esInflacion && variacion != null && (
-              <div className={`inline-flex items-center gap-0.5 font-mono text-label font-bold mt-0.5 tabular-nums ${positivo ? 'text-app-pos' : 'text-app-neg'}`}>
+              <div className={`inline-flex items-center gap-0.5 font-mono text-label font-bold mt-0.5 tabular-nums ${colorVariacion}`}>
                 <Icon name={positivo ? 'up' : 'down'} className="w-2.5 h-2.5" />
                 {formatPct(variacion)}
                 <div className="ml-0.5">

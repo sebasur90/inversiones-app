@@ -427,6 +427,28 @@ def test_rebalanceo_eje_tipo_con_objetivo_propio_no_se_duplica(db):
     assert r["total_a_vender_usd"] == pytest.approx(0.0)
 
 
+# ── 3.8 Rebalanceo: el desvío de un ticker prorrateado es el suyo ───────────
+
+def test_delta_pp_de_un_ticker_prorrateado_no_es_el_de_toda_la_categoria():
+    """La categoría X debe pasar de 60% a 80% (+20 pp) y la forman dos tickers iguales: cada uno
+    sube 10 pp (de 30% a 40%). Antes los dos figuraban con +20 pp."""
+    from app.services.rebalanceo_engine import generar_propuesta, PosicionActual
+    posiciones = [
+        PosicionActual(ticker="A", categoria="X", valor_usd=300.0),
+        PosicionActual(ticker="B", categoria="X", valor_usd=300.0),
+        PosicionActual(ticker="C", categoria="Y", valor_usd=400.0),
+    ]
+    r = generar_propuesta(
+        posiciones, objetivos_categoria={"X": 80.0, "Y": 20.0}, objetivos_ticker={}, eje="Sector",
+        total_usd=1000.0, tolerancia_pp=1.0, peso_maximo_pp=None, peso_minimo_pp=None,
+        modo="rebalanceo", aporte_usd=0.0, tasa_comision_pct=0.0,
+    )
+    items = {i.posicion: i for i in r.items}
+    assert items["A"].delta_pp == pytest.approx(10.0)
+    assert items["B"].delta_pp == pytest.approx(10.0)
+    assert items["A"].necesidad == "necesario"                      # la decisión sigue siendo de la categoría
+
+
 # ── 2.1 P&L consolidado vs Resumen con un ticker sin cotización ─────────────
 
 def test_pnl_valua_al_costo_el_ticker_sin_cotizacion_igual_que_el_resumen(db):

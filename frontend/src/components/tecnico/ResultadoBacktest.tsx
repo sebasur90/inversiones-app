@@ -9,11 +9,10 @@ import TablaOperaciones from './TablaOperaciones'
 import ComparacionConEstrategia from './ComparacionConEstrategia'
 import { guardarVerOperaciones, leerVerOperaciones } from './operacionesPropias'
 import { textosAdvertenciasSerie } from '../../utils/advertenciasSerie'
+import { formatPct } from '../../utils'
 
-function formatPctSigned(v: number | null | undefined): string {
-  if (v == null) return '—'
-  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`
-}
+// Mismo formato (y las mismas defensas contra NaN y "-0.00%") que el resto de la app.
+const formatPctSigned = formatPct
 
 export default function ResultadoBacktest({ resultado, dsl }: { resultado: BacktestOut; dsl: EstrategiaDsl }) {
   const m = resultado.metricas
@@ -93,11 +92,25 @@ export default function ResultadoBacktest({ resultado, dsl }: { resultado: Backt
           />
         )}
         <MetricTile label="Win rate" value={m.win_rate_pct != null ? `${m.win_rate_pct.toFixed(1)}%` : '—'} insuficiente={insuficiente} />
-        <MetricTile label="Profit factor" value={m.profit_factor != null ? m.profit_factor.toFixed(2) : '—'} insuficiente={insuficiente} />
+        <MetricTile
+          label="Profit factor"
+          // Sin operaciones perdedoras el cociente ganancias / pérdidas no existe (el backend manda
+          // null): con alguna ganadora es "infinito", no un dato que falta.
+          value={m.profit_factor != null ? m.profit_factor.toFixed(2) : (m.ganadoras > 0 ? '∞' : '—')}
+          sub={m.profit_factor == null && m.ganadoras > 0 ? 'Sin operaciones perdedoras' : undefined}
+          insuficiente={insuficiente}
+        />
         <MetricTile label="Máximo drawdown" value={m.max_drawdown_pct != null ? `${m.max_drawdown_pct.toFixed(2)}%` : '—'} tone="neg" />
         <MetricTile label="Retorno medio / operación" value={formatPctSigned(m.retorno_medio_operacion_pct)} insuficiente={insuficiente} />
-        <MetricTile label="Mejor operación" value={formatPctSigned(m.mejor_operacion_pct)} tone="pos" insuficiente={insuficiente} />
-        <MetricTile label="Peor operación" value={formatPctSigned(m.peor_operacion_pct)} tone="neg" insuficiente={insuficiente} />
+        {/* El color sigue al signo: si todas las operaciones pierden, la "mejor" también es negativa. */}
+        <MetricTile
+          label="Mejor operación" value={formatPctSigned(m.mejor_operacion_pct)}
+          tone={m.mejor_operacion_pct != null && m.mejor_operacion_pct < 0 ? 'neg' : 'pos'} insuficiente={insuficiente}
+        />
+        <MetricTile
+          label="Peor operación" value={formatPctSigned(m.peor_operacion_pct)}
+          tone={m.peor_operacion_pct != null && m.peor_operacion_pct >= 0 ? 'pos' : 'neg'} insuficiente={insuficiente}
+        />
         <MetricTile label="Exposición" value={`${m.exposicion_pct.toFixed(1)}%`} />
         <MetricTile label="Duración media" value={m.duracion_media_barras != null ? `${m.duracion_media_barras.toFixed(1)} barras` : '—'} insuficiente={insuficiente} />
         <MetricTile label="Comisiones acumuladas" value={`${m.comisiones_pct_acum.toFixed(2)}%`} />

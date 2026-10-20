@@ -254,7 +254,10 @@ export default function Rendimiento() {
                 <div className="text-right">
                   <div className="text-label text-app-text-faint uppercase tracking-wide mb-0.5">Cartera vs Benchmark</div>
                   <div className={`font-mono font-bold text-strong tabular-nums ${(perfRelativa.delta_pp ?? 0) >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
-                    {(perfRelativa.delta_pp ?? 0) >= 0 ? '+' : ''}{perfRelativa.delta_pp?.toFixed(1)}%
+                    {/* Es una diferencia en puntos porcentuales, no un porcentaje. */}
+                    {perfRelativa.delta_pp != null
+                      ? `${perfRelativa.delta_pp >= 0 ? '+' : ''}${perfRelativa.delta_pp.toFixed(1)} pp`
+                      : '—'}
                   </div>
                 </div>
               </div>

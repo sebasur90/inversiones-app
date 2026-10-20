@@ -29,9 +29,14 @@ export function formatUSDCrudo(value: number | null | undefined): string {
 }
 
 export function formatPct(value: number | null | undefined): string {
-  if (value == null) return '—'
-  const sign = value >= 0 ? '+' : ''
-  return `${sign}${value.toFixed(2)}%`
+  // Un NaN / Infinity (división por cero que llegó hasta acá) se muestra como "sin dato", nunca como
+  // "NaN%" ni "+Infinity%".
+  if (value == null || !Number.isFinite(value)) return '—'
+  // Se redondea ANTES de decidir el signo: −0,003 se ve como 0,00 y no como "-0.00%" (el `+ 0`
+  // convierte −0 en 0).
+  const redondeado = Number(value.toFixed(2)) + 0
+  const sign = redondeado >= 0 ? '+' : ''
+  return `${sign}${redondeado.toFixed(2)}%`
 }
 
 // Igual que formatPct pero recibe una razón (0.1059) en vez de un porcentaje (10.59)
