@@ -1662,6 +1662,8 @@ export interface MatrizCorrelacionParItem {
 
 export interface MatrizCorrelacionTickerItem {
   ticker: string
+  /** Serie usada: `subyacente` = USD del mercado de origen (CEDEARs); `local` = la que cotiza acá. */
+  variante: 'subyacente' | 'local'
   n_retornos: number
   cobertura_pct: number | null
   primer_periodo: string | null

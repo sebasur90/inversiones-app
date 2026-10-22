@@ -1780,6 +1780,7 @@ class MatrizCorrelacionParItem(BaseModel):
 
 class MatrizCorrelacionTickerItem(BaseModel):
     ticker: str
+    variante: str = "local"  # serie usada: "subyacente" (USD del mercado de origen) | "local"
     n_retornos: int
     cobertura_pct: Optional[float] = None
     primer_periodo: Optional[date] = None

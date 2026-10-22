@@ -2,11 +2,15 @@
 (app.services.correlaciones_analytics). SQLite in-memory, sin HTTP."""
 from datetime import date, timedelta
 
+import math
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.database import Base, IndiceMercado, MovimientoInversion, PrecioInstrumento
+from app.database import (
+    BarraOHLCV, Base, IndiceMercado, MovimientoInversion, PrecioInstrumento, WatchlistItem,
+)
 from app.services import contribucion_analytics
 from app.services.cache import limpiar_cache
 from app.services.correlaciones_analytics import (
@@ -363,3 +367,105 @@ def test_mensual_nueva_puede_diferir_de_la_vieja_ante_un_hueco(db: Session):
     # La vieja sí puede tener el par con datos (aunque insuficientes por count, la serie interna
     # sí contiene la observación encadenada que salta el hueco).
     assert "AAA" in resultado_viejo["tickers"]
+
+
+# ── Fuente: serie histórica de velas (`serie_ohlcv`), no las fotos del sync ───
+
+def _velas(db, clave, cierres: dict, moneda="USD"):
+    for fecha, cierre in cierres.items():
+        db.add(BarraOHLCV(ticker=clave, fecha=fecha, cierre=cierre, moneda=moneda, fuente="api"))
+
+
+def _dias_habiles(n: int) -> list[date]:
+    """Los últimos `n` días hábiles, el más viejo primero."""
+    dias, cursor = [], date.today() - timedelta(days=1)
+    while len(dias) < n:
+        if cursor.weekday() < 5:
+            dias.append(cursor)
+        cursor -= timedelta(days=1)
+    return sorted(dias)
+
+
+def _caminata(dias: list[date], fase: float, base=100.0) -> dict:
+    """Serie determinística con retornos que oscilan; la misma `fase` da el mismo movimiento."""
+    precio, out = base, {}
+    for i, d in enumerate(dias):
+        precio *= 1 + 0.01 * math.sin(i * 0.9 + fase)
+        out[d] = round(precio, 4)
+    return out
+
+
+def _watchlist(db, ticker, tipo="Acción", moneda="USD"):
+    db.add(WatchlistItem(ticker=ticker, nombre=ticker, tipo_instrumento=tipo, mercado="NYSE", moneda=moneda))
+
+
+def test_matriz_usa_las_velas_y_no_necesita_precios_instrumento(db: Session):
+    """Caso de la captura: tickers de watchlist (sin `precios_instrumento`) con 3 años de velas
+    diarias. Antes salían 5-7 observaciones por par; ahora hay cientos."""
+    dias = _dias_habiles(800)
+    for t, fase in (("SPY", 0.0), ("KO", 1.7), ("MELI", 3.1), ("MSFT", 0.05)):
+        _watchlist(db, t)
+        _velas(db, t, _caminata(dias, fase))
+    db.commit()
+
+    r = get_matriz_correlaciones(None, db, tickers=["SPY", "KO", "MELI", "MSFT"], frecuencia="diaria",
+                                 desde=dias[0])
+    assert r["estado"] == "ok"
+    assert r["n_pares_ok"] == 6
+    assert not r["pocos_datos"]
+    assert all(p["n_obs"] > 100 for p in r["pares"])
+    spy_msft = next(p for p in r["pares"] if {p["ticker_a"], p["ticker_b"]} == {"SPY", "MSFT"})
+    spy_ko = next(p for p in r["pares"] if {p["ticker_a"], p["ticker_b"]} == {"SPY", "KO"})
+    assert spy_msft["valor"] > 0.95 > abs(spy_ko["valor"])
+
+
+def test_cedear_con_sub_usa_la_serie_usd_y_no_mezcla_los_pesos_del_cedear(db: Session):
+    dias = _dias_habiles(300)
+    _watchlist(db, "MSFT", tipo="CEDEAR", moneda="ARS")
+    _velas(db, "MSFT@SUB", _caminata(dias, 0.0), moneda="USD")
+    # Fotos del CEDEAR en pesos (~x50): mezclarlas metería saltos falsos en la serie.
+    for d, px in _caminata(dias, 2.0, base=5000.0).items():
+        _precio(db, "MSFT", px, d, moneda="ARS")
+    _watchlist(db, "AAA")
+    _velas(db, "AAA", _caminata(dias, 0.0))
+    db.commit()
+
+    r = get_matriz_correlaciones(None, db, tickers=["MSFT", "AAA"], frecuencia="diaria", desde=dias[0])
+    assert r["estado"] == "ok"
+    assert {d["ticker"]: d["variante"] for d in r["tickers_detalle"]} == {"MSFT": "subyacente", "AAA": "local"}
+    assert r["pares"][0]["valor"] > 0.99  # misma fase: sólo si se leyó la serie USD
+
+
+def test_cedear_con_sub_corta_cae_a_la_serie_local(db: Session):
+    dias = _dias_habiles(300)
+    _watchlist(db, "MSFT", tipo="CEDEAR", moneda="USD")
+    _velas(db, "MSFT@SUB", _caminata(dias[-10:], 0.0))  # < MIN_BARRAS_REFERENCIA
+    _velas(db, "MSFT", _caminata(dias, 0.0))
+    _watchlist(db, "AAA")
+    _velas(db, "AAA", _caminata(dias, 0.0))
+    db.commit()
+
+    r = get_matriz_correlaciones(None, db, tickers=["MSFT", "AAA"], frecuencia="diaria", desde=dias[0])
+    assert {d["ticker"]: d["variante"] for d in r["tickers_detalle"]}["MSFT"] == "local"
+    assert r["estado"] == "ok" and r["pares"][0]["n_obs"] > 100
+
+
+def test_series_historicas_la_vela_pisa_a_la_foto_en_la_misma_fecha(db: Session):
+    from app.services.correlaciones_analytics import _series_historicas
+
+    f1, f2 = date(2024, 3, 4), date(2024, 3, 5)
+    _precio(db, "AAA", 10.0, f1)
+    _precio(db, "AAA", 11.0, f2)
+    _velas(db, "AAA", {f2: 12.5})
+    db.commit()
+
+    series, variantes = _series_historicas(db, ["AAA"])
+    assert series["AAA"] == [(f1, 10.0, "USD"), (f2, 12.5, "USD")]
+    assert variantes == {"AAA": "local"}
+
+
+def test_ticker_sin_velas_ni_precios_se_descarta(db: Session):
+    _watchlist(db, "AAA")
+    db.commit()
+    usables, descartados = _resolver_tickers(["AAA"], None, db)
+    assert usables == [] and descartados == [{"ticker": "AAA", "motivo": "sin_precios"}]

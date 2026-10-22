@@ -4,10 +4,10 @@ import { useNavigate } from 'react-router-dom'
 import { useInversionesContext } from '../context/InversionesContext'
 import {
   getMatrizCorrelaciones,
-  getTickersConPrecios,
+  getTickersTecnicos,
   type FrecuenciaCorrelacion,
   type MatrizCorrelacionParItem,
-  type TickerConPrecio,
+  type TickerTecnicoOut,
 } from '../api'
 import { calcularDesde, type PeriodoEvolucion } from '../utils'
 import { qk } from '../api/queryClient'
@@ -47,8 +47,18 @@ const OPCIONES_FRECUENCIA: { value: FrecuenciaCorrelacion; label: string }[] = [
 const MAX_TICKERS = 12
 
 const MOTIVO_DESCARTE_TEXTO: Record<string, string> = {
-  sin_precios: 'sin precios cargados',
+  sin_precios: 'sin historia de precios',
   tope_tickers: `por encima del máximo de ${MAX_TICKERS}`,
+}
+
+/** "cartera · 5 años" / "watchlist · sin historia": que se vea de antemano si va a alcanzar. */
+function etiquetaOpcion(t: TickerTecnicoOut): string {
+  const serie = t.series.find(s => s.variante === t.variante_referencia) ?? t.series[0]
+  const barras = serie?.barras ?? 0
+  const origen = t.origen === 'watchlist' ? 'watchlist' : 'cartera'
+  if (barras < 60) return `${origen} · sin historia`
+  const anios = barras / 252
+  return `${origen} · ${anios >= 1 ? `${Math.round(anios)} ${Math.round(anios) === 1 ? 'año' : 'años'}` : `${Math.round(barras / 21)} meses`}`
 }
 
 function fmtPar(p: MatrizCorrelacionParItem): string {
@@ -59,8 +69,8 @@ export default function MatrizCorrelaciones() {
   const navigate = useNavigate()
   const { carteraSeleccionada } = useInversionesContext()
 
-  const [periodo, setPeriodo] = useState<Periodo>('1Y')
-  const [frecuencia, setFrecuencia] = useState<FrecuenciaCorrelacion>('mensual')
+  const [periodo, setPeriodo] = useState<Periodo>('3Y')
+  const [frecuencia, setFrecuencia] = useState<FrecuenciaCorrelacion>('semanal')
   const [tickersSel, setTickersSel] = useState<string[] | null>(null)
   const [buscarTicker, setBuscarTicker] = useState('')
   const [explicacionAbierta, setExplicacionAbierta] = useState(true)
@@ -73,11 +83,10 @@ export default function MatrizCorrelaciones() {
   }, [carteraSeleccionada])
 
   const desde = calcularDesde(periodo)
-  const tickersQuery = useQuery({
-    queryKey: qk.de('tickers-con-precios'),
-    queryFn: () => getTickersConPrecios(),
-  })
-  const tickersDisponibles: TickerConPrecio[] = tickersQuery.data ?? []
+  // Cartera ∪ watchlist: lo que tiene historia de velas bajada por el sync (la misma que usa
+  // Análisis técnico), no sólo lo que alguna vez cotizó en la cartera.
+  const tickersQuery = useQuery({ queryKey: qk.de('tecnico-tickers'), queryFn: getTickersTecnicos })
+  const tickersDisponibles: TickerTecnicoOut[] = tickersQuery.data ?? []
 
   const sinInstrumentos = tickersSel !== null && tickersSel.length === 0
 
@@ -186,6 +195,7 @@ export default function MatrizCorrelaciones() {
                   className="shrink-0 font-semibold text-caption px-3 py-1.5 rounded-[10px] border border-app-border bg-app-surface text-app-text-dim"
                 >
                   {t.ticker}
+                  <span className="ml-1.5 font-normal text-app-text-faint">{etiquetaOpcion(t)}</span>
                 </button>
               ))}
             </div>
@@ -225,7 +235,7 @@ export default function MatrizCorrelaciones() {
                   ? 'No hay instrumentos para calcular'
                   : 'Todavía no hay suficientes datos'
               }
-              description="Agregá otro instrumento con precios cargados, o probá un período o una frecuencia más amplia."
+              description="Agregá otro instrumento con historia cargada (los de la watchlist se completan en el próximo sync), o probá un período o una frecuencia más amplia."
             />
           ) : (
             <div className="flex flex-col gap-4">

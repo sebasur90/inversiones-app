@@ -1,6 +1,12 @@
 """Adaptador entre los datos reales (Session/DB) y `correlaciones_engine` para la pantalla
 "Matriz de correlaciones".
 
+Fuente de precios: la serie histórica de velas (`serie_ohlcv`, ver `_series_historicas`), no las
+fotos que deja cada sync en `precios_instrumento`. Esas fotos tienen huecos y, con frecuencia
+diaria, dos tickers casi nunca coincidían en un día: la matriz salía vacía aunque hubiera años de
+velas cargadas. Un CEDEAR se mira por su subyacente en USD (la misma serie de referencia que usa
+Análisis técnico), así que la correlación es la de las empresas y no la del dólar que comparten.
+
 A diferencia de `contribucion_analytics.get_correlaciones` (retornos mensuales fin-de-mes,
 carry-forward sin tope de antigüedad), este módulo:
 
@@ -19,7 +25,8 @@ from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
-from . import correlaciones_engine
+from ..database import BarraOHLCV, PrecioInstrumento
+from . import correlaciones_engine, ohlcv_analytics
 from .cache import cache_por_sync
 from .inversiones_analytics import (
     EPS,
@@ -157,6 +164,46 @@ def _retornos_por_boundaries(
     return serie, cobertura
 
 
+# ── Series históricas ───────────────────────────────────────────────────────────
+
+def _series_historicas(
+    db: Session, tickers: list[str]
+) -> tuple[dict[str, list[tuple[date, float, str]]], dict[str, str]]:
+    """Cierres por ticker, ordenados por fecha, en el formato de `_precios_por_ticker`, más la
+    variante de serie usada por ticker (`"subyacente"` | `"local"`).
+
+    La variante es la de referencia del ticker (`ohlcv_analytics.mapa_referencias`): un CEDEAR con
+    serie `@SUB` suficiente se lee en USD del mercado de origen; el resto, por su serie local. La
+    local se completa con `precios_instrumento`, y la vela pisa a la foto en la misma fecha — mismo
+    criterio que `ohlcv_analytics.get_serie_barras` —, así un bono sin velas sigue teniendo serie.
+    La `@SUB` nunca se mezcla con `precios_instrumento`: son pesos del CEDEAR, un salto de ~x50.
+    """
+    if not tickers:
+        return {}, {}
+    referencias = ohlcv_analytics.mapa_referencias(db)
+    variantes = {t: referencias.get(t, "local") for t in tickers}
+    clave_a_ticker = {ohlcv_analytics.clave_serie(t, v): t for t, v in variantes.items()}
+    locales = [t for t, v in variantes.items() if v == "local"]
+
+    por_ticker: dict[str, dict[date, tuple[float, str]]] = {t: {} for t in tickers}
+    if locales:
+        for t, fecha, precio, moneda in db.query(
+            PrecioInstrumento.ticker, PrecioInstrumento.fecha, PrecioInstrumento.precio, PrecioInstrumento.moneda,
+        ).filter(PrecioInstrumento.ticker.in_(locales)):
+            por_ticker[t][fecha] = (float(precio), moneda)
+    for clave, fecha, cierre, moneda in db.query(
+        BarraOHLCV.ticker, BarraOHLCV.fecha, BarraOHLCV.cierre, BarraOHLCV.moneda,
+    ).filter(BarraOHLCV.ticker.in_(list(clave_a_ticker))):
+        if cierre is not None:
+            por_ticker[clave_a_ticker[clave]][fecha] = (float(cierre), moneda)
+
+    series = {
+        t: [(f, px, m) for f, (px, m) in sorted(filas.items())]
+        for t, filas in por_ticker.items() if filas
+    }
+    return series, variantes
+
+
 # ── Selección de tickers ───────────────────────────────────────────────────────
 
 def _tickers_por_defecto(cartera: str | None, db: Session, tope: int = MAX_TICKERS) -> list[str]:
@@ -192,9 +239,8 @@ def _tickers_por_defecto(cartera: str | None, db: Session, tope: int = MAX_TICKE
 def _resolver_tickers(
     pedidos: list[str], cartera: str | None, db: Session
 ) -> tuple[list[str], list[dict]]:
-    """Dedup preservando orden, uppercase, descarta los sin precios cargados, aplica el tope.
-    Devuelve (tickers_usables, descartados=[{ticker, motivo}])."""
-    precios_por_ticker = _precios_por_ticker(db)
+    """Dedup preservando orden, uppercase, descarta los que no tienen serie histórica ni precios,
+    aplica el tope. Devuelve (tickers_usables, descartados=[{ticker, motivo}])."""
     descartados: list[dict] = []
 
     if pedidos:
@@ -209,9 +255,10 @@ def _resolver_tickers(
     else:
         candidatos = _tickers_por_defecto(cartera, db)
 
+    series, _variantes = _series_historicas(db, candidatos)
     usables: list[str] = []
     for t in candidatos:
-        if not precios_por_ticker.get(t):
+        if not series.get(t):
             descartados.append({"ticker": t, "motivo": "sin_precios"})
             continue
         usables.append(t)
@@ -301,7 +348,7 @@ def get_matriz_correlaciones(
         resultado["tickers_descartados"] = descartados
         return resultado
 
-    precios_por_ticker = _precios_por_ticker(db)
+    precios_por_ticker, variantes = _series_historicas(db, tickers_usables)
     desde_efectivo, hasta_efectivo = _periodo_efectivo(desde, hasta, frecuencia, precios_por_ticker, tickers_usables)
 
     boundaries = _boundaries_frecuencia(frecuencia, desde_efectivo, hasta_efectivo)
@@ -326,6 +373,7 @@ def get_matriz_correlaciones(
         series_por_ticker[t] = serie
         tickers_detalle.append({
             "ticker": t,
+            "variante": variantes.get(t, "local"),
             "n_retornos": cobertura["n_retornos"],
             "cobertura_pct": cobertura["cobertura_pct"],
             "primer_periodo": cobertura["primer_periodo"],
