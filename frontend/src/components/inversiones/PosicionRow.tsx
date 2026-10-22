@@ -64,15 +64,17 @@ export default function PosicionRow({
             </span>
           </span>
         </div>
-        <div className="flex items-center gap-1.5 text-label mt-0.5">
-          <span className="font-mono text-app-text-dim tabular-nums">
+        {/* Envuelve en vez de desbordar: en un celular angosto el precio y la variación no
+            entran al lado de la columna derecha y terminaban encimados sobre ella. */}
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-label mt-0.5">
+          <span className="font-mono text-app-text-dim tabular-nums whitespace-nowrap">
             {item.moneda === 'ARS' ? formatARSCrudo(item.precio_actual) : item.moneda === 'USD' ? formatUSDCrudo(item.precio_actual) : formatPrecio(item.precio_actual)}
           </span>
           {/* Sin cotización: el precio de arriba es el costo de compra, no un precio de mercado. */}
           {item.valuado_al_costo ? (
-            <span className="text-app-text-faint">al costo</span>
+            <span className="text-app-text-faint whitespace-nowrap">al costo</span>
           ) : (
-            <VariacionDia pct={item.variacion_dia_pct} />
+            <VariacionDia pct={item.variacion_dia_pct} className="whitespace-nowrap" />
           )}
         </div>
         {peso != null && Number.isFinite(peso) && peso > 0 && (
@@ -92,7 +94,7 @@ export default function PosicionRow({
           // El resultado va en una píldora: se distingue de un vistazo en una lista larga y no
           // depende sólo del color (lleva la flecha y el signo).
           <div
-            className={`inline-flex items-center justify-end gap-0.5 font-mono text-label font-bold mt-1 px-2 py-0.5 rounded-full tabular-nums ${
+            className={`inline-flex items-center justify-end gap-0.5 whitespace-nowrap font-mono text-label font-bold mt-1 px-2 py-0.5 rounded-full tabular-nums ${
               positivo ? 'bg-app-pos-soft text-app-pos' : 'bg-app-neg-soft text-app-neg'
             }`}
           >

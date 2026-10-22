@@ -84,6 +84,11 @@ export function InfoTooltipLink({ term, title }: { term: HelpKey; title: string 
   )
 }
 
+/**
+ * Ícono ⓘ que abre la ayuda del término. Por defecto es sólo el ícono: casi siempre va al lado de
+ * un texto que ya nombra el término, y repetir el título adentro de filas y píldoras angostas las
+ * desbordaba en el celular. Pasar `label` cuando el ícono va solo y hace falta el texto.
+ */
 export default function InfoTooltip({ term, label, className = '' }: { term: HelpKey; label?: string; className?: string }) {
   const [open, setOpen] = useState(false)
   const entry = HELP[term]
@@ -95,7 +100,7 @@ export default function InfoTooltip({ term, label, className = '' }: { term: Hel
 
   return (
     <span className={`inline-flex items-center gap-1 ${className}`}>
-      {label ?? entry.title}
+      {label}
       <button
         type="button"
         aria-label={`Qué significa ${entry.title}`}

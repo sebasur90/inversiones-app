@@ -21,7 +21,7 @@ export default function DivergenciasEstrategias({ filas }: { filas: ComparadorFi
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-1.5">
-        <InfoTooltip term="comparador_divergencias" />
+        <InfoTooltip term="comparador_divergencias" label="Tramos de divergencia" />
       </div>
       {conDivergencias.map(f => (
         <Card key={String(f.estrategia_id ?? 'bh')}>
