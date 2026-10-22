@@ -245,3 +245,75 @@ def test_backfill_cola_stale_se_refresca(monkeypatch):
         [_rv("MSFT", "Microsoft")], ohlcv_existentes, ohlcv_maximos, estado, hoy=HOY,
     )
     assert [f["fecha"] for f in filas] == [HOY - timedelta(days=2), HOY - timedelta(days=1)]
+
+
+def _estado_msft():
+    return {"MSFT": {"resolucion_estado": "ok", "simbolo_subyacente": "MSFT", "moneda_subyacente": "USD"}}
+
+
+def test_backfill_cola_a_un_dia_de_la_ultima_rueda_se_refresca_y_pide_solo_la_cola(monkeypatch):
+    # Hoy jueves 22: la última rueda es el miércoles 21 y la serie llega al martes 20. Antes se
+    # consideraba "fresca" (tolerancia de 3 días) y la vela del 21 no entraba nunca.
+    hoy = date(2026, 10, 22)
+    pedidos = []
+
+    def _fetch(sym, desde, hasta):
+        pedidos.append((desde, hasta))
+        return [_bc(date(2026, 10, 19), 300.0), _bc(date(2026, 10, 20), 301.0), _bc(date(2026, 10, 21), 302.0)]
+
+    monkeypatch.setattr(yahoo, "fetch_historico_ohlcv", _fetch)
+    piso = hoy - mdp._PISO_SUBYACENTE
+    filas, _ = mdp.fetch_backfill_ohlcv_subyacente(
+        [_rv("MSFT", "Microsoft")], {"MSFT@SUB": piso + timedelta(days=5)},
+        {"MSFT@SUB": date(2026, 10, 20)}, _estado_msft(), hoy=hoy,
+    )
+    assert pedidos == [(date(2026, 10, 15), date(2026, 10, 21))]    # no los 5 años
+    assert date(2026, 10, 21) in {f["fecha"] for f in filas}
+
+
+def test_backfill_lunes_con_viernes_guardado_no_vuelve_a_pedir(monkeypatch):
+    # Lunes 26: "ayer" es domingo, pero la última rueda es el viernes 23, que ya está guardado.
+    def _boom(*a, **k):
+        raise AssertionError("la serie ya llega a la última rueda hábil")
+
+    monkeypatch.setattr(yahoo, "fetch_historico_ohlcv", _boom)
+    hoy = date(2026, 10, 26)
+    piso = hoy - mdp._PISO_SUBYACENTE
+    filas, issues = mdp.fetch_backfill_ohlcv_subyacente(
+        [_rv("MSFT", "Microsoft")], {"MSFT@SUB": piso + timedelta(days=5)},
+        {"MSFT@SUB": date(2026, 10, 23)}, _estado_msft(), hoy=hoy,
+    )
+    assert filas == [] and issues == []
+
+
+def test_backfill_cola_con_una_sola_barra_nueva_se_acepta(monkeypatch):
+    hoy = date(2026, 10, 22)
+    monkeypatch.setattr(yahoo, "fetch_historico_ohlcv", lambda *a, **k: [_bc(date(2026, 10, 21), 302.0)])
+    piso = hoy - mdp._PISO_SUBYACENTE
+    filas, _ = mdp.fetch_backfill_ohlcv_subyacente(
+        [_rv("MSFT", "Microsoft")], {"MSFT@SUB": piso + timedelta(days=5)},
+        {"MSFT@SUB": date(2026, 10, 20)}, _estado_msft(), hoy=hoy,
+    )
+    assert [f["fecha"] for f in filas] == [date(2026, 10, 21)]
+
+
+def test_backfill_solo_falta_historia_pide_hasta_la_barra_mas_vieja(monkeypatch):
+    hoy = date(2026, 10, 22)
+    pedidos = []
+    monkeypatch.setattr(yahoo, "fetch_historico_ohlcv",
+                        lambda sym, d, h: pedidos.append((d, h)) or [_bc(d, 100.0), _bc(h, 101.0)])
+    piso = hoy - mdp._PISO_SUBYACENTE
+    mdp.fetch_backfill_ohlcv_subyacente(
+        [_rv("MSFT", "Microsoft")], {"MSFT@SUB": date(2024, 1, 2)},
+        {"MSFT@SUB": date(2026, 10, 21)}, _estado_msft(), hoy=hoy,
+    )
+    assert pedidos == [(piso, date(2024, 1, 2))]
+
+
+def test_backfill_sin_datos_pide_la_historia_completa(monkeypatch):
+    hoy = date(2026, 10, 22)
+    pedidos = []
+    monkeypatch.setattr(yahoo, "fetch_historico_ohlcv",
+                        lambda sym, d, h: pedidos.append((d, h)) or [_bc(d, 100.0), _bc(h, 101.0)])
+    mdp.fetch_backfill_ohlcv_subyacente([_rv("MSFT", "Microsoft")], {}, {}, _estado_msft(), hoy=hoy)
+    assert pedidos == [(hoy - mdp._PISO_SUBYACENTE, date(2026, 10, 21))]

@@ -1628,7 +1628,9 @@ def fetch_backfill_ohlcv_local_yahoo(
 
 _PISO_SUBYACENTE = timedelta(days=366 * 5)      # 5 años (yfinance trae todo en una sola llamada)
 _TOLERANCIA_PISO_SUBYACENTE_DIAS = 40
-_COLA_STALE_DIAS = 3                            # el tope de la serie se refresca si atrasa más
+# Margen con el que se vuelve a pedir la cola: Yahoo puede ajustar las últimas velas (splits,
+# dividendos) y el upsert las corrige; también cubre un fin de semana largo sin pedir de más.
+_MARGEN_COLA_DIAS = 5
 _REINTENTO_RESOLUCION_DIAS = 180               # cooldown de un `sin_subyacente`
 # Un CEDEAR sin respuesta de Yahoo se reintenta mucho antes: su ticker *es* el del subyacente, así
 # que un `fetch_info` vacío es casi siempre un fallo pasajero (red, rate limit de yfinance) y no un
@@ -1757,6 +1759,14 @@ def resolver_subyacente(
     return issues
 
 
+def _ultima_rueda_habil(ayer: date) -> date:
+    """Última fecha ≤ `ayer` que no es fin de semana. No hay calendario de feriados de EE.UU.: un
+    feriado cuesta, como mucho, una llamada que no trae nada nuevo ese día."""
+    while ayer.weekday() >= 5:
+        ayer -= timedelta(days=1)
+    return ayer
+
+
 def fetch_backfill_ohlcv_subyacente(
     activos: list[dict],
     ohlcv_existentes: dict[str, date],
@@ -1779,11 +1789,13 @@ def fetch_backfill_ohlcv_subyacente(
     """
     hoy = hoy or date.today()
     ayer = hoy - timedelta(days=1)
+    ultima_rueda = _ultima_rueda_habil(ayer)
     issues: list[ValidationIssue] = []
 
     piso = hoy - _PISO_SUBYACENTE
 
-    pendientes: list[tuple[int, str, str]] = []
+    # (prioridad, ticker, símbolo, desde, hasta, barras_mínimas): sólo se pide lo que falta.
+    pendientes: list[tuple[int, str, str, date, date, int]] = []
     for a in activos:
         ticker = a["ticker"]
         est = estado_por_ticker.get(ticker) or {}
@@ -1797,24 +1809,29 @@ def fetch_backfill_ohlcv_subyacente(
         min_ya = ohlcv_existentes.get(clave)
         max_ya = ohlcv_maximos.get(clave)
         convergido_atras = min_ya is not None and min_ya <= piso + timedelta(days=_TOLERANCIA_PISO_SUBYACENTE_DIAS)
-        cola_fresca = max_ya is not None and max_ya >= ayer - timedelta(days=_COLA_STALE_DIAS)
+        cola_fresca = max_ya is not None and max_ya >= ultima_rueda
 
         if convergido_atras and cola_fresca:
             continue
 
-        if min_ya is None:
-            prioridad = 0                      # todavía no hay nada
-        elif not cola_fresca:
-            prioridad = 1                      # refresco de cola
+        # Sólo se pide lo que falta, según lo que ya hay en `serie_ohlcv`; una llamada cubre todo.
+        if min_ya is None or max_ya is None:
+            prioridad, desde, hasta, minimo = 0, piso, ayer, 2      # todavía no hay nada
         else:
-            prioridad = 2                      # sólo falta backfill hacia atrás
-        pendientes.append((prioridad, ticker, simbolo))
+            tramos = []
+            if not cola_fresca:                                     # refresco de cola
+                tramos.append((max(piso, max_ya - timedelta(days=_MARGEN_COLA_DIAS)), ayer))
+            if not convergido_atras:                                # backfill hacia atrás
+                tramos.append((piso, min_ya))
+            prioridad = 1 if not cola_fresca else 2
+            desde, hasta, minimo = min(t[0] for t in tramos), max(t[1] for t in tramos), 1
+        pendientes.append((prioridad, ticker, simbolo, desde, hasta, minimo))
 
     pendientes.sort(key=lambda x: x[0])
 
     filas: list[dict] = []
-    for _prioridad, ticker, simbolo in pendientes[:max_llamadas]:
-        serie = yahoo.fetch_historico_ohlcv(simbolo, piso, ayer)
+    for _prioridad, ticker, simbolo, desde, hasta, minimo in pendientes[:max_llamadas]:
+        serie = yahoo.fetch_historico_ohlcv(simbolo, desde, hasta)
         if serie is None:
             issues.append(ValidationIssue(
                 tab="Subyacente (USD)", campo=ticker, regla="subyacente_sin_serie",
@@ -1823,7 +1840,7 @@ def fetch_backfill_ohlcv_subyacente(
                 severidad=Severity.INFO,
             ))
             continue
-        if len(serie) < 2:  # G3
+        if len(serie) < minimo:  # G3 (con serie previa alcanza una barra: es un refresco de cola)
             continue
 
         clave = clave_serie(ticker, "subyacente")
