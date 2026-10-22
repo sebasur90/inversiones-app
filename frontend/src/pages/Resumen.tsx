@@ -1,36 +1,41 @@
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useInversionesContext } from '../context/InversionesContext'
 import { getEvolucionInversiones, getDiagnostico, getCalidadDatos } from '../api'
 import { qk } from '../api/queryClient'
+import { calcularDesde } from '../utils'
+import { variacionDiaCartera } from '../utils/resumenCartera'
 import { Icon } from '../components/icons/Icons'
 import ScreenHeader from '../components/layout/ScreenHeader'
-import HeroValorCard from '../components/inversiones/HeroValorCard'
+import HeroValorCard, { type PeriodoHero } from '../components/inversiones/HeroValorCard'
 import KpiGrid from '../components/inversiones/KpiGrid'
-import CarterasScroll from '../components/inversiones/CarterasScroll'
+import CarterasChips from '../components/inversiones/CarterasChips'
 import PosicionRow from '../components/inversiones/PosicionRow'
+import ParaMirarHoy from '../components/inversiones/ParaMirarHoy'
+import EstadoGeneral from '../components/inversiones/EstadoGeneral'
+import QueSeMovioHoy from '../components/inversiones/QueSeMovioHoy'
+import { AlternativasCard } from '../components/rendimiento/ContraElMercado'
 import { estadoAlerta } from '../utils/alertasPrecio'
-import RequiereAtencion from '../components/inversiones/RequiereAtencion'
-import OportunidadesCompra from '../components/inversiones/OportunidadesCompra'
 import EmptyState from '../components/ui/EmptyState'
-import Card from '../components/ui/Card'
-import ComparacionChart from '../components/charts/ComparacionChart'
 import InfoTooltip from '../help/components/InfoTooltip'
 import QueryBoundary from '../components/ui/QueryBoundary'
 import SkeletonPantalla from '../components/ui/Skeleton'
-import Semaforo from '../components/ui/Semaforo'
-import { nivelScore } from '../utils/niveles'
 
 export default function Resumen() {
   const navigate = useNavigate()
   const { carteras, carteraSeleccionada, setCarteraSeleccionada, monedaSeleccionada, resumen, rendimientoPorTicker, watchlist, umbralProximidad, loading } =
     useInversionesContext()
+  const [periodo, setPeriodo] = useState<PeriodoHero>('ALL')
 
   // Sin `syncVersion` en las dependencias: sincronizar invalida la caché de queries y estas
-  // tres se vuelven a pedir solas.
+  // se vuelven a pedir solas. La serie del gráfico usa la misma clave que Patrimonio
+  // (`evolucion` + cartera + período), así que cambiar de período acá y allá comparte caché.
   const evolucionQuery = useQuery({
-    queryKey: qk.evolucion(carteraSeleccionada),
-    queryFn: () => getEvolucionInversiones(carteraSeleccionada),
+    queryKey: qk.de('evolucion', carteraSeleccionada, periodo),
+    queryFn: () => getEvolucionInversiones(carteraSeleccionada, calcularDesde(periodo)),
+    // Al cambiar de período se sigue viendo la serie anterior (atenuada) en vez de un hueco.
+    placeholderData: keepPreviousData,
   })
   const diagnosticoQuery = useQuery({
     queryKey: qk.diagnostico(carteraSeleccionada),
@@ -45,19 +50,34 @@ export default function Resumen() {
   const diagnostico = diagnosticoQuery.data ?? null
   const calidad = calidadQuery.data ?? null
 
+  const variacionDia = useMemo(
+    () => variacionDiaCartera(rendimientoPorTicker, monedaSeleccionada),
+    [rendimientoPorTicker, monedaSeleccionada],
+  )
+
   const topPosiciones = rendimientoPorTicker.slice(0, 5)
-  const nivelSalud = diagnostico ? nivelScore(diagnostico.salud.score_total) : null
-  const nivelCalidad = calidad?.ultimo_sync ? nivelScore(calidad.ultimo_sync.health_score) : null
+  // El peso se mide contra el mismo total que muestra el valor de arriba, no contra la suma de las
+  // filas: si alguna posición quedó afuera del total, las barras no inventan un 100% distinto.
+  const valorTotal = monedaSeleccionada === 'ARS' ? resumen?.valor_actual_ars : resumen?.valor_actual_usd
 
   return (
     <div className="pb-4">
       <ScreenHeader title="Resumen" />
+      <CarterasChips carteras={carteras} seleccionada={carteraSeleccionada} onSelect={setCarteraSeleccionada} />
 
       {loading ? (
         <SkeletonPantalla />
       ) : (
         <>
-          <HeroValorCard resumen={resumen} moneda={monedaSeleccionada} evolucion={evolucion} />
+          <HeroValorCard
+            resumen={resumen}
+            moneda={monedaSeleccionada}
+            evolucion={evolucion}
+            periodo={periodo}
+            onPeriodo={setPeriodo}
+            cargandoSerie={evolucionQuery.isFetching}
+            variacionDia={variacionDia}
+          />
           <KpiGrid resumen={resumen} moneda={monedaSeleccionada} />
 
           <QueryBoundary
@@ -69,67 +89,62 @@ export default function Resumen() {
             }}
             fallback={null}
           >
-            <RequiereAtencion
+            <ParaMirarHoy
               diagnostico={diagnostico}
               calidad={calidad}
               posiciones={rendimientoPorTicker}
+              watchlist={watchlist}
               umbralProximidad={umbralProximidad}
             />
-
-            <OportunidadesCompra watchlist={watchlist} umbralProximidad={umbralProximidad} />
-
-          {/* Los dos scores, en una fila: el detalle de lo que los mueve ya está arriba. */}
-          <div className="grid grid-cols-2 gap-2 mb-4 mt-1">
-            {diagnostico && (
-              <button
-                onClick={() => navigate('/diagnostico')}
-                className="text-left bg-app-surface border border-app-border rounded-2xl p-3 hover:border-app-border-soft transition-colors"
-              >
-                {/* "Diagnóstico", no "Salud de cartera": el score y los hallazgos salen de
-                    `getDiagnostico` y el tile lleva a /diagnostico. Con el nombre de la otra
-                    pantalla (/salud, que no tiene score) el destino contradecía la etiqueta. */}
-                <div className="text-label font-bold uppercase tracking-wide text-app-text-dim mb-0.5">Diagnóstico</div>
-                <div className="font-display text-metric font-semibold text-app-text">
-                  {diagnostico.salud.score_total !== null ? Math.round(diagnostico.salud.score_total) : '—'}
-                  <span className="text-body text-app-text-dim">/100</span>
-                </div>
-                {nivelSalud && <Semaforo nivel={nivelSalud.nivel} etiqueta={nivelSalud.etiqueta} className="mb-0.5" />}
-                <div className="text-caption text-app-text-dim">
-                  {diagnostico.hallazgos.length} hallazgo{diagnostico.hallazgos.length !== 1 ? 's' : ''}
-                  <Icon name="chevron" className="w-3.5 h-3.5 inline-block -rotate-90 ml-0.5" />
-                </div>
-              </button>
-            )}
-
-            {calidad?.ultimo_sync && (
-              <button
-                onClick={() => navigate('/calidad-datos')}
-                className="text-left bg-app-surface border border-app-border rounded-2xl p-3 hover:border-app-border-soft transition-colors"
-              >
-                <div className="text-label font-bold uppercase tracking-wide text-app-text-dim mb-0.5">Calidad de datos</div>
-                <div className="font-display text-metric font-semibold text-app-text">
-                  {calidad.ultimo_sync.health_score}
-                  <span className="text-body text-app-text-dim">/100</span>
-                </div>
-                {nivelCalidad && <Semaforo nivel={nivelCalidad.nivel} etiqueta={nivelCalidad.etiqueta} className="mb-0.5" />}
-                <div className="text-caption text-app-text-dim">
-                  {calidad.issues.length} problema{calidad.issues.length !== 1 ? 's' : ''}
-                  <Icon name="chevron" className="w-3.5 h-3.5 inline-block -rotate-90 ml-0.5" />
-                </div>
-              </button>
-            )}
-            </div>
+            <EstadoGeneral diagnostico={diagnostico} calidad={calidad} />
           </QueryBoundary>
 
-          <div className="flex items-center justify-between mb-2.5 mt-1">
-            <h3 className="text-body font-bold text-app-text">Carteras</h3>
+          <QueSeMovioHoy variacionDia={variacionDia} moneda={monedaSeleccionada} />
+
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="text-strong font-bold text-app-text">Tus posiciones</h3>
+            {rendimientoPorTicker.length > 5 && (
+              <button onClick={() => navigate('/posiciones')} className="min-h-9 text-body font-semibold text-app-accent">
+                Ver las {rendimientoPorTicker.length}
+              </button>
+            )}
           </div>
-          <CarterasScroll carteras={carteras} seleccionada={carteraSeleccionada} onSelect={setCarteraSeleccionada} />
+          {topPosiciones.length === 0 ? (
+            <EmptyState title="Sin posiciones activas" description="Todavía no hay tenencias para esta cartera." />
+          ) : (
+            <div className="bg-app-surface border border-app-border rounded-2xl px-3.5">
+              {topPosiciones.map(item => {
+                const valor = monedaSeleccionada === 'ARS' ? item.valor_actual_ars : item.valor_actual_usd
+                return (
+                  <PosicionRow
+                    key={item.ticker}
+                    item={item}
+                    moneda={monedaSeleccionada}
+                    alerta={estadoAlerta(item, umbralProximidad)}
+                    peso={valorTotal && valorTotal > 0 ? valor / valorTotal : null}
+                    onClick={() => navigate(`/ticker/${encodeURIComponent(item.ticker)}`)}
+                  />
+                )
+              })}
+            </div>
+          )}
+
+          <h3 className="text-strong font-bold text-app-text mb-2 mt-5">
+            <InfoTooltip term="benchmark" label="Contra el mercado (en pesos)" />
+          </h3>
+          {resumen && <AlternativasCard resumen={resumen} conConclusion />}
+          <button
+            onClick={() => navigate('/benchmarks-comparacion')}
+            className="inline-flex items-center gap-1 min-h-9 mt-1 text-body font-semibold text-app-accent"
+          >
+            Comparar con más referencias
+            <Icon name="chevron" className="w-3.5 h-3.5 -rotate-90" />
+          </button>
 
           {/* Simulador de escenarios */}
           <button
             onClick={() => navigate('/simulador')}
-            className="w-full text-left bg-app-surface border border-app-border rounded-2xl p-3.5 mb-4 mt-5 hover:border-app-accent/50 transition-colors"
+            className="w-full text-left bg-app-surface border border-dashed border-app-border rounded-2xl p-3.5 mt-4 hover:border-app-accent/50 transition-colors"
           >
             <div className="flex items-center justify-between">
               <div>
@@ -139,37 +154,6 @@ export default function Resumen() {
               <Icon name="chevron" className="w-4 h-4 text-app-text-dim" />
             </div>
           </button>
-
-          <h3 className="text-body font-bold text-app-text mb-2.5 mt-5">
-            <InfoTooltip term="benchmark" label="Cartera vs. benchmarks (ARS)" />
-          </h3>
-          <Card>
-            <ComparacionChart resumen={resumen} />
-          </Card>
-
-          <div className="flex items-center justify-between mb-1 mt-5">
-            <h3 className="text-body font-bold text-app-text">Posiciones</h3>
-            {rendimientoPorTicker.length > 5 && (
-              <button onClick={() => navigate('/posiciones')} className="text-label font-semibold text-app-text-dim">
-                Ver todas
-              </button>
-            )}
-          </div>
-          {topPosiciones.length === 0 ? (
-            <EmptyState title="Sin posiciones activas" description="Todavía no hay tenencias para esta cartera." />
-          ) : (
-            <div>
-              {topPosiciones.map(item => (
-                <PosicionRow
-                  key={item.ticker}
-                  item={item}
-                  moneda={monedaSeleccionada}
-                  alerta={estadoAlerta(item, umbralProximidad)}
-                  onClick={() => navigate(`/ticker/${encodeURIComponent(item.ticker)}`)}
-                />
-              ))}
-            </div>
-          )}
         </>
       )}
     </div>

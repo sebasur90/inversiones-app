@@ -23,12 +23,13 @@ export default function KpiGrid({ resumen, moneda }: { resumen: InversionesResum
         infoTerm="invertido"
         value={fmt.monto(invertido)}
         suffix={esARS ? 'ARS' : 'USD'}
+        sub="Lo que pusiste, neto"
         size="md"
       />
       {/* Las dos vienen en unidades distintas (XIRR anualizada, TWR acumulado del período):
           el label lo dice para que no se lean como comparables. */}
-      <MetricTile label="XIRR (anual)" infoTerm="xirr" value={formatPctRatio(xirr)} tone={toneFor(xirr)} size="md" />
-      <MetricTile label="TWR (período)" infoTerm="twr" value={formatPctRatio(twr)} tone={toneFor(twr)} size="md" />
+      <MetricTile label="XIRR (anual)" infoTerm="xirr" value={formatPctRatio(xirr)} tone={toneFor(xirr)} sub="Ganancia por año" size="md" />
+      <MetricTile label="TWR (período)" infoTerm="twr" value={formatPctRatio(twr)} tone={toneFor(twr)} sub="Sin el efecto de tus aportes" size="md" />
     </div>
   )
 }

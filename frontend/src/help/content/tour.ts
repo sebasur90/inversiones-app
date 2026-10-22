@@ -21,7 +21,7 @@ export const TOUR_BIENVENIDA: PasoTour[] = [
     emoji: '📊',
     titulo: 'Resumen: el punto de partida',
     texto:
-      'El número grande es el valor total de tu cartera. Debajo, "Requiere atención" junta lo urgente para que no tengas que revisar pantalla por pantalla.',
+      'El número grande es el valor total de tu cartera. Debajo, "Para mirar hoy" junta lo urgente para que no tengas que revisar pantalla por pantalla.',
   },
   {
     emoji: '🧭',

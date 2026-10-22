@@ -15,16 +15,18 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
   '/resumen': {
     queEs: 'La portada: cuánto vale tu cartera hoy y qué necesita tu atención primero.',
     comoLeerla: [
-      'El número grande es el valor total de tu cartera, en la moneda que elegiste (USD o ARS).',
-      'Los indicadores debajo resumen cuánto ganaste o perdiste en total.',
-      '"Requiere atención" junta lo urgente —alertas de precio, datos viejos— para no tener que recorrer pantalla por pantalla.',
-      'Los dos círculos de "Salud de cartera" y "Calidad de datos" son scores de 0 a 100: más alto es mejor.',
+      'El número grande es el valor total de tu cartera, en la moneda que elegiste (USD o ARS). Debajo, cuánto se movió en el último día y cuánto ganaste en total.',
+      'El gráfico muestra la evolución del valor; los botones de abajo (1M, 3M, 1A, Todo) cambian el período. La ganancia que figura al lado no cuenta lo que aportaste en ese tramo.',
+      '"Para mirar hoy" junta lo que merece tu atención: alertas de precio, hallazgos y errores de datos. Si hay instrumentos de tu Watchlist en zona de compra, aparecen en la pestaña "Para comprar".',
+      '"Estado general" resume dos scores de 0 a 100 (Diagnóstico y Calidad de datos): más alto es mejor.',
+      '"Qué se movió hoy" muestra las posiciones que más empujaron la cartera para arriba y para abajo, según su efecto en plata.',
     ],
     queHacer: [
-      'Si aparece algo en "Requiere atención", tocalo para ir directo al detalle.',
+      'Si aparece algo en "Para mirar hoy", tocalo para ir directo al detalle.',
       'Si la línea de "Datos hace…" se ve en naranja o coral, tocá el ícono de sincronizar.',
+      'Si tenés más de una cartera, elegila con los botones de arriba.',
     ],
-    ojo: 'El valor total cambia también cuando cambiás entre USD y ARS: no es que tu cartera se movió, es el tipo de cambio.',
+    ojo: 'El valor total cambia también cuando cambiás entre USD y ARS: no es que tu cartera se movió, es el tipo de cambio. Y el cambio del último día es una aproximación: sólo cuenta las posiciones con precio del día anterior.',
     terminos: ['benchmark', 'xirr'],
   },
 

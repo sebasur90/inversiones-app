@@ -21,12 +21,15 @@ export default function PosicionRow({
   moneda,
   onClick,
   alerta = null,
+  peso = null,
 }: {
   item: RendimientoPorTickerItem
   moneda: 'USD' | 'ARS'
   onClick: () => void
   /** Estado de sus niveles de precio. `null` deja la fila exactamente como sin alertas. */
   alerta?: EstadoAlerta | null
+  /** Qué parte de la cartera es esta posición, como ratio (0.22 = 22%). Sin él, la fila queda igual. */
+  peso?: number | null
 }) {
   const esARS = moneda === 'ARS'
   const valor = esARS ? item.valor_actual_ars : item.valor_actual_usd
@@ -73,6 +76,16 @@ export default function PosicionRow({
             <VariacionDia pct={item.variacion_dia_pct} />
           )}
         </div>
+        {peso != null && Number.isFinite(peso) && peso > 0 && (
+          <div className="flex items-center gap-2 mt-1.5" title="Qué parte de tu cartera es esta posición">
+            <div aria-hidden="true" className="flex-1 h-1 rounded-full bg-app-surface-2 overflow-hidden">
+              <div className="h-1 rounded-full bg-app-accent" style={{ width: `${Math.min(100, peso * 100)}%` }} />
+            </div>
+            <span className="font-mono text-label text-app-text-dim tabular-nums w-9 text-right">
+              {peso < 0.005 ? '<1' : Math.round(peso * 100)}%
+            </span>
+          </div>
+        )}
       </div>
       <div className="text-right shrink-0">
         <div className="font-mono text-caption font-bold text-app-text tabular-nums">{fmt.monto(valor)}</div>

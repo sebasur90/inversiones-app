@@ -9,6 +9,21 @@ interface FilaBarra {
   label: string
   valor: number
   propia?: boolean
+  /** Cómo se nombra en la frase: "al dólar" (le ganás…) y "el dólar" (perdés contra…). */
+  ganaA?: string
+  contra?: string
+}
+
+/** "Le ganás al dólar, pero perdés contra la inflación.": la conclusión de las barras en una línea. */
+function conclusion(filas: FilaBarra[]): string | null {
+  const propia = filas.find(f => f.propia)
+  const otras = filas.filter(f => !f.propia && f.ganaA && f.contra)
+  if (!propia || otras.length === 0) return null
+  const gana = otras.filter(f => propia.valor > f.valor).map(f => f.ganaA as string)
+  const pierde = otras.filter(f => propia.valor <= f.valor).map(f => f.contra as string)
+  if (pierde.length === 0) return `Le ganás ${gana.join(' y ')}.`
+  if (gana.length === 0) return `Perdés contra ${pierde.join(' y ')}.`
+  return `Le ganás ${gana.join(' y ')}, pero perdés contra ${pierde.join(' y ')}.`
 }
 
 function ListaBarras({ filas }: { filas: FilaBarra[] }) {
@@ -78,7 +93,7 @@ export function BenchmarkCard({ perf }: { perf: PerformanceRelativaOut | null })
  * comprar dólares o ajustar por inflación. Siempre en pesos (así vienen los datos), con la misma
  * cuenta que usaba el gráfico de barras que esto reemplaza.
  */
-export function AlternativasCard({ resumen }: { resumen: InversionesResumen }) {
+export function AlternativasCard({ resumen, conConclusion = false }: { resumen: InversionesResumen; conConclusion?: boolean }) {
   const invertido = resumen.total_invertido_ars
 
   if (invertido <= 0) {
@@ -94,14 +109,17 @@ export function AlternativasCard({ resumen }: { resumen: InversionesResumen }) {
     { label: 'Tu cartera', valor: sobreInvertido(resumen.valor_actual_ars + resumen.ingresos_recibidos_ars), propia: true },
   ]
   if (resumen.valor_benchmark_usd_ars != null) {
-    filas.push({ label: 'Si hubieras comprado dólares', valor: sobreInvertido(resumen.valor_benchmark_usd_ars) })
+    filas.push({ label: 'Si hubieras comprado dólares', valor: sobreInvertido(resumen.valor_benchmark_usd_ars), ganaA: 'al dólar', contra: 'el dólar' })
   }
   if (resumen.total_invertido_ars_real != null) {
-    filas.push({ label: 'Si hubieras ajustado por inflación', valor: sobreInvertido(resumen.total_invertido_ars_real) })
+    filas.push({ label: 'Si hubieras ajustado por inflación', valor: sobreInvertido(resumen.total_invertido_ars_real), ganaA: 'a la inflación', contra: 'la inflación' })
   }
+
+  const frase = conConclusion ? conclusion(filas) : null
 
   return (
     <Card>
+      {frase && <p className="text-strong leading-relaxed text-app-text mb-1">{frase}</p>}
       <ListaBarras filas={filas} />
       <div className="mt-2 text-label text-app-text-faint space-y-0.5">
         {resumen.valor_benchmark_usd_ars == null && <div>Sin dólar MEP disponible para hoy.</div>}
