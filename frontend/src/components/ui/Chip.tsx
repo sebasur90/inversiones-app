@@ -6,7 +6,11 @@ export default function Chip({ children, onRemove }: { children: ReactNode; onRe
     <span className="inline-flex items-center gap-1.5 bg-app-accent-soft text-app-accent rounded-[9px] px-2.5 py-1.5 text-label font-bold">
       {children}
       {onRemove && (
-        <button onClick={onRemove} aria-label="Quitar filtro" className="flex items-center">
+        <button
+          onClick={onRemove}
+          aria-label="Quitar filtro"
+          className="flex items-center rounded-full transition-[background-color,transform] duration-150 hover:bg-app-accent/25 active:scale-90"
+        >
           <Icon name="close" className="w-3.5 h-3.5" />
         </button>
       )}

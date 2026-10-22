@@ -110,7 +110,7 @@ export default function IndicadoresMacro() {
     return (
       <div className="pb-4">
         <ScreenHeader title="Indicadores macro" onBack={() => navigate(-1)} />
-        <EmptyState title="Sin indicadores cargados" description="Sincronizá el sheet para ver CER, MEP, riesgo país e inflación." />
+        <EmptyState ilustracion="lupa" emoji="📉" title="Sin indicadores cargados" description="Sincronizá el sheet para ver CER, MEP, riesgo país e inflación." />
       </div>
     )
   }

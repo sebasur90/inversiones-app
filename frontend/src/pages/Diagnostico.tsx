@@ -12,6 +12,7 @@ import HallazgoCard from '../components/inversiones/HallazgoCard'
 import { priorizarHallazgos, evaluarDesviacionPlan } from '../utils/hallazgos'
 import { parseApiError, type ParsedApiError } from '../help/errors/apiErrors'
 import ErrorBanner from '../help/components/ErrorBanner'
+import TituloSeccion from '../components/ui/TituloSeccion'
 import InfoTooltip from '../help/components/InfoTooltip'
 import SkeletonPantalla from '../components/ui/Skeleton'
 import Semaforo from '../components/ui/Semaforo'
@@ -57,7 +58,7 @@ export default function Diagnostico() {
           {error ? (
             <ErrorBanner error={error} />
           ) : (
-            <EmptyState title="Error al cargar" description="No se pudo cargar el diagnóstico. Intentá de nuevo." />
+            <EmptyState ilustracion="lupa" emoji="😕" title="Error al cargar" description="No se pudo cargar el diagnóstico. Intentá de nuevo." />
           )}
         </div>
       </div>
@@ -116,7 +117,7 @@ export default function Diagnostico() {
                     <div className="h-2 rounded-full bg-app-surface-2 overflow-hidden mb-1.5">
                       {dim.score !== null ? (
                         <div
-                          className={`h-full rounded-full transition-all ${
+                          className={`h-full rounded-full transition-all duration-200 ${
                             dim.score >= 70
                               ? 'bg-app-pos'
                               : dim.score >= 40
@@ -141,12 +142,12 @@ export default function Diagnostico() {
 
         {/* Findings List */}
         {hallazgos.length === 0 ? (
-          <EmptyState title="Sin hallazgos" description="No detectamos puntos de atención en esta cartera." />
+          <EmptyState ilustracion="escudo" emoji="✨" title="Sin hallazgos" description="No detectamos puntos de atención en esta cartera." />
         ) : (
           <div>
-            <div className="text-body font-bold text-app-text mb-2.5">
+            <TituloSeccion icono="alert" tono="warn">
               {hallazgos.length} hallazgo{hallazgos.length !== 1 ? 's' : ''}
-            </div>
+            </TituloSeccion>
             {visibles.map(h => (
               <HallazgoCard
                 key={h.tipo}
@@ -159,7 +160,7 @@ export default function Diagnostico() {
             {hallazgos.length > 5 && (
               <button
                 onClick={() => setExpandido(v => !v)}
-                className="w-full text-center py-2.5 text-caption font-semibold text-app-text-dim hover:text-app-text transition-colors"
+                className="w-full text-center py-2.5 text-caption font-semibold text-app-text-dim hover:text-app-text transition-[color,transform] duration-150 active:scale-[0.98]"
               >
                 {expandido ? 'Ver menos' : `Ver más (${hallazgos.length - 5})`}
               </button>

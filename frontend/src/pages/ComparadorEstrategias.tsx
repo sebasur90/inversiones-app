@@ -14,6 +14,7 @@ import Segmented from '../components/ui/Segmented'
 import EmptyState from '../components/ui/EmptyState'
 import QueryBoundary from '../components/ui/QueryBoundary'
 import InfoTooltip from '../help/components/InfoTooltip'
+import TituloSeccion from '../components/ui/TituloSeccion'
 import { Icon } from '../components/icons/Icons'
 import ListaComparadorEstrategias from '../components/tecnico/ListaComparadorEstrategias'
 import GraficoComparadorCapital from '../components/tecnico/GraficoComparadorCapital'
@@ -132,6 +133,8 @@ export default function ComparadorEstrategias() {
       <div className="pb-4">
         <ScreenHeader title="Comparador de estrategias" onBack={() => navigate(-1)} />
         <EmptyState
+          ilustracion="lupa"
+          emoji="📊"
           title="Sin tickers para comparar"
           description="Agregá instrumentos a tu cartera o a la watchlist para poder correr un backtest."
         />
@@ -164,14 +167,14 @@ export default function ComparadorEstrategias() {
         <input
           value={filtroTicker} onChange={e => setFiltroTicker(e.target.value)}
           placeholder="Filtrar por ticker…"
-          className="w-full h-9 rounded-lg bg-app-surface-2 border border-app-border px-3 text-caption text-app-text outline-none focus:border-app-accent/60 mb-2"
+          className="w-full h-10 rounded-xl bg-app-surface-2 border border-app-border px-3 text-caption text-app-text outline-none transition-[border-color,box-shadow] duration-150 hover:border-white/20 focus:border-app-accent focus:shadow-[0_0_0_3px_rgba(59,130,246,0.25)] mb-2"
         />
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4">
           {tickersFiltrados.map(t => (
             <button
               key={t.ticker} onClick={() => { setTickerSel(t.ticker); setVarianteSel(null) }}
-              className={`shrink-0 font-semibold text-caption px-3 py-1.5 rounded-[10px] border transition-colors ${
-                t.ticker === ticker ? 'bg-app-accent-soft border-app-accent text-app-accent' : 'bg-app-surface border-app-border text-app-text-dim'
+              className={`shrink-0 font-semibold text-caption px-3 py-1.5 rounded-[10px] border transition-[background-color,border-color,color,transform] duration-150 active:scale-95 ${
+                t.ticker === ticker ? 'bg-app-accent-soft border-app-accent text-app-accent' : 'bg-app-surface border-app-border text-app-text-dim hover:border-white/25 hover:text-app-text'
               }`}
             >
               {t.ticker}
@@ -240,10 +243,10 @@ export default function ComparadorEstrategias() {
               <button
                 key={e.id} onClick={() => toggleEstrategia(e.id)}
                 disabled={!estrategiaIds.includes(e.id) && estrategiaIds.length >= MAX_ESTRATEGIAS}
-                className={`text-label font-bold px-2.5 py-1.5 rounded-lg border truncate max-w-[160px] disabled:opacity-40 ${
+                className={`text-label font-bold px-2.5 py-1.5 rounded-lg border truncate max-w-[160px] transition-[background-color,border-color,color,transform] duration-150 active:scale-95 disabled:opacity-40 disabled:active:scale-100 ${
                   estrategiaIds.includes(e.id)
                     ? 'bg-app-accent-soft text-app-accent border-app-accent/40'
-                    : 'bg-app-surface text-app-text-dim border-app-border'
+                    : 'bg-app-surface text-app-text-dim border-app-border hover:border-white/25 hover:text-app-text'
                 }`}
               >
                 {e.nombre}
@@ -280,6 +283,8 @@ export default function ComparadorEstrategias() {
 
       {idsOrdenados.length === 0 ? (
         <EmptyState
+          ilustracion="lupa"
+          emoji="🔭"
           title="Elegí al menos una estrategia"
           description="Tocá los chips de arriba para agregarlas a la comparación."
         />
@@ -301,7 +306,7 @@ export default function ComparadorEstrategias() {
               )}
 
               <div>
-                <h3 className="text-body font-bold text-app-text mb-2">Comparación</h3>
+                <TituloSeccion icono="pie" tono="accent" className="mb-2">Comparación</TituloSeccion>
                 <Card>
                   <ListaComparadorEstrategias
                     filas={resultado.filas} moneda={resultado.moneda}
@@ -311,7 +316,7 @@ export default function ComparadorEstrategias() {
               </div>
 
               <div>
-                <h3 className="text-body font-bold text-app-text mb-2">Evolución del capital</h3>
+                <TituloSeccion icono="trend" tono="cyan" className="mb-2">Evolución del capital</TituloSeccion>
                 <Card>
                   <GraficoComparadorCapital
                     fechas={resultado.fechas} filas={resultado.filas} moneda={resultado.moneda}
@@ -321,7 +326,7 @@ export default function ComparadorEstrategias() {
               </div>
 
               <div>
-                <h3 className="text-body font-bold text-app-text mb-2">La diferencia</h3>
+                <TituloSeccion icono="scale" tono="violet" className="mb-2">La diferencia</TituloSeccion>
                 <PanelDiferenciaEstrategias mejor={resultado.mejor} />
               </div>
 
@@ -337,12 +342,12 @@ export default function ComparadorEstrategias() {
               </div>
 
               <div>
-                <h3 className="text-body font-bold text-app-text mb-2">¿Por qué fueron diferentes?</h3>
+                <TituloSeccion icono="info" tono="warn" className="mb-2">¿Por qué fueron diferentes?</TituloSeccion>
                 <DivergenciasEstrategias filas={resultado.filas} />
               </div>
 
               <div>
-                <h3 className="text-body font-bold text-app-text mb-2">Detalle de una estrategia</h3>
+                <TituloSeccion icono="list" tono="pos" className="mb-2">Detalle de una estrategia</TituloSeccion>
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {resultado.filas.filter(f => f.estrategia_id != null).map(f => (
                     <button

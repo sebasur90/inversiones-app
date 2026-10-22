@@ -13,6 +13,8 @@ import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
+import { Icon } from '../components/icons/Icons'
+import TituloSeccion from '../components/ui/TituloSeccion'
 import InfoTooltip from '../help/components/InfoTooltip'
 import SkeletonPantalla from '../components/ui/Skeleton'
 import QueryBoundary from '../components/ui/QueryBoundary'
@@ -100,13 +102,16 @@ export default function FlujoCaja() {
       >
       {!datos || (datos.instrumentos.length === 0 && datos.sin_proyeccion.length === 0) ? (
         <EmptyState
+          ilustracion="planta"
+          emoji="💸"
           title="Sin renta fija proyectable"
           description="No hay bonos, ON ni letras con tenencia activa y fecha de vencimiento en esta cartera."
         />
       ) : (
         <div className="px-4 flex flex-col gap-4">
           <Card>
-            <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">
+            <div className="flex items-center gap-1.5 text-label font-bold uppercase tracking-wide text-app-text-dim mb-1">
+              <Icon name="dollar" className="w-3.5 h-3.5 text-app-pos" />
               Total a cobrar · próximos {datos.horizonte_meses} meses
             </div>
             <div className="font-mono text-metric-lg font-bold text-app-text tabular-nums">
@@ -173,10 +178,12 @@ export default function FlujoCaja() {
 
           {datos.instrumentos.length > 0 && (
             <div>
-              <div className="text-label font-bold uppercase tracking-wide text-app-text-dim mb-2 px-0.5 flex items-center gap-2">
-                Por instrumento
-                <InfoTooltip term="flujocaja_confianza" />
-              </div>
+              <TituloSeccion icono="list" tono="accent" className="mb-2">
+                <span className="inline-flex items-center gap-1.5">
+                  Por instrumento
+                  <InfoTooltip term="flujocaja_confianza" />
+                </span>
+              </TituloSeccion>
               <div className="flex flex-col gap-2">
                 {datos.instrumentos.map(inst => (
                   <Card key={inst.ticker} className="!p-3.5">
@@ -234,9 +241,7 @@ export default function FlujoCaja() {
 
           {datos.sin_proyeccion.length > 0 && (
             <div>
-              <div className="text-label font-bold uppercase tracking-wide text-app-text-dim mb-2 px-0.5">
-                Sin proyección
-              </div>
+              <TituloSeccion icono="alert" tono="warn" className="mb-2">Sin proyección</TituloSeccion>
               <div className="flex flex-col gap-2">
                 {datos.sin_proyeccion.map(item => (
                   <Card key={item.ticker} className="!p-3.5">

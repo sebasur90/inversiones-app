@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import type { PnlPorTickerItem } from '../../api'
 import { useFormatoMoneda } from '../../hooks/useFormatoMoneda'
+import AvatarTicker from '../ui/AvatarTicker'
 
 /**
  * La ganancia (o pérdida) de cada instrumento, de mayor a menor, con una barra que da el tamaño
@@ -30,10 +31,11 @@ export default function QuienAporto({ items, esARS }: { items: PnlPorTickerItem[
           <button
             key={item.ticker}
             onClick={() => navigate(`/ticker/${encodeURIComponent(item.ticker)}`)}
-            className="flex flex-col gap-2 bg-app-surface border border-app-border rounded-[13px] px-3.5 py-2.5 text-left"
+            className="flex flex-col gap-2 bg-app-surface border border-app-border rounded-2xl px-3.5 py-3 text-left transition-[border-color,box-shadow,transform] duration-150 hover:border-app-accent/50 hover:shadow-[0_6px_24px_-12px_rgba(59,130,246,0.45)] hover:-translate-y-px active:translate-y-0 active:scale-[0.99]"
           >
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
+            <div className="flex items-center gap-3">
+              <AvatarTicker ticker={item.ticker} className="border-app-border text-app-text" />
+              <div className="min-w-0 flex-1">
                 <div className="font-bold text-body text-app-text">
                   {item.ticker} <span className="font-normal text-app-text-dim">{item.nombre}</span>
                 </div>
@@ -46,8 +48,8 @@ export default function QuienAporto({ items, esARS }: { items: PnlPorTickerItem[
                 {monto(total)}
               </div>
             </div>
-            <div aria-hidden="true" className="h-1 rounded-sm bg-app-surface-2">
-              <div className="h-1 rounded-sm" style={{ width: `${maximo > 0 ? (Math.abs(total ?? 0) / maximo) * 100 : 0}%`, background: color }} />
+            <div aria-hidden="true" className="h-1 rounded-full bg-app-surface-2 overflow-hidden">
+              <div className="h-1 rounded-full transition-[width] duration-200" style={{ width: `${maximo > 0 ? (Math.abs(total ?? 0) / maximo) * 100 : 0}%`, background: color }} />
             </div>
           </button>
         )

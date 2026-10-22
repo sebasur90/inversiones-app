@@ -69,6 +69,8 @@ export default function VistaFiscal() {
       <div className="pb-4">
         <ScreenHeader title="Vista fiscal" onBack={() => navigate(-1)} />
         <EmptyState
+          ilustracion="escudo"
+          emoji="🧾"
           title="Sin resultados por año"
           description="No hay ventas, amortizaciones ni dividendos/cupones registrados en esta cartera."
         />
@@ -92,7 +94,10 @@ export default function VistaFiscal() {
       <ScreenHeader title="Vista fiscal" onBack={() => navigate(-1)} />
 
       <Card className="mb-3">
-        <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">
+        <div className="flex items-center gap-2 text-label font-bold uppercase tracking-wide text-app-text-dim mb-1.5">
+          <span aria-hidden="true" className="w-7 h-7 rounded-[9px] bg-app-accent-soft text-app-accent flex items-center justify-center">
+            <Icon name="calendarDays" className="w-4 h-4" />
+          </span>
           Resultado acumulado ({esARS ? 'ARS' : 'USD'})
         </div>
         <div className={`font-mono text-metric-lg font-bold tabular-nums ${toneClass(totResultado)}`}>
@@ -130,12 +135,12 @@ export default function VistaFiscal() {
             <Card key={a.anio} className="!p-0 overflow-hidden">
               <button
                 onClick={() => toggle(a.anio)}
-                className="w-full flex items-center justify-between px-4 py-3 text-left"
+                className="w-full flex items-center justify-between px-4 py-3 text-left transition-colors duration-150 hover:bg-white/[0.035] active:bg-white/[0.06]"
               >
                 <div className="flex items-center gap-2">
                   <Icon
                     name="chevron"
-                    className={`w-3.5 h-3.5 text-app-text-faint transition-transform ${abierto ? 'rotate-0' : '-rotate-90'}`}
+                    className={`w-3.5 h-3.5 text-app-text-faint transition-transform duration-150 ${abierto ? 'rotate-0' : '-rotate-90'}`}
                   />
                   <span className="text-strong font-bold text-app-text tabular-nums">{a.anio}</span>
                 </div>

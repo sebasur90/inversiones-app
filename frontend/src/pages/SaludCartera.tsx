@@ -6,6 +6,7 @@ import { getSaludCartera, type SaludDimension, type SaludIndicador, type EstadoS
 import type { HelpKey } from '../help/content/index'
 import { qk } from '../api/queryClient'
 import { useFormatoMoneda } from '../hooks/useFormatoMoneda'
+import TituloSeccion from '../components/ui/TituloSeccion'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
 import MetricTile from '../components/ui/MetricTile'
@@ -35,7 +36,7 @@ function DimensionRow({ dim, abierta, onToggle }: { dim: SaludDimension; abierta
 
   return (
     <div className="border-b border-app-border last:border-b-0 py-3">
-      <button onClick={onToggle} className="w-full flex items-center justify-between gap-2 text-left" aria-expanded={abierta}>
+      <button onClick={onToggle} className={`w-full flex items-center justify-between gap-2 text-left rounded-lg transition-colors duration-150 hover:bg-white/[0.035] active:bg-white/[0.06]`} aria-expanded={abierta}>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1 mb-0.5">
             <span className="dimension-name">{dim.nombre}</span>
@@ -49,7 +50,7 @@ function DimensionRow({ dim, abierta, onToggle }: { dim: SaludDimension; abierta
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <span className="dimension-detail text-right max-w-[140px]">{dim.valor}</span>
-          <Icon name="chevron" className={`w-3.5 h-3.5 text-app-text-dim shrink-0 transition-transform ${abierta ? 'rotate-0' : '-rotate-90'}`} />
+          <Icon name="chevron" className={`w-3.5 h-3.5 text-app-text-dim shrink-0 transition-transform duration-150 ${abierta ? 'rotate-0' : '-rotate-90'}`} />
         </div>
       </button>
 
@@ -63,7 +64,7 @@ function DimensionRow({ dim, abierta, onToggle }: { dim: SaludDimension; abierta
           <div className="text-label text-app-text-faint">Fuente: {dim.fuente}</div>
           <button
             onClick={() => navigate(dim.pantalla)}
-            className="self-start text-caption font-bold text-app-accent"
+            className="self-start text-caption font-bold text-app-accent transition-[color,transform] duration-150 hover:text-blue-300 active:scale-95"
           >
             Ver en detalle →
           </button>
@@ -98,7 +99,7 @@ export default function SaludCartera() {
             {/* Sección 1: Resumen general */}
             <div>
               <div className="flex items-center gap-1 mb-2.5">
-                <h3 className="text-body font-bold text-app-text">Resumen general</h3>
+                <TituloSeccion icono="pie" tono="accent" className="">Resumen general</TituloSeccion>
                 <InfoTooltip term="salud_que_es" label="" />
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -161,7 +162,7 @@ export default function SaludCartera() {
             {/* Sección 2: Estado por dimensión */}
             <div>
               <div className="flex items-center gap-1 mb-2.5">
-                <h3 className="text-body font-bold text-app-text">Estado por dimensión</h3>
+                <TituloSeccion icono="shield" tono="pos" className="">Estado por dimensión</TituloSeccion>
                 <InfoTooltip term="salud_estados" label="" />
               </div>
               <Card>
@@ -178,13 +179,13 @@ export default function SaludCartera() {
 
             {/* Sección 3: Cosas para revisar */}
             <div>
-              <div className="text-body font-bold text-app-text mb-2.5">
+              <TituloSeccion icono="alert" tono="warn">
                 {salud.observaciones.length === 0
                   ? 'Cosas para revisar'
                   : `${salud.observaciones.length} cosa${salud.observaciones.length !== 1 ? 's' : ''} para revisar`}
-              </div>
+              </TituloSeccion>
               {salud.observaciones.length === 0 ? (
-                <EmptyState title="Todo en orden" description="No detectamos ninguna observación en esta cartera." />
+                <EmptyState ilustracion="escudo" emoji="✨" title="Todo en orden" description="No detectamos ninguna observación en esta cartera." />
               ) : (
                 salud.observaciones.map(obs => <ObservacionCard key={obs.id} item={obs} />)
               )}

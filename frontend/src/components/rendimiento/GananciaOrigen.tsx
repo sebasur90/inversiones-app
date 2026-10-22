@@ -73,10 +73,13 @@ export default function GananciaOrigen({
 
       <button
         onClick={() => navigate('/explicacion-resultado')}
-        className="flex items-center justify-between min-h-11 px-3 rounded-[10px] bg-app-surface-2 text-body font-semibold text-app-text"
+        className="group flex items-center justify-between min-h-11 px-3 rounded-xl bg-app-surface-2 text-body font-semibold text-app-text transition-[background-color,transform] duration-150 hover:bg-white/[0.08] active:scale-[0.98]"
       >
-        <span>Ver por qué ganaste o perdiste</span>
-        <Icon name="chevron" className="w-4 h-4" />
+        <span className="inline-flex items-center gap-2">
+          <span aria-hidden="true">🔎</span>
+          Ver por qué ganaste o perdiste
+        </span>
+        <Icon name="chevron" className="w-4 h-4 -rotate-90 text-app-text-dim transition-transform duration-150 group-hover:translate-x-0.5" />
       </button>
     </Card>
   )

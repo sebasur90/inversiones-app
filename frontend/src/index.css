@@ -55,6 +55,31 @@
   50% { transform: scaleY(1); }
 }
 
+/* Microinteracciones: entradas de 180-200 ms. El toast ya está centrado con -translate-x-1/2
+   (Tailwind 4 lo escribe en la propiedad `translate`), así que su keyframe usa `scale`, que es
+   otra propiedad: animar `translate` o `transform` lo descentraría. */
+@keyframes toast-in {
+  from { opacity: 0; scale: 0.94; }
+  to { opacity: 1; scale: 1; }
+}
+@keyframes fade-in {
+  from { opacity: 0.35; }
+  to { opacity: 1; }
+}
+
+@layer utilities {
+  .animate-toast-in { animation: toast-in 180ms ease-out; }
+  .animate-fade-in { animation: fade-in 200ms ease-out; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 * {
   box-sizing: border-box;
 }

@@ -14,7 +14,7 @@ export default function BotonExportarCsv({ nombre, encabezados, filas, className
   return (
     <button
       onClick={() => descargarCSV(`${nombre}-${sufijoFechaHoy()}`, encabezados, filas())}
-      className={`inline-flex items-center gap-1 text-label font-semibold text-app-text-dim ${className}`}
+      className={`inline-flex items-center gap-1 text-label font-semibold text-app-text-dim transition-[background-color,border-color,color,transform] duration-150 hover:text-app-text active:scale-95 ${className}`}
     >
       <Icon name="download" className="w-3.5 h-3.5" />
       Exportar CSV

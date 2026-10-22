@@ -405,7 +405,7 @@ export default function AnalisisTecnico() {
     return (
       <div className="pb-4">
         <ScreenHeader title="Análisis técnico" />
-        <EmptyState title="Sin tickers para analizar" description="Agregá instrumentos a tu cartera o a la watchlist para ver velas, indicadores y estrategias." />
+        <EmptyState ilustracion="lupa" emoji="📈" title="Sin tickers para analizar" description="Agregá instrumentos a tu cartera o a la watchlist para ver velas, indicadores y estrategias." />
       </div>
     )
   }
@@ -441,10 +441,11 @@ export default function AnalisisTecnico() {
           {(['grafico', 'estrategias'] as const).map(v => (
             <button
               key={v} type="button" role="tab" aria-selected={vista === v} onClick={() => setVista(v)}
-              className={`flex-1 h-11 text-body font-semibold transition-colors ${
-                vista === v ? 'text-app-text shadow-[inset_0_-2px_0_var(--color-app-accent)]' : 'text-app-text-dim'
+              className={`flex-1 h-11 inline-flex items-center justify-center gap-1.5 text-body font-semibold transition-[color,box-shadow,background-color] duration-150 hover:bg-white/[0.03] ${
+                vista === v ? 'text-app-text shadow-[inset_0_-2px_0_var(--color-app-accent)]' : 'text-app-text-dim hover:text-app-text'
               }`}
             >
+              <Icon name={v === 'grafico' ? 'trend' : 'target'} className="w-4 h-4" />
               {v === 'grafico' ? 'Gráfico' : 'Estrategias'}
             </button>
           ))}
@@ -453,10 +454,10 @@ export default function AnalisisTecnico() {
             link, no una pestaña. */}
         <button
           type="button" onClick={() => navigate('/diario-operaciones')}
-          className="flex-1 h-11 inline-flex items-center justify-center gap-0.5 text-body font-semibold text-app-text-dim"
+          className="group flex-1 h-11 inline-flex items-center justify-center gap-1 text-body font-semibold text-app-text-dim transition-colors duration-150 hover:text-app-text hover:bg-white/[0.03]"
         >
           Diario
-          <Icon name="chevron" className="w-3.5 h-3.5 -rotate-90" />
+          <Icon name="chevron" className="w-3.5 h-3.5 -rotate-90 transition-transform duration-150 group-hover:translate-x-0.5" />
         </button>
         <InfoTooltip term="analisis_tecnico_titulo" />
       </div>
@@ -468,8 +469,8 @@ export default function AnalisisTecnico() {
               {PERIODOS.map(p => (
                 <button
                   key={p} type="button" onClick={() => setPeriodo(p)} aria-pressed={periodo === p}
-                  className={`shrink-0 h-9 min-w-[32px] px-1 rounded-lg font-mono text-caption font-semibold transition-colors ${
-                    periodo === p ? 'bg-app-accent-soft text-app-accent' : 'text-app-text-dim'
+                  className={`shrink-0 h-9 min-w-[32px] px-1 rounded-lg font-mono text-caption font-semibold transition-[background-color,color,transform] duration-150 active:scale-95 ${
+                    periodo === p ? 'bg-app-accent-soft text-app-accent' : 'text-app-text-dim hover:text-app-text hover:bg-white/5'
                   }`}
                 >
                   {ETIQUETA_PERIODO[p] ?? p}
@@ -482,8 +483,8 @@ export default function AnalisisTecnico() {
                   key={i.value} type="button" aria-label={NOMBRE_INTERVALO[i.value]} title={NOMBRE_INTERVALO[i.value]}
                   aria-pressed={intervalo === i.value}
                   onClick={() => { setIntervalo(i.value); setHoverIndex(null) }}
-                  className={`w-8 h-8 rounded-lg font-mono text-caption font-bold transition-colors ${
-                    intervalo === i.value ? 'bg-app-surface-2 text-app-text' : 'text-app-text-dim'
+                  className={`w-8 h-8 rounded-lg font-mono text-caption font-bold transition-[background-color,color,transform] duration-150 active:scale-95 ${
+                    intervalo === i.value ? 'bg-app-surface-2 text-app-text' : 'text-app-text-dim hover:text-app-text'
                   }`}
                 >
                   {i.label}
@@ -498,6 +499,7 @@ export default function AnalisisTecnico() {
           >
             {serie && serie.barras.length === 0 ? (
               <EmptyState
+                ilustracion="lupa"
                 title="Sin serie suficiente"
                 description={
                   serie.advertencias.includes('un_solo_punto')

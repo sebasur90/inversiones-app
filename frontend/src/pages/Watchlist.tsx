@@ -26,6 +26,7 @@ import AlertaPrecioBadge from '../components/inversiones/AlertaPrecioBadge'
 import SelectorInstrumento from '../components/inversiones/SelectorInstrumento'
 import DetalleWatchlist from '../components/inversiones/DetalleWatchlist'
 import { Icon } from '../components/icons/Icons'
+import AvatarTicker from '../components/ui/AvatarTicker'
 import VariacionDia from '../components/ui/VariacionDia'
 import { formatARSCrudo, formatUSDCrudo, formatPrecio } from '../utils'
 import { estadoWatchlist, type EstadoAlerta } from '../utils/alertasPrecio'
@@ -193,28 +194,24 @@ export default function Watchlist() {
       >
         {items.length === 0 ? (
           <EmptyState
+            ilustracion="lupa"
+            emoji="🔭"
             title="Todavía no seguís ningún instrumento"
             description='Tocá "Agregar" y elegí del catálogo de instrumentos: la app baja el último precio y vos fijás a qué precio querrías comprarlo.'
           />
         ) : filtrados.length === 0 ? (
-          <EmptyState title="Ningún instrumento cerca de su zona de compra" />
+          <EmptyState ilustracion="escudo" emoji="✨" title="Ningún instrumento cerca de su zona de compra" description="Cuando alguno entre en su zona, lo vas a ver acá y te avisamos." />
         ) : (
-          <div>
+          <div className="animate-fade-in bg-app-surface border border-app-border rounded-2xl px-1.5">
             {filtrados.map(({ item, estado }) => {
               const senal = senalPorTicker.get(item.ticker)
               return (
                 <button
                   key={item.ticker}
                   onClick={() => setTickerAbierto(item.ticker)}
-                  className="w-full flex items-center gap-2.5 py-2.5 border-b border-app-border-soft last:border-b-0 text-left"
+                  className="group w-full flex items-center gap-2.5 px-1.5 py-2.5 border-b border-app-border-soft last:border-b-0 text-left rounded-lg transition-colors duration-150 hover:bg-white/[0.035] active:bg-white/[0.06]"
                 >
-                  <div
-                    className={`w-9 h-9 rounded-[11px] bg-app-surface-2 border flex items-center justify-center font-mono text-label font-bold shrink-0 ${
-                      estado ? AVATAR_ALERTA[estado] : 'border-app-border text-app-text'
-                    }`}
-                  >
-                    {item.ticker.slice(0, 4)}
-                  </div>
+                  <AvatarTicker ticker={item.ticker} className={estado ? AVATAR_ALERTA[estado] : 'border-app-border text-app-text'} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 min-w-0">
                       <div className="text-caption font-bold text-app-text truncate">{item.nombre}</div>
@@ -222,13 +219,13 @@ export default function Watchlist() {
                       {senal && (
                         <span
                           title={`${senal.estrategia_nombre} · ${senal.motivo} · ${senal.fecha} · ${senal.moneda || ''} ${senal.precio.toFixed(2)}${senal.variante === 'subyacente' ? ' (subyacente)' : ''}`}
-                          className={`shrink-0 rounded-md px-1.5 py-0.5 text-label font-bold border ${
+                          className={`shrink-0 inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-label font-bold border ${
                             senal.tipo === 'compra'
                               ? 'border-app-pos/40 text-app-pos bg-app-pos-soft'
                               : 'border-app-neg/40 text-app-neg bg-app-neg-soft'
                           }`}
                         >
-                          {senal.tipo === 'compra' ? '▲' : '▼'} {senal.tipo}
+                          <Icon name={senal.tipo === 'compra' ? 'up' : 'down'} className="w-3 h-3" /> {senal.tipo}
                           {senal.variante === 'subyacente' && <span className="ml-1 opacity-70">{senal.moneda || 'USD'}</span>}
                         </span>
                       )}
@@ -265,7 +262,10 @@ export default function Watchlist() {
                       </span>
                     </div>
                   </div>
-                  <Icon name="chevron" className="w-3.5 h-3.5 text-app-text-dim -rotate-90 shrink-0" />
+                  <Icon
+                    name="chevron"
+                    className="w-3.5 h-3.5 text-app-text-faint -rotate-90 shrink-0 transition-[transform,color] duration-150 group-hover:translate-x-0.5 group-hover:text-app-text"
+                  />
                 </button>
               )
             })}

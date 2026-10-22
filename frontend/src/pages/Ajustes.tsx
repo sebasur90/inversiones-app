@@ -7,6 +7,7 @@ import { qk } from '../api/queryClient'
 import { fechaHora } from '../utils/fechas'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
+import { Icon, type IconName } from '../components/icons/Icons'
 import Segmented from '../components/ui/Segmented'
 import Button from '../components/ui/Button'
 import BarraProgreso from '../components/ui/BarraProgreso'
@@ -67,11 +68,41 @@ const OPCIONES_PRIVACIDAD: { value: string; label: string }[] = [
   { value: '0', label: 'Desactivado' },
 ]
 
-function Seccion({ titulo, ayuda, children }: { titulo: ReactNode; ayuda: string; children: ReactNode }) {
+const TONO_SECCION: Record<string, string> = {
+  accent: 'bg-app-accent-soft text-app-accent',
+  pos: 'bg-app-pos-soft text-app-pos',
+  warn: 'bg-app-warn/15 text-app-warn',
+  violet: 'bg-app-violet/15 text-app-violet',
+  cyan: 'bg-app-cyan/15 text-app-cyan',
+  neg: 'bg-app-neg-soft text-app-neg',
+}
+
+function Seccion({
+  titulo,
+  ayuda,
+  icono,
+  tono = 'accent',
+  children,
+}: {
+  titulo: ReactNode
+  ayuda: string
+  icono?: IconName
+  tono?: keyof typeof TONO_SECCION
+  children: ReactNode
+}) {
   return (
     <Card className="mb-3">
-      <div className="text-body font-semibold text-app-text mb-0.5">{titulo}</div>
-      <div className="text-caption text-app-text-dim mb-2.5">{ayuda}</div>
+      <div className="flex items-start gap-3 mb-2.5">
+        {icono && (
+          <span aria-hidden="true" className={`w-8 h-8 rounded-[10px] flex items-center justify-center shrink-0 ${TONO_SECCION[tono]}`}>
+            <Icon name={icono} className="w-4 h-4" />
+          </span>
+        )}
+        <div className="min-w-0">
+          <div className="text-body font-semibold text-app-text mb-0.5">{titulo}</div>
+          <div className="text-caption text-app-text-dim">{ayuda}</div>
+        </div>
+      </div>
       {children}
     </Card>
   )
@@ -190,7 +221,7 @@ export default function Ajustes() {
     <div className="pb-4">
       <ScreenHeader title="Ajustes" onBack={() => navigate('/mas')} />
 
-      <Seccion titulo="Moneda" ayuda="En qué moneda se muestran los importes en toda la app.">
+      <Seccion icono="dollar" tono="pos" titulo="Moneda" ayuda="En qué moneda se muestran los importes en toda la app.">
         <Segmented
           options={[
             { value: 'USD', label: 'USD' },
@@ -202,6 +233,7 @@ export default function Ajustes() {
       </Seccion>
 
       <Seccion
+        icono="lock" tono="violet"
         titulo={<InfoTooltip term="modoPrivacidad" label="Privacidad" />}
         ayuda="Con el modo privacidad los importes de tu cartera se reemplazan por ••••. Los rendimientos en %, las cantidades de nominales y las cotizaciones de mercado siguen a la vista."
       >
@@ -225,6 +257,7 @@ export default function Ajustes() {
       </Seccion>
 
       <Seccion
+        icono="sync" tono="accent"
         titulo="Sincronización automática"
         ayuda="Al abrir la app, si los datos son más viejos que este umbral se sincroniza con el Sheet."
       >
@@ -241,6 +274,7 @@ export default function Ajustes() {
       {/* Esto es el umbral del badge *dentro* de la app; los avisos al celular son la sección
           siguiente. Antes las dos se llamaban "Alertas de precio". */}
       <Seccion
+        icono="target" tono="warn"
         titulo="Aviso de proximidad en la app"
         ayuda="A qué distancia del stop-loss o del precio objetivo una posición empieza a marcarse en Posiciones y en la Watchlist. Los niveles de cada ticker se cargan en el detalle del ticker (o en la pestaña Instrumentos del Sheet); esto sólo cambia cuándo aparece el aviso previo."
       >
@@ -257,6 +291,7 @@ export default function Ajustes() {
       </Seccion>
 
       <Seccion
+        icono="alert" tono="cyan"
         titulo="Avisos al celular"
         ayuda="El servidor te manda un mensaje por Telegram cuando una posición cruza su stop-loss o su precio objetivo, cuando un ticker de la watchlist entra en zona de compra, cuando dispara una estrategia que habilitaste, y cuando cambia de estado el diagnóstico (valuación, calidad o solidez) de una empresa de tu cartera o tu watchlist. Cada aviso dice si es compra o venta, de qué cartera (o de la watchlist) y qué regla lo disparó. Llega con la app cerrada; se configura con TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID (ver .env.example)."
       >
@@ -316,6 +351,7 @@ export default function Ajustes() {
       </Seccion>
 
       <Seccion
+        icono="trend" tono="pos"
         titulo="Cotizaciones"
         ayuda="Los precios los trae el servidor de IOL, con las fuentes públicas como respaldo. Durante la rueda se refrescan solos cada dos horas (si el job está activado); el sync completo del Sheet es aparte, una vez por día."
       >
@@ -337,6 +373,7 @@ export default function Ajustes() {
       </Seccion>
 
       <Seccion
+        icono="shield" tono="accent"
         titulo="Cupo de la API de IOL"
         ayuda="IOL es la fuente primaria de cotizaciones y tiene un tope mensual de llamadas bonificadas. Cuando se agota, la app cae a las fuentes públicas."
       >
@@ -365,7 +402,7 @@ export default function Ajustes() {
         )}
       </Seccion>
 
-      <Seccion titulo="Tamaño de texto" ayuda="Escala toda la tipografía de la app.">
+      <Seccion icono="edit" tono="cyan" titulo="Tamaño de texto" ayuda="Escala toda la tipografía de la app.">
         <Segmented
           options={OPCIONES_ESCALA}
           value={String(escalaTexto)}
@@ -374,6 +411,7 @@ export default function Ajustes() {
       </Seccion>
 
       <Seccion
+        icono="info" tono="violet"
         titulo="Modo guiado"
         ayuda='Con el modo guiado activado, la franja "💡 Cómo leer esta pantalla" aparece abierta en cada pantalla. Apagarlo no borra el contenido: sólo lo colapsa por defecto.'
       >
@@ -397,7 +435,7 @@ export default function Ajustes() {
         </div>
       </Seccion>
 
-      <Seccion titulo="Restablecer preferencias" ayuda="Vuelve moneda, cartera, auto-sync, privacidad, tamaño de texto y modo guiado a los valores iniciales. No toca los datos ni lo guardado en el dispositivo.">
+      <Seccion icono="sync" tono="neg" titulo="Restablecer preferencias" ayuda="Vuelve moneda, cartera, auto-sync, privacidad, tamaño de texto y modo guiado a los valores iniciales. No toca los datos ni lo guardado en el dispositivo.">
         <Button variant="danger" onClick={restablecer}>
           Restablecer
         </Button>

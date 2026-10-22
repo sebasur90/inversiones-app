@@ -2,6 +2,9 @@ import { useNavigate } from 'react-router-dom'
 import { fechaCorta, fechaHora } from '../utils/fechas'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import { getCalidadDatos } from '../api'
+import TituloSeccion from '../components/ui/TituloSeccion'
+import EmptyState from '../components/ui/EmptyState'
+import { Icon } from '../components/icons/Icons'
 import CalidadIssueRow from '../components/inversiones/CalidadIssueRow'
 import Sparkline from '../components/charts/Sparkline'
 import { parseApiError, type ParsedApiError } from '../help/errors/apiErrors'
@@ -131,9 +134,9 @@ export default function CalidadDatos() {
 
         {reglas_recurrentes.length > 0 && (
           <div className="mb-6">
-            <div className="text-strong font-semibold text-app-text mb-2">
+            <TituloSeccion icono="sync" tono="warn" className="mb-2">
               Reglas que se repiten ({reglas_recurrentes.length})
-            </div>
+            </TituloSeccion>
             <div className="text-caption text-app-text-dim mb-3">
               Aparecieron en 2 o más de los últimos {calidad.syncs_en_ventana} syncs — conviene
               corregirlas en el Sheet en vez de revisarlas cada vez.
@@ -142,7 +145,7 @@ export default function CalidadDatos() {
               {reglas_recurrentes.map(r => (
                 <div
                   key={r.regla}
-                  className="p-3 bg-app-surface-2 border border-app-border rounded-xl"
+                  className="p-3 bg-app-surface-2 border border-app-border rounded-xl transition-colors duration-150 hover:border-white/20"
                 >
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <span className={`text-caption font-semibold ${sevColor(r.severidad)}`}>
@@ -161,21 +164,18 @@ export default function CalidadDatos() {
         )}
 
         {issues.length === 0 && ultimo_sync ? (
-          <div className="p-6 text-center bg-app-surface-2 rounded-2xl">
-            <div className="text-title font-semibold text-app-text mb-1">✓ Sin problemas detectados</div>
-            <div className="text-body text-app-text-dim">Los datos se sincronizaron correctamente</div>
-          </div>
+          <EmptyState ilustracion="escudo" emoji="✨" title="Sin problemas detectados" description="Los datos se sincronizaron correctamente." />
         ) : !ultimo_sync ? (
-          <div className="p-6 text-center bg-app-surface-2 rounded-2xl">
-            <div className="text-title font-semibold text-app-text mb-1">⚙️ Todavía no sincronizaste</div>
-            <div className="text-body text-app-text-dim">Haz tu primer sync para ver el estado de calidad</div>
-          </div>
+          <EmptyState ilustracion="lupa" emoji="⚙️" title="Todavía no sincronizaste" description="Hacé tu primer sync para ver el estado de calidad." />
         ) : (
           <div>
-            <div className="text-strong font-semibold text-app-text mb-4">Problemas encontrados ({issues.length})</div>
+            <TituloSeccion icono="alert" tono="neg" className="mb-4">Problemas encontrados ({issues.length})</TituloSeccion>
             {Object.entries(issues_por_tab).map(([tab, tab_issues]) => (
               <div key={tab} className="mb-6">
-                <div className="text-body font-semibold text-app-text mb-2 uppercase tracking-wide">{tab}</div>
+                <div className="flex items-center gap-2 text-label font-bold text-app-text-dim mb-2 uppercase tracking-wide">
+                  <Icon name="list" className="w-3.5 h-3.5" />
+                  {tab}
+                </div>
                 <div className="flex flex-col gap-2">
                   {tab_issues.map((issue, idx) => (
                     <CalidadIssueRow key={`${tab}-${idx}`} issue={issue} />

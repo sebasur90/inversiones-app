@@ -8,6 +8,7 @@ import {
   type ModoSimulacion,
   type RebalanceoSimulacionOut,
 } from '../api'
+import TituloSeccion from '../components/ui/TituloSeccion'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import EmptyState from '../components/ui/EmptyState'
@@ -86,14 +87,16 @@ export default function Rebalanceo() {
       <QueryBoundary isLoading={loading} error={error}>
       {rebalanceo.ejes.length === 0 ? (
         <EmptyState
+          ilustracion="planta"
+          emoji="⚖️"
           title="Sin objetivos de rebalanceo cargados"
           description="Agregá filas a la pestaña 'Rebalanceo' del Sheet y sincronizá para ver el balance de tu cartera."
         />
       ) : (
         <>
-          <h3 className="text-body font-bold text-app-text mb-2.5">
+          <TituloSeccion icono="scale" tono="violet">
             <InfoTooltip term="rebalanceo" label="Balance de Cartera" />
-          </h3>
+          </TituloSeccion>
 
           <Segmented
             options={rebalanceo.ejes.map(e => ({ value: e.eje, label: e.eje }))}
@@ -115,7 +118,7 @@ export default function Rebalanceo() {
 
               {eje.sin_objetivo.length > 0 && (
                 <>
-                  <h3 className="text-body font-bold text-app-text mb-2.5 mt-6">Sin objetivo</h3>
+                  <TituloSeccion icono="list" tono="warn" className="mb-2.5 mt-6">Sin objetivo</TituloSeccion>
                   <div className="flex flex-col gap-2.5">
                     {eje.sin_objetivo.map(item => (
                       <div key={item.etiqueta}>

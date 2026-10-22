@@ -2,6 +2,7 @@ import type { InversionesResumen, PerformanceRelativaOut } from '../../api'
 import { formatPctRatio } from '../../utils'
 import { formatMonedaCruda } from '../../utils/formatoMonto'
 import { useFormatoMoneda } from '../../hooks/useFormatoMoneda'
+import { Icon } from '../icons/Icons'
 import AvisoCalculo from '../inversiones/AvisoCalculo'
 import MetricTile from '../ui/MetricTile'
 
@@ -42,15 +43,29 @@ export default function RendimientoHero({
   const delta = hayBenchmark ? perfRelativa!.delta_pp! : null
 
   return (
-    <section aria-label="Resumen del rendimiento" className="bg-app-surface border border-app-border rounded-2xl p-5 mb-5 flex flex-col gap-3.5">
-      <div className="text-label font-bold uppercase tracking-wide text-app-text-faint">Tu cartera rindió</div>
+    <section aria-label="Resumen del rendimiento" className="relative overflow-hidden bg-app-surface border border-app-border rounded-[22px] p-5 mb-5 flex flex-col gap-3.5">
+      {/* Anillos decorativos, teñidos según gane o pierda. */}
+      <svg aria-hidden="true" viewBox="0 0 200 200" className="absolute -right-14 -top-16 w-[220px] h-[220px] opacity-55 pointer-events-none">
+        {[90, 64, 38].map(r => (
+          <circle key={r} cx="100" cy="100" r={r} fill="none" stroke={twr != null && twr < 0 ? 'rgba(239,68,68,.15)' : 'rgba(16,185,129,.15)'} />
+        ))}
+      </svg>
+      <div className="relative flex items-center gap-2">
+        <span
+          aria-hidden="true"
+          className={`w-7 h-7 rounded-[9px] flex items-center justify-center ${twr != null && twr < 0 ? 'bg-app-neg-soft text-app-neg' : 'bg-app-pos-soft text-app-pos'}`}
+        >
+          <Icon name="trend" className="w-4 h-4" />
+        </span>
+        <div className="text-label font-bold uppercase tracking-wide text-app-text-dim">Tu cartera rindió</div>
+      </div>
 
       {twr == null ? (
         <p className="text-body text-app-text-dim">
           Todavía no se puede calcular el rendimiento de esta cartera en {esARS ? 'pesos' : 'dólares'}.
         </p>
       ) : (
-        <div className="flex flex-col gap-1.5">
+        <div className="relative flex flex-col gap-1.5">
           <div className={`font-mono text-display leading-none font-bold tabular-nums ${twr >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
             {formatPctRatio(twr)}
           </div>
@@ -70,7 +85,7 @@ export default function RendimientoHero({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="relative grid grid-cols-2 gap-2">
         <MetricTile label="Ganancia total" infoTerm="realizado" value={monto(totalPnl)} tone={tono(totalPnl)} />
         <MetricTile
           label={extrapolada ? 'A un año (estimado)' : 'Llevado a un año'}
@@ -81,13 +96,15 @@ export default function RendimientoHero({
       </div>
 
       {delta != null && (
-        <div className="flex items-center gap-2 pt-3 border-t border-app-border text-body text-app-text-dim">
+        <div className="relative flex items-center gap-2 pt-3 border-t border-app-border text-body text-app-text-dim">
           {/* Diferencia en puntos porcentuales, no un porcentaje. */}
-          <span className={`font-mono font-bold text-caption px-1.5 py-0.5 rounded-md tabular-nums ${delta >= 0 ? 'bg-app-pos-soft text-app-pos' : 'bg-app-neg-soft text-app-neg'}`}>
-            {delta >= 0 ? '+' : '−'}{Math.abs(delta).toFixed(1)} pp
+          <span className={`inline-flex items-center gap-0.5 font-mono font-bold text-caption px-2 py-0.5 rounded-lg tabular-nums ${delta >= 0 ? 'bg-app-pos-soft text-app-pos' : 'bg-app-neg-soft text-app-neg'}`}>
+            <Icon name={delta >= 0 ? 'up' : 'down'} className="w-3 h-3" />
+            {Math.abs(delta).toFixed(1)} pp
           </span>
           <span>
             {delta >= 0 ? 'Superaste a' : 'Quedaste por debajo de'} {perfRelativa!.benchmark_usado}.
+            {delta >= 0 && <span aria-hidden="true"> 🏆</span>}
           </span>
         </div>
       )}

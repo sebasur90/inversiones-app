@@ -38,7 +38,7 @@ export default function QueSeMovioHoy({
               key={m.ticker}
               onClick={() => navigate(`/ticker/${encodeURIComponent(m.ticker)}`)}
               aria-label={`Ver detalle de ${m.ticker} — ${m.nombre}`}
-              className="text-left bg-app-surface border border-app-border rounded-[14px] p-3 hover:border-app-border-soft transition-colors"
+              className="text-left bg-app-surface border border-app-border rounded-[14px] p-3 hover:border-white/20 hover:-translate-y-px active:translate-y-0 active:scale-[0.98] transition-[border-color,transform] duration-150"
             >
               <div className="flex items-center justify-between gap-1.5 mb-1.5">
                 <span className="font-mono text-body font-bold text-app-text truncate">{m.ticker}</span>

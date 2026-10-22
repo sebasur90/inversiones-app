@@ -13,8 +13,8 @@ export default function Segmented<T extends string>({
         <button
           key={opt.value}
           onClick={() => onChange(opt.value)}
-          className={`font-semibold text-caption px-2.5 py-1.5 rounded-lg whitespace-nowrap transition-colors ${
-            opt.value === value ? 'bg-app-accent-soft text-app-accent' : 'text-app-text-dim'
+          className={`font-semibold text-caption px-2.5 py-1.5 rounded-lg whitespace-nowrap transition-[background-color,color,transform] duration-150 active:scale-95 ${
+            opt.value === value ? 'bg-app-accent-soft text-app-accent' : 'text-app-text-dim hover:text-app-text'
           }`}
         >
           {opt.label}

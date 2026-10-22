@@ -6,6 +6,7 @@ import { useInversionesContext } from '../context/InversionesContext'
 import { getPerformanceRelativa, type MonedaRiesgo } from '../api'
 import { useBenchmarkSeleccionado } from '../hooks/useBenchmarkSeleccionado'
 import { formatPctRatio, calcularDesde, type PeriodoEvolucion } from '../utils'
+import TituloSeccion from '../components/ui/TituloSeccion'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import Card from '../components/ui/Card'
@@ -93,9 +94,9 @@ export default function PerformanceRelativa() {
         onRetry={() => void perfQuery.refetch()}
       >
       {!perfRelativa || perfRelativa.estado === 'sin_benchmark' ? (
-        <EmptyState title="Sin benchmark configurado" description="Configura un benchmark para esta cartera para poder comparar su performance." />
+        <EmptyState ilustracion="lupa" emoji="🎯" title="Sin benchmark configurado" description="Configura un benchmark para esta cartera para poder comparar su performance." />
       ) : perfRelativa.estado === 'datos_insuficientes' ? (
-        <EmptyState title="Datos insuficientes" description="No hay suficiente historial común entre la cartera y el benchmark para este período." />
+        <EmptyState ilustracion="planta" title="Datos insuficientes" description="No hay suficiente historial común entre la cartera y el benchmark para este período." />
       ) : (
         <>
           <Card className="mb-4">
@@ -150,7 +151,7 @@ export default function PerformanceRelativa() {
             <PerformanceRelativaChart serie={perfRelativa.serie} />
           </Card>
 
-          <h3 className="text-body font-bold text-app-text mb-2.5">Métricas de performance relativa</h3>
+          <TituloSeccion icono="scale" tono="violet">Métricas de performance relativa</TituloSeccion>
           <div className="grid grid-cols-2 gap-2 mb-4">
             <MetricTile
               label="Exceso de retorno"

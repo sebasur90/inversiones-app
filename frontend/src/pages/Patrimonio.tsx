@@ -8,6 +8,8 @@ import { useInversionesContext } from '../context/InversionesContext'
 import { getEvolucionInversiones, getPatrimonioHistory, getPatrimonioSummary, type EvolucionPunto, type MovimientoInversion, type PatrimonioPunto, type PatrimonioSummaryOut } from '../api'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
+import TituloSeccion from '../components/ui/TituloSeccion'
+import BotonAcceso from '../components/ui/BotonAcceso'
 import EmptyState from '../components/ui/EmptyState'
 import Modal from '../components/ui/Modal'
 import { Icon } from '../components/icons/Icons'
@@ -237,10 +239,8 @@ export default function Patrimonio() {
     <div className="pb-4">
       <ScreenHeader title="Patrimonio" onBack={() => navigate(-1)} />
 
-      <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
-        <button onClick={() => navigate('/rendimiento')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
-          <Icon name="trend" className="w-3.5 h-3.5" /> Ver rendimiento detallado
-        </button>
+      <div className="flex flex-wrap gap-2 mb-4">
+        <BotonAcceso icono="trend" onClick={() => navigate('/rendimiento')}>Rendimiento detallado</BotonAcceso>
       </div>
 
       <ErrorBanner error={error} />
@@ -252,36 +252,49 @@ export default function Patrimonio() {
         <Segmented options={opcionesVista} value={vista} onChange={setVista} />
       </div>
 
-      {ultimoPunto && (
-        <>
-          <div className="flex items-start justify-between mb-3">
-            <div>
-              <div className="text-label text-app-text-faint uppercase tracking-wide mb-0.5">Valor actual</div>
-              <div className="font-mono font-bold text-metric text-app-text tabular-nums">
-                {compacto(ultimoPunto.valor)}
-              </div>
-            </div>
-            {deltaAbs != null && variacionPct != null && (
-              <div className="text-right shrink-0 ml-4">
-                <div className="text-label text-app-text-faint uppercase tracking-wide mb-0.5">Variación del período</div>
-                <div className={`font-mono font-bold text-strong tabular-nums ${variacionPct >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>
-                  {montoConSigno(deltaAbs)} ({variacionPct >= 0 ? '+' : ''}{variacionPct.toFixed(1)}%)
+      {ultimoPunto && (() => {
+        const valor = ultimoPunto?.valor ?? null
+        const capital = ultimoPunto?.capitalAportado ?? null
+        const ganancia = valor !== null && capital !== null ? valor - capital : null
+        const sube = (variacionPct ?? 0) >= 0
+        return (
+          <section aria-label="Valor del patrimonio" className="relative overflow-hidden bg-app-surface border border-app-border rounded-[22px] p-5 mb-4">
+            <svg aria-hidden="true" viewBox="0 0 200 200" className="absolute -right-14 -top-16 w-[220px] h-[220px] opacity-55 pointer-events-none">
+              {[90, 64, 38].map(r => (
+                <circle key={r} cx="100" cy="100" r={r} fill="none" stroke="rgba(59,130,246,.14)" />
+              ))}
+            </svg>
+            <div className="relative flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-1.5 text-label font-bold uppercase tracking-wide text-app-text-dim mb-1">
+                  <Icon name="wallet" className="w-3.5 h-3.5" />
+                  Valor actual
                 </div>
+                <div className="font-mono font-bold text-metric-lg text-app-text tabular-nums">{compacto(ultimoPunto.valor)}</div>
+              </div>
+              {deltaAbs != null && variacionPct != null && (
+                <div className="text-right shrink-0">
+                  <div className="text-label font-bold uppercase tracking-wide text-app-text-dim mb-1">Variación del período</div>
+                  <div
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg font-mono font-bold text-caption tabular-nums ${
+                      sube ? 'bg-app-pos-soft text-app-pos' : 'bg-app-neg-soft text-app-neg'
+                    }`}
+                  >
+                    <Icon name={sube ? 'up' : 'down'} className="w-3 h-3" />
+                    {montoConSigno(deltaAbs)} ({sube ? '+' : ''}{variacionPct.toFixed(1)}%)
+                  </div>
+                </div>
+              )}
+            </div>
+            {ganancia !== null && (
+              <div className="relative mt-3.5 pt-3.5 border-t border-app-border flex items-center justify-between text-body text-app-text-dim">
+                <span>Ganancia sobre lo aportado</span>
+                <span className={`font-mono font-bold tabular-nums ${ganancia >= 0 ? 'text-app-pos' : 'text-app-neg'}`}>{monto(ganancia)}</span>
               </div>
             )}
-          </div>
-          {(() => {
-            const valor = ultimoPunto?.valor ?? null
-            const capital = ultimoPunto?.capitalAportado ?? null
-            const ganancia = valor !== null && capital !== null ? valor - capital : null
-            return ganancia !== null ? (
-              <div className="text-label text-app-text-dim mb-3">
-                Ganancia: <span className={ganancia >= 0 ? 'text-app-pos' : 'text-app-neg'}>{monto(ganancia)}</span>
-              </div>
-            ) : null
-          })()}
-        </>
-      )}
+          </section>
+        )
+      })()}
 
       <div className="flex items-center gap-4 mb-2">
         <div className="flex items-center gap-1.5 text-label text-app-text-dim">
@@ -297,7 +310,7 @@ export default function Patrimonio() {
       {loading ? (
         <Skeleton className="h-[260px] rounded-xl" />
       ) : datosGrafico.length === 0 ? (
-        <EmptyState title="Sin datos para este período" description="Probá con un rango más amplio o revisá que la cartera tenga movimientos." />
+        <EmptyState ilustracion="lupa" emoji="📈" title="Sin datos para este período" description="Probá con un rango más amplio o revisá que la cartera tenga movimientos." />
       ) : (
         <>
           <ResponsiveContainer width="100%" height={260}>
@@ -418,7 +431,7 @@ export default function Patrimonio() {
             return (
               <>
                 <div className="mt-6 mb-4">
-                  <div className="text-label text-app-text-faint uppercase tracking-wide font-semibold mb-2">Máximo histórico y drawdown</div>
+                  <TituloSeccion icono="trophy" tono="warn" className="mb-2.5">Máximo histórico y drawdown</TituloSeccion>
                   <div className="grid grid-cols-2 gap-2">
                     <MetricTile
                       label="Máximo histórico"
@@ -437,8 +450,8 @@ export default function Patrimonio() {
                 </div>
 
                 <div className="mt-6 mb-4">
-                  <div className="text-label text-app-text-faint uppercase tracking-wide font-semibold mb-2">Descomposición del período</div>
-                  <div className="space-y-2 text-label">
+                  <TituloSeccion icono="pie" tono="accent" className="mb-2.5">Descomposición del período</TituloSeccion>
+                  <div className="space-y-2.5 text-caption bg-app-surface border border-app-border rounded-2xl p-4">
                     <div className="flex justify-between">
                       <span className="text-app-text-dim">
                         <InfoTooltip term="patrimonio_descomposicion_aportes" label="Aportes:" className="text-app-text-dim" />
@@ -482,7 +495,7 @@ export default function Patrimonio() {
 
           {patrimonioHistoria.length > 0 && (
             <div className="mt-6">
-              <div className="text-label text-app-text-faint uppercase tracking-wide font-semibold mb-2">Tabla mensual</div>
+              <TituloSeccion icono="calendarDays" tono="cyan" className="mb-2.5">Tabla mensual</TituloSeccion>
               <PatrimonioMensualTable puntos={patrimonioHistoria} esUSD={esUSD} />
             </div>
           )}

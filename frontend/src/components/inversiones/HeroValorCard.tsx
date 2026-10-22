@@ -133,7 +133,7 @@ export default function HeroValorCard({
       <AvisoCalculo mensajes={[aviso]} />
 
       <div className="mt-3">
-        <div role="img" aria-label={`Evolución del valor de la cartera ${textoPeriodo}`} className={cargandoSerie ? 'opacity-50 transition-opacity' : 'transition-opacity'}>
+        <div role="img" aria-label={`Evolución del valor de la cartera ${textoPeriodo}`} className={cargandoSerie ? 'opacity-50 transition-opacity duration-200' : 'transition-opacity duration-200'}>
           <Sparkline data={serie} color={colorSerie} className="w-full h-13" />
         </div>
         <div className="flex items-center justify-between gap-2 mt-2">
@@ -143,8 +143,8 @@ export default function HeroValorCard({
                 key={p.value}
                 onClick={() => onPeriodo(p.value)}
                 aria-pressed={periodo === p.value}
-                className={`min-w-11 min-h-9 px-2 rounded-lg font-mono text-caption font-semibold text-center transition-colors ${
-                  periodo === p.value ? 'bg-app-accent-soft text-app-accent' : 'text-app-text-dim'
+                className={`min-w-11 min-h-9 px-2 rounded-lg font-mono text-caption font-semibold text-center transition-[background-color,color,transform] duration-150 active:scale-95 ${
+                  periodo === p.value ? 'bg-app-accent-soft text-app-accent' : 'text-app-text-dim hover:text-app-text hover:bg-white/5'
                 }`}
               >
                 {p.label}

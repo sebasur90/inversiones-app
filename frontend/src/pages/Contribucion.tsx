@@ -17,6 +17,8 @@ import MetricTile from '../components/ui/MetricTile'
 import CorrelacionMatriz from '../components/charts/CorrelacionMatriz'
 import AvisoCalculo from '../components/inversiones/AvisoCalculo'
 import { Icon } from '../components/icons/Icons'
+import TituloSeccion from '../components/ui/TituloSeccion'
+import BotonAcceso from '../components/ui/BotonAcceso'
 import { SkeletonFilas } from '../components/ui/Skeleton'
 import QueryBoundary from '../components/ui/QueryBoundary'
 import { qk } from '../api/queryClient'
@@ -92,18 +94,14 @@ export default function Contribucion() {
     <div className="pb-4">
       <ScreenHeader title="Contribución y concentración" onBack={() => navigate(-1)} />
 
-      <div className="flex flex-wrap gap-x-4 gap-y-1 mb-4">
-        <button onClick={() => navigate('/exposicion')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
-          <Icon name="pie" className="w-3.5 h-3.5" /> Ver exposición
-        </button>
-        <button onClick={() => navigate('/riesgo')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
-          <Icon name="alert" className="w-3.5 h-3.5" /> Ver métricas de riesgo
-        </button>
+      <div className="flex flex-wrap gap-2 mb-5">
+        <BotonAcceso icono="pie" onClick={() => navigate('/exposicion')}>Exposición</BotonAcceso>
+        <BotonAcceso icono="alert" colorIcono="text-app-warn" onClick={() => navigate('/riesgo')}>Métricas de riesgo</BotonAcceso>
       </div>
 
-      <h3 className="text-body font-bold text-app-text mb-2.5">
+      <TituloSeccion icono="trophy" tono="pos">
         <InfoTooltip term="contribucion" label="Contribución al rendimiento" />
-      </h3>
+      </TituloSeccion>
       <QueryBoundary
         isLoading={loadingContribucion}
         error={contribucionQuery.error}
@@ -111,7 +109,7 @@ export default function Contribucion() {
         fallback={<SkeletonFilas filas={3} />}
       >
       {!contribucion || contribucion.contribucion.length === 0 ? (
-        <EmptyState title="Sin datos" description="No hay movimientos suficientes para calcular contribución." />
+        <EmptyState ilustracion="lupa" title="Sin datos" description="No hay movimientos suficientes para calcular contribución." />
       ) : (
         <>
           <div className="mb-3">
@@ -131,9 +129,9 @@ export default function Contribucion() {
       )}
       </QueryBoundary>
 
-      <h3 className="text-body font-bold text-app-text mb-2.5">Concentración</h3>
+      <TituloSeccion icono="scale" tono="warn">Concentración</TituloSeccion>
       {loadingContribucion ? null : !contribucion || contribucion.concentracion.length === 0 ? (
-        <EmptyState title="Sin datos" description="No hay posiciones clasificadas para calcular concentración." />
+        <EmptyState ilustracion="lupa" title="Sin datos" description="No hay posiciones clasificadas para calcular concentración." />
       ) : (
         <>
           <div className="mb-3">
@@ -164,9 +162,9 @@ export default function Contribucion() {
         </>
       )}
 
-      <h3 className="text-body font-bold text-app-text mb-2.5">
+      <TituloSeccion icono="grid" tono="violet">
         <InfoTooltip term="correlacion" label="Correlación entre activos" />
-      </h3>
+      </TituloSeccion>
       <div className="mb-3">
         <Segmented options={OPCIONES_UNIVERSO} value={universo} onChange={setUniverso} />
       </div>
@@ -178,6 +176,7 @@ export default function Contribucion() {
       >
       {!correlaciones || correlaciones.n_tickers < 2 ? (
         <EmptyState
+          ilustracion="lupa"
           title="Sin suficientes activos"
           description="Se necesitan al menos 2 tickers con precio cargado para calcular correlaciones."
         />

@@ -7,6 +7,7 @@ import { qk } from '../api/queryClient'
 import { CHART_COLORS } from '../utils'
 import { formatMonto } from '../utils/formatoMonto'
 import { useMontosOcultos } from '../utils/privacidad'
+import TituloSeccion from '../components/ui/TituloSeccion'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import Donut from '../components/charts/Donut'
@@ -105,14 +106,14 @@ export default function Descomposicion() {
         {!data ? (
           <SkeletonPantalla />
         ) : data.raiz.length === 0 ? (
-          <EmptyState title="Sin posiciones para descomponer" description="Sincronizá tu Sheet o elegí otra cartera." />
+          <EmptyState ilustracion="planta" emoji="🌱" title="Sin posiciones para descomponer" description="Sincronizá tu Sheet o elegí otra cartera." />
         ) : (
           <>
             {/* Breadcrumb */}
             <div className="flex items-center gap-1 flex-wrap text-caption mb-2.5">
               <button
                 onClick={irARaiz}
-                className={`font-semibold ${ruta.length === 0 ? 'text-app-text' : 'text-app-text-dim'}`}
+                className={`font-semibold transition-colors duration-150 hover:text-app-text ${ruta.length === 0 ? 'text-app-text' : 'text-app-text-dim'}`}
               >
                 Cartera
               </button>
@@ -121,7 +122,7 @@ export default function Descomposicion() {
                   <span className="text-app-text-faint">›</span>
                   <button
                     onClick={() => irAMiga(i)}
-                    className={`font-semibold ${i === migas.length - 1 ? 'text-app-text' : 'text-app-text-dim'}`}
+                    className={`font-semibold transition-colors duration-150 hover:text-app-text ${i === migas.length - 1 ? 'text-app-text' : 'text-app-text-dim'}`}
                   >
                     {nodo.etiqueta}
                   </button>
@@ -145,9 +146,9 @@ export default function Descomposicion() {
             </div>
 
             <div className="flex items-center gap-2 mb-2.5">
-              <h3 className="text-body font-bold text-app-text">
+              <TituloSeccion icono="pie" tono="accent" className="">
                 {nivelActual === 'Familia' ? 'Por familia' : nodoActual ? `Dentro de ${nodoActual.etiqueta}` : 'Detalle'}
-              </h3>
+              </TituloSeccion>
               <InfoTooltip term="descomposicion_nivel" label="" />
               <div className="flex-1" />
               <BotonExportarCsv
@@ -163,7 +164,7 @@ export default function Descomposicion() {
                   key={nodo.clave}
                   onClick={() => entrarA(nodo)}
                   disabled={nodo.hijos.length === 0 && nodo.nivel !== 'Ticker'}
-                  className="text-left w-full disabled:cursor-default"
+                  className="text-left w-full rounded-xl px-2 py-1.5 transition-colors duration-150 hover:bg-white/[0.035] active:bg-white/[0.06] disabled:cursor-default disabled:hover:bg-transparent"
                 >
                   <div className="flex justify-between items-baseline text-caption mb-1.5">
                     <div className="flex items-center gap-1.5 min-w-0">

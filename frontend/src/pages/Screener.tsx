@@ -15,6 +15,7 @@ import EmptyState from '../components/ui/EmptyState'
 import QueryBoundary from '../components/ui/QueryBoundary'
 import BotonExportarCsv from '../components/ui/BotonExportarCsv'
 import InfoTooltip from '../help/components/InfoTooltip'
+import AvatarTicker from '../components/ui/AvatarTicker'
 import { Icon } from '../components/icons/Icons'
 import { formatPct } from '../utils'
 import GraficoFullscreen from '../components/tecnico/GraficoFullscreen'
@@ -112,10 +113,10 @@ export default function Screener() {
             <div className="flex flex-wrap gap-1.5">
               <button
                 onClick={() => setEstrategiaIds([])}
-                className={`text-label font-bold px-2.5 py-1.5 rounded-lg border ${
+                className={`text-label font-bold px-2.5 py-1.5 rounded-lg border transition-[background-color,border-color,color,transform] duration-150 active:scale-95 ${
                   estrategiaIds.length === 0
                     ? 'bg-app-accent-soft text-app-accent border-app-accent/40'
-                    : 'bg-app-surface text-app-text-dim border-app-border'
+                    : 'bg-app-surface text-app-text-dim border-app-border hover:border-white/25 hover:text-app-text'
                 }`}
               >
                 Todas
@@ -124,10 +125,10 @@ export default function Screener() {
                 <button
                   key={e.id}
                   onClick={() => toggleEstrategia(e.id)}
-                  className={`text-label font-bold px-2.5 py-1.5 rounded-lg border truncate max-w-[160px] ${
+                  className={`text-label font-bold px-2.5 py-1.5 rounded-lg border truncate max-w-[160px] transition-[background-color,border-color,color,transform] duration-150 active:scale-95 ${
                     estrategiaIds.includes(e.id)
                       ? 'bg-app-accent-soft text-app-accent border-app-accent/40'
-                      : 'bg-app-surface text-app-text-dim border-app-border'
+                      : 'bg-app-surface text-app-text-dim border-app-border hover:border-white/25 hover:text-app-text'
                   }`}
                 >
                   {e.nombre}
@@ -192,6 +193,8 @@ export default function Screener() {
 
       {!haEscaneado ? (
         <EmptyState
+          ilustracion="lupa"
+          emoji="🔭"
           title="Todavía no escaneaste"
           description="Elegí estrategias y un umbral, y tocá Escanear para ver qué tickers están cerca de disparar."
         />
@@ -223,11 +226,13 @@ export default function Screener() {
 
               {filas.length === 0 ? (
                 <EmptyState
+                  ilustracion="escudo"
+                  emoji="✨"
                   title="Ninguna estrategia está cerca de disparar"
                   description={`Nada quedó dentro de ±${scanQuery.data.umbral_pct}%. Probá un umbral más amplio.`}
                 />
               ) : (
-                <div>
+                <div className="animate-fade-in bg-app-surface border border-app-border rounded-2xl px-1.5">
                   {filas.map(f => {
                     const key = claveFila(f)
                     const abierta = expandida === key
@@ -240,22 +245,20 @@ export default function Screener() {
                       <div key={key} className="border-b border-app-border-soft last:border-b-0">
                         <button
                           onClick={() => setExpandida(abierta ? null : key)}
-                          className="w-full flex items-center gap-2.5 py-2.5 text-left"
+                          className="w-full flex items-center gap-2.5 px-1.5 py-2.5 text-left rounded-lg transition-colors duration-150 hover:bg-white/[0.035] active:bg-white/[0.06]"
                         >
-                          <div className={`w-9 h-9 rounded-[11px] bg-app-surface-2 border flex items-center justify-center font-mono text-label font-bold shrink-0 ${avatarClase}`}>
-                            {f.ticker.slice(0, 4)}
-                          </div>
+                          <AvatarTicker ticker={f.ticker} className={avatarClase} />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 min-w-0">
                               <div className="text-caption font-bold text-app-text truncate">{f.nombre}</div>
                               <span
-                                className={`shrink-0 rounded-md px-1.5 py-0.5 text-label font-bold border ${
+                                className={`shrink-0 inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-label font-bold border ${
                                   f.tipo === 'compra'
                                     ? 'border-app-pos/40 text-app-pos bg-app-pos-soft'
                                     : 'border-app-neg/40 text-app-neg bg-app-neg-soft'
                                 }`}
                               >
-                                {f.tipo === 'compra' ? '▲' : '▼'} {f.tipo}
+                                <Icon name={f.tipo === 'compra' ? 'up' : 'down'} className="w-3 h-3" /> {f.tipo}
                               </span>
                             </div>
                             <div className="text-label text-app-text-dim mt-0.5 truncate">

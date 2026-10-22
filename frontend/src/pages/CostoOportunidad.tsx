@@ -8,6 +8,7 @@ import { calcularDesde, formatPctRatio, type PeriodoEvolucion } from '../utils'
 import { formatMonto } from '../utils/formatoMonto'
 import { useMontosOcultos } from '../utils/privacidad'
 import { qk } from '../api/queryClient'
+import TituloSeccion from '../components/ui/TituloSeccion'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
 import Segmented from '../components/ui/Segmented'
@@ -84,10 +85,10 @@ export default function CostoOportunidad() {
               <button
                 key={b}
                 onClick={() => setBenchmarkSeleccionado(b)}
-                className={`px-2.5 py-1.5 rounded-lg text-caption font-semibold whitespace-nowrap ${
+                className={`px-2.5 py-1.5 rounded-lg text-caption font-semibold whitespace-nowrap transition-[background-color,border-color,color,transform] duration-150 active:scale-95 ${
                   benchmarkSeleccionado === b
                     ? 'bg-app-accent-soft text-app-accent'
-                    : 'bg-app-surface border border-app-border text-app-text-dim'
+                    : 'bg-app-surface border border-app-border text-app-text-dim hover:border-white/25 hover:text-app-text'
                 }`}
               >
                 {b}
@@ -112,6 +113,8 @@ export default function CostoOportunidad() {
       <QueryBoundary isLoading={query.isLoading} error={query.error} onRetry={() => void query.refetch()}>
         {!benchmarkSeleccionado || !data || data.estado !== 'ok' ? (
           <EmptyState
+            ilustracion="lupa"
+            emoji="🔭"
             title={
               !benchmarkSeleccionado || data?.estado === 'sin_benchmark'
                 ? 'Sin referencia elegida'
@@ -184,7 +187,7 @@ export default function CostoOportunidad() {
 
             {/* Evolución acumulada (base 100) */}
             <div>
-              <h3 className="text-body font-bold text-app-text mb-2">Evolución acumulada (base 100)</h3>
+              <TituloSeccion icono="trend" tono="accent" className="mb-2">Evolución acumulada (base 100)</TituloSeccion>
               <Card>
                 <CostoOportunidadChart
                   serie={serieIndices}
@@ -202,7 +205,7 @@ export default function CostoOportunidad() {
 
             {/* Evolución en dinero */}
             <div>
-              <h3 className="text-body font-bold text-app-text mb-2">Evolución en dinero</h3>
+              <TituloSeccion icono="dollar" tono="pos" className="mb-2">Evolución en dinero</TituloSeccion>
               <Card>
                 <CostoOportunidadChart
                   serie={serieValores}

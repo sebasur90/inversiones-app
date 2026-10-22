@@ -26,7 +26,8 @@ const FONDO_SEVERIDAD: Record<Severidad, string> = {
   info: 'bg-app-pos-soft text-app-pos',
 }
 
-const BORDE_FILA = 'w-full text-left px-3.5 py-3 border-b border-app-border-soft last:border-b-0'
+const BORDE_FILA =
+  'w-full text-left px-3.5 py-3 border-b border-app-border-soft last:border-b-0 transition-colors duration-150 hover:bg-white/[0.035] active:bg-white/[0.06]'
 const FILA = `${BORDE_FILA} flex items-center gap-3`
 const FILA_TEXTO = `${BORDE_FILA} flex flex-col gap-0.5`
 
@@ -91,7 +92,9 @@ export default function ParaMirarHoy({
 
   return (
     <section className="mb-4" aria-label="Para mirar hoy">
-      <h3 className="text-strong font-bold text-app-text mb-2">Para mirar hoy</h3>
+      <h3 className="text-strong font-bold text-app-text mb-2">
+        Para mirar hoy <span aria-hidden="true">👀</span>
+      </h3>
 
       {totalAlertas + totalCompras === 0 ? (
         <div className="flex items-center gap-3 bg-app-surface border border-app-border rounded-2xl p-3.5">
@@ -99,7 +102,9 @@ export default function ParaMirarHoy({
             <Icon name="check" className="w-[18px] h-[18px]" />
           </div>
           <div className="min-w-0">
-            <div className="text-body font-semibold text-app-text">Todo en orden</div>
+            <div className="text-body font-semibold text-app-text">
+              Todo en orden <span aria-hidden="true">✨</span>
+            </div>
             <div className="text-caption text-app-text-dim">
               Ninguna alerta de precio, hallazgo importante ni error de datos. Se revisaron {posiciones.length}{' '}
               posicion{posiciones.length !== 1 ? 'es' : ''} y {watchlist.length} de la Watchlist.
@@ -119,8 +124,8 @@ export default function ParaMirarHoy({
                   role="tab"
                   aria-selected={vista === id}
                   onClick={() => setVistaElegida(id)}
-                  className={`flex items-center justify-center gap-1.5 min-h-10 rounded-[9px] text-body font-semibold transition-colors ${
-                    vista === id ? 'bg-app-surface-2 text-app-text' : 'text-app-text-dim'
+                  className={`flex items-center justify-center gap-1.5 min-h-10 rounded-[9px] text-body font-semibold transition-[background-color,color,transform] duration-150 active:scale-[0.97] ${
+                    vista === id ? 'bg-app-surface-2 text-app-text' : 'text-app-text-dim hover:text-app-text'
                   }`}
                 >
                   {etiqueta}

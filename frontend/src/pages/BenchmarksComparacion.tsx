@@ -13,6 +13,7 @@ import { calcularDesde, type PeriodoEvolucion } from '../utils'
 import { formatMonto } from '../utils/formatoMonto'
 import { useMontosOcultos } from '../utils/privacidad'
 import { qk } from '../api/queryClient'
+import TituloSeccion from '../components/ui/TituloSeccion'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
 import Segmented from '../components/ui/Segmented'
@@ -59,8 +60,8 @@ function ChipSeleccion({ label, activo, onClick }: { label: string; activo: bool
     <button
       onClick={onClick}
       aria-pressed={activo}
-      className={`px-2.5 py-1.5 rounded-lg text-label font-semibold whitespace-nowrap ${
-        activo ? 'bg-app-accent-soft text-app-accent' : 'bg-app-surface border border-app-border text-app-text-dim'
+      className={`px-2.5 py-1.5 rounded-lg text-label font-semibold whitespace-nowrap transition-[background-color,border-color,color,transform] duration-150 active:scale-95 ${
+        activo ? 'bg-app-accent-soft text-app-accent' : 'bg-app-surface border border-app-border text-app-text-dim hover:border-white/25 hover:text-app-text'
       }`}
     >
       {label}
@@ -185,7 +186,7 @@ export default function BenchmarksComparacion() {
       </div>
 
       {!hayAlgoQueComparar ? (
-        <EmptyState title="Elegí al menos un benchmark o un ticker para comparar" />
+        <EmptyState ilustracion="lupa" emoji="🔭" title="Elegí al menos un benchmark o un ticker para comparar" />
       ) : tab === 'comparacion' ? (
         <QueryBoundary
           isLoading={comparacion.isLoading}
@@ -195,7 +196,7 @@ export default function BenchmarksComparacion() {
           {performance && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-body font-bold text-app-text mb-3">Rendimientos</h3>
+                <TituloSeccion icono="trend" tono="accent" className="mb-3">Rendimientos</TituloSeccion>
                 <Card className="p-3">
                   <BenchmarkComparisonTable filas={performance.filas} />
                   <AvisoCalculo mensajes={performance.advertencias ?? []} />
@@ -204,7 +205,7 @@ export default function BenchmarksComparacion() {
 
               {performance.serie && performance.serie.length > 0 && (
                 <div>
-                  <h3 className="text-body font-bold text-app-text mb-3">Evolución del índice</h3>
+                  <TituloSeccion icono="pie" tono="cyan" className="mb-3">Evolución del índice</TituloSeccion>
                   <Card>
                     <PerformanceCompareChart serie={performance.serie} />
                   </Card>
@@ -220,11 +221,11 @@ export default function BenchmarksComparacion() {
           onRetry={() => void oportunidad.refetch()}
         >
           {costo === null ? (
-            <EmptyState title="Elegí un benchmark para ver el análisis de costo de oportunidad" />
+            <EmptyState ilustracion="lupa" title="Elegí un benchmark para ver el análisis de costo de oportunidad" />
           ) : (
             <div className="space-y-4">
               <div>
-                <h3 className="text-body font-bold text-app-text mb-3">Resumen</h3>
+                <TituloSeccion icono="scale" tono="violet" className="mb-3">Resumen</TituloSeccion>
                 {costo.estado === 'ok' ? (
                   <div className="grid grid-cols-2 gap-2">
                     <MetricTile
@@ -246,6 +247,7 @@ export default function BenchmarksComparacion() {
                   </div>
                 ) : (
                   <EmptyState
+                    ilustracion="planta"
                     title={
                       costo.estado === 'sin_benchmark'
                         ? 'No hay benchmark configurado'
@@ -257,7 +259,7 @@ export default function BenchmarksComparacion() {
 
               {costo.estado === 'ok' && costo.por_posicion.length > 0 && (
                 <div>
-                  <h3 className="text-body font-bold text-app-text mb-3">Por posición</h3>
+                  <TituloSeccion icono="list" tono="pos" className="mb-3">Por posición</TituloSeccion>
                   <Card className="p-3 overflow-x-auto">
                     <table className="w-full text-label">
                       <thead>

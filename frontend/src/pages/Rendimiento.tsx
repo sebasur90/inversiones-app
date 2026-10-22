@@ -6,7 +6,9 @@ import { getPnlRealizadoNoRealizado, getRendimientoMensual, getPerformanceRelati
 import ScreenHeader from '../components/layout/ScreenHeader'
 import EmptyState from '../components/ui/EmptyState'
 import AvisoCalculo from '../components/inversiones/AvisoCalculo'
-import { Icon } from '../components/icons/Icons'
+import { type IconName } from '../components/icons/Icons'
+import TituloSeccion, { type TonoSeccion } from '../components/ui/TituloSeccion'
+import BotonAcceso from '../components/ui/BotonAcceso'
 import InfoTooltip from '../help/components/InfoTooltip'
 import QueryBoundary from '../components/ui/QueryBoundary'
 import RendimientoHero from '../components/rendimiento/RendimientoHero'
@@ -17,10 +19,20 @@ import MesAMes from '../components/rendimiento/MesAMes'
 import QuienAporto from '../components/rendimiento/QuienAporto'
 import MetricasDetalladas from '../components/rendimiento/MetricasDetalladas'
 
-function Seccion({ titulo, children }: { titulo: React.ReactNode; children: React.ReactNode }) {
+function Seccion({
+  titulo,
+  icono,
+  tono = 'accent',
+  children,
+}: {
+  titulo: React.ReactNode
+  icono: IconName
+  tono?: TonoSeccion
+  children: React.ReactNode
+}) {
   return (
     <section className="mb-5">
-      <h2 className="text-strong font-bold text-app-text mb-2.5">{titulo}</h2>
+      <TituloSeccion icono={icono} tono={tono}>{titulo}</TituloSeccion>
       {children}
     </section>
   )
@@ -61,13 +73,9 @@ export default function Rendimiento() {
     <div className="pb-4">
       <ScreenHeader title="Rendimiento" onBack={() => navigate(-1)} />
 
-      <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
-        <button onClick={() => navigate('/patrimonio')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
-          <Icon name="trend" className="w-3.5 h-3.5" /> Ver evolución del patrimonio
-        </button>
-        <button onClick={() => navigate('/riesgo')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
-          <Icon name="alert" className="w-3.5 h-3.5" /> Ver métricas de riesgo
-        </button>
+      <div className="flex flex-wrap gap-2 mb-4">
+        <BotonAcceso icono="trend" onClick={() => navigate('/patrimonio')}>Evolución del patrimonio</BotonAcceso>
+        <BotonAcceso icono="alert" colorIcono="text-app-warn" onClick={() => navigate('/riesgo')}>Métricas de riesgo</BotonAcceso>
       </div>
 
       <QueryBoundary
@@ -76,40 +84,45 @@ export default function Rendimiento() {
         onRetry={() => void rendimientoQuery.refetch()}
       >
       {!pnl || !resumen ? (
-        <EmptyState title="Sin datos" description="No hay movimientos suficientes para calcular el rendimiento de esta cartera." />
+        <EmptyState
+          ilustracion="lupa"
+          emoji="📊"
+          title="Sin datos"
+          description="No hay movimientos suficientes para calcular el rendimiento de esta cartera."
+        />
       ) : (
         <>
           <RendimientoHero resumen={resumen} totalPnl={total} perfRelativa={perfRelativa} esARS={esARS} />
 
-          <Seccion titulo="¿De dónde salió la ganancia?">
+          <Seccion titulo="¿De dónde salió la ganancia?" icono="pie" tono="accent">
             <GananciaOrigen realizado={realizado} noRealizado={noRealizado} ingresos={ingresos} total={total} />
           </Seccion>
 
           {descomposicionFx && (
-            <Seccion titulo="¿Ganaste por tus activos o por el dólar?">
+            <Seccion titulo="¿Ganaste por tus activos o por el dólar?" icono="scale" tono="warn">
               <ActivosVsDolar fx={descomposicionFx} />
             </Seccion>
           )}
 
-          <Seccion titulo={<InfoTooltip term="benchmark" label="Contra el mercado" />}>
+          <Seccion titulo={<InfoTooltip term="benchmark" label="Contra el mercado" />} icono="target" tono="accent">
             <BenchmarkCard perf={perfRelativa} />
           </Seccion>
 
-          <Seccion titulo="¿Y si hubieras hecho otra cosa con tu plata? (en pesos)">
+          <Seccion titulo="¿Y si hubieras hecho otra cosa con tu plata? (en pesos)" icono="sync" tono="violet">
             <AlternativasCard resumen={resumen} />
           </Seccion>
 
-          <Seccion titulo={<InfoTooltip term="twr" label="Mes a mes" />}>
+          <Seccion titulo={<InfoTooltip term="twr" label="Mes a mes" />} icono="calendarDays" tono="cyan">
             {!rendimientoMensual || rendimientoMensual.meses.length === 0 ? (
-              <EmptyState title="Sin historial mensual" description="No hay suficientes meses de actividad para armar el mapa de calor." />
+              <EmptyState ilustracion="planta" emoji="🌱" title="Sin historial mensual" description="No hay suficientes meses de actividad para armar el mapa de calor." />
             ) : (
               <MesAMes datos={rendimientoMensual} esARS={esARS} />
             )}
           </Seccion>
 
-          <Seccion titulo="Quién aportó la ganancia">
+          <Seccion titulo="Quién aportó la ganancia" icono="trophy" tono="pos">
             {pnl.por_ticker.length === 0 ? (
-              <EmptyState title="Sin posiciones" description="No hay tickers con actividad para esta cartera." />
+              <EmptyState ilustracion="lupa" title="Sin posiciones" description="No hay tickers con actividad para esta cartera." />
             ) : (
               <QuienAporto items={pnl.por_ticker} esARS={esARS} />
             )}

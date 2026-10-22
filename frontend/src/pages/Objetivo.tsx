@@ -14,6 +14,7 @@ import {
   resolverTasaBase,
 } from '../utils/proyeccion'
 import ScreenHeader from '../components/layout/ScreenHeader'
+import TituloSeccion from '../components/ui/TituloSeccion'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
 import Segmented from '../components/ui/Segmented'
@@ -224,6 +225,8 @@ export default function Objetivo() {
       <div className="pb-4">
         <ScreenHeader title="Objetivo" />
         <EmptyState
+          ilustracion="lupa"
+          emoji="🎯"
           title="Elegí una cartera"
           description="Los objetivos se definen por cartera, no aplican al Consolidado."
         />
@@ -232,7 +235,7 @@ export default function Objetivo() {
             <button
               key={c.nombre}
               onClick={() => setCarteraSeleccionada(c.nombre)}
-              className="text-left px-3.5 py-3 rounded-xl text-body font-semibold text-app-text bg-app-surface border border-app-border"
+              className="text-left px-3.5 py-3 rounded-xl text-body font-semibold text-app-text bg-app-surface border border-app-border transition-[border-color,background-color,transform] duration-150 hover:border-app-accent/50 hover:bg-app-surface-2 active:scale-[0.98]"
             >
               {c.nombre}
             </button>
@@ -252,6 +255,8 @@ export default function Objetivo() {
         <SkeletonPantalla />
       ) : !objetivo ? (
         <EmptyState
+          ilustracion="planta"
+          emoji="🎯"
           title="Esta cartera no tiene un objetivo definido"
           description={`Agregá una fila para "${carteraSeleccionada}" en la pestaña "Objetivos" del Sheet (Cartera, Nombre, Fecha Límite, Monto USD) y sincronizá con el botón de arriba.`}
         />
@@ -353,10 +358,9 @@ export default function Objetivo() {
           </div>
 
           {/* Fechas estimadas */}
-          <h3 className="text-body font-bold text-app-text mb-2.5 flex items-center gap-1.5">
-            <Icon name="trend" className="w-3.5 h-3.5 text-app-accent" />
+          <TituloSeccion icono="calendarDays" tono="accent" className="mb-2.5 mt-5">
             <InfoTooltip term="objetivo_fechas_estimadas" label="Fechas estimadas" />
-          </h3>
+          </TituloSeccion>
           <Card>
             <div className="space-y-3.5">
               <div>
@@ -411,7 +415,7 @@ export default function Objetivo() {
           {/* Escenarios */}
           {escenarios && escenariosResueltos ? (
             <>
-              <h3 className="text-body font-bold text-app-text mb-2.5 mt-3.5">Escenarios</h3>
+              <TituloSeccion icono="scale" tono="violet" className="mb-2.5 mt-5">Escenarios</TituloSeccion>
               <Card>
                 <div className="grid grid-cols-3 gap-2 mb-3">
                   {escenariosResueltos.map(({ esc, tasa, fechaEsc, alcanzable }) => {
@@ -454,7 +458,7 @@ export default function Objetivo() {
           {/* Proyección patrimonial */}
           {puntosPlan.length > 0 && puntosProyeccion.length > 0 ? (
             <>
-              <h3 className="text-body font-bold text-app-text mb-2.5 mt-3.5">Proyección patrimonial</h3>
+              <TituloSeccion icono="trend" tono="cyan" className="mb-2.5 mt-5">Proyección patrimonial</TituloSeccion>
               <Card>
                 {escenarios && (
                   <div className="mb-3">
@@ -488,7 +492,7 @@ export default function Objetivo() {
           {/* Sensibilidad */}
           {grillaSensibilidad ? (
             <>
-              <h3 className="text-body font-bold text-app-text mb-2.5 mt-3.5">Sensibilidad: tasa × aporte</h3>
+              <TituloSeccion icono="grid" tono="warn" className="mb-2.5 mt-5">Sensibilidad: tasa × aporte</TituloSeccion>
               <SensibilidadGrid
                 grilla={grillaSensibilidad.grilla}
                 tasas={grillaSensibilidad.tasas}
@@ -500,7 +504,7 @@ export default function Objetivo() {
           ) : null}
 
           {/* Aportes históricos */}
-          <h3 className="text-body font-bold text-app-text mb-2.5 mt-3.5">Aportes históricos</h3>
+          <TituloSeccion icono="wallet" tono="pos" className="mb-2.5 mt-5">Aportes históricos</TituloSeccion>
           <Card>
             <AportesChart aportesHistoricos={aportesHistoricos} montoObjetivo={objetivo.monto_usd} />
           </Card>

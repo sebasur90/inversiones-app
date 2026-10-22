@@ -48,6 +48,8 @@ export default function Aportes() {
       <div className="pb-4">
         <ScreenHeader title="Ritmo de aportes" onBack={() => navigate(-1)} />
         <EmptyState
+          ilustracion="planta"
+          emoji="🌱"
           title="Sin aportes registrados"
           description="Cuando registres compras o ventas, acá vas a ver tu constancia mes a mes, tu racha, tus logros y a cuánto llegarías si mantenés el ritmo."
         />

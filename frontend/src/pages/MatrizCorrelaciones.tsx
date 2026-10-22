@@ -166,7 +166,7 @@ export default function MatrizCorrelaciones() {
         <div className="flex items-center justify-between mb-1.5">
           <div className="text-label font-bold uppercase text-app-text-faint">Instrumentos</div>
           {tickersSel !== null && (
-            <button onClick={() => setTickersSel(null)} className="text-label font-semibold text-app-accent">
+            <button onClick={() => setTickersSel(null)} className="text-label font-semibold text-app-accent transition-colors duration-150 hover:text-blue-300">
               Volver a mis tenencias
             </button>
           )}
@@ -185,14 +185,14 @@ export default function MatrizCorrelaciones() {
               value={buscarTicker}
               onChange={e => setBuscarTicker(e.target.value)}
               placeholder="Buscar instrumento para agregar…"
-              className="w-full bg-app-surface border border-app-border rounded-[10px] px-3 py-2 text-caption text-app-text mb-2"
+              aria-label="Buscar instrumento para agregar" className="w-full bg-app-surface border border-app-border rounded-xl h-11 px-3 text-caption text-app-text mb-2 outline-none transition-[border-color,box-shadow] duration-150 hover:border-white/20 focus:border-app-accent focus:shadow-[0_0_0_3px_rgba(59,130,246,0.25)]"
             />
             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4">
               {opcionesAgregar.slice(0, 20).map(t => (
                 <button
                   key={t.ticker}
                   onClick={() => agregarTicker(t.ticker)}
-                  className="shrink-0 font-semibold text-caption px-3 py-1.5 rounded-[10px] border border-app-border bg-app-surface text-app-text-dim"
+                  className="shrink-0 font-semibold text-caption px-3 py-1.5 rounded-[10px] border border-app-border bg-app-surface text-app-text-dim transition-[border-color,color,transform] duration-150 hover:border-white/25 hover:text-app-text active:scale-95"
                 >
                   {t.ticker}
                   <span className="ml-1.5 font-normal text-app-text-faint">{etiquetaOpcion(t)}</span>
@@ -221,6 +221,8 @@ export default function MatrizCorrelaciones() {
 
       {sinInstrumentos ? (
         <EmptyState
+          ilustracion="lupa"
+          emoji="🔗"
           title="Elegí al menos dos instrumentos"
           description="Agregá instrumentos de la lista de arriba, o volvé a tus tenencias."
         />
@@ -228,6 +230,7 @@ export default function MatrizCorrelaciones() {
         <QueryBoundary isLoading={query.isLoading} error={query.error} onRetry={() => void query.refetch()}>
           {!data || data.estado !== 'ok' ? (
             <EmptyState
+              ilustracion="planta"
               title={
                 data?.estado === 'sin_suficientes_tickers'
                   ? 'Hace falta al menos un segundo instrumento'

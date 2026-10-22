@@ -12,7 +12,7 @@ import { formatCompacto } from '../utils/formatoMonto'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Segmented from '../components/ui/Segmented'
 import EmptyState from '../components/ui/EmptyState'
-import { Icon } from '../components/icons/Icons'
+import BotonAcceso from '../components/ui/BotonAcceso'
 import InfoTooltip from '../help/components/InfoTooltip'
 import SkeletonPantalla, { Skeleton } from '../components/ui/Skeleton'
 import QueryBoundary from '../components/ui/QueryBoundary'
@@ -106,7 +106,7 @@ export default function Precios() {
     return (
       <div className="pb-4">
         <ScreenHeader title="Precios" />
-        <EmptyState title="Sin precios cargados" description="Sincronizá el sheet para ver la evolución de precios." />
+        <EmptyState ilustracion="lupa" emoji="📈" title="Sin precios cargados" description="Sincronizá el sheet para ver la evolución de precios." />
       </div>
     )
   }
@@ -132,13 +132,9 @@ export default function Precios() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-x-4 gap-y-1 mb-2">
-        <button onClick={() => navigate('/indicadores')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
-          <Icon name="trend" className="w-3.5 h-3.5" /> Indicadores macro (CER/MEP)
-        </button>
-        <button onClick={() => navigate('/comparar')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
-          <Icon name="trend" className="w-3.5 h-3.5" /> Comparar varios tickers
-        </button>
+      <div className="flex flex-wrap gap-2 mb-3">
+        <BotonAcceso icono="trend" onClick={() => navigate('/indicadores')}>Indicadores macro (CER/MEP)</BotonAcceso>
+        <BotonAcceso icono="search" colorIcono="text-app-violet" onClick={() => navigate('/comparar')}>Comparar varios tickers</BotonAcceso>
       </div>
 
       {/* Selector de ticker */}
@@ -147,10 +143,10 @@ export default function Precios() {
           <button
             key={t.ticker}
             onClick={() => setTickerSel(t.ticker)}
-            className={`shrink-0 font-semibold text-caption px-3 py-1.5 rounded-[10px] border transition-colors ${
+            className={`shrink-0 font-semibold text-caption px-3 py-1.5 rounded-[10px] border transition-[background-color,border-color,color,transform] duration-150 active:scale-95 ${
               t.ticker === tickerSel
                 ? 'bg-app-accent-soft border-app-accent text-app-accent'
-                : 'bg-app-surface border-app-border text-app-text-dim'
+                : 'bg-app-surface border-app-border text-app-text-dim hover:border-white/25 hover:text-app-text'
             }`}
           >
             {t.ticker}

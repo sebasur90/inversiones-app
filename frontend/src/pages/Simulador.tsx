@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useInversionesContext } from '../context/InversionesContext'
 import ScreenHeader from '../components/layout/ScreenHeader'
+import TituloSeccion from '../components/ui/TituloSeccion'
+import { Icon } from '../components/icons/Icons'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Segmented from '../components/ui/Segmented'
@@ -268,7 +270,7 @@ export default function Simulador() {
 
         {/* Panel de configuración — 3 escenarios lado a lado */}
         <div>
-          <h2 className="text-strong font-semibold text-app-text mb-3">Escenarios</h2>
+          <TituloSeccion icono="scale" tono="violet" className="mb-3">Escenarios</TituloSeccion>
           <div className="space-y-3">
             {escenarios.map((esc, idx) => (
               <EscenarioConfigPanel
@@ -326,7 +328,7 @@ export default function Simulador() {
           <>
             {/* Gráfico */}
             <div className="mt-6">
-              <h2 className="text-strong font-semibold text-app-text mb-3">Evolución del patrimonio</h2>
+              <TituloSeccion icono="trend" tono="accent" className="mb-3">Evolución del patrimonio</TituloSeccion>
               <Card className="p-3 bg-app-surface-2">
                 <EscenarioProyeccionChart resultado={resultado} />
               </Card>
@@ -334,7 +336,7 @@ export default function Simulador() {
 
             {/* Tabla comparativa */}
             <div className="mt-6">
-              <h2 className="text-strong font-semibold text-app-text mb-3">Comparación de escenarios</h2>
+              <TituloSeccion icono="pie" tono="cyan" className="mb-3">Comparación de escenarios</TituloSeccion>
               <Card className="p-3 bg-app-surface-2">
                 <EscenarioComparacionTable resultado={resultado} />
               </Card>
@@ -351,7 +353,10 @@ export default function Simulador() {
               <Card className="p-3 bg-yellow-900/20 border border-yellow-600/30">
                 <div className="text-caption space-y-1">
                   {resultado.advertencias.map((adv, idx) => (
-                    <div key={idx} className="text-yellow-200">• {adv}</div>
+                    <div key={idx} className="flex items-start gap-2 text-yellow-200">
+                      <Icon name="alert" className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                      {adv}
+                    </div>
                   ))}
                 </div>
               </Card>
@@ -378,19 +383,19 @@ export default function Simulador() {
                   <button
                     onClick={() => handleCargarGuardado(esc)}
                     disabled={escenarios.length >= 5}
-                    className="text-label font-semibold text-app-accent disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="text-label font-semibold text-app-accent transition-colors duration-150 hover:text-blue-300 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Cargar
                   </button>
                   <button
                     onClick={() => handleDuplicarGuardado(esc)}
-                    className="text-label font-semibold text-app-text-dim hover:text-app-text"
+                    className="text-label font-semibold text-app-text-dim transition-colors duration-150 hover:text-app-text active:scale-95"
                   >
                     Duplicar
                   </button>
                   <button
                     onClick={() => handleEliminarGuardado(esc)}
-                    className={`text-label font-semibold ${
+                    className={`text-label font-semibold transition-colors duration-150 active:scale-95 ${
                       confirmandoEliminar === esc.id
                         ? 'text-app-neg'
                         : 'text-app-text-dim hover:text-app-neg'

@@ -187,7 +187,7 @@ export default function TickerParesTab({ ticker }: { ticker: string }) {
           <Card>
             <div className="flex items-center justify-between mb-2">
               <div className="text-strong font-bold text-app-text">Clasificación</div>
-              <button onClick={() => setEditorClasif(true)} className="text-caption font-bold text-app-accent">Corregir</button>
+              <button onClick={() => setEditorClasif(true)} className="text-caption font-bold text-app-accent transition-[color,transform] duration-150 hover:text-blue-300 active:scale-95">Corregir</button>
             </div>
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-caption">
               {([['Tipo', 'tipo'], ['Región', 'region'], ['País', 'pais'], ['Sector', 'sector'], ['Industria', 'industria']] as const).map(([label, campo]) => (
@@ -205,7 +205,7 @@ export default function TickerParesTab({ ticker }: { ticker: string }) {
           <Card>
             <div className="flex items-center justify-between mb-1">
               <div className="text-strong font-bold text-app-text">Pares</div>
-              <button onClick={() => setEditorPares(true)} className="text-caption font-bold text-app-accent">Editar</button>
+              <button onClick={() => setEditorPares(true)} className="text-caption font-bold text-app-accent transition-[color,transform] duration-150 hover:text-blue-300 active:scale-95">Editar</button>
             </div>
             <div className="text-label text-app-text-faint mb-2 flex items-center gap-1">
               Criterio: {v.pares.criterio || 'sin pares'} <InfoTooltip term="valuacion_pares_criterio" label="" />
@@ -215,7 +215,7 @@ export default function TickerParesTab({ ticker }: { ticker: string }) {
                 <button
                   key={p.ticker_base}
                   onClick={() => navigate(`/ticker/${encodeURIComponent(p.ticker_base)}`)}
-                  className="text-left bg-app-surface-2 border border-app-border rounded-[9px] px-2.5 py-1.5"
+                  className="text-left bg-app-surface-2 border border-app-border rounded-[9px] px-2.5 py-1.5 transition-[border-color,transform] duration-150 hover:border-app-accent/50 active:scale-95"
                   title={p.nombre ?? undefined}
                 >
                   <div className="text-label font-bold font-mono text-app-text">{p.ticker_base}{p.agregado ? ' ·' : ''}</div>

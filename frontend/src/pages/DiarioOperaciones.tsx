@@ -5,6 +5,7 @@ import { getDiarioOperaciones, type DiarioOperacionOut } from '../api'
 import { qk } from '../api/queryClient'
 import { useFormatoFijo } from '../hooks/useFormatoMoneda'
 import { formatMonedaCruda, type Moneda } from '../utils/formatoMonto'
+import AvatarTicker from '../components/ui/AvatarTicker'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
 import Segmented from '../components/ui/Segmented'
@@ -60,7 +61,7 @@ export default function DiarioOperaciones() {
         fallback={<Skeleton className="h-[240px] rounded-xl" />}
       >
         {datos && datos.operaciones.length === 0 ? (
-          <EmptyState title="Todavía no hay operaciones" description="Cuando registres compras o ventas van a aparecer acá, con el contexto de mercado de cada una." />
+          <EmptyState ilustracion="planta" emoji="📓" title="Todavía no hay operaciones" description="Cuando registres compras o ventas van a aparecer acá, con el contexto de mercado de cada una." />
         ) : datos ? (
           <div className="flex flex-col gap-3">
             <Card>
@@ -89,8 +90,8 @@ export default function DiarioOperaciones() {
                 {[null, ...tickers].map(t => (
                   <button
                     key={t ?? 'todos'} type="button" onClick={() => setTicker(t)}
-                    className={`shrink-0 font-semibold text-caption px-3 py-1.5 rounded-[10px] border transition-colors ${
-                      t === ticker ? 'bg-app-accent-soft border-app-accent text-app-accent' : 'bg-app-surface border-app-border text-app-text-dim'
+                    className={`shrink-0 font-semibold text-caption px-3 py-1.5 rounded-[10px] border transition-[background-color,border-color,color,transform] duration-150 active:scale-95 ${
+                      t === ticker ? 'bg-app-accent-soft border-app-accent text-app-accent' : 'bg-app-surface border-app-border text-app-text-dim hover:border-white/25 hover:text-app-text'
                     }`}
                   >
                     {t ?? 'Todos'}
@@ -130,8 +131,14 @@ function Fila({ op, resultado, onAbrir }: { op: DiarioOperacionOut; resultado: s
   const moneda: Moneda = op.moneda === 'USD' ? 'USD' : 'ARS'
   const contexto = textoContexto(op)
   return (
-    <button type="button" onClick={onAbrir} className="flex items-start justify-between gap-3 px-3 py-2.5 text-left">
-      <div className="min-w-0">
+    <button
+      type="button"
+      onClick={onAbrir}
+      className="flex items-start justify-between gap-3 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-white/[0.035] active:bg-white/[0.06]"
+    >
+      <div className="flex items-start gap-2.5 min-w-0">
+        <AvatarTicker ticker={op.ticker} className="border-app-border text-app-text" />
+        <div className="min-w-0">
         <div className="flex items-baseline gap-2">
           <span className="text-caption font-semibold text-app-text">{op.ticker}</span>
           <span className="text-label font-semibold" style={{ color }}>
@@ -143,6 +150,7 @@ function Fila({ op, resultado, onAbrir }: { op: DiarioOperacionOut; resultado: s
           {op.cantidad} a {formatMonedaCruda(op.precio, moneda)}
         </div>
         {contexto && <div className="text-label text-app-text-dim font-mono tabular-nums mt-0.5">{contexto}</div>}
+        </div>
       </div>
       {(resultado != null || op.resultado_pct != null) && (
         <div className="shrink-0 text-right font-mono tabular-nums" style={{ color }}>

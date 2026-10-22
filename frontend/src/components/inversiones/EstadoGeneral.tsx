@@ -4,7 +4,8 @@ import { nivelScore, type Nivel, type NivelInfo } from '../../utils/niveles'
 import { Icon } from '../icons/Icons'
 import Semaforo from '../ui/Semaforo'
 
-const FILA = 'w-full flex items-center gap-3 text-left px-3.5 py-3 border-b border-app-border-soft last:border-b-0'
+const FILA =
+  'group w-full flex items-center gap-3 text-left px-3.5 py-3 border-b border-app-border-soft last:border-b-0 transition-colors duration-150 hover:bg-white/[0.035] active:bg-white/[0.06]'
 
 function Fila({
   titulo,
@@ -30,7 +31,7 @@ function Fila({
         {score !== null ? Math.round(score) : '—'}
         <span className="text-body text-app-text-dim">/100</span>
       </div>
-      <Icon name="chevron" className="w-4 h-4 -rotate-90 text-app-text-dim shrink-0" />
+      <Icon name="chevron" className="w-4 h-4 -rotate-90 text-app-text-dim shrink-0 transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-app-text" />
     </button>
   )
 }
@@ -54,7 +55,10 @@ export default function EstadoGeneral({
 
   return (
     <section className="mb-4" aria-label="Estado general">
-      <h3 className="text-strong font-bold text-app-text mb-2">Estado general</h3>
+      <h3 className="flex items-center gap-1.5 text-strong font-bold text-app-text mb-2">
+        <Icon name="shield" className="w-4 h-4 text-app-accent" />
+        Estado general
+      </h3>
       <div className="bg-app-surface border border-app-border rounded-2xl overflow-hidden">
         {diagnostico && (
           // "Diagnóstico", no "Salud de cartera": el score y los hallazgos salen de `getDiagnostico`

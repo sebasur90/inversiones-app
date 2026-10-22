@@ -124,7 +124,7 @@ function FichaEmisor({ item, onVerTicker }: { item: MapaMercadoItem; onVerTicker
 
       <button
         onClick={onVerTicker}
-        className="rounded-xl bg-app-accent px-4 py-2.5 text-strong font-semibold text-white"
+        className="rounded-xl bg-app-accent px-4 py-2.5 text-strong font-semibold text-white transition-[background-color,transform] duration-150 hover:bg-blue-600 active:scale-[0.97]"
       >
         Ver {item.ticker}
       </button>
@@ -175,6 +175,8 @@ export default function MapaMercado() {
           <SkeletonPantalla />
         ) : data.items.length === 0 ? (
           <EmptyState
+            ilustracion="planta"
+            emoji="🗺️"
             title="Todavía no hay datos del mercado"
             description="La descarga corre sola después del cierre de EE.UU., y la clasificación se completa de a poco. Volvé más tarde."
           />
@@ -197,7 +199,7 @@ export default function MapaMercado() {
             <div className="mb-2 flex flex-wrap items-center gap-1 text-caption">
               <button
                 onClick={() => setRuta([])}
-                className={`font-semibold ${migas.length === 0 ? 'text-app-text' : 'text-app-text-dim'}`}
+                className={`font-semibold transition-colors duration-150 hover:text-app-text ${migas.length === 0 ? 'text-app-text' : 'text-app-text-dim'}`}
               >
                 Mercado
               </button>
@@ -206,7 +208,7 @@ export default function MapaMercado() {
                   <span className="text-app-text-faint">›</span>
                   <button
                     onClick={() => setRuta(rutaEfectiva.slice(0, i + 1))}
-                    className={`font-semibold ${i === migas.length - 1 ? 'text-app-text' : 'text-app-text-dim'}`}
+                    className={`font-semibold transition-colors duration-150 hover:text-app-text ${i === migas.length - 1 ? 'text-app-text' : 'text-app-text-dim'}`}
                   >
                     {m.etiqueta}
                   </button>
@@ -216,6 +218,7 @@ export default function MapaMercado() {
 
             {sinContenido ? (
               <EmptyState
+                ilustracion="lupa"
                 title={soloMio || tamano === 'cartera' ? 'No hay nada tuyo para mostrar' : 'Nada para mostrar'}
                 description={
                   soloMio || tamano === 'cartera'

@@ -1,6 +1,7 @@
 import { formatPctRatio } from '../../utils'
 import Card from '../../components/ui/Card'
 import MetricTile from '../../components/ui/MetricTile'
+import { Icon } from '../../components/icons/Icons'
 import type { TickerRiesgoOut } from '../../api'
 
 export default function TickerRiesgoTab({ riesgo }: { riesgo: TickerRiesgoOut }) {
@@ -48,7 +49,10 @@ export default function TickerRiesgoTab({ riesgo }: { riesgo: TickerRiesgoOut })
 
       {riesgo.mejores_periodos && riesgo.mejores_periodos.length > 0 && (
         <Card className="mb-4">
-          <h3 className="text-caption font-bold text-app-text mb-3">Mejores períodos</h3>
+          <h3 className="flex items-center gap-1.5 text-caption font-bold text-app-text mb-3">
+            <Icon name="trophy" className="w-3.5 h-3.5 text-app-accent" />
+            Mejores períodos
+          </h3>
           <div className="space-y-2">
             {riesgo.mejores_periodos.slice(0, 3).map((p, i) => (
               <div key={i} className="flex justify-between items-center py-2 px-2 bg-app-surface/50 rounded-[7px]">
@@ -64,7 +68,10 @@ export default function TickerRiesgoTab({ riesgo }: { riesgo: TickerRiesgoOut })
 
       {riesgo.peores_periodos && riesgo.peores_periodos.length > 0 && (
         <Card>
-          <h3 className="text-caption font-bold text-app-text mb-3">Peores períodos</h3>
+          <h3 className="flex items-center gap-1.5 text-caption font-bold text-app-text mb-3">
+            <Icon name="alert" className="w-3.5 h-3.5 text-app-accent" />
+            Peores períodos
+          </h3>
           <div className="space-y-2">
             {riesgo.peores_periodos.slice(0, 3).map((p, i) => (
               <div key={i} className="flex justify-between items-center py-2 px-2 bg-app-surface/50 rounded-[7px]">

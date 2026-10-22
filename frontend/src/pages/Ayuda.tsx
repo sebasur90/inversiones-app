@@ -39,7 +39,7 @@ function SeccionTutoriales() {
               type="button"
               onClick={() => setAbiertoId(abierto ? null : tutorial.id)}
               aria-expanded={abierto}
-              className="w-full flex items-center gap-3 text-left px-3.5 py-3"
+              className="w-full flex items-center gap-3 text-left px-3.5 py-3 transition-colors duration-150 hover:bg-white/[0.035] active:bg-white/[0.06]"
             >
               <div className="min-w-0 flex-1">
                 <div className="text-body font-semibold text-app-text">{tutorial.titulo}</div>
@@ -104,7 +104,7 @@ function SeccionGlosario() {
 
   return (
     <div>
-      <div className="flex items-center gap-2 bg-app-surface border border-app-border rounded-xl h-10 px-3 mb-3">
+      <div className="flex items-center gap-2 bg-app-surface border border-app-border rounded-xl h-11 px-3 mb-3 transition-[border-color,box-shadow] duration-150 hover:border-white/20 focus-within:border-app-accent focus-within:shadow-[0_0_0_3px_rgba(59,130,246,0.25)]">
         <Icon name="search" className="w-4 h-4 text-app-text-faint" />
         <input
           value={consulta}
@@ -116,7 +116,7 @@ function SeccionGlosario() {
       </div>
 
       {resultados.length === 0 ? (
-        <EmptyState title="Nada coincide" description="Probá con otra palabra." />
+        <EmptyState ilustracion="lupa" emoji="🔎" title="Nada coincide" description="Probá con otra palabra." />
       ) : (
         <div className="flex flex-col gap-1">
           {resultados.map(k => (
@@ -162,7 +162,7 @@ function SeccionFaq() {
               type="button"
               onClick={() => setAbiertaIdx(abierta ? null : i)}
               aria-expanded={abierta}
-              className="w-full flex items-center gap-3 text-left px-3.5 py-3"
+              className="w-full flex items-center gap-3 text-left px-3.5 py-3 transition-colors duration-150 hover:bg-white/[0.035] active:bg-white/[0.06]"
             >
               <div className="flex-1 text-caption font-semibold text-app-text">{item.pregunta}</div>
               <Icon

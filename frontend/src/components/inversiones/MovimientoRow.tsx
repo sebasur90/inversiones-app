@@ -2,6 +2,8 @@ import type { MovimientoInversion } from '../../api'
 import { formatMonto } from '../../utils/formatoMonto'
 import { useMontosOcultos } from '../../utils/privacidad'
 import InfoTooltip from '../../help/components/InfoTooltip'
+import { Icon, type IconName } from '../icons/Icons'
+import AvatarTicker from '../ui/AvatarTicker'
 import type { MovimientosHelpKey } from '../../help/content/movimientos'
 
 const TIPO_LABELS: Record<string, string> = {
@@ -18,6 +20,15 @@ const TIPO_BADGE_CLASSES: Record<string, string> = {
   dividendo: 'bg-app-pos-soft text-app-pos',
   cupon: 'bg-app-pos-soft text-app-pos',
   amortizacion: 'bg-app-violet/15 text-app-violet',
+}
+
+// El ícono acompaña al color del badge: el tipo se lee aunque no se distingan los tonos.
+const TIPO_ICONO: Record<string, IconName> = {
+  compra: 'plus',
+  venta: 'down',
+  dividendo: 'calendar',
+  cupon: 'calendar',
+  amortizacion: 'download',
 }
 
 const TIPO_HELP_KEY: Record<string, MovimientosHelpKey | undefined> = {
@@ -42,13 +53,14 @@ export default function MovimientoRow({ mov }: { mov: MovimientoInversion }) {
   const detalle = mov.cantidad != null ? `${mov.cantidad.toLocaleString('es-AR', { maximumFractionDigits: 8 })} @ ${mov.precio.toLocaleString('es-AR', { maximumFractionDigits: 6 })} ${mov.moneda}` : mov.moneda
 
   return (
-    <div className="flex items-center gap-2.5 py-2.5 border-b border-app-border-soft last:border-b-0">
-      <div className="w-9 h-9 rounded-[11px] bg-app-surface-2 border border-app-border flex items-center justify-center font-mono text-label font-bold text-app-text shrink-0">
-        {mov.ticker.slice(0, 4)}
-      </div>
+    <div className="flex items-center gap-2.5 py-2.5 border-b border-app-border-soft last:border-b-0 rounded-lg transition-colors duration-150 hover:bg-white/[0.035]">
+      <AvatarTicker ticker={mov.ticker} className="border-app-border text-app-text" />
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1">
-          <span className={`inline-block font-bold text-label tracking-wide px-1.5 py-0.5 rounded-[6px] ${TIPO_BADGE_CLASSES[mov.tipo_movimiento] ?? 'bg-app-surface-2 text-app-text-dim'}`}>
+        <div className="flex items-center gap-1.5">
+          {/* El avatar puede ser un logo, que no dice el ticker: va también en texto. */}
+          <span className="font-mono text-body font-bold text-app-text">{mov.ticker}</span>
+          <span className={`inline-flex items-center gap-1 font-bold text-label tracking-wide px-1.5 py-0.5 rounded-[6px] ${TIPO_BADGE_CLASSES[mov.tipo_movimiento] ?? 'bg-app-surface-2 text-app-text-dim'}`}>
+            {TIPO_ICONO[mov.tipo_movimiento] && <Icon name={TIPO_ICONO[mov.tipo_movimiento]} className="w-3 h-3" />}
             {(TIPO_LABELS[mov.tipo_movimiento] ?? mov.tipo_movimiento).toUpperCase()}
           </span>
           {TIPO_HELP_KEY[mov.tipo_movimiento] && (

@@ -4,6 +4,7 @@ import Card from '../../components/ui/Card'
 import Sparkline from '../../components/charts/Sparkline'
 import VariacionDia from '../../components/ui/VariacionDia'
 import InfoTooltip from '../../help/components/InfoTooltip'
+import { Icon } from '../../components/icons/Icons'
 import type { TickerHistoricoOut } from '../../api'
 
 // Días que pueden separar dos registros para seguir llamando "diaria" a la variación entre ellos
@@ -34,7 +35,10 @@ export default function TickerHistoricoTab({ historico, monedaSeleccionada }: { 
     <div className="pb-4">
       {precios.length > 0 && (
         <Card className="mb-4">
-          <h3 className="text-caption font-bold text-app-text mb-3">Precio histórico</h3>
+          <h3 className="flex items-center gap-1.5 text-caption font-bold text-app-text mb-3">
+            <Icon name="trend" className="w-3.5 h-3.5 text-app-accent" />
+            Precio histórico
+          </h3>
           <Sparkline
             data={precios}
             color={esCreciente ? '#10b981' : '#ef4444'}
@@ -44,7 +48,10 @@ export default function TickerHistoricoTab({ historico, monedaSeleccionada }: { 
       )}
 
       <Card>
-        <h3 className="text-caption font-bold text-app-text mb-3">Detalle por fecha</h3>
+        <h3 className="flex items-center gap-1.5 text-caption font-bold text-app-text mb-3">
+            <Icon name="calendarDays" className="w-3.5 h-3.5 text-app-accent" />
+            Detalle por fecha
+          </h3>
         <div className="overflow-x-auto">
           <table className="w-full text-label">
             <thead>

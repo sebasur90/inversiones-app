@@ -7,6 +7,7 @@ import { calcularDesde, type PeriodoEvolucion } from '../utils'
 import { MASCARA } from '../utils/formatoMonto'
 import { useMontosOcultos } from '../utils/privacidad'
 import { qk } from '../api/queryClient'
+import TituloSeccion from '../components/ui/TituloSeccion'
 import ScreenHeader from '../components/layout/ScreenHeader'
 import Card from '../components/ui/Card'
 import Segmented from '../components/ui/Segmented'
@@ -139,14 +140,14 @@ export default function ExplicacionResultado() {
 
       <QueryBoundary isLoading={query.isLoading} error={query.error} onRetry={() => void query.refetch()}>
         {!data || data.estado === 'sin_datos' ? (
-          <EmptyState title="Sin movimientos" description="Esta cartera todavía no tiene movimientos cargados en este período." />
+          <EmptyState ilustracion="planta" emoji="🌱" title="Sin movimientos" description="Esta cartera todavía no tiene movimientos cargados en este período." />
         ) : (
           <div className="flex flex-col gap-5">
             {/* 1. Resultado total */}
             <div>
-              <h3 className="text-body font-bold text-app-text mb-2.5">
+              <TituloSeccion icono="wallet" tono="accent">
                 <InfoTooltip term="explicacion_que_es" label="Resultado total" />
-              </h3>
+              </TituloSeccion>
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <MetricTile label="Rendimiento del período" value={fmtPct(data.resultado.twr_pct)} tone={data.resultado.twr_pct != null ? (data.resultado.twr_pct >= 0 ? 'pos' : 'neg') : undefined} />
                 <MetricTile label="P&L" value={fmtMonto(data.resultado.pnl, esUSD, ocultos)} tone={data.resultado.pnl != null ? (data.resultado.pnl >= 0 ? 'pos' : 'neg') : undefined} />
@@ -176,7 +177,7 @@ export default function ExplicacionResultado() {
             {/* 2. Atribución por tipo */}
             {porTipo.length > 0 && (
               <div>
-                <h3 className="text-body font-bold text-app-text mb-2.5">Atribución por tipo</h3>
+                <TituloSeccion icono="pie" tono="cyan">Atribución por tipo</TituloSeccion>
                 <div className="flex flex-col gap-3">
                   {porTipo.map(it => (
                     <AtribucionBar key={it.etiqueta} item={it} maxAbs={maxAbsTipo} esUSD={esUSD} />
@@ -187,7 +188,7 @@ export default function ExplicacionResultado() {
 
             {/* 3. Principales contribuyentes */}
             <div>
-              <h3 className="text-body font-bold text-app-text mb-2.5">Principales contribuyentes</h3>
+              <TituloSeccion icono="trophy" tono="pos">Principales contribuyentes</TituloSeccion>
               {data.contribuyentes.length === 0 ? (
                 <div className="text-label text-app-text-faint">Ninguna posición aportó ganancia en este período.</div>
               ) : (
@@ -197,7 +198,7 @@ export default function ExplicacionResultado() {
 
             {/* 4. Principales detractores */}
             <div>
-              <h3 className="text-body font-bold text-app-text mb-2.5">Principales detractores</h3>
+              <TituloSeccion icono="down" tono="neg">Principales detractores</TituloSeccion>
               {data.detractores.length === 0 ? (
                 <div className="text-label text-app-text-faint">Ninguna posición restó en este período.</div>
               ) : (
@@ -207,7 +208,7 @@ export default function ExplicacionResultado() {
 
             {/* 5. Descomposición del resultado */}
             <div>
-              <h3 className="text-body font-bold text-app-text mb-2.5">De dónde viene el resultado</h3>
+              <TituloSeccion icono="scale" tono="violet">De dónde viene el resultado</TituloSeccion>
               <Card>
                 <ComponenteRow label="Movimiento de precio" valor={data.componentes.precio} esUSD={esUSD} term="explicacion_precio" />
                 <ComponenteRow label="Dividendos" valor={data.componentes.dividendos} esUSD={esUSD} term="explicacion_dividendos_cupones" />
@@ -248,7 +249,9 @@ export default function ExplicacionResultado() {
 
             {/* 6. Explicación para principiantes */}
             <div>
-              <h3 className="text-body font-bold text-app-text mb-2.5">En criollo</h3>
+              <TituloSeccion icono="info" tono="warn">
+                En criollo <span aria-hidden="true">💬</span>
+              </TituloSeccion>
               <Card>
                 <div className="text-caption text-app-text font-semibold mb-1.5">{data.explicacion.titulo}</div>
                 {data.explicacion.frases.length > 0 && (

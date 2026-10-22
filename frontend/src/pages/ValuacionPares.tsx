@@ -73,8 +73,8 @@ function FiltroChip({ activo, onClick, children }: { activo: boolean; onClick: (
   return (
     <button
       onClick={onClick}
-      className={`shrink-0 rounded-[9px] px-2.5 py-1.5 text-label font-bold border transition-colors ${
-        activo ? 'bg-app-accent-soft text-app-accent border-app-accent/40' : 'bg-app-surface-2 text-app-text-dim border-app-border'
+      className={`shrink-0 rounded-[9px] px-2.5 py-1.5 text-label font-bold border transition-[background-color,border-color,color,transform] duration-150 active:scale-95 ${
+        activo ? 'bg-app-accent-soft text-app-accent border-app-accent/40' : 'bg-app-surface-2 text-app-text-dim border-app-border hover:border-white/25 hover:text-app-text'
       }`}
     >
       {children}
@@ -85,7 +85,7 @@ function FiltroChip({ activo, onClick, children }: { activo: boolean; onClick: (
 function Tarjeta({ item, onClick }: { item: ValuacionItem; onClick: () => void }) {
   const detalle = [item.tipo, item.region, item.sector].filter(Boolean).join(' · ')
   return (
-    <button onClick={onClick} className="w-full text-left bg-app-surface border border-app-border rounded-2xl p-3.5 mb-2.5">
+    <button onClick={onClick} className="w-full text-left bg-app-surface border border-app-border rounded-2xl p-3.5 mb-2.5 transition-[border-color,box-shadow,transform] duration-150 hover:border-app-accent/50 hover:shadow-[0_6px_24px_-12px_rgba(59,130,246,0.45)] hover:-translate-y-px active:translate-y-0 active:scale-[0.99]">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
@@ -213,7 +213,7 @@ export default function ValuacionPares() {
               <button
                 onClick={() => lote.mutate()}
                 disabled={lote.isPending || lote.isSuccess}
-                className="shrink-0 text-caption font-bold text-app-accent disabled:text-app-text-faint"
+                className="shrink-0 text-caption font-bold text-app-accent transition-[color,transform] duration-150 hover:text-blue-300 active:scale-95 disabled:text-app-text-faint"
               >
                 {lote.isSuccess ? 'Bajando…' : 'Bajar ahora'}
               </button>
@@ -263,6 +263,8 @@ export default function ValuacionPares() {
       <QueryBoundary isLoading={lista.isLoading} error={lista.error} onRetry={() => void lista.refetch()}>
         {filtrados.length === 0 ? (
           <EmptyState
+            ilustracion="lupa"
+            emoji="🔭"
             title={items.length === 0 ? 'Todavía no hay nada para comparar' : 'Nada con esos filtros'}
             description={
               items.length === 0
@@ -282,7 +284,7 @@ export default function ValuacionPares() {
               />
             ))}
             {filtrados.length > visibles && (
-              <button onClick={() => setVisibles(v => v + PAGINA)} className="w-full py-3 text-caption font-bold text-app-accent">
+              <button onClick={() => setVisibles(v => v + PAGINA)} className="w-full py-3 text-caption font-bold text-app-accent transition-[color,transform] duration-150 hover:text-blue-300 active:scale-[0.98]">
                 Ver {Math.min(PAGINA, filtrados.length - visibles)} más de {filtrados.length - visibles}
               </button>
             )}

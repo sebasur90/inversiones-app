@@ -9,9 +9,9 @@ import { Icon, type IconName } from '../icons/Icons'
 // "Más" y desde el buscador del header.
 const ITEMS: { to: string; label: string; icon: IconName }[] = [
   { to: '/resumen', label: 'Resumen', icon: 'home' },
-  { to: '/posiciones', label: 'Posiciones', icon: 'list' },
-  { to: '/rendimiento', label: 'Rendimiento', icon: 'up' },
-  { to: '/movimientos', label: 'Movimientos', icon: 'trend' },
+  { to: '/posiciones', label: 'Posiciones', icon: 'wallet' },
+  { to: '/rendimiento', label: 'Rendimiento', icon: 'trend' },
+  { to: '/movimientos', label: 'Movimientos', icon: 'swap' },
   { to: '/mas', label: 'Más', icon: 'more' },
 ]
 
@@ -32,7 +32,7 @@ export default function BottomNav() {
   )
 
   return (
-    <nav className="flex border-t border-app-border bg-app-surface px-1 pt-2 safe-bottom shrink-0">
+    <nav aria-label="Principal" className="flex border-t border-app-border bg-app-surface px-1 pt-2 safe-bottom shrink-0">
       {ITEMS.map(item => {
         // Las alertas de precio se resuelven en Posiciones: el contador va ahí y no en un
         // sexto destino que no entraría.
@@ -43,23 +43,32 @@ export default function BottomNav() {
             to={item.to}
             aria-label={alertas > 0 ? `${item.label}, ${alertas} alerta${alertas !== 1 ? 's' : ''} de precio` : undefined}
             className={({ isActive }) =>
-              `flex-1 flex flex-col items-center justify-center gap-1 min-h-[44px] pb-2 text-label font-semibold ${
-                isActive ? 'text-app-accent' : 'text-app-text-dim'
+              `group flex-1 flex flex-col items-center justify-center gap-1 min-h-[44px] pb-2 text-label font-semibold transition-colors duration-150 ${
+                isActive ? 'text-app-accent' : 'text-app-text-dim hover:text-app-text'
               }`
             }
           >
-            <span className="relative">
-              <Icon name={item.icon} className="w-[18px] h-[18px]" />
-              {alertas > 0 && (
+            {({ isActive }) => (
+              <>
+                {/* El activo se marca con una píldora detrás del ícono: se distingue sin depender sólo del color. */}
                 <span
-                  aria-hidden="true"
-                  className={`absolute -top-1.5 -right-2.5 min-w-[15px] h-[15px] px-1 rounded-full flex items-center justify-center font-bold text-[9px] leading-none tabular-nums ${claseContador(conteo)}`}
+                  className={`relative flex items-center justify-center w-12 h-7 rounded-full transition-[background-color,transform] duration-150 group-active:scale-90 ${
+                    isActive ? 'bg-app-accent-soft' : ''
+                  }`}
                 >
-                  {alertas > 9 ? '9+' : alertas}
+                  <Icon name={item.icon} className="w-[18px] h-[18px]" />
+                  {alertas > 0 && (
+                    <span
+                      aria-hidden="true"
+                      className={`absolute -top-1 right-0.5 min-w-[15px] h-[15px] px-1 rounded-full flex items-center justify-center font-bold text-[9px] leading-none tabular-nums ${claseContador(conteo)}`}
+                    >
+                      {alertas > 9 ? '9+' : alertas}
+                    </span>
+                  )}
                 </span>
-              )}
-            </span>
-            <span className="text-center leading-[1.1]">{item.label}</span>
+                <span className="text-center leading-[1.1]">{item.label}</span>
+              </>
+            )}
           </NavLink>
         )
       })}

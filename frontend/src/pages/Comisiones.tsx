@@ -10,6 +10,7 @@ import { qk } from '../api/queryClient'
 import { CHART_COLORS } from '../utils'
 import { useFormatoFijo } from '../hooks/useFormatoMoneda'
 import ScreenHeader from '../components/layout/ScreenHeader'
+import { Icon } from '../components/icons/Icons'
 import Segmented from '../components/ui/Segmented'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
@@ -112,7 +113,7 @@ export default function Comisiones() {
     return (
       <div className="pb-4">
         <ScreenHeader title="Comisiones" onBack={() => navigate(-1)} />
-        <EmptyState title="Sin comisiones registradas" description="No hay movimientos con comisión en esta cartera." />
+        <EmptyState ilustracion="escudo" emoji="🧾" title="Sin comisiones registradas" description="No hay movimientos con comisión en esta cartera." />
       </div>
     )
   }
@@ -129,7 +130,12 @@ export default function Comisiones() {
       <ScreenHeader title="Comisiones" onBack={() => navigate(-1)} />
 
       <Card className="mb-4">
-        <div className="text-label font-bold uppercase tracking-wide text-app-text-faint mb-1">Total pagado</div>
+        <div className="flex items-center gap-2 text-label font-bold uppercase tracking-wide text-app-text-dim mb-1.5">
+          <span aria-hidden="true" className="w-7 h-7 rounded-[9px] bg-app-warn/15 text-app-warn flex items-center justify-center">
+            <Icon name="dollar" className="w-4 h-4" />
+          </span>
+          Total pagado
+        </div>
         <div className="font-mono text-metric-lg font-bold text-app-text tabular-nums">
           {formatMoneda(esARS ? datos.total_ars : datos.total_usd)}
         </div>

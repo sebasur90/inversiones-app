@@ -14,6 +14,8 @@ import InfoTooltip from '../help/components/InfoTooltip'
 import ErrorBanner from '../help/components/ErrorBanner'
 import { parseApiError, type ParsedApiError } from '../help/errors/apiErrors'
 import Segmented from '../components/ui/Segmented'
+import TituloSeccion from '../components/ui/TituloSeccion'
+import BotonAcceso from '../components/ui/BotonAcceso'
 import { Icon } from '../components/icons/Icons'
 import SkeletonPantalla from '../components/ui/Skeleton'
 import { qk } from '../api/queryClient'
@@ -52,8 +54,16 @@ function tonoDeValor(v: number | null | undefined): 'pos' | 'neg' | undefined {
 
 function PeriodoRow({ item }: { item: PeriodoRetorno }) {
   return (
-    <div className="flex items-center justify-between bg-app-surface border border-app-border rounded-[13px] px-3.5 py-2 text-left">
-      <div className="text-caption font-semibold text-app-text">{formatMesLabel(item.anio, item.mes)}</div>
+    <div className="flex items-center justify-between gap-3 bg-app-surface border border-app-border rounded-2xl px-3.5 py-2.5 text-left transition-colors duration-150 hover:bg-app-surface-2">
+      <div className="flex items-center gap-2.5 text-caption font-semibold text-app-text">
+        <span
+          aria-hidden="true"
+          className={`w-7 h-7 rounded-lg flex items-center justify-center ${item.retorno >= 0 ? 'bg-app-pos-soft text-app-pos' : 'bg-app-neg-soft text-app-neg'}`}
+        >
+          <Icon name={item.retorno >= 0 ? 'up' : 'down'} className="w-3.5 h-3.5" />
+        </span>
+        {formatMesLabel(item.anio, item.mes)}
+      </div>
       <div className={`font-mono font-bold text-body tabular-nums ${toneClass(item.retorno)}`}>{formatPctRatio(item.retorno)}</div>
     </div>
   )
@@ -80,13 +90,9 @@ export default function Riesgo() {
     <div className="pb-4">
       <ScreenHeader title="Riesgo" onBack={() => navigate(-1)} />
 
-      <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
-        <button onClick={() => navigate('/rendimiento')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
-          <Icon name="trend" className="w-3.5 h-3.5" /> Ver rendimiento detallado
-        </button>
-        <button onClick={() => navigate('/contribucion')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
-          <Icon name="scale" className="w-3.5 h-3.5" /> Ver contribución y concentración
-        </button>
+      <div className="flex flex-wrap gap-2 mb-4">
+        <BotonAcceso icono="trend" onClick={() => navigate('/rendimiento')}>Rendimiento detallado</BotonAcceso>
+        <BotonAcceso icono="scale" colorIcono="text-app-warn" onClick={() => navigate('/contribucion')}>Contribución y concentración</BotonAcceso>
       </div>
 
       <div className="mb-3">
@@ -109,16 +115,17 @@ export default function Riesgo() {
       ) : error ? (
         <div className="py-4"><ErrorBanner error={error} /></div>
       ) : !riesgo || sinHistorialSuficiente ? (
-        <EmptyState title="Sin datos" description="No hay suficiente historial mensual para calcular métricas de riesgo de esta cartera." />
+        <EmptyState ilustracion="lupa" emoji="📉" title="Sin datos" description="No hay suficiente historial mensual para calcular métricas de riesgo de esta cartera." />
       ) : (
         <>
-          <div className="text-label text-app-text-dim mb-3">
+          <div className="inline-flex items-center gap-1.5 text-label text-app-text-dim mb-4 px-2.5 py-1.5 rounded-full bg-app-surface border border-app-border">
+            <Icon name="info" className="w-3.5 h-3.5 shrink-0" />
             Basado en {riesgo.n_meses_historia} mes{riesgo.n_meses_historia === 1 ? '' : 'es'} de historial (frecuencia mensual).
           </div>
 
-          <h3 className="text-body font-bold text-app-text mb-2.5">
+          <TituloSeccion icono="down" tono="neg">
             <InfoTooltip term="drawdown" label="Drawdown" />
-          </h3>
+          </TituloSeccion>
           {serieDrawdown.length < 2 ? (
             <EmptyState title="Sin historial suficiente" description="Se necesitan al menos 2 meses con tenencia para graficar el drawdown." />
           ) : (
@@ -244,18 +251,22 @@ export default function Riesgo() {
                 <span className="text-app-neg font-bold">{formatPctRatio(riesgo.frecuencia_positivos_negativos.pct_negativos)}</span> negativos
                 <span className="text-app-text-dim"> ({riesgo.frecuencia_positivos_negativos.n_obs} meses)</span>
               </div>
+              <div aria-hidden="true" className="flex h-2 rounded-full overflow-hidden gap-0.5 mt-3">
+                <div className="bg-app-pos transition-[width] duration-200" style={{ width: `${(riesgo.frecuencia_positivos_negativos.pct_positivos ?? 0) * 100}%` }} />
+                <div className="bg-app-neg transition-[width] duration-200" style={{ width: `${(riesgo.frecuencia_positivos_negativos.pct_negativos ?? 0) * 100}%` }} />
+              </div>
             </Card>
           )}
 
           {(riesgo.mejores_periodos.length > 0 || riesgo.peores_periodos.length > 0) && (
             <>
-              <h3 className="text-body font-bold text-app-text mb-2.5">Mejores meses</h3>
+              <TituloSeccion icono="trophy" tono="pos">Mejores meses</TituloSeccion>
               <div className="flex flex-col gap-1.5 mb-4">
                 {riesgo.mejores_periodos.map(p => (
                   <PeriodoRow key={`mejor-${p.anio}-${p.mes}`} item={p} />
                 ))}
               </div>
-              <h3 className="text-body font-bold text-app-text mb-2.5">Peores meses</h3>
+              <TituloSeccion icono="alert" tono="warn">Peores meses</TituloSeccion>
               <div className="flex flex-col gap-1.5">
                 {riesgo.peores_periodos.map(p => (
                   <PeriodoRow key={`peor-${p.anio}-${p.mes}`} item={p} />

@@ -136,7 +136,7 @@ export default function TickerResumenTab({ position, cartera, monedaSeleccionada
         )}
         {/* Los dos niveles se muestran siempre, aunque no estén definidos: tocarlos es cómo se
             fijan desde la app. Antes la tile desaparecía y no había nada que tocar. */}
-        <button type="button" onClick={() => setEditandoNiveles(true)} className="text-left">
+        <button type="button" onClick={() => setEditandoNiveles(true)} className="text-left rounded-2xl transition-transform duration-150 hover:-translate-y-px active:scale-[0.98]">
           <MetricTile
             label="Precio Objetivo"
             infoTerm="objetivo"
@@ -150,7 +150,7 @@ export default function TickerResumenTab({ position, cartera, monedaSeleccionada
             tone={position.objetivo_alcanzado ? 'pos' : undefined}
           />
         </button>
-        <button type="button" onClick={() => setEditandoNiveles(true)} className="text-left">
+        <button type="button" onClick={() => setEditandoNiveles(true)} className="text-left rounded-2xl transition-transform duration-150 hover:-translate-y-px active:scale-[0.98]">
           <MetricTile
             label="Stop Loss"
             infoTerm="stopLoss"

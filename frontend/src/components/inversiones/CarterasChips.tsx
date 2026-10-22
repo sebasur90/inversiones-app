@@ -1,6 +1,6 @@
 import type { CarteraInfo } from '../../api'
 
-const CHIP = 'shrink-0 min-h-9 px-3.5 rounded-full text-body whitespace-nowrap transition-colors'
+const CHIP = 'shrink-0 min-h-9 px-3.5 rounded-full text-body whitespace-nowrap transition-[background-color,border-color,color,transform] duration-150 active:scale-95'
 
 /**
  * Selector de cartera en una fila de chips, arriba de todo: cambia todo lo que hay en la pantalla,
@@ -24,7 +24,7 @@ export default function CarterasChips({
         onClick={() => onSelect(null)}
         aria-pressed={seleccionada === null}
         className={`${CHIP} font-semibold ${
-          seleccionada === null ? 'bg-app-text text-app-bg' : 'border border-app-border text-app-text-dim'
+          seleccionada === null ? 'bg-app-text text-app-bg' : 'border border-app-border text-app-text-dim hover:border-white/25 hover:text-app-text'
         }`}
       >
         Todas
@@ -35,7 +35,7 @@ export default function CarterasChips({
           onClick={() => onSelect(c.nombre)}
           aria-pressed={seleccionada === c.nombre}
           className={`${CHIP} font-medium ${
-            seleccionada === c.nombre ? 'bg-app-text text-app-bg font-semibold' : 'border border-app-border text-app-text-dim'
+            seleccionada === c.nombre ? 'bg-app-text text-app-bg font-semibold' : 'border border-app-border text-app-text-dim hover:border-white/25 hover:text-app-text'
           }`}
         >
           {c.nombre}

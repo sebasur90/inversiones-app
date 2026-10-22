@@ -9,7 +9,8 @@ import Segmented from '../components/ui/Segmented'
 import Donut from '../components/charts/Donut'
 import EmptyState from '../components/ui/EmptyState'
 import AvisosValuacion from '../components/inversiones/AvisosValuacion'
-import { Icon } from '../components/icons/Icons'
+import TituloSeccion from '../components/ui/TituloSeccion'
+import BotonAcceso from '../components/ui/BotonAcceso'
 import InfoTooltip from '../help/components/InfoTooltip'
 import SkeletonPantalla from '../components/ui/Skeleton'
 
@@ -52,30 +53,22 @@ export default function Exposicion() {
     <div className="pb-4">
       <ScreenHeader title="Exposición" />
 
-      <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
-        <div className="inline-flex items-center gap-1">
-          <button onClick={() => navigate('/descomposicion')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
-            <Icon name="pie" className="w-3.5 h-3.5" /> Ver descomposición jerárquica
-          </button>
-        </div>
-        <div className="inline-flex items-center gap-1">
-          <button onClick={() => navigate('/vencimientos')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
-            <Icon name="target" className="w-3.5 h-3.5" /> Ver calendario de vencimientos
-          </button>
+      <div className="flex flex-wrap gap-2 mb-4">
+        <BotonAcceso icono="pie" onClick={() => navigate('/descomposicion')}>Descomposición jerárquica</BotonAcceso>
+        <span className="inline-flex items-center gap-1">
+          <BotonAcceso icono="calendar" colorIcono="text-app-warn" onClick={() => navigate('/vencimientos')}>Calendario de vencimientos</BotonAcceso>
           <InfoTooltip term="exposicion_vencimientos" />
-        </div>
-        <div className="inline-flex items-center gap-1">
-          <button onClick={() => navigate('/contribucion')} className="inline-flex items-center gap-1 text-label font-semibold text-app-text-dim">
-            <Icon name="scale" className="w-3.5 h-3.5" /> Ver contribución y concentración
-          </button>
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <BotonAcceso icono="scale" colorIcono="text-app-violet" onClick={() => navigate('/contribucion')}>Contribución y concentración</BotonAcceso>
           <InfoTooltip term="exposicion_contribucion_concentracion" />
-        </div>
+        </span>
       </div>
 
       {loading ? (
         <SkeletonPantalla />
       ) : exposicion.ejes.length === 0 ? (
-        <EmptyState title="Sin exposición para mostrar" description="Sincronizá tu Sheet o elegí otra cartera." />
+        <EmptyState ilustracion="planta" emoji="🌱" title="Sin exposición para mostrar" description="Sincronizá tu Sheet o elegí otra cartera." />
       ) : (
         <>
           <div className="flex items-center gap-2 mb-3">
@@ -97,28 +90,31 @@ export default function Exposicion() {
             />
           </div>
 
-          <div className="flex items-center gap-2 mb-2.5">
-            <h3 className="text-body font-bold text-app-text">Detalle</h3>
-            <InfoTooltip term="exposicion_porcentaje" />
-          </div>
-          <div className="flex flex-col gap-2.5">
-            {items.map((item, i) => (
-              <div key={item.etiqueta}>
-                <div className="flex justify-between items-baseline text-caption mb-1.5">
-                  <div className="flex items-center gap-1">
-                    <span className="text-app-text">{item.etiqueta}</span>
-                    {item.etiqueta === 'Otros' && <InfoTooltip term="exposicion_ticker_top10" />}
+          <TituloSeccion icono="list" tono="accent" className="mb-2.5">
+            <span className="inline-flex items-center gap-1.5">Detalle <InfoTooltip term="exposicion_porcentaje" /></span>
+          </TituloSeccion>
+          <div className="animate-fade-in flex flex-col gap-3.5 bg-app-surface border border-app-border rounded-2xl p-4">
+            {items.map((item, i) => {
+              const color = CHART_COLORS[i % CHART_COLORS.length]
+              return (
+                <div key={item.etiqueta}>
+                  <div className="flex justify-between items-center gap-3 text-caption mb-1.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span aria-hidden="true" className="w-2.5 h-2.5 rounded-[3px] shrink-0" style={{ background: color }} />
+                      <span className="text-app-text truncate">{item.etiqueta}</span>
+                      {item.etiqueta === 'Otros' && <InfoTooltip term="exposicion_ticker_top10" />}
+                    </div>
+                    <div className="flex items-baseline gap-2 shrink-0">
+                      <span className="font-mono font-bold text-app-text tabular-nums">{formatMoneda(esARS ? item.valor_ars : item.valor_usd)}</span>
+                      <span className="font-mono text-label text-app-text-dim tabular-nums w-10 text-right">{item.porcentaje.toFixed(1).replace('.', ',')}%</span>
+                    </div>
                   </div>
-                  <span className="font-mono font-bold text-app-text tabular-nums">{formatMoneda(esARS ? item.valor_ars : item.valor_usd)}</span>
+                  <div className="h-1.5 rounded-full bg-app-surface-2 overflow-hidden">
+                    <div className="h-full rounded-full transition-[width] duration-200" style={{ width: `${item.porcentaje}%`, background: color }} />
+                  </div>
                 </div>
-                <div className="h-1.5 rounded-full bg-app-surface-2 overflow-hidden">
-                  <div
-                    className="h-full rounded-full"
-                    style={{ width: `${item.porcentaje}%`, background: CHART_COLORS[i % CHART_COLORS.length] }}
-                  />
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           <AvisosValuacion avisos={exposicion.avisos} moneda={esARS ? 'ARS' : 'USD'} />

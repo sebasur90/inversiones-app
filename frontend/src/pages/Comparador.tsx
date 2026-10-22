@@ -150,7 +150,7 @@ export default function Comparador() {
     return (
       <div className="pb-4">
         <ScreenHeader title="Comparador" onBack={() => navigate(-1)} />
-        <EmptyState title="Sin precios cargados" description="Sincronizá el sheet para poder comparar tickers." />
+        <EmptyState ilustracion="lupa" emoji="📈" title="Sin precios cargados" description="Sincronizá el sheet para poder comparar tickers." />
       </div>
     )
   }
@@ -169,10 +169,10 @@ export default function Comparador() {
               key={t.ticker}
               onClick={() => toggleTicker(t.ticker)}
               disabled={!activo && tickersSel.length >= MAX_TICKERS}
-              className={`shrink-0 font-semibold text-caption px-3 py-1.5 rounded-[10px] border transition-colors disabled:opacity-40 ${
+              className={`shrink-0 font-semibold text-caption px-3 py-1.5 rounded-[10px] border transition-[background-color,border-color,color,transform] duration-150 active:scale-95 disabled:opacity-40 disabled:active:scale-100 ${
                 activo
                   ? 'bg-app-accent-soft border-app-accent text-app-accent'
-                  : 'bg-app-surface border-app-border text-app-text-dim'
+                  : 'bg-app-surface border-app-border text-app-text-dim hover:border-white/25 hover:text-app-text'
               }`}
             >
               {t.ticker}
@@ -182,7 +182,7 @@ export default function Comparador() {
       </div>
 
       {tickersSel.length === 0 ? (
-        <EmptyState title="Elegí al menos un ticker" description="Tocá los chips de arriba para agregarlos a la comparación." />
+        <EmptyState ilustracion="lupa" emoji="🔭" title="Elegí al menos un ticker" description="Tocá los chips de arriba para agregarlos a la comparación." />
       ) : (
         <>
           <div className="px-4 mb-4 pt-2">
@@ -209,8 +209,8 @@ export default function Comparador() {
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setNormalizado(v => !v)}
-                className={`shrink-0 font-semibold text-label px-2.5 py-1.5 rounded-lg border ${
-                  normalizado ? 'bg-app-accent-soft border-app-accent text-app-accent' : 'bg-app-surface border-app-border text-app-text-dim'
+                className={`shrink-0 font-semibold text-label px-2.5 py-1.5 rounded-lg border transition-[background-color,border-color,color,transform] duration-150 active:scale-95 ${
+                  normalizado ? 'bg-app-accent-soft border-app-accent text-app-accent' : 'bg-app-surface border-app-border text-app-text-dim hover:border-white/25 hover:text-app-text'
                 }`}
               >
                 Base 100

@@ -2,6 +2,7 @@ import { formatPctRatio } from '../../utils'
 import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import Card from '../../components/ui/Card'
 import MetricTile from '../../components/ui/MetricTile'
+import { Icon } from '../../components/icons/Icons'
 import type { TickerPerformanceOut, TickerPositionOut } from '../../api'
 
 function toneFor(v: number | null | undefined): 'pos' | 'neg' | undefined {
@@ -57,7 +58,10 @@ export default function TickerRendimientoTab({ performance, position, monedaSele
       </div>
 
       <Card>
-        <h3 className="text-caption font-bold text-app-text mb-3">Desglose por moneda</h3>
+        <h3 className="flex items-center gap-1.5 text-caption font-bold text-app-text mb-3">
+            <Icon name="dollar" className="w-3.5 h-3.5 text-app-accent" />
+            Desglose por moneda
+          </h3>
         <div className="overflow-x-auto">
           <table className="w-full text-label">
             <thead>

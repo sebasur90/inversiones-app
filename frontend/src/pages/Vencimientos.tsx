@@ -7,6 +7,7 @@ import ScreenHeader from '../components/layout/ScreenHeader'
 import VencimientoRow from '../components/inversiones/VencimientoRow'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
+import TituloSeccion from '../components/ui/TituloSeccion'
 import InfoTooltip from '../help/components/InfoTooltip'
 import SkeletonPantalla from '../components/ui/Skeleton'
 import QueryBoundary from '../components/ui/QueryBoundary'
@@ -110,16 +111,18 @@ export default function Vencimientos() {
         fallback={<SkeletonPantalla />}
       >
       {items.length === 0 ? (
-        <EmptyState title="Sin vencimientos" description="No hay instrumentos con fecha de vencimiento en esta cartera." />
+        <EmptyState ilustracion="planta" emoji="📅" title="Sin vencimientos" description="No hay instrumentos con fecha de vencimiento en esta cartera." />
       ) : (
         <div className="px-4 flex flex-col gap-4">
           {porAnio.length > 0 && <ResumenPorAnio porAnio={porAnio} esARS={esARS} />}
 
           <div>
-            <div className="flex items-center gap-2 mb-1 text-label font-bold uppercase tracking-wide text-app-text-dim">
-              Instrumentos
-              <InfoTooltip term="vencimientos_inferido" />
-            </div>
+            <TituloSeccion icono="calendar" tono="warn" className="mb-1.5">
+              <span className="inline-flex items-center gap-1.5">
+                Instrumentos
+                <InfoTooltip term="vencimientos_inferido" />
+              </span>
+            </TituloSeccion>
             {items.map(item => (
               <VencimientoRow key={item.ticker} item={item} moneda={monedaSeleccionada} />
             ))}

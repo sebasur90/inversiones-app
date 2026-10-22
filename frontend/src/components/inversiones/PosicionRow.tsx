@@ -4,6 +4,7 @@ import VariacionDia from '../ui/VariacionDia'
 import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import { pctDelEstado, severidadDeEstado, type EstadoAlerta } from '../../utils/alertasPrecio'
 import { Icon } from '../icons/Icons'
+import AvatarTicker from '../ui/AvatarTicker'
 import InfoTooltip from '../../help/components/InfoTooltip'
 import AlertaPrecioBadge from './AlertaPrecioBadge'
 import type { Severidad } from './SeverityBadge'
@@ -42,11 +43,9 @@ export default function PosicionRow({
     <button
       onClick={onClick}
       aria-label={`Ver detalle de ${item.ticker} — ${item.nombre}`}
-      className="w-full flex items-center gap-2.5 py-2.5 border-b border-app-border-soft last:border-b-0 text-left"
+      className="group w-full flex items-center gap-2.5 py-2.5 border-b border-app-border-soft last:border-b-0 text-left rounded-lg transition-colors duration-150 hover:bg-white/[0.035] active:bg-white/[0.06]"
     >
-      <div className={`w-9 h-9 rounded-[11px] bg-app-surface-2 border flex items-center justify-center font-mono text-label font-bold shrink-0 ${avatarAlerta}`}>
-        {item.ticker.slice(0, 4)}
-      </div>
+      <AvatarTicker ticker={item.ticker} className={avatarAlerta} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0">
           <div className="text-caption font-bold text-app-text truncate">{item.nombre}</div>
@@ -90,13 +89,23 @@ export default function PosicionRow({
       <div className="text-right shrink-0">
         <div className="font-mono text-caption font-bold text-app-text tabular-nums">{fmt.monto(valor)}</div>
         {rendimiento != null && (
-          <div className={`flex items-center justify-end gap-0.5 font-mono text-label font-bold mt-0.5 tabular-nums ${positivo ? 'text-app-pos' : 'text-app-neg'}`}>
+          // El resultado va en una píldora: se distingue de un vistazo en una lista larga y no
+          // depende sólo del color (lleva la flecha y el signo).
+          <div
+            className={`inline-flex items-center justify-end gap-0.5 font-mono text-label font-bold mt-1 px-2 py-0.5 rounded-full tabular-nums ${
+              positivo ? 'bg-app-pos-soft text-app-pos' : 'bg-app-neg-soft text-app-neg'
+            }`}
+          >
             <Icon name={positivo ? 'up' : 'down'} className="w-2.5 h-2.5" />
             {formatPctRatio(rendimiento)}
             <InfoTooltip term="posiciones_rendimiento_simple" />
           </div>
         )}
       </div>
+      <Icon
+        name="chevron"
+        className="w-3.5 h-3.5 -rotate-90 text-app-text-faint shrink-0 transition-[transform,color] duration-150 group-hover:translate-x-0.5 group-hover:text-app-text"
+      />
     </button>
   )
 }
