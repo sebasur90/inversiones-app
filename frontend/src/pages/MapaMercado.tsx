@@ -65,10 +65,22 @@ function FichaEmisor({ item, onVerTicker }: { item: MapaMercadoItem; onVerTicker
   const ubicacion = [item.pais, item.region].filter(Boolean).join(' · ')
   return (
     <div className="flex flex-col gap-3">
-      <div>
+      <div className="flex items-center gap-3">
+        {item.tiene_logo && (
+          <img
+            src={`/api/inversiones/logos/${encodeURIComponent(item.ticker_base)}.png`}
+            alt=""
+            className="h-10 w-10 shrink-0 rounded-full bg-white/90 object-contain"
+            onError={e => {
+              e.currentTarget.style.display = 'none'
+            }}
+          />
+        )}
+        <div className="min-w-0">
         <div className="font-mono text-strong font-bold text-app-text">{item.ticker}</div>
         {detalleClasif && <div className="text-caption text-app-text-dim">{detalleClasif}</div>}
         {ubicacion && <div className="text-caption text-app-text-dim">{ubicacion}</div>}
+        </div>
       </div>
 
       <div className="grid grid-cols-4 gap-2 rounded-xl bg-app-surface-2 p-3">
@@ -238,7 +250,7 @@ export default function MapaMercado() {
                 </span>
               </p>
               <p>
-                {data.cobertura.con_variacion} de {data.cobertura.total} emisores con variación
+                {data.cobertura.con_variacion} de {data.cobertura.total} emisores con variación · {data.cobertura.con_logo} con logo
                 {data.actualizado ? ` · actualizado ${new Date(data.actualizado + 'Z').toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}` : ''}.
               </p>
               {ocultosPorPeso > 0 && (

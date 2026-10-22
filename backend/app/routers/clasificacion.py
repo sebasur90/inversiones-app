@@ -60,6 +60,8 @@ def _corrida_en_segundo_plano(tickers: list[str] | None = None) -> None:
         db.rollback()
     finally:
         db.close()
+    # Como en el job programado: los `website` recién bajados dan logos nuevos. Nunca lanza.
+    scheduler._bajar_logos()
 
 
 def pedir_datos_en_segundo_plano(tickers: list[str]) -> None:
