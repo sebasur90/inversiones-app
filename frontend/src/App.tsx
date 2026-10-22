@@ -37,6 +37,10 @@ const Contribucion = lazy(() => import('./pages/Contribucion'))
 const MatrizCorrelaciones = lazy(() => import('./pages/MatrizCorrelaciones'))
 const ExplicacionResultado = lazy(() => import('./pages/ExplicacionResultado'))
 const DiarioOperaciones = lazy(() => import('./pages/DiarioOperaciones'))
+const CentroDecisiones = lazy(() => import('./pages/CentroDecisiones'))
+const AnalisisDecision = lazy(() => import('./pages/decisiones/AnalisisDecision'))
+const PosicionDecision = lazy(() => import('./pages/decisiones/PosicionDecision'))
+const DecisionDetalle = lazy(() => import('./pages/decisiones/DecisionDetalle'))
 const Diagnostico = lazy(() => import('./pages/Diagnostico'))
 const SaludCartera = lazy(() => import('./pages/SaludCartera'))
 const CalidadDatos = lazy(() => import('./pages/CalidadDatos'))
@@ -175,6 +179,10 @@ function Root() {
             <Route path="correlaciones" element={<MatrizCorrelaciones />} />
             <Route path="explicacion-resultado" element={<ExplicacionResultado />} />
             <Route path="diario-operaciones" element={<DiarioOperaciones />} />
+            <Route path="decisiones" element={<CentroDecisiones />} />
+            <Route path="decisiones/analisis/:ticker" element={<AnalisisDecision />} />
+            <Route path="decisiones/posicion/:ticker" element={<PosicionDecision />} />
+            <Route path="decisiones/:id" element={<DecisionDetalle />} />
             <Route path="diagnostico" element={<Diagnostico />} />
             <Route path="salud" element={<SaludCartera />} />
             <Route path="calidad-datos" element={<CalidadDatos />} />

@@ -69,6 +69,11 @@ const TIPOS_DE_NIVEL: { campo: keyof AvisosConfigIn; etiqueta: string; ayuda: st
     etiqueta: 'Cambio de diagnóstico',
     ayuda: 'Cuando la valuación, la calidad o la solidez de una empresa de tu cartera o tu watchlist cambia de estado y el cambio se confirma en una segunda lectura. No avisa con datos viejos ni poco confiables.',
   },
+  {
+    campo: 'avisar_revision_decision',
+    etiqueta: 'Revisión de decisiones',
+    ayuda: 'Cuando llega la fecha de revisión de una decisión guardada en el Centro de Decisiones, o se cumple su condición de invalidación de precio. Una vez por evento.',
+  },
 ]
 
 /**

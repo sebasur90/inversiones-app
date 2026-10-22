@@ -139,6 +139,7 @@ class AvisosConfigOut(BaseModel):
     avisar_compra_zona: bool
     avisar_venta_zona: bool = True
     avisar_diagnostico: bool = True
+    avisar_revision_decision: bool = True
     estrategias: list[AvisoEstrategiaOut] = Field(default_factory=list)
 
 
@@ -149,6 +150,7 @@ class AvisosConfigIn(BaseModel):
     avisar_compra_zona: Optional[bool] = None
     avisar_venta_zona: Optional[bool] = None
     avisar_diagnostico: Optional[bool] = None
+    avisar_revision_decision: Optional[bool] = None
 
 
 class AvisoEstrategiaIn(BaseModel):
@@ -3394,3 +3396,422 @@ class BacktestHistorialOut(BaseModel):
     estados: list[dict[str, Any]] = Field(default_factory=list)
     suficiente: bool = False
     limites: list[str] = Field(default_factory=list)
+
+
+# ── Centro de Decisiones ─────────────────────────────────────────────────────
+
+Horizonte = Literal["corto", "mediano", "largo"]
+ObjetivoInversion_ = Literal["crecimiento", "valor", "ingresos", "diversificacion"]
+Enfoque = Literal["fundamental", "tecnico", "combinado"]
+
+
+class DecisionPreferenciasIn(BaseModel):
+    horizonte: Horizonte = "largo"
+    objetivo: ObjetivoInversion_ = "crecimiento"
+    enfoque: Enfoque = "combinado"
+    tolerancia: Optional[Literal["baja", "media", "alta"]] = None
+    moneda: Literal["USD", "ARS"] = "USD"
+    universo: Literal["cartera", "watchlist", "catalogo"] = "catalogo"
+    excluir: dict[str, list[str]] = Field(default_factory=dict)
+    pesos: Optional[dict[str, int]] = None
+
+
+class DecisionPreferenciasOut(BaseModel):
+    horizonte: str
+    objetivo: str
+    enfoque: str
+    tolerancia: Optional[str] = None
+    moneda: str
+    universo: str
+    excluir: dict[str, list[str]] = Field(default_factory=dict)
+    pesos: Optional[dict[str, int]] = None
+    pesos_efectivos: dict[str, float] = Field(default_factory=dict)
+    pesos_tabla: dict[str, dict[str, dict[str, int]]] = Field(default_factory=dict)
+
+
+class CentroFactorOut(BaseModel):
+    texto: str
+    efecto: float
+    regla: str = ""
+    origen: str = "calculado"
+
+
+class CentroDimensionOut(BaseModel):
+    clave: str
+    nombre: str
+    puntaje: Optional[float] = None
+    estado: str
+    resumen: str = ""
+    regla: str = ""
+    factores: list[CentroFactorOut] = Field(default_factory=list)
+    faltantes: list[str] = Field(default_factory=list)
+
+
+class CentroBanderaOut(BaseModel):
+    clave: str
+    texto: str
+    regla: str = ""
+    severidad: str
+
+
+class CentroOrdenOut(BaseModel):
+    puntaje: Optional[float] = None
+    incompleto: bool
+    motivo: Optional[str] = None
+    cobertura: float
+    pesos: dict[str, float] = Field(default_factory=dict)
+    contribuciones: list[dict[str, Any]] = Field(default_factory=list)
+    regla: str = ""
+
+
+class CentroEvaluacionOut(BaseModel):
+    version_reglas: int
+    ticker: str
+    dimensiones: list[CentroDimensionOut] = Field(default_factory=list)
+    banderas: list[CentroBanderaOut] = Field(default_factory=list)
+    orden: CentroOrdenOut
+
+
+class CentroRespuestasOut(BaseModel):
+    que_encaja: Optional[str] = None
+    por_que: str = ""
+    evidencia: list[str] = Field(default_factory=list)
+    desventajas: list[str] = Field(default_factory=list)
+    invalidaria: list[str] = Field(default_factory=list)
+    siguiente_paso: str
+    siguiente_paso_texto: str = ""
+    incertidumbre: str
+    incertidumbre_razones: list[str] = Field(default_factory=list)
+
+
+class CentroConclusionOut(BaseModel):
+    tipo: str
+    titulo: str
+    ganador: Optional[str] = None
+    diferencia: Optional[float] = None
+    robusta: bool = False
+    respuestas: CentroRespuestasOut
+    condiciones: list[str] = Field(default_factory=list)
+    evidencia_en_contra: list[str] = Field(default_factory=list)
+    preguntas: list[str] = Field(default_factory=list)
+    regla: str = ""
+    salvedad: str = ""
+
+
+class CentroEscenarioOut(BaseModel):
+    clave: str
+    nombre: str
+    disponible: bool
+    condicion: str = ""
+    fundamento: str = ""
+    precio_entrada: Optional[float] = None
+    tramos: list[dict[str, Any]] = Field(default_factory=list)
+    invalidacion: Optional[float] = None
+    regla_invalidacion: str = ""
+    riesgo_pct: Optional[float] = None
+    favorable_pct: Optional[float] = None
+    base_pct: Optional[float] = None
+    desfavorable_pct: Optional[float] = None
+    comision_pct: Optional[float] = None
+    faltantes: list[str] = Field(default_factory=list)
+    incertidumbres: list[str] = Field(default_factory=list)
+
+
+class CentroEscenariosOut(BaseModel):
+    version_reglas: int
+    estado: str
+    precio: Optional[float] = None
+    fecha_precio: Optional[date] = None
+    moneda: Optional[str] = None
+    horizonte_meses: int
+    escenarios: list[CentroEscenarioOut] = Field(default_factory=list)
+    mensaje: str = ""
+    regla_potencial: str = ""
+    salvedad: str = ""
+    fuente_precio: Optional[str] = None
+
+
+class CentroAlternativaOut(BaseModel):
+    ticker: str
+    nombre: Optional[str] = None
+    precio_ref: Optional[float] = None
+    moneda: Optional[str] = None
+    fecha_precio: Optional[date] = None
+    fecha_dato: Optional[date] = None
+    sector: Optional[str] = None
+    industria: Optional[str] = None
+    region: Optional[str] = None
+    con_tecnico: bool = False
+    comparabilidad: Optional[str] = None
+    comparabilidad_resumen: Optional[str] = None
+    origen: Optional[str] = None
+    evaluacion: CentroEvaluacionOut
+    diferencias: list[dict[str, Any]] = Field(default_factory=list)
+    encaje_objetivo: Optional[CentroDimensionOut] = None
+
+
+class CentroAlternativasOut(BaseModel):
+    estado: str
+    mensaje: str = ""
+    items: list[CentroAlternativaOut] = Field(default_factory=list)
+    excluidas: list[dict[str, Any]] = Field(default_factory=list)
+    robustez: dict[str, Optional[str]] = Field(default_factory=dict)
+    advertencias_fechas: list[str] = Field(default_factory=list)
+    objetivo_en_grupo: Optional[dict[str, Any]] = None
+    metodo: Optional[str] = None
+
+
+class CentroFuenteOut(BaseModel):
+    dato: str
+    fuente: str
+    fecha: Optional[date] = None
+    antiguedad_dias: Optional[int] = None
+    estado: str
+    nota: str = ""
+
+
+class CentroAnalisisOut(BaseModel):
+    version_reglas: int
+    estado: str
+    mensaje: str = ""
+    ticker: str
+    ticker_base: str
+    nombre: Optional[str] = None
+    fecha_analisis: date
+    cartera: Optional[str] = None
+    preferencias: dict[str, Any] = Field(default_factory=dict)
+    es_etf: bool = False
+    clasificacion: dict[str, Any] = Field(default_factory=dict)
+    estado_datos: str = ""
+    en_cartera_o_watchlist: bool = False
+    secciones: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    fuentes: list[CentroFuenteOut] = Field(default_factory=list)
+    evaluacion: Optional[CentroEvaluacionOut] = None
+    fortalezas: list[str] = Field(default_factory=list)
+    debilidades: list[str] = Field(default_factory=list)
+    diagnostico: Optional[DiagnosticoEmpresaOut] = None
+    valor_razonable: Optional[dict[str, Any]] = None
+    comparador: Optional[dict[str, Any]] = None
+    tecnico: Optional[dict[str, Any]] = None
+    riesgo: Optional[dict[str, Any]] = None
+    encaje: Optional[dict[str, Any]] = None
+    alternativas: Optional[CentroAlternativasOut] = None
+    escenarios: Optional[CentroEscenariosOut] = None
+    conclusion: Optional[CentroConclusionOut] = None
+    versiones: dict[str, Optional[int]] = Field(default_factory=dict)
+    resumen: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class CentroExplorarItemOut(BaseModel):
+    ticker: str
+    ticker_base: str
+    nombre: Optional[str] = None
+    tipo: Optional[str] = None
+    sector: Optional[str] = None
+    industria: Optional[str] = None
+    pais: Optional[str] = None
+    region: Optional[str] = None
+    en_cartera: bool = False
+    en_watchlist: bool = False
+    fecha_dato: Optional[date] = None
+    estado_datos: str = ""
+    orden: Optional[float] = None
+    incompleto: bool = False
+    dimensiones: list[dict[str, Any]] = Field(default_factory=list)
+    banderas: list[str] = Field(default_factory=list)
+
+
+class CentroExplorarOut(BaseModel):
+    universo: str
+    total: int
+    items: list[CentroExplorarItemOut] = Field(default_factory=list)
+    truncado: bool = False
+    sin_dato_tematica: int = 0
+    excluidas: int = 0
+    tematica: Optional[dict[str, Any]] = None
+    nota: str = ""
+    pesos: Optional[dict[str, int]] = None
+
+
+class CentroFacetaOut(BaseModel):
+    valor: str
+    n: int
+
+
+class CentroFacetasOut(BaseModel):
+    sectores: list[CentroFacetaOut] = Field(default_factory=list)
+    industrias: list[CentroFacetaOut] = Field(default_factory=list)
+    paises: list[CentroFacetaOut] = Field(default_factory=list)
+    regiones: list[CentroFacetaOut] = Field(default_factory=list)
+    tipos: list[CentroFacetaOut] = Field(default_factory=list)
+    tematicas: list[dict[str, Any]] = Field(default_factory=list)
+    tematicas_no_cubiertas: str = ""
+    cobertura: dict[str, Any] = Field(default_factory=dict)
+
+
+class SimulacionOperacionIn(BaseModel):
+    ticker: str = Field(min_length=1, max_length=15)
+    monto_usd: float = Field(ge=-1e9, le=1e9)
+
+
+class SimulacionDecisionIn(BaseModel):
+    operaciones: list[SimulacionOperacionIn] = Field(min_length=1, max_length=8)
+
+
+class SimulacionEjeOut(BaseModel):
+    eje: str
+    etiqueta_compra: Optional[str] = None
+    items: list[dict[str, Any]] = Field(default_factory=list)
+    antes: dict[str, Any] = Field(default_factory=dict)
+    despues: dict[str, Any] = Field(default_factory=dict)
+
+
+class SimulacionDecisionOut(BaseModel):
+    version_reglas: int
+    cartera: Optional[str] = None
+    operaciones: list[dict[str, Any]] = Field(default_factory=list)
+    total: dict[str, float] = Field(default_factory=dict)
+    aporte_nuevo_usd: float = 0.0
+    liquidez_usd: float = 0.0
+    ejes: list[SimulacionEjeOut] = Field(default_factory=list)
+    observaciones: list[ImpactoObservacionOut] = Field(default_factory=list)
+    ventas: list[dict[str, Any]] = Field(default_factory=list)
+    comision_estimada_usd: Optional[float] = None
+    tasa_comision_pct: Optional[float] = None
+    rebalanceo: list[dict[str, Any]] = Field(default_factory=list)
+    exacto: list[str] = Field(default_factory=list)
+    supuestos: list[str] = Field(default_factory=list)
+    notas: list[str] = Field(default_factory=list)
+    avisos: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class CentroOpcionPosicionOut(BaseModel):
+    clave: str
+    nombre: str
+    a_favor: list[str] = Field(default_factory=list)
+    en_contra: list[str] = Field(default_factory=list)
+    cambio_en_cartera: Optional[dict[str, Any]] = None
+    condiciones: list[str] = Field(default_factory=list)
+    invalidaria: list[str] = Field(default_factory=list)
+    balance: str
+    regla: str = ""
+
+
+class CentroPosicionOut(BaseModel):
+    version_reglas: int
+    ticker: str
+    ticker_base: str
+    nombre: Optional[str] = None
+    cartera: Optional[str] = None
+    situacion: dict[str, Any] = Field(default_factory=dict)
+    tesis: dict[str, Any] = Field(default_factory=dict)
+    opciones: list[CentroOpcionPosicionOut] = Field(default_factory=list)
+    reasignaciones: list[dict[str, Any]] = Field(default_factory=list)
+    liquidez: Optional[dict[str, Any]] = None
+    secciones: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    analisis: CentroAnalisisOut
+    invalidacion_cumplida: list[str] = Field(default_factory=list)
+
+
+class DecisionCrearIn(BaseModel):
+    modo: Literal["oportunidad", "posicion"]
+    ticker: str = Field(min_length=1, max_length=15)
+    accion_elegida: str = Field(min_length=1, max_length=30)
+    cartera: Optional[str] = Field(None, max_length=80)
+    preferencias: Optional[dict[str, Any]] = None
+    con: list[str] = Field(default_factory=list, max_length=6)
+    monto_ref_usd: Optional[float] = Field(None, gt=0, le=1e9)
+    nota: Optional[str] = Field(None, max_length=2000)
+    ejecutada: bool = False
+    revisar_en_dias: Optional[int] = Field(None, ge=1, le=1100)
+    alternativa_elegida: Optional[str] = Field(None, max_length=15)
+
+
+class DecisionPatchIn(BaseModel):
+    ejecutada: Optional[bool] = None
+    nota: Optional[str] = Field(None, max_length=2000)
+    revisar_el: Optional[date] = None
+    estado: Optional[Literal["abierta", "cerrada"]] = None
+
+
+class DecisionRevisionIn(BaseModel):
+    evaluacion_proceso: Optional[Literal["bien", "regular", "mal"]] = None
+    nota: Optional[str] = Field(None, max_length=2000)
+
+
+class DecisionAlternativaOut(BaseModel):
+    ticker: str
+    rol: str
+    orden: Optional[float] = None
+    precio_ref: Optional[float] = None
+    moneda: Optional[str] = None
+    dimensiones: Optional[list[dict[str, Any]]] = None
+    motivo: Optional[str] = None
+
+
+class DecisionRevisionOut(BaseModel):
+    id: int
+    decision_id: int
+    creada_en: datetime
+    comparacion: dict[str, Any] = Field(default_factory=dict)
+    evaluacion_proceso: Optional[str] = None
+    nota: Optional[str] = None
+    version: int
+
+
+class DecisionOut(BaseModel):
+    id: int
+    creada_en: datetime
+    cartera: Optional[str] = None
+    modo: str
+    ticker: str
+    ticker_base: Optional[str] = None
+    nombre: Optional[str] = None
+    preferencias: dict[str, Any] = Field(default_factory=dict)
+    conclusion: dict[str, Any] = Field(default_factory=dict)
+    accion_elegida: str
+    ejecutada: bool
+    nota: Optional[str] = None
+    argumentos: dict[str, Any] = Field(default_factory=dict)
+    riesgos: list[dict[str, Any]] = Field(default_factory=list)
+    supuestos: list[str] = Field(default_factory=list)
+    condiciones: dict[str, Any] = Field(default_factory=dict)
+    versiones: dict[str, Any] = Field(default_factory=dict)
+    calidad: dict[str, Any] = Field(default_factory=dict)
+    orden: Optional[float] = None
+    precio_ref: Optional[float] = None
+    moneda: Optional[str] = None
+    fecha_precio: Optional[date] = None
+    fecha_dato: Optional[date] = None
+    volatilidad_ref: Optional[float] = None
+    revisar_el: Optional[date] = None
+    estado: str
+    n_revisiones: int = 0
+    alternativas: list[DecisionAlternativaOut] = Field(default_factory=list)
+    motivos: list[str] = Field(default_factory=list)
+
+
+class DecisionDetalleOut(DecisionOut):
+    snapshot: Optional[dict[str, Any]] = None
+    revisiones: list[DecisionRevisionOut] = Field(default_factory=list)
+
+
+class AprendizajePatronOut(BaseModel):
+    clave: str
+    titulo: str
+    casos: int
+    muestra: int
+    tono: str
+    texto: str
+    regla: str = ""
+    foco: str = "proceso"
+
+
+class AprendizajeOut(BaseModel):
+    decisiones: int
+    revisiones: int
+    minimo_descriptivo: int
+    minimo_repetido: int
+    patrones: list[AprendizajePatronOut] = Field(default_factory=list)
+    operaciones: list[AprendizajePatronOut] = Field(default_factory=list)
+    salvedad: str = ""

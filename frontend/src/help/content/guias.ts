@@ -122,6 +122,40 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
     terminos: ['screener_umbral', 'screener_dispara_ahora', 'screener_grafico_gatillo'],
   },
 
+  '/decisiones': {
+    queEs: 'Un lugar para pensar decisiones: buscar oportunidades, comparar un activo con alternativas, evaluar tus posiciones y revisar después cómo te fue.',
+    comoLeerla: [
+      'En Oportunidades buscás un ticker o explorás por sector, país o temática; cada resultado muestra su puntaje de orden y sus dimensiones.',
+      'En Mi cartera elegís una posición para evaluar mantener, aumentar, reducir o salir.',
+      'En Historial están tus decisiones guardadas, las que toca revisar y lo que se repite en tu proceso.',
+    ],
+    queHacer: [
+      'Ajustá tus preferencias (horizonte, objetivo, enfoque) antes de comparar: cambian los pesos.',
+      'Guardá la decisión con una condición de invalidación y una fecha para revisarla.',
+    ],
+    ojo: 'Nada de lo que ves es una orden de operar. El puntaje ordena; las razones, las banderas y las fechas de los datos son lo que importa.',
+    terminos: ['decisiones_que_es', 'decisiones_orden', 'decisiones_pesos', 'decisiones_aprendizaje'],
+  },
+  '/decisiones/analisis': {
+    queEs: 'El análisis completo de un activo con tus preferencias: dimensiones, riesgos, alternativas, escenarios de entrada y una conclusión por reglas.',
+    comoLeerla: [
+      'Arriba, el resumen: puntaje de orden, las cinco dimensiones y las banderas críticas.',
+      'Fundamentales (calidad del negocio) y Valoración (precio) van separadas a propósito.',
+      'Cada sección se abre para ver los factores, las reglas y qué datos faltan.',
+    ],
+    queHacer: ['Cambiá la lista de alternativas si querés comparar contra otras empresas.', 'Simulá el impacto en tu cartera antes de guardar la decisión.'],
+    ojo: 'Los escenarios son hipotéticos: el potencial es relativo a los pares, no un rendimiento esperado.',
+    terminos: ['decisiones_fundamentales', 'decisiones_valoracion', 'decisiones_escenarios', 'decisiones_conclusion'],
+  },
+  '/decisiones/posicion': {
+    queEs: 'Las cuatro opciones sobre una posición que ya tenés, con su evidencia y cómo cambiaría la cartera.',
+    comoLeerla: [
+      'Arriba, la situación: tenencia, costo, valor, resultado y peso.',
+      'Cada opción lista lo que la respalda y lo que la contradice, con la simulación del cambio.',
+    ],
+    ojo: 'Que una posición esté en pérdida o en ganancia no es un argumento para ninguna opción.',
+    terminos: ['decisiones_posicion', 'decisiones_simulador'],
+  },
   '/diario-operaciones': {
     queEs: 'Todas tus compras y ventas juntas, con cómo estaba el mercado cada vez que operaste y qué pasó después de cada venta.',
     comoLeerla: [
@@ -445,7 +479,10 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
 
 /** Normaliza rutas con segmento dinámico a su clave de guía (`/ticker/AAPL` → `/ticker`). */
 export function claveRutaGuia(pathname: string): string {
-  return pathname.startsWith('/ticker/') ? '/ticker' : pathname
+  if (pathname.startsWith('/ticker/')) return '/ticker'
+  if (pathname.startsWith('/decisiones/analisis/')) return '/decisiones/analisis'
+  if (pathname.startsWith('/decisiones/posicion/')) return '/decisiones/posicion'
+  return pathname
 }
 
 export function resolverGuia(pathname: string): GuiaPantalla | null {

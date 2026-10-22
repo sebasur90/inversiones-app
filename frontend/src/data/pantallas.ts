@@ -14,6 +14,12 @@ export const GRUPOS_PANTALLAS: GrupoPantallas[] = [
     ],
   },
   {
+    titulo: 'Decisiones',
+    items: [
+      { to: '/decisiones', label: 'Centro de Decisiones', desc: 'Buscar oportunidades, comparar alternativas, evaluar tus posiciones y revisar tus decisiones', icon: 'compass' },
+    ],
+  },
+  {
     titulo: 'Cartera',
     items: [
       { to: '/salud', label: 'Salud de cartera', desc: 'Estado de cada dimensión y qué revisar, con reglas transparentes', icon: 'check' },

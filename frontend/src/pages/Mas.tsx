@@ -17,6 +17,7 @@ function claseContador(criticas: number, advertencias: number): string {
 // antes de leer los nombres.
 const ESTILO_GRUPO: Record<string, { icono: IconName; tono: string }> = {
   Ayuda: { icono: 'info', tono: 'bg-app-cyan/15 text-app-cyan' },
+  Decisiones: { icono: 'compass', tono: 'bg-app-violet/15 text-app-violet' },
   Cartera: { icono: 'wallet', tono: 'bg-app-accent-soft text-app-accent' },
   'Rendimiento y riesgo': { icono: 'trend', tono: 'bg-app-pos-soft text-app-pos' },
   Herramientas: { icono: 'grid', tono: 'bg-app-violet/15 text-app-violet' },

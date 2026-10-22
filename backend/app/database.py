@@ -550,6 +550,9 @@ class AjustesAvisos(Base):
     # `alertas_diagnostico_engine`. Arranca prendido: sólo avisa de un cambio confirmado y la
     # primera corrida siembra el estado sin mandar nada.
     avisar_diagnostico = Column(Integer, nullable=False, default=1, server_default="1")
+    # Decisiones del Centro de Decisiones cuya fecha de revisión llegó o cuya condición de
+    # invalidación de precio se cumplió (`services/diario_decisiones.avisar_revisiones`).
+    avisar_revision_decision = Column(Integer, nullable=False, default=1, server_default="1")
     fecha_actualizacion = Column(DateTime, nullable=False)
 
 
@@ -902,6 +905,98 @@ class IngestaFundamentales(Base):
     detalle = Column(JSON, nullable=True)
 
 
+class DecisionPreferencias(Base):
+    """Preferencias de análisis del Centro de Decisiones (horizonte, objetivo, enfoque, moneda, universo,
+    exclusiones y pesos). Fila única (`id = 1`); `preferencias` es un JSON validado por
+    `services/decision_preferencias.normalizar`. En la DB y no en el navegador porque se congela en cada
+    decisión guardada y la lee el job que avisa revisiones. La gestiona la app: el sync no la toca.
+    """
+    __tablename__ = "decision_preferencias"
+    id = Column(Integer, primary_key=True)
+    preferencias = Column(JSON, nullable=False)
+    fecha_actualizacion = Column(DateTime, nullable=False)
+
+
+class Decision(Base):
+    """Una decisión registrada en el diario del Centro de Decisiones (`services/diario_decisiones.py`).
+
+    Guarda lo que la app concluyó **ese día** (conclusión, argumentos, riesgos, supuestos, condiciones,
+    versiones de las reglas) y lo que eligió el usuario (`accion_elegida`, `nota`). Lo calculado es
+    inmutable: sólo `ejecutada`, `nota`, `revisar_el` y `estado` se editan. `ejecutada` la marca el usuario:
+    una simulación no se asume ejecutada. Sin FK a tablas que vacía el sync (`movimientos_inversion`
+    regenera sus ids): se vincula a los movimientos por `ticker` + fecha.
+    """
+    __tablename__ = "decisiones"
+    id = Column(Integer, primary_key=True, index=True)
+    creada_en = Column(DateTime, nullable=False)
+    cartera = Column(String, nullable=True)              # None = consolidado
+    modo = Column(String, nullable=False)                # "oportunidad" | "posicion"
+    ticker = Column(String, nullable=False, index=True)
+    ticker_base = Column(String, nullable=True, index=True)
+    nombre = Column(String, nullable=True)
+    preferencias = Column(JSON, nullable=False)
+    conclusion = Column(JSON, nullable=False)            # {tipo, titulo, frases, ...}
+    accion_elegida = Column(String, nullable=False)
+    ejecutada = Column(Integer, nullable=False, default=0, server_default="0")
+    nota = Column(String, nullable=True)
+    argumentos = Column(JSON, nullable=False)            # {a_favor: [...], en_contra: [...]}
+    riesgos = Column(JSON, nullable=False)
+    supuestos = Column(JSON, nullable=False)
+    condiciones = Column(JSON, nullable=False)           # {entrada, salida, invalidacion: [...]}
+    versiones = Column(JSON, nullable=False)
+    calidad = Column(JSON, nullable=False)               # {cobertura, firmeza, incompleto, fechas}
+    orden = Column(Numeric(6, 2), nullable=True)         # puntaje de orden al decidir (None = incompleto)
+    precio_ref = Column(Numeric(18, 6), nullable=True)
+    moneda = Column(String, nullable=True)
+    fecha_precio = Column(Date, nullable=True)
+    fecha_dato = Column(Date, nullable=True)
+    volatilidad_ref = Column(Numeric(10, 6), nullable=True)   # vol anual al decidir (para comparar con la observada)
+    revisar_el = Column(Date, nullable=True)
+    estado = Column(String, nullable=False, default="abierta", server_default="abierta")   # abierta | cerrada
+    # Aviso por Telegram (una vez por evento). `None` = todavía no se avisó (o falló el envío: se reintenta).
+    aviso_revision_en = Column(DateTime, nullable=True)
+    aviso_invalidacion_en = Column(DateTime, nullable=True)
+
+
+class DecisionAlternativa(Base):
+    """Alternativas evaluadas en una decisión, tal como se veían al decidir. Inmutable."""
+    __tablename__ = "decision_alternativas"
+    id = Column(Integer, primary_key=True, index=True)
+    decision_id = Column(Integer, ForeignKey("decisiones.id"), nullable=False, index=True)
+    ticker = Column(String, nullable=False)
+    rol = Column(String, nullable=False)                 # "elegida" | "evaluada" | "descartada"
+    orden = Column(Numeric(6, 2), nullable=True)
+    precio_ref = Column(Numeric(18, 6), nullable=True)
+    moneda = Column(String, nullable=True)
+    dimensiones = Column(JSON, nullable=True)
+    motivo = Column(String, nullable=True)
+
+
+class DecisionSnapshot(Base):
+    """Foto completa del análisis (la salida de `centro_decisiones_analytics.analizar`) al decidir o al
+    revisar. **Point-in-time e inmutable**: una revisión no reconstruye el pasado con datos de hoy."""
+    __tablename__ = "decision_snapshots"
+    id = Column(Integer, primary_key=True, index=True)
+    decision_id = Column(Integer, ForeignKey("decisiones.id"), nullable=False, index=True)
+    tipo = Column(String, nullable=False)                # "inicial" | "revision"
+    creada_en = Column(DateTime, nullable=False)
+    payload = Column(JSON, nullable=False)
+
+
+class DecisionRevision(Base):
+    """Revisión de una decisión: compara la foto inicial con el análisis de ese momento. Nunca pisa la
+    decisión ni las revisiones anteriores. `evaluacion_proceso` y `nota` son del usuario."""
+    __tablename__ = "decision_revisiones"
+    id = Column(Integer, primary_key=True, index=True)
+    decision_id = Column(Integer, ForeignKey("decisiones.id"), nullable=False, index=True)
+    creada_en = Column(DateTime, nullable=False)
+    snapshot_id = Column(Integer, ForeignKey("decision_snapshots.id"), nullable=True)
+    comparacion = Column(JSON, nullable=False)
+    evaluacion_proceso = Column(String, nullable=True)   # "bien" | "regular" | "mal" | None
+    nota = Column(String, nullable=True)
+    version = Column(Integer, nullable=False)
+
+
 class MigracionAplicada(Base):
     """Marca de las migraciones de **datos** que no pueden correr en cada arranque.
 
@@ -1169,6 +1264,11 @@ def init_db():
         if 'avisar_diagnostico' not in cols:
             conn.execute(text(
                 "ALTER TABLE ajustes_avisos ADD COLUMN avisar_diagnostico INTEGER NOT NULL DEFAULT 1"
+            ))
+            conn.commit()
+        if 'avisar_revision_decision' not in cols:
+            conn.execute(text(
+                "ALTER TABLE ajustes_avisos ADD COLUMN avisar_revision_decision INTEGER NOT NULL DEFAULT 1"
             ))
             conn.commit()
 

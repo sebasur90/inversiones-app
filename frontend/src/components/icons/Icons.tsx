@@ -7,6 +7,7 @@ import {
   CalendarDays,
   Check,
   ChevronDown,
+  Compass,
   ChevronLeft,
   DollarSign,
   Download,
@@ -72,6 +73,7 @@ const LUCIDE = {
   calendarDays: CalendarDays,
   dollar: DollarSign,
   trophy: Trophy,
+  compass: Compass,
 } satisfies Record<string, LucideIcon>
 
 export type IconName = keyof typeof LUCIDE | IconoPropio

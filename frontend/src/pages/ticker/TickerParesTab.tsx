@@ -184,6 +184,13 @@ export default function TickerParesTab({ ticker }: { ticker: string }) {
 
           {v.diagnostico.confianza !== 'sin_datos' && <DiagnosticoCard diagnostico={v.diagnostico} fechaDato={v.fecha_dato} />}
 
+          {v.estado_datos !== 'no_apto' && (
+            <Button variant="outline" icon={<Icon name="compass" className="w-4 h-4" />}
+                    onClick={() => navigate(`/decisiones/analisis/${encodeURIComponent(ticker)}`)}>
+              Analizar decisión
+            </Button>
+          )}
+
           <Card>
             <div className="flex items-center justify-between mb-2">
               <div className="text-strong font-bold text-app-text">Clasificación</div>

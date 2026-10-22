@@ -22,7 +22,8 @@ from ..services import indicadores_engine, estrategia_engine, intervalos_engine
 from ..services import comparador_estrategias_analytics, comparador_estrategias_engine
 from ..services import ticker_analytics, zonas_precio, operaciones_grafico, tamano_posicion
 from ..services import benchmarks, fuerza_relativa_engine, niveles_auto_engine, dibujos_grafico
-from ..services import comparacion_propia, diario_operaciones, lectura_tecnica_engine
+from ..services import comparacion_propia, diario_operaciones
+from ..services import lectura_tecnica as lectura_tecnica_svc
 
 router = APIRouter(prefix="/api/inversiones", tags=["tecnico"])
 
@@ -291,25 +292,7 @@ def lectura_tecnica(
     sólo si ya está en la base: no sale a bajarlo."""
     _validar_ticker_tecnico(ticker, db)
     _validar_variante(variante)
-    variante = _variante_efectiva(ticker, variante, db)
-    serie = ohlcv_analytics.get_serie_barras(
-        ticker, date.min, date.today(), db,
-        max_barras=lectura_tecnica_engine.BARRAS_NECESARIAS, variante=variante,
-    )
-    barras = serie["barras"]
-    bench = benchmarks.por_defecto(serie["moneda"])
-    bench_barras = (
-        benchmarks.barras(db, bench, desde=barras[0].fecha - timedelta(days=15)) if barras else []
-    )
-    alineado = (
-        fuerza_relativa_engine.alinear_benchmark(barras, bench_barras) if bench_barras else None
-    )
-    return {
-        "ticker": ticker, "variante": variante, "moneda": serie["moneda"],
-        **lectura_tecnica_engine.leer(barras, alineado),
-        "benchmark": bench if alineado else None,
-        "benchmark_nombre": benchmarks.BENCHMARKS[bench]["nombre"] if alineado else None,
-    }
+    return lectura_tecnica_svc.leer_ticker(ticker, _variante_efectiva(ticker, variante, db), db)
 
 
 @router.get("/tecnico/{ticker}/fuerza-relativa", response_model=FuerzaRelativaOut)

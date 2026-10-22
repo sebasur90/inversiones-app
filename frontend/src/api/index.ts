@@ -3080,6 +3080,7 @@ export interface AvisosConfigOut {
   avisar_compra_zona: boolean
   avisar_venta_zona: boolean
   avisar_diagnostico: boolean
+  avisar_revision_decision: boolean
   estrategias: AvisoEstrategiaOut[]
 }
 
@@ -3090,6 +3091,7 @@ export interface AvisosConfigIn {
   avisar_compra_zona?: boolean
   avisar_venta_zona?: boolean
   avisar_diagnostico?: boolean
+  avisar_revision_decision?: boolean
 }
 
 export interface AvisoEstrategiaIn {
@@ -3701,3 +3703,452 @@ export const borrarCorreccionPar = (ticker: string, par: string) =>
 /** Dispara una corrida normal de la ingesta en segundo plano; el avance se ve en el estado. */
 export const actualizarClasificacionLote = () =>
   api.post<{ resultado: string }>('/inversiones/clasificacion/actualizar-lote').then(r => r.data)
+
+// ── Centro de Decisiones ─────────────────────────────────────────────────────
+
+export type Horizonte = 'corto' | 'mediano' | 'largo'
+export type ObjetivoDecision = 'crecimiento' | 'valor' | 'ingresos' | 'diversificacion'
+export type EnfoqueDecision = 'fundamental' | 'tecnico' | 'combinado'
+export type DimensionDecision = 'fundamentales' | 'valoracion' | 'riesgo' | 'tecnico' | 'encaje'
+
+export interface PreferenciasDecision {
+  horizonte: Horizonte
+  objetivo: ObjetivoDecision
+  enfoque: EnfoqueDecision
+  tolerancia: 'baja' | 'media' | 'alta' | null
+  moneda: 'USD' | 'ARS'
+  universo: 'cartera' | 'watchlist' | 'catalogo'
+  excluir: Record<string, string[]>
+  pesos: Record<string, number> | null
+}
+
+export interface PreferenciasDecisionOut extends PreferenciasDecision {
+  pesos_efectivos: Record<string, number>
+  pesos_tabla: Record<string, Record<string, Record<string, number>>>
+}
+
+export interface FactorDecision { texto: string; efecto: number; regla: string; origen: string }
+
+export interface DimensionEval {
+  clave: DimensionDecision
+  nombre: string
+  puntaje: number | null
+  estado: 'evaluada' | 'sin_datos' | 'no_aplica'
+  resumen: string
+  regla: string
+  factores: FactorDecision[]
+  faltantes: string[]
+}
+
+export interface BanderaDecision { clave: string; texto: string; regla: string; severidad: 'alta' | 'media' }
+
+export interface OrdenDecision {
+  puntaje: number | null
+  incompleto: boolean
+  motivo: string | null
+  cobertura: number
+  pesos: Record<string, number>
+  contribuciones: { dimension: string; nombre: string; peso_pct: number; aporte: number }[]
+  regla: string
+}
+
+export interface EvaluacionDecision {
+  version_reglas: number
+  ticker: string
+  dimensiones: DimensionEval[]
+  banderas: BanderaDecision[]
+  orden: OrdenDecision
+}
+
+export interface ConclusionDecision {
+  tipo: string
+  titulo: string
+  ganador: string | null
+  diferencia: number | null
+  robusta: boolean
+  respuestas: {
+    que_encaja: string | null
+    por_que: string
+    evidencia: string[]
+    desventajas: string[]
+    invalidaria: string[]
+    siguiente_paso: string
+    siguiente_paso_texto: string
+    incertidumbre: 'alta' | 'media' | 'baja'
+    incertidumbre_razones: string[]
+  }
+  condiciones: string[]
+  evidencia_en_contra: string[]
+  preguntas: string[]
+  regla: string
+  salvedad: string
+}
+
+export interface EscenarioEntrada {
+  clave: string
+  nombre: string
+  disponible: boolean
+  condicion: string
+  fundamento: string
+  precio_entrada: number | null
+  tramos: { precio: number; fraccion: number }[]
+  invalidacion: number | null
+  regla_invalidacion: string
+  riesgo_pct: number | null
+  favorable_pct: number | null
+  base_pct: number | null
+  desfavorable_pct: number | null
+  comision_pct: number | null
+  faltantes: string[]
+  incertidumbres: string[]
+}
+
+export interface EscenariosEntrada {
+  version_reglas: number
+  estado: string
+  precio: number | null
+  fecha_precio: string | null
+  moneda: string | null
+  horizonte_meses: number
+  escenarios: EscenarioEntrada[]
+  mensaje: string
+  regla_potencial: string
+  salvedad: string
+  fuente_precio: string | null
+}
+
+export interface AlternativaDecision {
+  ticker: string
+  nombre: string | null
+  precio_ref: number | null
+  moneda: string | null
+  fecha_dato: string | null
+  sector: string | null
+  industria: string | null
+  region: string | null
+  con_tecnico: boolean
+  comparabilidad: string | null
+  comparabilidad_resumen: string | null
+  origen: string | null
+  evaluacion: EvaluacionDecision
+  diferencias: { dimension: string; nombre: string; delta: number; texto: string }[]
+}
+
+export interface FuenteDecision {
+  dato: string
+  fuente: string
+  fecha: string | null
+  antiguedad_dias: number | null
+  estado: 'ok' | 'viejo' | 'falta'
+  nota: string
+}
+
+export interface ObservacionSimulacion { nivel: 'revisar' | 'atencion' | 'info'; texto: string; regla: string; eje: string }
+
+export interface AnalisisDecision {
+  version_reglas: number
+  estado: 'ok' | 'no_aplica'
+  mensaje: string
+  ticker: string
+  ticker_base: string
+  nombre: string | null
+  fecha_analisis: string
+  cartera: string | null
+  preferencias: PreferenciasDecision
+  es_etf: boolean
+  clasificacion: { tipo: string | null; sector: string | null; industria: string | null; pais: string | null; region: string | null }
+  estado_datos: string
+  en_cartera_o_watchlist: boolean
+  secciones: Record<string, { estado: string; motivo: string | null }>
+  fuentes: FuenteDecision[]
+  evaluacion: EvaluacionDecision | null
+  fortalezas: string[]
+  debilidades: string[]
+  diagnostico: DiagnosticoEmpresa | null
+  valor_razonable: {
+    estado: string; mensaje: string; moneda: string | null; precio: number | null
+    escenarios: { clave: string; nombre: string; valor: number; margen_seguridad: number | null; potencial: number | null }[]
+    lectura: string | null; lectura_texto: string | null; confianza: string | null; salvedad: string; faltantes: string[]
+  } | null
+  comparador: { estado: string; mensaje: string; firmeza: string | null; titulo: string | null
+    rechazadas: { ticker: string; motivo: string | null }[]; sugeridas: string[]; seleccion: string[] } | null
+  tecnico: {
+    fecha: string | null; ultimo_cierre: number | null; moneda: string; variante: string; atr: number | null
+    tendencia: { estado: string; distancia_pct: number; periodo_sma: number } | null
+    momentum: { estado: string; rsi: number } | null
+    soporte: { precio: number; distancia_pct: number; toques: number } | null
+    resistencia: { precio: number; distancia_pct: number; toques: number } | null
+    fuerza_relativa: { estado: string; diferencia_puntos: number; ruedas: number } | null
+    benchmark_nombre: string | null
+  } | null
+  riesgo: { volatilidad: number | null; caida_maxima: number | null; beta: number | null; semanas: number; desde: string | null; fecha: string | null } | null
+  encaje: { sin_cartera: boolean; monto_ref_usd?: number; monto_ref_texto?: string; observaciones: ObservacionSimulacion[]
+    peso_emisor?: { antes_pct: number; despues_pct: number } | null } | null
+  alternativas: {
+    estado: string; mensaje: string; items: AlternativaDecision[]; excluidas: { ticker: string; motivo: string }[]
+    robustez: Record<string, string | null>; advertencias_fechas: string[]
+    objetivo_en_grupo: { ticker: string; evaluacion: EvaluacionDecision } | null; metodo: string | null
+  } | null
+  escenarios: EscenariosEntrada | null
+  conclusion: ConclusionDecision | null
+  versiones: Record<string, number | null>
+  resumen: { texto: string; regla: string; fuentes: string[] }[]
+}
+
+export interface ExplorarItem {
+  ticker: string
+  ticker_base: string
+  nombre: string | null
+  tipo: string | null
+  sector: string | null
+  industria: string | null
+  pais: string | null
+  region: string | null
+  en_cartera: boolean
+  en_watchlist: boolean
+  fecha_dato: string | null
+  orden: number | null
+  incompleto: boolean
+  dimensiones: { clave: string; nombre: string; puntaje: number | null; estado: string }[]
+  banderas: string[]
+}
+
+export interface ExplorarOut {
+  universo: string
+  total: number
+  items: ExplorarItem[]
+  truncado: boolean
+  sin_dato_tematica: number
+  excluidas: number
+  tematica: { clave: string; nombre: string; regla: string } | null
+  nota: string
+}
+
+export interface FacetasDecision {
+  sectores: { valor: string; n: number }[]
+  industrias: { valor: string; n: number }[]
+  paises: { valor: string; n: number }[]
+  regiones: { valor: string; n: number }[]
+  tipos: { valor: string; n: number }[]
+  tematicas: { clave: string; nombre: string; regla: string }[]
+  tematicas_no_cubiertas: string
+  cobertura: { con_fundamentales: number; emisores_conocidos: number; texto: string }
+}
+
+export interface SimulacionEjeItem {
+  etiqueta: string
+  antes_pct: number
+  despues_pct: number
+  delta_pp: number
+  antes_usd: number
+  despues_usd: number
+  afectada: boolean
+  residual: boolean
+}
+
+export interface SimulacionDecision {
+  version_reglas: number
+  cartera: string | null
+  operaciones: { ticker: string; monto_usd: number; tipo: string }[]
+  total: { antes_usd: number; despues_usd: number; antes_ars: number; despues_ars: number }
+  aporte_nuevo_usd: number
+  liquidez_usd: number
+  ejes: { eje: string; items: SimulacionEjeItem[]; antes: { n_efectivo: number | null }; despues: { n_efectivo: number | null } }[]
+  observaciones: ObservacionSimulacion[]
+  ventas: { ticker: string; monto_usd: number; fraccion: number | null; cantidad_estimada: number | null
+    resultado_estimado_usd: number | null; regla: string; valuado_al_costo: boolean }[]
+  comision_estimada_usd: number | null
+  tasa_comision_pct: number | null
+  rebalanceo: { eje: string; desvio_antes_pp: number | null; desvio_despues_pp: number | null; regla: string }[]
+  exacto: string[]
+  supuestos: string[]
+  notas: string[]
+  avisos: Record<string, string[]>
+}
+
+export interface OpcionPosicion {
+  clave: 'mantener' | 'aumentar' | 'reducir' | 'salir'
+  nombre: string
+  a_favor: string[]
+  en_contra: string[]
+  cambio_en_cartera: { peso_antes_pct: number; peso_despues_pct: number; liquidez_usd: number
+    observaciones: ObservacionSimulacion[]; comision_estimada_usd: number | null
+    venta: { resultado_estimado_usd: number | null } | null } | null
+  condiciones: string[]
+  invalidaria: string[]
+  balance: 'mas_a_favor' | 'mas_en_contra' | 'mixta'
+  regla: string
+}
+
+export interface PosicionDecision {
+  version_reglas: number
+  ticker: string
+  ticker_base: string
+  nombre: string | null
+  cartera: string | null
+  situacion: {
+    cantidad: number; precio_promedio: number | null; precio_actual: number | null; fecha_precio: string | null
+    moneda: string | null; valuado_al_costo: boolean; valor_actual_usd: number | null; valor_actual_ars: number | null
+    valor_invertido_usd: number | null; rendimiento_usd: number | null; realizado_usd: number | null
+    no_realizado_usd: number | null; ingresos_usd: number | null; peso_ticker_pct: number | null
+    peso_emisor_pct: number; umbral_atencion_pct: number; umbral_revisar_pct: number; nota_resultado: string
+  }
+  tesis: { existe: boolean; deteriorada: boolean; cambios: { nombre: string; antes: number; ahora: number; delta: number }[]
+    banderas_nuevas: BanderaDecision[] }
+  opciones: OpcionPosicion[]
+  reasignaciones: { destino: string; nombre: string | null; orden_destino: number | null; monto_usd: number; simulacion: SimulacionDecision }[]
+  liquidez: { simulacion: SimulacionDecision; texto: string } | null
+  secciones: Record<string, { estado: string; motivo: string | null }>
+  analisis: AnalisisDecision
+  invalidacion_cumplida: string[]
+}
+
+export interface DecisionAlternativa { ticker: string; rol: string; orden: number | null; precio_ref: number | null; moneda: string | null }
+
+export interface DecisionGuardada {
+  id: number
+  creada_en: string
+  cartera: string | null
+  modo: 'oportunidad' | 'posicion'
+  ticker: string
+  ticker_base: string | null
+  nombre: string | null
+  conclusion: { tipo: string; titulo: string; ganador: string | null; respuestas?: ConclusionDecision['respuestas']
+    evidencia_en_contra?: string[] }
+  accion_elegida: string
+  ejecutada: boolean
+  nota: string | null
+  argumentos: { a_favor: string[]; en_contra: string[] }
+  riesgos: { texto: string; severidad: string; tipo: string }[]
+  supuestos: string[]
+  condiciones: { entrada: { texto?: string; precio?: number | null; moneda?: string | null }
+    invalidacion: { tipo: string; texto: string; valor?: number }[] }
+  versiones: Record<string, number | null>
+  calidad: { cobertura: number; incompleto: boolean; incertidumbre: string; firmeza: string | null
+    advertencias_fechas: string[]; secciones_no_disponibles: string[] }
+  orden: number | null
+  precio_ref: number | null
+  moneda: string | null
+  fecha_precio: string | null
+  revisar_el: string | null
+  estado: 'abierta' | 'cerrada'
+  n_revisiones: number
+  alternativas: DecisionAlternativa[]
+  motivos: string[]
+}
+
+export interface RevisionDecision {
+  id: number
+  decision_id: number
+  creada_en: string
+  evaluacion_proceso: 'bien' | 'regular' | 'mal' | null
+  nota: string | null
+  version: number
+  comparacion: {
+    dias: number | null
+    orden: { antes: number | null; ahora: number | null }
+    conclusion: { antes: string | null; ahora: string | null }
+    dimensiones: { dimension: string; nombre: string; antes: number | null; ahora: number | null; delta: number | null }[]
+    banderas_nuevas: BanderaDecision[]
+    banderas_resueltas: BanderaDecision[]
+    precio: { referencia: number | null; actual: number | null; moneda: string | null; variacion: number | null; nota: string | null }
+    benchmark: { nombre: string; variacion: number | null } | null
+    benchmark_nota?: string
+    alternativas: { ticker: string; variacion: number | null }[]
+    condiciones: { texto: string; cumplida: boolean | null }[]
+    supuestos: { supuesto: string; estado: string; regla: string }[]
+    riesgo: { texto: string | null }
+    resultado: { variacion_precio: number; contra_indice: number | null; nota: string } | null
+    sugerencia: string | null
+    salvedad: string
+  }
+}
+
+export interface DecisionDetalle extends DecisionGuardada {
+  snapshot: Record<string, unknown> | null
+  revisiones: RevisionDecision[]
+}
+
+export interface PatronAprendizaje {
+  clave: string; titulo: string; casos: number; muestra: number
+  tono: 'insuficiente' | 'patron_descriptivo' | 'patron_repetido'; texto: string; regla: string; foco: string
+}
+
+export interface AprendizajeOut {
+  decisiones: number
+  revisiones: number
+  minimo_descriptivo: number
+  minimo_repetido: number
+  patrones: PatronAprendizaje[]
+  operaciones: PatronAprendizaje[]
+  salvedad: string
+}
+
+export interface CrearDecisionIn {
+  modo: 'oportunidad' | 'posicion'
+  ticker: string
+  accion_elegida: string
+  cartera?: string | null
+  con?: string[]
+  monto_ref_usd?: number | null
+  nota?: string | null
+  ejecutada?: boolean
+  revisar_en_dias?: number | null
+  alternativa_elegida?: string | null
+}
+
+export const getPreferenciasDecision = () =>
+  api.get<PreferenciasDecisionOut>('/inversiones/decisiones/preferencias').then(r => r.data)
+
+export const guardarPreferenciasDecision = (body: PreferenciasDecision) =>
+  api.put<PreferenciasDecisionOut>('/inversiones/decisiones/preferencias', body).then(r => r.data)
+
+export const getFacetasDecision = () =>
+  api.get<FacetasDecision>('/inversiones/decisiones/facetas').then(r => r.data)
+
+export const explorarDecisiones = (params: { sector?: string; industria?: string; pais?: string; region?: string
+  tematica?: string; universo?: string }) =>
+  api.get<ExplorarOut>('/inversiones/decisiones/explorar', { params }).then(r => r.data)
+
+/** `con` viaja como un solo parámetro con comas (axios serializa arrays como `con[]=`). */
+export const getAnalisisDecision = (ticker: string, params: { cartera?: string | null; con?: string[] }) =>
+  api.get<AnalisisDecision>(`/inversiones/decisiones/analisis/${encodeURIComponent(ticker)}`, {
+    params: { cartera: params.cartera || undefined, con: params.con?.length ? params.con.join(',') : undefined },
+    timeout: 60_000,
+  }).then(r => r.data)
+
+export const getPosicionDecision = (ticker: string, cartera: string | null) =>
+  api.get<PosicionDecision>(`/inversiones/decisiones/posicion/${encodeURIComponent(ticker)}`, {
+    params: { cartera: cartera || undefined }, timeout: 60_000,
+  }).then(r => r.data)
+
+/** Sólo simula: no guarda nada ni toca movimientos. Montos en USD (+ suma, − reduce). */
+export const simularDecision = (cartera: string | null, operaciones: { ticker: string; monto_usd: number }[]) =>
+  api.post<SimulacionDecision>(`${carteraPath(cartera)}/simular-decision`, { operaciones }).then(r => r.data)
+
+export const getDecisiones = (params: { ticker?: string; estado?: string } = {}) =>
+  api.get<DecisionGuardada[]>('/inversiones/decisiones', { params }).then(r => r.data)
+
+export const getDecisionesPendientes = () =>
+  api.get<DecisionGuardada[]>('/inversiones/decisiones/pendientes').then(r => r.data)
+
+export const getAprendizajeDecisiones = () =>
+  api.get<AprendizajeOut>('/inversiones/decisiones/aprendizaje').then(r => r.data)
+
+export const getDecision = (id: number) =>
+  api.get<DecisionDetalle>(`/inversiones/decisiones/${id}`).then(r => r.data)
+
+export const crearDecision = (body: CrearDecisionIn) =>
+  api.post<DecisionDetalle>('/inversiones/decisiones', body, { timeout: 60_000 }).then(r => r.data)
+
+export const editarDecision = (id: number, body: { ejecutada?: boolean; nota?: string; revisar_el?: string; estado?: 'abierta' | 'cerrada' }) =>
+  api.patch<DecisionDetalle>(`/inversiones/decisiones/${id}`, body).then(r => r.data)
+
+export const borrarDecision = (id: number) =>
+  api.delete<void>(`/inversiones/decisiones/${id}`).then(r => r.data)
+
+export const revisarDecision = (id: number, body: { evaluacion_proceso?: 'bien' | 'regular' | 'mal' | null; nota?: string | null }) =>
+  api.post<RevisionDecision>(`/inversiones/decisiones/${id}/revisiones`, body, { timeout: 60_000 }).then(r => r.data)
+
+export const calificarRevision = (id: number, body: { evaluacion_proceso?: 'bien' | 'regular' | 'mal' | null; nota?: string | null }) =>
+  api.patch<RevisionDecision>(`/inversiones/decisiones/revisiones/${id}`, body).then(r => r.data)

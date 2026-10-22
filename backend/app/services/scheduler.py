@@ -101,6 +101,23 @@ def _evaluar_alertas() -> None:
         db.rollback()
     finally:
         db.close()
+    _avisar_decisiones()
+
+
+def _avisar_decisiones() -> None:
+    """Revisiones de decisiones vencidas o invalidadas (Centro de Decisiones). Sesión propia; nunca lanza."""
+    from ..database import SessionLocal
+    from . import diario_decisiones
+
+    db = SessionLocal()
+    try:
+        resumen = diario_decisiones.avisar_revisiones(db)
+        logger.info("scheduler: avisos de decisiones %s", resumen)
+    except Exception as exc:
+        logger.exception("scheduler: los avisos de decisiones fallaron: %s", exc)
+        db.rollback()
+    finally:
+        db.close()
 
 
 def _horas_env(nombre: str, default: str) -> str:

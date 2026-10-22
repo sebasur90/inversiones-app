@@ -1040,6 +1040,7 @@ def guardar_config_avisos(cambios: AvisosConfigIn, db: Session = Depends(get_db)
         avisar_compra_zona=cambios.avisar_compra_zona,
         avisar_venta_zona=cambios.avisar_venta_zona,
         avisar_diagnostico=cambios.avisar_diagnostico,
+        avisar_revision_decision=cambios.avisar_revision_decision,
     )
     return avisos_config.estado(db)
 

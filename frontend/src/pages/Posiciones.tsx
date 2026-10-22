@@ -145,6 +145,9 @@ export default function Posiciones() {
         <IconButton onClick={() => navigate('/diario-operaciones')} aria-label="Diario de operaciones">
           <Icon name="edit" className="w-4 h-4" />
         </IconButton>
+        <IconButton onClick={() => navigate('/decisiones?tab=cartera')} aria-label="Evaluar posiciones en el Centro de Decisiones">
+          <Icon name="compass" className="w-4 h-4" />
+        </IconButton>
         <IconButton
           onClick={() =>
             descargarCSV(

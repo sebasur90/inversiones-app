@@ -33,6 +33,9 @@ assert set(CAMPO_POR_TIPO) == set(alertas_engine.TIPOS)
 #: y cuyo `assert` exige una entrada por cada uno): el diagnóstico es otra familia de alerta.
 CAMPO_DIAGNOSTICO = "avisar_diagnostico"
 
+#: Interruptor de las revisiones de decisiones del Centro de Decisiones (`diario_decisiones.avisar_revisiones`).
+CAMPO_REVISION_DECISION = "avisar_revision_decision"
+
 _FILA = 1
 
 
@@ -58,6 +61,7 @@ def actualizar(
     avisar_compra_zona: bool | None = None,
     avisar_venta_zona: bool | None = None,
     avisar_diagnostico: bool | None = None,
+    avisar_revision_decision: bool | None = None,
 ) -> AjustesAvisos:
     """Cambia los interruptores pasados; `None` es "no tocar"."""
     fila = obtener(db)
@@ -67,6 +71,7 @@ def actualizar(
         ("avisar_compra_zona", avisar_compra_zona),
         ("avisar_venta_zona", avisar_venta_zona),
         (CAMPO_DIAGNOSTICO, avisar_diagnostico),
+        (CAMPO_REVISION_DECISION, avisar_revision_decision),
     ):
         if valor is not None:
             setattr(fila, campo, 1 if valor else 0)
@@ -126,6 +131,7 @@ def estado(db: Session) -> dict:
         "avisar_compra_zona": bool(fila.avisar_compra_zona),
         "avisar_venta_zona": bool(fila.avisar_venta_zona),
         "avisar_diagnostico": bool(fila.avisar_diagnostico),
+        "avisar_revision_decision": bool(fila.avisar_revision_decision),
         "estrategias": [
             {
                 "id": e.id,
