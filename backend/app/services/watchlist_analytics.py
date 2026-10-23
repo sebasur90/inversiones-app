@@ -443,6 +443,63 @@ def asegurar_serie_subyacente(db: Session, ticker: str) -> list[ValidationIssue]
     return issues
 
 
+def descargar_series(db: Session, ticker: str, con_subyacente: bool = True) -> list[ValidationIssue]:
+    """Baja ya mismo las velas de un ítem de la watchlist, en vez de esperar al próximo sync.
+
+    El alta sólo trae el precio (y, para un CEDEAR, la serie del subyacente en USD): la serie local
+    la llena el sync de la tarde con los mismos tres backfills que corre acá —analisistecnico/IOL,
+    Yahoo `.BA` y el subyacente—, así que un ticker recién agregado quedaba sin gráfico hasta
+    entonces. Las funciones son las del sync, con su misma calibración de escala y sus mismos
+    cooldowns: acá no hay lógica de series nueva, sólo se las corre para un único ticker.
+
+    Los que están en cartera no entran: esa serie la mantiene el sync con el historial completo.
+    `con_subyacente=False` cuando el ítem se acaba de dar de alta: `agregar` ya bajó esa serie.
+
+    Best effort, como el alta: una fuente que no responde deja un issue y el sync lo completa.
+    No commitea: lo hace el llamador.
+    """
+    if not market_data.use_external_apis():
+        return []
+    activo = next((a for a in items_para_market_data(db) if a["ticker"] == ticker), None)
+    if activo is None or db.query(InstrumentoInversion.id).filter(
+        InstrumentoInversion.ticker == ticker,
+    ).first() is not None:
+        return []
+
+    issues: list[ValidationIssue] = []
+    if db.get(PrecioWatchlist, ticker) is None:
+        # Sin precio observado no hay referencia de escala y los backfills descartan las velas.
+        _, issues_precio = refrescar_precios(db, [ticker], max_simbolos_sueltos=1, solo_simbolo_suelto=True)
+        issues.extend(issues_precio)
+    precio = db.get(PrecioWatchlist, ticker)
+    referencia = [] if precio is None else [
+        {"ticker": ticker, "fecha": precio.fecha, "precio": float(precio.precio), "moneda": precio.moneda},
+    ]
+
+    existentes = {
+        tk: f_min for tk, f_min in db.query(BarraOHLCV.ticker, func.min(BarraOHLCV.fecha)).filter(
+            BarraOHLCV.ticker == ticker,
+        ).group_by(BarraOHLCV.ticker)
+    }
+    estado = estado_market_data.cargar(db)
+    barras, issues_wl = market_data_precios.fetch_backfill_ohlcv_watchlist(
+        [activo], referencia, existentes, db, estado_por_ticker=estado,
+    )
+    filas_yahoo, issues_yahoo = market_data_precios.fetch_backfill_ohlcv_local_yahoo(
+        [activo], referencia, existentes, estado_por_ticker=estado,
+    )
+    barras.extend(filas_yahoo)
+    issues.extend(issues_wl + issues_yahoo)
+
+    estado_market_data.persistir(db, {ticker: estado[ticker]} if ticker in estado else {})
+    ohlcv_analytics.upsert_barras(db, barras)
+    db.flush()
+    if con_subyacente:
+        # Último, porque carga su propio estado y persiste el suyo: el CEDEAR queda además con su serie en USD.
+        issues.extend(asegurar_serie_subyacente(db, ticker))
+    return issues
+
+
 def _guardar_zona_compra(db: Session, ticker: str, techo: float | None, moneda: str) -> None:
     """Traduce el escalar `objetivo` de la API de watchlist a la zona de compra: techo = objetivo,
     piso abierto, en la serie de referencia del ticker. `None` borra la zona.

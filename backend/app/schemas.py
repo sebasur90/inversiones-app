@@ -3570,6 +3570,14 @@ class CentroFuenteOut(BaseModel):
     nota: str = ""
 
 
+class CentroPrepararTecnicoOut(BaseModel):
+    estado: str                      # ok | sin_series | fuera_de_catalogo
+    agregado_a_watchlist: bool
+    con_series: bool
+    mensaje: str
+    avisos: list[str] = Field(default_factory=list)
+
+
 class CentroAnalisisOut(BaseModel):
     version_reglas: int
     estado: str

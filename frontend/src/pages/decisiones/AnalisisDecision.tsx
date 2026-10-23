@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import { agregarAWatchlist, getAnalisisDecision, type AnalisisDecision as Analisis, type DimensionEval, type EscenarioEntrada } from '../../api'
+import { getAnalisisDecision, prepararTecnicoDecision, type AnalisisDecision as Analisis, type DimensionEval, type EscenarioEntrada } from '../../api'
 import { qk } from '../../api/queryClient'
 import { useInversionesContext } from '../../context/InversionesContext'
 import ScreenHeader from '../../components/layout/ScreenHeader'
@@ -167,33 +167,56 @@ function ResumenFuentes({ a }: { a: Analisis }) {
 function Tecnico({ a }: { a: Analisis }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const agregar = useMutation({
-    mutationFn: () => agregarAWatchlist({ ticker: a.ticker }),
+  const tec = a.tecnico
+  const sinSerie = !tec || tec.ultimo_cierre == null
+  // Una sola descarga automática por ticker: si la fuente no responde, no se reintenta en bucle
+  // (queda el botón). `useRef` y no estado, para que el doble efecto de StrictMode no la repita.
+  const intentado = useRef<string | null>(null)
+  const preparar = useMutation({
+    mutationFn: () => prepararTecnicoDecision(a.ticker),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: qk.watchlist })
+      void queryClient.invalidateQueries({ queryKey: qk.de('tecnico-tickers') })
+      for (const clave of ['tecnico-serie', 'tecnico-lectura', 'tecnico-fuerza-relativa']) {
+        void queryClient.invalidateQueries({ queryKey: qk.de(clave, a.ticker) })
+      }
       void queryClient.invalidateQueries({ queryKey: qk.de('decision-analisis') })
     },
   })
-  const tec = a.tecnico
+  useEffect(() => {
+    if (!sinSerie || intentado.current === a.ticker) return
+    intentado.current = a.ticker
+    preparar.mutate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sinSerie, a.ticker])
+  const res = preparar.data
   return (
     <Seccion titulo="Análisis técnico" termino="decisiones_tecnico" resumen={<BarraDimension d={dim(a, 'tecnico')} compacta />}>
       <DetalleDimension d={dim(a, 'tecnico')} />
-      {tec ? (
+      {tec && !sinSerie && (
         <ul className="text-caption text-app-text flex flex-col gap-0.5">
           <li>Último cierre: {precio(tec.ultimo_cierre, tec.moneda)} ({tec.fecha}, serie {tec.variante}).</li>
           {tec.soporte && <li>Soporte: {precio(tec.soporte.precio, tec.moneda)} ({num(tec.soporte.distancia_pct, 1)} %, {tec.soporte.toques} toques).</li>}
           {tec.resistencia && <li>Resistencia: {precio(tec.resistencia.precio, tec.moneda)} ({num(tec.resistencia.distancia_pct, 1)} %).</li>}
           {tec.atr != null && <li className="flex items-center gap-1">ATR(14): {precio(tec.atr, tec.moneda)} <InfoTooltip term="decisiones_atr" label="" /></li>}
         </ul>
-      ) : (
+      )}
+      {sinSerie && (
         <div className="flex flex-col gap-2">
-          <p className="text-caption text-app-text-dim">Sin serie diaria: el técnico se calcula para activos de tu cartera o tu watchlist.</p>
-          <Button variant="outline" onClick={() => agregar.mutate()} loading={agregar.isPending}>Agregar a la watchlist</Button>
-          {agregar.isSuccess && <p className="text-label text-app-text-faint">Agregado. La serie se baja en el próximo refresco de precios.</p>}
-          {agregar.error && <ErrorBanner error={parseApiError(agregar.error)} />}
+          {preparar.isPending && <p className="text-caption text-app-text-dim">Descargando el gráfico de {a.ticker}… puede tardar unos segundos.</p>}
+          {res && !preparar.isPending && (
+            <p className="text-caption text-app-text-dim">{res.mensaje}{res.agregado_a_watchlist ? ' Se agregó a tu watchlist para poder seguirlo.' : ''}</p>
+          )}
+          {preparar.error && <ErrorBanner error={parseApiError(preparar.error)} />}
+          {!preparar.isPending && res?.estado !== 'fuera_de_catalogo' && (
+            <Button variant="outline" onClick={() => preparar.mutate()}>Reintentar la descarga</Button>
+          )}
         </div>
       )}
-      {tec && <Button variant="ghost" onClick={() => navigate(`/analisis-tecnico?ticker=${encodeURIComponent(a.ticker)}`)}>Abrir el gráfico</Button>}
+      {res?.agregado_a_watchlist && !sinSerie && (
+        <p className="text-label text-app-text-faint">Se agregó {a.ticker} a tu watchlist para poder seguir su gráfico; podés quitarlo desde allí.</p>
+      )}
+      {!sinSerie && <Button variant="ghost" onClick={() => navigate(`/analisis-tecnico?ticker=${encodeURIComponent(a.ticker)}`)}>Abrir el gráfico</Button>}
     </Seccion>
   )
 }

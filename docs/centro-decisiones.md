@@ -39,6 +39,7 @@ Tablas nuevas (`create_all`, sin tocar datos existentes): `decision_preferencias
 |---|---|---|
 | GET/PUT | `/decisiones/preferencias` | horizonte, objetivo, enfoque, tolerancia, moneda, universo, exclusiones, pesos |
 | GET | `/decisiones/facetas` | sectores/industrias/países/regiones/tipos reales, temáticas por regla y cobertura |
+| POST | `/decisiones/tecnico/{ticker}/preparar` | alta en la watchlist (si no está en cartera ni watchlist) + descarga de velas locales y del subyacente |
 | GET | `/decisiones/explorar?sector=&pais=&region=&industria=&tipo=&tematica=` | ranking sin técnico ni encaje |
 | GET | `/decisiones/analisis/{ticker}?cartera=&con=A,B&monto_ref_usd=` | análisis completo |
 | GET | `/decisiones/posicion/{ticker}?cartera=` | mantener / aumentar / reducir / salir |
@@ -153,7 +154,7 @@ guarda que tendría que pasar un modelo de lenguaje futuro.
 - Fundamentales, múltiplos, beta, serie semanal: Yahoo vía la ingesta existente (`fundamentales_ingesta`, cada
   ~7/14 días por emisor). Sólo el último trimestre contra el mismo del año anterior: sin historia contable de
   varios años, sin múltiplos históricos propios, sin estimaciones de analistas en el cálculo.
-- Técnico: sólo cartera ∪ watchlist (serie diaria). La pantalla ofrece agregar a la watchlist.
+- Técnico: sólo cartera ∪ watchlist (serie diaria). Al abrir el análisis de un activo sin serie, la pantalla llama sola a `POST /decisiones/tecnico/{ticker}/preparar`: lo agrega a la watchlist (único modo que tiene la app de seguir un ticker) y baja las velas con los mismos backfills del sync (`watchlist_analytics.descargar_series`). Una sola vez por ticker y visita; si la fuente no responde queda el botón «Reintentar la descarga». Los tickers que IOL no cataloga no se pueden seguir.
 - Temáticas: sólo por reglas sobre datos que existen (dividendos, crecimiento, valor, calidad). "Inteligencia
   artificial" y similares no se ofrecen como temática: se busca por sector o industria.
 - Bonos, ONs, letras y FCI: fuera de alcance.

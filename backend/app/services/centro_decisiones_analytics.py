@@ -25,12 +25,13 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from ..database import InstrumentoInversion, WatchlistItem
-from . import catalogo_instrumentos, clasificacion_engine as ce
+from . import catalogo_instrumentos, clasificacion_engine as ce, watchlist_analytics
 from . import comparador_analytics, comparador_engine, decision_datos, escenarios_entrada_engine as ee
 from . import evaluacion_engine as ev
 from . import indicadores_engine as ind
 from . import interpretacion, lectura_tecnica, ohlcv_analytics, pares_engine, posicion_decision_engine as pde
 from . import salud_engine, simulador_decision, tematicas as tm, valor_razonable_analytics, valuacion_engine as ve
+from . import market_data
 from .cache import cache_por_sync
 from .impacto_cartera_analytics import TickerDesconocido
 from .inversiones_analytics import (
@@ -326,6 +327,8 @@ def calcular_analisis(u: Universo, db: Session, ticker: str, prefs: dict, carter
     tecnico = _seguro("tecnico", secciones, _tecnico, db, t)
     if tecnico is None and secciones["tecnico"]["estado"] == "ok":
         secciones["tecnico"] = {"estado": "sin_datos", "motivo": "el ticker no está en la cartera ni en la watchlist"}
+    elif tecnico is not None and tecnico.get("ultimo_cierre") is None:
+        secciones["tecnico"] = {"estado": "sin_datos", "motivo": "todavía no hay velas diarias de este ticker"}
     encaje = _seguro("encaje", secciones, _encaje, db, cartera, t, e, monto_ref_usd)
 
     ins = _insumos(u, db, t, e, diag, vr, tecnico, encaje)
@@ -379,6 +382,44 @@ def calcular_analisis(u: Universo, db: Session, ticker: str, prefs: dict, carter
 
 
 @cache_por_sync
+def preparar_tecnico(db: Session, ticker: str) -> dict:
+    """Deja al ticker listo para el análisis técnico: lo da de alta en la watchlist si no está en
+    ninguna parte y le baja ya las velas (ver `watchlist_analytics.descargar_series`).
+
+    Se llama al abrir el análisis de un activo sin serie. Dar de alta es el único camino que tiene
+    la app para seguir un ticker (el gráfico, las zonas y el refresco de precios leen de ahí), así que
+    el efecto sobre la watchlist es explícito en la respuesta (`agregado_a_watchlist`) y reversible
+    desde su pantalla. Los tickers que IOL no cataloga (acciones sin CEDEAR) no se pueden seguir.
+    Hace commit.
+    """
+    en_cartera = db.query(InstrumentoInversion.id).filter(InstrumentoInversion.ticker == ticker).first() is not None
+    en_watchlist = db.get(WatchlistItem, ticker) is not None
+    agregado = False
+    issues = []
+    if not en_cartera and not en_watchlist:
+        item, error, issues = watchlist_analytics.agregar(db, ticker)
+        if error == "no_encontrado":
+            return {"estado": "fuera_de_catalogo", "agregado_a_watchlist": False, "con_series": False,
+                    "mensaje": f"{ticker} no figura en el catálogo de IOL, así que no hay serie diaria para seguirlo."}
+        agregado = error is None
+        if item is not None:
+            ticker = item.ticker
+    if not en_cartera:
+        issues = [*issues, *watchlist_analytics.descargar_series(db, ticker, con_subyacente=not agregado)]
+    db.commit()
+
+    tecnico = _seguro("tecnico", {}, _tecnico, db, ticker)
+    con_series = bool(tecnico and tecnico.get("ultimo_cierre") is not None)
+    if con_series:
+        mensaje = "Gráfico descargado."
+    elif not market_data.use_external_apis():
+        mensaje = "Las fuentes externas están desactivadas: no se pueden bajar velas."
+    else:
+        mensaje = "No se pudo bajar la serie diaria ahora (la fuente no respondió o no tiene historia). Se reintenta en el próximo sync."
+    return {"estado": "ok" if con_series else "sin_series", "agregado_a_watchlist": agregado,
+            "con_series": con_series, "mensaje": mensaje, "avisos": sorted({i.mensaje for i in issues})[:5]}
+
+
 def analizar(ticker: str, prefs: dict, cartera: str | None, con: tuple, monto_ref_usd: float | None, db: Session) -> dict:
     """Análisis completo de un activo con las preferencias dadas (ver el docstring del módulo)."""
     return calcular_analisis(Universo(db), db, ticker, prefs, cartera, con, monto_ref_usd)

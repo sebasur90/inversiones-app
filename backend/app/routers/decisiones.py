@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..database import MovimientoInversion, get_db
 from ..schemas import (
-    AprendizajeOut, CentroAnalisisOut, CentroExplorarOut, CentroFacetasOut, CentroPosicionOut, DecisionCrearIn,
+    AprendizajeOut, CentroAnalisisOut, CentroPrepararTecnicoOut, CentroExplorarOut, CentroFacetasOut, CentroPosicionOut, DecisionCrearIn,
     DecisionDetalleOut, DecisionOut, DecisionPatchIn, DecisionPreferenciasIn, DecisionPreferenciasOut,
     DecisionRevisionIn, DecisionRevisionOut, SimulacionDecisionIn, SimulacionDecisionOut,
 )
@@ -122,6 +122,13 @@ def analisis(
     t = _ticker(ticker)
     return cda.analizar(t, _prefs(db, horizonte, objetivo, enfoque, moneda, tolerancia), _cartera(cartera, db),
                         _con(con), monto_ref_usd, db)
+
+
+@router.post("/decisiones/tecnico/{ticker}/preparar", response_model=CentroPrepararTecnicoOut)
+def preparar_tecnico(ticker: str, db: Session = Depends(get_db)):
+    """Da de alta el ticker en la watchlist (si no está en ninguna parte) y le baja las velas, para que el
+    análisis técnico y el gráfico tengan datos. Es una acción explícita de la pantalla, no del GET de análisis."""
+    return cda.preparar_tecnico(db, _ticker(ticker))
 
 
 # ── Posición existente ──────────────────────────────────────────────────────

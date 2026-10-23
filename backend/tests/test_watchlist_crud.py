@@ -384,3 +384,84 @@ def test_un_item_viejo_con_tipo_que_no_dice_cedear_se_resuelve_por_el_catalogo(e
     s.commit()
     tipos = {i["ticker"]: i["tipo_instrumento"] for i in watchlist_analytics.items_para_market_data(s)}
     assert tipos == {"AAPL": "CEDEAR", "ALUA": "Acción"}
+
+
+# ── Preparar el técnico desde el Centro de Decisiones ────────────────────────
+
+PREPARAR = "/api/inversiones/decisiones/tecnico/{}/preparar"
+
+
+def _velas_locales(monkeypatch, precio_base=27000.0, dias=300):
+    """analisistecnico de mentira: velas del CEDEAR en pesos, en la misma unidad que el precio de IOL."""
+    from datetime import timedelta
+
+    hoy = date.today()
+    pedidos = []
+
+    def _historico(simbolo, desde, hasta):
+        pedidos.append(simbolo)
+        return [
+            market_data_precios.BarraCruda(
+                fecha=hoy - timedelta(days=dias - i), cierre=precio_base + i * 3, apertura=precio_base + i * 3 - 5,
+                maximo=precio_base + i * 3 + 20, minimo=precio_base + i * 3 - 20, volumen=1e5,
+            )
+            for i in range(dias - 1)
+        ]
+
+    monkeypatch.setattr(market_data_precios.analisistecnico, "fetch_historico_ohlcv", _historico)
+    return pedidos
+
+
+def test_preparar_da_de_alta_el_ticker_y_baja_las_velas_locales_y_del_subyacente(client, sesion, monkeypatch):
+    _yahoo_xlp(monkeypatch)
+    pedidos = _velas_locales(monkeypatch)
+
+    r = client.post(PREPARAR.format("AAPL"))
+
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["estado"] == "ok" and cuerpo["con_series"] and cuerpo["agregado_a_watchlist"]
+    assert pedidos == ["AAPL:CEDEAR"]       # la serie local del CEDEAR en pesos, no la acción del Nasdaq
+    s = sesion()
+    assert s.get(WatchlistItem, "AAPL") is not None
+    assert s.query(BarraOHLCV).filter(BarraOHLCV.ticker == "AAPL").count() > 200
+    assert s.query(BarraOHLCV).filter(BarraOHLCV.ticker == "AAPL@SUB").count() > 60
+
+
+def test_preparar_un_ticker_que_ya_esta_en_la_watchlist_no_lo_duplica_y_le_baja_las_velas(client, sesion, monkeypatch):
+    _yahoo_xlp(monkeypatch)
+    sin_velas = lambda s, d, h: None     # el alta sin sync: sólo precio y subyacente
+    monkeypatch.setattr(market_data_precios.analisistecnico, "fetch_historico_ohlcv", sin_velas)
+    assert client.post("/api/inversiones/watchlist", json={"ticker": "AAPL"}).status_code == 201
+    assert sesion().query(BarraOHLCV).filter(BarraOHLCV.ticker == "AAPL").count() == 0
+    _velas_locales(monkeypatch)
+
+    cuerpo = client.post(PREPARAR.format("AAPL")).json()
+
+    assert cuerpo["estado"] == "ok" and not cuerpo["agregado_a_watchlist"]
+    s = sesion()
+    assert s.query(WatchlistItem).filter(WatchlistItem.ticker == "AAPL").count() == 1
+    assert s.query(BarraOHLCV).filter(BarraOHLCV.ticker == "AAPL").count() > 200
+
+
+def test_preparar_un_ticker_fuera_del_catalogo_no_agrega_nada(client, sesion):
+    cuerpo = client.post(PREPARAR.format("ZZZZ")).json()
+
+    assert cuerpo["estado"] == "fuera_de_catalogo" and not cuerpo["con_series"]
+    assert sesion().query(WatchlistItem).count() == 0
+
+
+def test_preparar_con_las_fuentes_caidas_deja_el_ticker_seguido_pero_sin_series(client, sesion, monkeypatch):
+    monkeypatch.setattr(market_data_precios.analisistecnico, "fetch_historico_ohlcv", lambda s, d, h: None)
+    monkeypatch.setattr(market_data_precios.iol_client, "fetch_historico_ohlcv", lambda db, t, d, h: None)
+    monkeypatch.setattr(market_data_precios.yahoo, "fetch_info", lambda t: None)
+    monkeypatch.setattr(market_data_precios.yahoo, "fetch_historico_ohlcv", lambda s, d, h: None)
+
+    cuerpo = client.post(PREPARAR.format("ALUA")).json()
+
+    assert cuerpo["estado"] == "sin_series" and not cuerpo["con_series"] and cuerpo["agregado_a_watchlist"]
+    assert sesion().get(WatchlistItem, "ALUA") is not None
+
+
+def test_preparar_un_ticker_con_formato_invalido_es_422(client):
+    assert client.post(PREPARAR.format("no valido!")).status_code == 422

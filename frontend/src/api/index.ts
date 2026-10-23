@@ -4117,6 +4117,20 @@ export const getAnalisisDecision = (ticker: string, params: { cartera?: string |
     timeout: 60_000,
   }).then(r => r.data)
 
+export interface PrepararTecnicoOut {
+  estado: 'ok' | 'sin_series' | 'fuera_de_catalogo'
+  agregado_a_watchlist: boolean
+  con_series: boolean
+  mensaje: string
+  avisos: string[]
+}
+
+/** Da de alta el ticker en la watchlist si no está en ninguna parte y le baja las velas. Tarda: va a fuentes externas. */
+export const prepararTecnicoDecision = (ticker: string) =>
+  api.post<PrepararTecnicoOut>(`/inversiones/decisiones/tecnico/${encodeURIComponent(ticker)}/preparar`, null, {
+    timeout: 120_000,
+  }).then(r => r.data)
+
 export const getPosicionDecision = (ticker: string, cartera: string | null) =>
   api.get<PosicionDecision>(`/inversiones/decisiones/posicion/${encodeURIComponent(ticker)}`, {
     params: { cartera: cartera || undefined }, timeout: 60_000,
