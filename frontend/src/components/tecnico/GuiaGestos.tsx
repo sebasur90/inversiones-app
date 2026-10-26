@@ -55,14 +55,16 @@ const GESTOS_TACTIL: [string, string][] = [
   ['Tocá una vela', 'arriba ves su fecha, precios, variación y los indicadores'],
   ['Mantené apretado y arrastrá', 'recorrés vela por vela'],
   ['Pellizcá (o + y −)', 'acercás y alejás'],
+  ['Pellizcá en vertical (un dedo arriba del otro)', 'achicás o estirás las velas de arriba a abajo'],
   ['Deslizá de costado', 'te movés por la historia (con zoom)'],
   ['Deslizá para arriba o abajo', 'movés la página, no el gráfico'],
-  ['Doble toque', 'volvés a todo el período'],
+  ['Doble toque', 'volvés a todo el período y a la altura automática'],
 ]
 
 const GESTOS_MOUSE: [string, string][] = [
   ['Pasá el mouse', 'arriba ves los datos de cada vela y los indicadores'],
   ['Rueda (o + y −)', 'acercás y alejás donde está el puntero'],
+  ['Shift + rueda', 'achicás o estirás las velas de arriba a abajo'],
   ['Arrastrá', 'te movés por la historia (con zoom)'],
   ['Doble clic', 'volvés a todo el período'],
 ]

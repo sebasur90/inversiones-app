@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Icon } from '../icons/Icons'
+import { esDialogoDeArriba } from '../ui/Modal'
 
 const FOCUSABLES =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -41,6 +42,10 @@ export default function GraficoFullscreen({
   const panelRef = useRef<HTMLDivElement>(null)
   const disparadorRef = useRef<HTMLElement | null>(null)
   const [girado, setGirado] = useState(false)
+  // Igual que en `Modal`: con `onClose` como dependencia, cada render de la pantalla re-corría el
+  // efecto del foco y se lo sacaba al input del selector de indicadores abierto encima.
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   async function alternarGiro() {
     if (girado) {
@@ -81,9 +86,10 @@ export default function GraficoFullscreen({
     disparadorRef.current = document.activeElement as HTMLElement | null
 
     function onKeyDown(e: KeyboardEvent) {
+      if (!esDialogoDeArriba(panelRef.current)) return
       if (e.key === 'Escape') {
         e.stopPropagation()
-        onClose()
+        onCloseRef.current()
         return
       }
       if (e.key !== 'Tab' || !panelRef.current) return
@@ -112,7 +118,7 @@ export default function GraficoFullscreen({
       document.removeEventListener('keydown', onKeyDown)
       disparadorRef.current?.focus?.()
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 

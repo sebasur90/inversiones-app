@@ -174,6 +174,13 @@ export default function AnalisisTecnico() {
       desde, indicadores: claves, variante, max_barras: maxBarras, intervalo, niveles_auto: true,
     }),
     enabled: ticker !== null,
+    // Cambiar un indicador (o el período) del mismo ticker deja el gráfico anterior a la vista
+    // mientras llega el nuevo: si no, el gráfico se cambiaba por el esqueleto, perdía el zoom y la
+    // pantalla completa se cerraba sola. Otro ticker u otra serie sí esperan vacíos: sus zonas y
+    // dibujos no van sobre las velas de la anterior. (La clave es [nombre, ticker, desde, claves,
+    // variante, …].)
+    placeholderData: (previa, consultaPrevia) =>
+      consultaPrevia?.queryKey[1] === ticker && consultaPrevia?.queryKey[4] === variante ? previa : undefined,
   })
   const serie = serieQuery.data
   const ultimoCierre = serie?.barras[serie.barras.length - 1]?.cierre ?? null
@@ -603,16 +610,6 @@ export default function AnalisisTecnico() {
             </details>
           )}
 
-          <Modal open={indicadoresAbierto} onClose={() => setIndicadoresAbierto(false)} title="Indicadores">
-            <div className="flex flex-col gap-2">
-              <InfoTooltip term="analisis_tecnico_indicadores" label="Qué es un indicador" />
-              <SelectorIndicadores
-                activos={activos} onAgregar={agregarIndicador} onQuitar={quitarIndicador}
-                onQuitarTipo={quitarTipoIndicador} onCambiarParam={cambiarParamIndicador}
-                tieneVolumen={serie?.tiene_volumen ?? true}
-              />
-            </div>
-          </Modal>
         </>
       ) : (
         ticker && (
@@ -638,12 +635,25 @@ export default function AnalisisTecnico() {
             zonas={zonasEnGrafico} editandoZonas={borrador !== null}
             onArrastrarZona={arrastrarZona} edicionZonas={edicionZonas}
             zonasVisibles={zonasVisibles} onToggleZonas={borrador ? undefined : () => setVerZonas(v => !v)}
-            onQuitarIndicador={quitarIndicadorPorClave}
+            onAbrirIndicadores={() => setIndicadoresAbierto(true)} onQuitarIndicador={quitarIndicadorPorClave}
             {...propsOperaciones}
             hoverIndex={hoverIndex} onHover={setHoverIndex}
           />
         </GraficoFullscreen>
       )}
+
+      {/* Después de la pantalla completa: con la misma capa, el que va último en el DOM queda
+          arriba, así el selector se abre sobre el gráfico a pantalla completa. */}
+      <Modal open={indicadoresAbierto} onClose={() => setIndicadoresAbierto(false)} title="Indicadores">
+        <div className="flex flex-col gap-2">
+          <InfoTooltip term="analisis_tecnico_indicadores" label="Qué es un indicador" />
+          <SelectorIndicadores
+            activos={activos} onAgregar={agregarIndicador} onQuitar={quitarIndicador}
+            onQuitarTipo={quitarTipoIndicador} onCambiarParam={cambiarParamIndicador}
+            tieneVolumen={serie?.tiene_volumen ?? true}
+          />
+        </div>
+      </Modal>
     </div>
   )
 }

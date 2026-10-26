@@ -15,6 +15,17 @@ const DOBLE_TOQUE_PX = 24
 const FRICCION = 0.94
 /** Tras un toque, los navegadores emulan eventos de mouse (`dblclick` incluido): se ignoran. */
 const IGNORAR_MOUSE_TRAS_TOQUE = 800
+/** Un pellizco es vertical (estira o achica las velas) si los dedos están más alineados en
+ * vertical que en horizontal por este factor; si no, es el zoom de tiempo de siempre. */
+const PELLIZCO_VERTICAL = 1.5
+/** Límites de la escala vertical: 1 = el rango justo de lo visible; 6 = las velas ocupan un sexto
+ * del alto; 0,3 = estiradas, con los extremos fuera del panel. */
+const ESCALA_Y_MIN = 0.3
+const ESCALA_Y_MAX = 6
+
+function acotarEscalaY(k: number): number {
+  return Math.min(ESCALA_Y_MAX, Math.max(ESCALA_Y_MIN, k))
+}
 
 /** Ventana visible en índices de barra. `inicio` puede tener fracción (el desplazamiento sigue al
  * dedo píxel a píxel); `fin = inicio + visibles − 1`. `fin` puede pasar de la última barra (`n − 1`):
@@ -49,6 +60,9 @@ export interface ControlesVentana {
   ventana: Ventana
   /** ¿Está mostrando toda la serie? Sirve para deshabilitar "restablecer". */
   completa: boolean
+  /** Escala vertical del panel de precio: 1 = automática (el rango de lo visible ocupa todo el
+   * alto); mayor que 1 achica las velas, menor las estira. La cambia el pellizco vertical. */
+  escalaY: number
   /** `factor > 1` acerca (lo usan los botones; ver la implementación para el ancla). */
   zoom: (factor: number) => void
   reset: () => void
@@ -103,6 +117,8 @@ type Gesto =
   /** `u1`/`u2`: posición (en barras, con fracción) bajo cada dedo al empezar. El pellizco mantiene
    * esas dos posiciones debajo de los dedos: zoom y desplazamiento en el mismo gesto. */
   | { tipo: 'pellizco'; id1: number; id2: number; u1: number; u2: number }
+  /** Pellizco con los dedos uno arriba del otro: escala vertical. `dy0` es la separación inicial. */
+  | { tipo: 'pellizcoY'; id1: number; id2: number; dy0: number; escala0: number }
   /** Scroll vertical de la página, o el dedo que queda después de un pellizco. */
   | { tipo: 'ignorar' }
   /** Empezó sobre un elemento con su propio arrastre (`ATRIBUTO_GESTO_PROPIO`, p. ej. la manija de
@@ -120,9 +136,10 @@ type Gesto =
  *
  * Gestos táctiles (estilo TradingView): arrastre horizontal desplaza con inercia, arrastre vertical
  * es el scroll de la página (el contenedor va con `touch-action: pan-y`), toque fija la cruz,
- * mantener apretado y arrastrar recorre las velas, pellizco hace zoom anclado a los dedos y doble
- * toque vuelve a todo el período. Con mouse: arrastre, rueda (zoom; horizontal del trackpad =
- * desplazamiento) y doble clic. El hover del mouse no pasa por acá: es de `crosshair.ts`.
+ * mantener apretado y arrastrar recorre las velas, pellizco hace zoom anclado a los dedos (con los
+ * dedos uno arriba del otro, cambia la escala vertical: achica o estira las velas) y doble toque
+ * vuelve a todo el período y a la escala automática. Con mouse: arrastre, rueda (zoom; horizontal
+ * del trackpad = desplazamiento; con Shift, escala vertical) y doble clic. El hover del mouse no pasa por acá: es de `crosshair.ts`.
  *
  * Los listeners son nativos y no props de React: los de React son pasivos para `wheel`/`touchmove`
  * y no dejarían llamar a `preventDefault`, que es justamente lo que separa "este gesto es del
@@ -141,10 +158,12 @@ export function useVentanaVisible(
   opciones: OpcionesGestos,
 ): ControlesVentana {
   const [ventana, setVentana] = useState<Ventana>(() => ventanaCompleta(n))
+  const [escalaY, setEscalaY] = useState(1)
   const [arrastrando, setArrastrando] = useState(false)
 
   // Lo que leen los listeners: siempre el último valor, sin volver a registrarlos en cada render.
   const ventanaRef = useRef(ventana)
+  const escalaYRef = useRef(escalaY)
   const anchoRef = useRef(ancho)
   anchoRef.current = ancho
   const nRef = useRef(n)
@@ -155,14 +174,24 @@ export function useVentanaVisible(
   const frameRef = useRef<number | null>(null)
   const inerciaRef = useRef<number | null>(null)
 
-  const aplicar = useCallback((v: Ventana) => {
-    ventanaRef.current = v
+  const programarFrame = useCallback(() => {
     if (frameRef.current != null) return
     frameRef.current = requestAnimationFrame(() => {
       frameRef.current = null
       setVentana(ventanaRef.current)
+      setEscalaY(escalaYRef.current)
     })
   }, [])
+
+  const aplicar = useCallback((v: Ventana) => {
+    ventanaRef.current = v
+    programarFrame()
+  }, [programarFrame])
+
+  const aplicarEscalaY = useCallback((k: number) => {
+    escalaYRef.current = acotarEscalaY(k)
+    programarFrame()
+  }, [programarFrame])
 
   const detenerInercia = useCallback(() => {
     if (inerciaRef.current != null) cancelAnimationFrame(inerciaRef.current)
@@ -182,6 +211,8 @@ export function useVentanaVisible(
     const v = ventanaCompleta(n)
     ventanaRef.current = v
     setVentana(v)
+    escalaYRef.current = 1
+    setEscalaY(1)
     opcionesRef.current.onCambioSerie?.()
   }, [n, serie, detenerInercia])
 
@@ -216,8 +247,10 @@ export function useVentanaVisible(
     zoomEn(factor, v.fin >= nRef.current - 1 - 1e-6 ? anchoRef.current : undefined)
   }, [detenerInercia, zoomEn])
 
+  /** Todo el período y la escala vertical automática. */
   const reset = useCallback(() => {
     detenerInercia()
+    escalaYRef.current = 1
     aplicar(ventanaCompleta(nRef.current))
   }, [aplicar, detenerInercia])
 
@@ -303,6 +336,12 @@ export function useVentanaVisible(
         const b = e.touches[1]
         const x1 = xEnPanel(a.clientX)
         const x2 = xEnPanel(b.clientX)
+        const dy = Math.abs(b.clientY - a.clientY)
+        if (dy >= 20 && dy > Math.abs(x2 - x1) * PELLIZCO_VERTICAL) {
+          gesto = { tipo: 'pellizcoY', id1: a.identifier, id2: b.identifier, dy0: dy, escala0: escalaYRef.current }
+          if (e.cancelable) e.preventDefault()
+          return
+        }
         if (Math.abs(x2 - x1) < 10 || nRef.current <= MINIMO_VISIBLE) {
           gesto = { tipo: 'ignorar' }
           return
@@ -331,6 +370,17 @@ export function useVentanaVisible(
 
       if (g.tipo === 'propio') {
         if (e.cancelable) e.preventDefault()
+        return
+      }
+
+      if (g.tipo === 'pellizcoY') {
+        const a = buscarToque(e.touches, g.id1)
+        const b = buscarToque(e.touches, g.id2)
+        if (!a || !b) return
+        if (e.cancelable) e.preventDefault()
+        const dy = Math.abs(b.clientY - a.clientY)
+        // Juntar los dedos achica las velas (el rango de precios crece); separarlos las estira.
+        if (dy >= 10) aplicarEscalaY((g.escala0 * g.dy0) / dy)
         return
       }
 
@@ -394,7 +444,7 @@ export function useVentanaVisible(
       limpiarTimer()
       if (e.touches.length > 0) {
         // Se levantó uno de los dos dedos del pellizco: el que queda no arranca otro gesto.
-        if (gesto.tipo === 'pellizco') gesto = { tipo: 'ignorar' }
+        if (gesto.tipo === 'pellizco' || gesto.tipo === 'pellizcoY') gesto = { tipo: 'ignorar' }
         return
       }
       if (gesto.tipo === 'propio') {
@@ -437,12 +487,20 @@ export function useVentanaVisible(
     }
 
     function onWheel(e: WheelEvent) {
-      if (nRef.current <= MINIMO_VISIBLE) return
-      e.preventDefault()
-      detenerInercia()
       const escala = e.deltaMode === 1 ? 16 : 1
       const dx = e.deltaX * escala
       const dy = e.deltaY * escala
+      // Shift + rueda: el equivalente del pellizco vertical (algunos navegadores mandan la rueda
+      // con Shift como desplazamiento horizontal, así que vale el delta que venga).
+      if (e.shiftKey) {
+        e.preventDefault()
+        const d = Math.abs(dy) >= Math.abs(dx) ? dy : dx
+        aplicarEscalaY(escalaYRef.current * Math.exp(Math.max(-100, Math.min(100, d)) * 0.0025))
+        return
+      }
+      if (nRef.current <= MINIMO_VISIBLE) return
+      e.preventDefault()
+      detenerInercia()
       if (Math.abs(dx) > Math.abs(dy)) {
         // Trackpad hacia el costado: desplazamiento, no zoom.
         const v = ventanaRef.current
@@ -519,11 +577,12 @@ export function useVentanaVisible(
       contenedor.removeEventListener('contextmenu', onContextMenu)
       onPointerUpVentana()
     }
-  }, [ref, activo, aplicar, detenerInercia, posicionEn, reset, zoomEn])
+  }, [ref, activo, aplicar, aplicarEscalaY, detenerInercia, posicionEn, reset, zoomEn])
 
   return {
     ventana,
     completa: esCompleta(ventana, n),
+    escalaY,
     zoom,
     reset,
     arrastrando,

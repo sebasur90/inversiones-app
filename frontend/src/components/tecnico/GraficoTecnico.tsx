@@ -4,12 +4,12 @@ import type {
 } from '../../api'
 import Segmented from '../ui/Segmented'
 import type { ControlDibujos } from './useDibujos'
-import { ETIQUETA_TIPO } from './dibujosGrafico'
+import { ETIQUETA_TIPO, rolHorizontal } from './dibujosGrafico'
 import { useEscalaX } from './useEscalaX'
 import { estiloContenedorGestos, useVentanaVisible } from './useVentanaVisible'
 import { useAnchoContenedor } from './useAnchoContenedor'
 import { useAltosGrafico } from './useAltosGrafico'
-import PanelPrecio, { salidasGraficables, type OverlayPrecio } from './PanelPrecio'
+import PanelPrecio, { COLOR_RESISTENCIA, COLOR_SOPORTE, salidasGraficables, type OverlayPrecio } from './PanelPrecio'
 import type { BordeZona, ZonasDibujo } from './ZonasPrecio'
 import type { TipoZona } from '../../api'
 import PanelIndicador from './PanelIndicador'
@@ -17,7 +17,7 @@ import PanelVolumen from './PanelVolumen'
 import EjeFechas from './EjeFechas'
 import FichaBarra from './FichaBarra'
 import { BarraHerramientas, BotonesGrafico, PieGrafico, type Herramienta } from './ControlesGrafico'
-import { formatoValor } from './formatoEjes'
+import { formatoPrecio, formatoValor } from './formatoEjes'
 import { Icon } from '../icons/Icons'
 import GuiaGestos, { AVISO_SIN_RECORRIDO, AvisoGrafico, useAvisoGrafico, useGuiaGestos } from './GuiaGestos'
 import { ESPEC_POR_TIPO, claveIndicador, colorIndicador, type IndicadorActivo } from './indicadoresConfig'
@@ -38,13 +38,33 @@ const OPCIONES_BENCHMARK: { value: BenchmarkFR; label: string }[] = [
 ]
 
 const HERRAMIENTAS_DIBUJO: { value: TipoDibujo; label: string }[] = [
-  { value: 'horizontal', label: 'Horizontal' }, { value: 'tendencia', label: 'Tendencia' }, { value: 'fibonacci', label: 'Fibonacci' },
+  { value: 'horizontal', label: 'Sop./Res.' }, { value: 'tendencia', label: 'Tendencia' }, { value: 'fibonacci', label: 'Fibonacci' },
 ]
 
 function pistaDibujo(d: ControlDibujos): string | null {
-  if (d.herramienta === 'horizontal') return 'Tocá el precio donde va la línea.'
+  if (d.herramienta === 'horizontal') return 'Tocá el precio donde va el soporte o la resistencia.'
   if (d.herramienta) return d.primerPunto ? 'Ahora tocá el segundo punto.' : 'Tocá el primer punto.'
   return null
+}
+
+/** Qué dice la barra con un dibujo seleccionado: qué es y cómo se mueve. */
+function textoSeleccion(d: ControlDibujos, ultimoCierre: number | null): string {
+  const sel = d.lista.find(x => x.id === d.seleccionado)
+  if (!sel) return ''
+  if (sel.tipo === 'horizontal') {
+    return `${rolHorizontal(sel.precio1, ultimoCierre)} en ${formatoPrecio(sel.precio1)}: arrastrá la manija ↕ para moverla.`
+  }
+  return `${ETIQUETA_TIPO[sel.tipo]}: arrastrá sus puntas para moverla.`
+}
+
+/** Identidad de la serie para el hook de gestos: cambia con otro ticker, período o intervalo, pero
+ * no cuando la misma serie vuelve del servidor con otro indicador (es un array nuevo con las
+ * mismas velas, y resetear ahí perdía el zoom con cada indicador agregado o cambiado). */
+function idSerie(barras: BarraOut[]): string {
+  const n = barras.length
+  if (n === 0) return ''
+  const [a, b] = [barras[0], barras[n - 1]]
+  return `${n}|${a.fecha}|${a.cierre}|${b.fecha}|${b.cierre}`
 }
 
 const TEXTO_ADVERTENCIA_FR: Record<string, string> = {
@@ -134,7 +154,7 @@ export default function GraficoTecnico({
     },
     onClic: (i, y) => { toqueRef.current?.(i, y) },
     onCruz: dibujando ? undefined : onHover,
-    serie: barras,
+    serie: idSerie(barras),
     onCambioSerie: () => onHover(null),
     onSinRecorrido: () => aviso.avisar(AVISO_SIN_RECORRIDO),
   })
@@ -159,6 +179,8 @@ export default function GraficoTecnico({
     else if (espec.destino === 'volumen') overlaysVolumen.push({ clave, color, series })
     else panelesOsciladores.push({ tipo: a.tipo, clave, color, series })
   }
+  // Pedidos pero todavía sin serie: el gráfico anterior queda a la vista mientras se calculan.
+  const calculando = activos.some(a => ESPEC_POR_TIPO[a.tipo] && !indicadores[claveIndicador(a.tipo, a.params)])
   // La leyenda lleva el valor de cada overlay en la vela de la cruz (o la última): con dos medias
   // del mismo tipo el color es lo único que las distingue, y el número es lo que no se ve a ojo.
   // Los osciladores tienen su valor en su propio panel: en la leyenda van sólo para poder quitarlos.
@@ -249,7 +271,7 @@ export default function GraficoTecnico({
           <span className={`min-w-0 flex-1 ${dibujos.error ? 'text-app-neg' : 'text-app-text-dim'}`}>
             {dibujos.error
               ?? pistaDibujo(dibujos)
-              ?? `${ETIQUETA_TIPO[dibujos.lista.find(d => d.id === dibujos.seleccionado)?.tipo ?? 'horizontal']} seleccionada`}
+              ?? textoSeleccion(dibujos, barras[barras.length - 1]?.cierre ?? null)}
           </span>
           {dibujando ? (
             <button type="button" onClick={() => dibujos.elegirHerramienta(null)} className="shrink-0 h-8 px-2.5 rounded-lg bg-app-surface-2 font-semibold text-app-text-dim">
@@ -266,7 +288,7 @@ export default function GraficoTecnico({
         </div>
       )}
 
-      {(leyenda.length > 0 || onAbrirIndicadores) && (
+      {(leyenda.length > 0 || onAbrirIndicadores || calculando) && (
         <div className="flex flex-wrap gap-1.5 mb-1.5">
           {leyenda.map(o => (
             <span
@@ -288,6 +310,9 @@ export default function GraficoTecnico({
               )}
             </span>
           ))}
+          {calculando && (
+            <span className="inline-flex items-center h-8 px-2 text-label text-app-text-faint animate-pulse">Calculando…</span>
+          )}
           {onAbrirIndicadores && (
             <button
               type="button" onClick={onAbrirIndicadores}
@@ -333,7 +358,7 @@ export default function GraficoTecnico({
           barras={barras} escalaX={escalaX} alto={alto.precio} tieneVelas={tieneVelas} moneda={moneda}
           overlays={overlaysPrecio} senales={senales} primeraBarraEvaluable={primeraBarraEvaluable}
           zonas={zonas} editandoZonas={editandoZonas} onArrastrarZona={onArrastrarZona}
-          misOperaciones={misOperaciones} escalaLog={escalaLog} nivelesAuto={nivelesActivos ? nivelesAuto : null}
+          misOperaciones={misOperaciones} escalaLog={escalaLog} escalaY={controles.escalaY} nivelesAuto={nivelesActivos ? nivelesAuto : null}
           dibujos={dibujos} toqueRef={toqueRef}
           hoverIndex={hoverIndex} onHover={onHover}
         />
@@ -378,6 +403,15 @@ export default function GraficoTecnico({
 
       {advertenciasFR.map(t => <p key={t} className="mt-1 text-label text-app-text-dim">{t}</p>)}
 
+      {nivelesActivos && (
+        <ExplicacionNiveles
+          niveles={nivelesAuto ?? []} unidad={intervalo === 'S' ? 'semanas' : intervalo === 'M' ? 'meses' : 'ruedas'}
+          onFijar={dibujos ? (n => dibujos.fijarNivel(n.precio, n.ultima_fecha)) : undefined}
+          fijados={new Set((dibujos?.lista ?? []).filter(d => d.tipo === 'horizontal').map(d => d.precio1))}
+          ocupado={!!dibujos?.guardando}
+        />
+      )}
+
       {/* Debajo del gráfico y no arriba: así la primera pantalla del celular es el precio, y los
           interruptores quedan a mano del pulgar justo bajo lo que modifican. */}
       <div className="mt-2">
@@ -403,6 +437,65 @@ export default function GraficoTecnico({
         conCruz={hoverIndex != null} unidad={intervalo === 'S' ? 'semanas' : intervalo === 'M' ? 'meses' : 'ruedas'}
         onAyuda={guia.mostrar}
       />
+    </div>
+  )
+}
+
+/** Qué son los soportes y resistencias automáticos y cómo pasarlos a líneas propias. Sin esto el
+ * botón «Sop./Res.» dibujaba unas líneas punteadas sin decir de dónde salían (o nada, si en el
+ * período no había ninguno, sin decir por qué). */
+function ExplicacionNiveles({
+  niveles, unidad, onFijar, fijados, ocupado,
+}: {
+  niveles: NivelAutoOut[]
+  unidad: string
+  /** Sin esto (gráfico sin dibujos) no se ofrece fijar. */
+  onFijar?: (n: NivelAutoOut) => void
+  /** Precios que ya tienen una línea propia: no se ofrecen de nuevo. */
+  fijados: Set<number>
+  ocupado: boolean
+}) {
+  const ordenados = [...niveles].sort((a, b) => b.precio - a.precio)
+  const color = (n: NivelAutoOut) => (n.tipo === 'resistencia' ? COLOR_RESISTENCIA : COLOR_SOPORTE)
+  return (
+    <div className="mt-2 rounded-xl border border-app-border px-3 py-2.5 text-label text-app-text-dim">
+      <p>
+        <span className="font-semibold text-app-text">Se calculan solos</span> sobre las {unidad} del período elegido: se
+        buscan los máximos y mínimos donde el precio dio la vuelta y se agrupan los que caen a la misma altura. Queda un
+        nivel donde rebotó <span className="font-semibold text-app-text">al menos 2 veces</span>; más toques y más
+        recientes, más fuerte. <span style={{ color: COLOR_RESISTENCIA }}>R</span> = resistencia (arriba del precio),{' '}
+        <span style={{ color: COLOR_SOPORTE }}>S</span> = soporte (abajo). Cambian si cambiás el período.
+      </p>
+      {ordenados.length === 0 ? (
+        <p className="mt-1.5">En este período no hay ningún nivel con dos toques: probá con un período más largo.</p>
+      ) : onFijar && (
+        <>
+          <p className="mt-1.5">Para moverlo a mano, fijalo: queda como una línea tuya que podés arrastrar.</p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {ordenados.map(n => {
+              const yaFijado = fijados.has(n.precio)
+              return (
+                <button
+                  key={`${n.tipo}-${n.precio}`} type="button" disabled={yaFijado || ocupado} onClick={() => onFijar(n)}
+                  className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg bg-app-surface-2 font-mono font-semibold text-app-text disabled:opacity-40"
+                  title={yaFijado ? 'Ya está fijado' : `Fijar ${n.tipo} en ${formatoPrecio(n.precio)}`}
+                >
+                  <span style={{ color: color(n) }}>{n.tipo === 'resistencia' ? 'R' : 'S'}</span>
+                  {formatoPrecio(n.precio)}
+                  <span className="text-app-text-faint">· {n.toques}</span>
+                  {!yaFijado && <Icon name="plus" className="w-3 h-3 text-app-accent" />}
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
+      {onFijar && (
+        <p className="mt-1.5">
+          También podés poner uno propio con <span className="font-semibold text-app-text">Dibujar → Sop./Res.</span> Tocá
+          una línea tuya para seleccionarla y arrastrá su manija ↕ para moverla.
+        </p>
+      )}
     </div>
   )
 }

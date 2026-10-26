@@ -43,8 +43,8 @@ const COLOR_TRAILING = '#fbbf24'
 const COLOR_GATILLO_COMPRA = '#10b981'
 const COLOR_GATILLO_VENTA = '#ef4444'
 const COLOR_CRUZ = '#475569'
-const COLOR_RESISTENCIA = '#fb923c'
-const COLOR_SOPORTE = '#a3e635'
+export const COLOR_RESISTENCIA = '#fb923c'
+export const COLOR_SOPORTE = '#a3e635'
 /** Halo detrás de las etiquetas del eje: se leen aunque pase una vela o una media por debajo. */
 const COLOR_HALO = '#121621'
 /** Con velas más angostas que esto, el cuerpo y la mecha se confunden en una mancha: se dibuja la
@@ -75,7 +75,7 @@ export function salidasGraficables(o: OverlayPrecio): [string, (number | null)[]
  * motor de backtest y viajan en la respuesta: dibujarlos re-derivándolos acá daría una línea que
  * no es la que efectivamente disparó la salida. */
 export default function PanelPrecio({
-  barras, escalaX, alto, tieneVelas, overlays, senales, operaciones, primeraBarraEvaluable, moneda, gatillo, zonas, editandoZonas, onArrastrarZona, misOperaciones, escalaLog, nivelesAuto, dibujos, toqueRef, hoverIndex, onHover,
+  barras, escalaX, alto, tieneVelas, overlays, senales, operaciones, primeraBarraEvaluable, moneda, gatillo, zonas, editandoZonas, onArrastrarZona, misOperaciones, escalaLog, escalaY = 1, nivelesAuto, dibujos, toqueRef, hoverIndex, onHover,
 }: {
   barras: BarraOut[]
   escalaX: EscalaX
@@ -96,6 +96,8 @@ export default function PanelPrecio({
   misOperaciones?: OperacionesGraficoOut | null
   /** Escala logarítmica en el eje de precio (los osciladores quedan lineales). */
   escalaLog?: boolean
+  /** Escala vertical del pellizco (ver `ControlesVentana.escalaY`): 1 = automática. */
+  escalaY?: number
   /** Soportes y resistencias automáticos. No entran en la escala Y: como una zona lejana, un nivel
    * fuera del tramo que se mira simplemente no se ve. */
   nivelesAuto?: NivelAutoOut[] | null
@@ -162,7 +164,11 @@ export default function PanelPrecio({
   const minV = enEscala.length ? Math.min(...enEscala) : 0
   const maxV = enEscala.length ? Math.max(...enEscala) : 1
   const pad = (maxV - minV) * 0.08 || Math.abs(maxV) * 0.05 || 1
-  const [y0, y1] = dominioCongelado ?? [minV - pad, maxV + pad]
+  // La escala vertical abre o cierra el rango alrededor de su centro: con el pellizco vertical las
+  // velas se achican o se estiran sin dejar de seguir al tramo visible al desplazarse.
+  const centro = (minV + maxV) / 2
+  const medio = ((maxV - minV) / 2 + pad) * escalaY
+  const [y0, y1] = dominioCongelado ?? [centro - medio, centro + medio]
   const yDeValor = (v: number) => (usarLog && !(v > 0) ? alto : alto - ((aEscala(v) - y0) / (y1 - y0 || 1)) * alto)
   /** Inversa de `yDeValor`: la usa el arrastre de los bordes de zona. */
   const valorDeY = (y: number) => deEscala(y0 + ((alto - y) / (alto || 1)) * (y1 - y0))
@@ -332,14 +338,14 @@ export default function PanelPrecio({
             const color = n.tipo === 'resistencia' ? COLOR_RESISTENCIA : COLOR_SOPORTE
             return (
               <g key={`${n.tipo}-${n.precio}`}>
-                <line x1={0} x2={escalaX.ancho} y1={y} y2={y} stroke={color} strokeWidth={1} strokeDasharray="1 3" opacity={0.75}>
+                <line x1={0} x2={escalaX.ancho} y1={y} y2={y} stroke={color} strokeWidth={1.25} strokeDasharray="3 3" opacity={0.8}>
                   <title>{`${n.tipo === 'resistencia' ? 'Resistencia' : 'Soporte'} ${formatoPrecio(n.precio)}: ${n.toques} toques`}</title>
                 </line>
                 <text
                   x={4} y={y - 3} fontSize={9} fill={color} stroke={COLOR_HALO} strokeWidth={3} paintOrder="stroke"
                   className="font-mono font-bold"
                 >
-                  {`${n.tipo === 'resistencia' ? 'R' : 'S'} · ${n.toques} toques`}
+                  {`${n.tipo === 'resistencia' ? 'R' : 'S'} ${formatoPrecio(n.precio)} · ${n.toques} toques`}
                 </text>
               </g>
             )
@@ -351,6 +357,10 @@ export default function PanelPrecio({
         <DibujosGrafico
           dibujos={dibujos.lista} barras={barras} escalaX={escalaX} yDeValor={yDeValor}
           seleccionado={dibujos.seleccionado} primerPunto={dibujos.primerPunto} vistaPrevia={vistaPrevia}
+          arrastre={{
+            svgRef, alto, valorDeY, onMover: dibujos.mover,
+            onArrastreActivo: activo => setDominioCongelado(activo ? [y0, y1] : null),
+          }}
         />
       )}
 

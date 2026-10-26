@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import {
   INDICADORES_UI, MAX_INDICADORES, claveIndicador, colorIndicador,
   type EspecIndicadorUi, type IndicadorActivo,
@@ -49,6 +50,74 @@ export default function SelectorIndicadores({
         </section>
       ))}
     </div>
+  )
+}
+
+/** Cuánto se espera después de la última tecla para recalcular: escribir "200" no tiene que pedir
+ * antes la media de 2 y la de 20. */
+const ESPERA_PARAMETRO_MS = 700
+
+/** Input de un parámetro con borrador propio. El texto es del usuario mientras escribe (puede
+ * quedar vacío o a medias); el valor sólo se confirma si es un número dentro del rango, un rato
+ * después de la última tecla, al salir del campo o con Enter. Al salir con algo inválido vuelve
+ * al último valor confirmado. */
+function InputParametro({
+  valor, min, max, step, onConfirmar,
+}: {
+  valor: number
+  min?: number
+  max?: number
+  step?: number
+  onConfirmar: (v: number) => void
+}) {
+  const [texto, setTexto] = useState(String(valor))
+  const timer = useRef<number | null>(null)
+  const enfocado = useRef(false)
+
+  // Un cambio de afuera (otra instancia, valor por defecto) se refleja si no se está escribiendo.
+  useEffect(() => {
+    if (!enfocado.current) setTexto(String(valor))
+  }, [valor])
+  useEffect(() => () => { if (timer.current != null) window.clearTimeout(timer.current) }, [])
+
+  const valido = (t: string): number | null => {
+    const v = Number(t.replace(',', '.'))
+    if (t.trim() === '' || !Number.isFinite(v)) return null
+    if ((min != null && v < min) || (max != null && v > max)) return null
+    // Sin `step` el parámetro es entero (un período de 20,5 ruedas no existe).
+    if (step == null && !Number.isInteger(v)) return null
+    return v
+  }
+  const confirmar = (t: string) => {
+    if (timer.current != null) window.clearTimeout(timer.current)
+    timer.current = null
+    const v = valido(t)
+    if (v != null && v !== valor) onConfirmar(v)
+    return v
+  }
+
+  const fueraDeRango = texto.trim() !== '' && valido(texto) == null
+  return (
+    <input
+      type="text" inputMode={step == null ? 'numeric' : 'decimal'} enterKeyHint="done" value={texto}
+      aria-invalid={fueraDeRango}
+      title={min != null && max != null ? `Entre ${min} y ${max}` : undefined}
+      onFocus={() => { enfocado.current = true }}
+      onChange={e => {
+        const t = e.target.value
+        setTexto(t)
+        if (timer.current != null) window.clearTimeout(timer.current)
+        timer.current = window.setTimeout(() => confirmar(t), ESPERA_PARAMETRO_MS)
+      }}
+      onBlur={() => {
+        enfocado.current = false
+        if (confirmar(texto) == null) setTexto(String(valor))
+      }}
+      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+      className={`w-16 h-8 bg-app-bg border rounded-lg px-2 font-mono text-caption text-app-text ${
+        fueraDeRango ? 'border-app-neg' : 'border-app-border'
+      }`}
+    />
   )
 }
 
@@ -104,11 +173,9 @@ function FilaIndicador({
               {espec.params.map(p => (
                 <label key={p.nombre} className="flex items-center gap-1 text-label text-app-text-dim">
                   {p.label}
-                  <input
-                    type="number" inputMode="decimal" min={p.min} max={p.max} step={p.step ?? 1}
-                    value={a.params[p.nombre] ?? p.default}
-                    onChange={e => onCambiarParam(a.id, p.nombre, Number(e.target.value))}
-                    className="w-16 h-8 bg-app-bg border border-app-border rounded-lg px-2 font-mono text-caption text-app-text"
+                  <InputParametro
+                    valor={a.params[p.nombre] ?? p.default} min={p.min} max={p.max} step={p.step}
+                    onConfirmar={v => onCambiarParam(a.id, p.nombre, v)}
                   />
                 </label>
               ))}

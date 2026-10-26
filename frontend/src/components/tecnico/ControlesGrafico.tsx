@@ -19,7 +19,7 @@ export function BotonesGrafico({
     <>
       <Boton label="Alejar" onClick={() => controles.zoom(1 / 1.5)} disabled={controles.completa}>−</Boton>
       <Boton label="Acercar" onClick={() => controles.zoom(1.5)}>+</Boton>
-      <Boton label="Ver todo el período" onClick={controles.reset} disabled={controles.completa}>⤢</Boton>
+      <Boton label="Ver todo el período" onClick={controles.reset} disabled={controles.completa && controles.escalaY === 1}>⤢</Boton>
       {onToggleFullscreen && (
         <Boton label={fullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'} onClick={onToggleFullscreen}>
           {fullscreen ? <Icon name="close" className="w-4 h-4" /> : '⛶'}
@@ -124,7 +124,7 @@ function Boton({
 function pistaSegunEstado(completa: boolean, conCruz: boolean): string {
   if (TACTIL) {
     if (conCruz) return 'Tocá la misma vela o ✕ para quitar la cruz · mantené y arrastrá para recorrer'
-    if (completa) return 'Pellizcá o tocá + para acercar · tocá una vela para ver sus datos'
+    if (completa) return 'Pellizcá o tocá + para acercar · pellizcá en vertical para achicar las velas'
     return 'Deslizá de costado para moverte · doble toque: ver todo'
   }
   if (completa) return 'Rueda o + para acercar'

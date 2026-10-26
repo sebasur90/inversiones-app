@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { qk } from '../../api/queryClient'
 import {
-  borrarDibujo, crearDibujo, getDibujos, type DibujoIn, type DibujoOut, type TipoDibujo, type VarianteSerie,
+  borrarDibujo, crearDibujo, getDibujos, reemplazarDibujo, type DibujoIn, type DibujoOut, type TipoDibujo, type VarianteSerie,
 } from '../../api'
 import { parseApiError } from '../../help/errors/apiErrors'
 
@@ -25,6 +25,10 @@ export interface ControlDibujos {
   seleccionado: number | null
   seleccionar: (id: number | null) => void
   borrarSeleccionado: () => void
+  /** Guarda un dibujo con sus puntos movidos (arrastre de una manija). Se ve movido al instante. */
+  mover: (d: DibujoOut) => void
+  /** Pasa un soporte o resistencia automático a una línea propia, que se puede arrastrar. */
+  fijarNivel: (precio: number, fecha: string) => void
   guardando: boolean
   /** Último error del servidor (o `null`). */
   error: string | null
@@ -61,6 +65,21 @@ export function useDibujos(ticker: string | null, variante: VarianteSerie | unde
       setError(null)
     },
     onError: e => setError(parseApiError(e).message),
+  })
+
+  const reemplazar = useMutation({
+    mutationFn: (d: DibujoOut) => reemplazarDibujo(ticker as string, d.id, {
+      variante: d.variante, tipo: d.tipo, fecha1: d.fecha1, precio1: d.precio1,
+      fecha2: d.fecha2, precio2: d.precio2, color: d.color,
+    }),
+    onMutate: d => {
+      // Optimista: al soltar la manija la línea queda donde se la dejó, sin volver un instante a su
+      // lugar anterior mientras responde el servidor.
+      queryClient.setQueryData<DibujoOut[]>(clave, prev => prev?.map(x => (x.id === d.id ? d : x)))
+      setError(null)
+    },
+    onError: e => setError(parseApiError(e).message),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: clave }),
   })
 
   const borrar = useMutation({
@@ -102,6 +121,11 @@ export function useDibujos(ticker: string | null, variante: VarianteSerie | unde
     setHerramienta(null)
   }, [crear, herramienta, primerPunto, variante])
 
+  const fijarNivel = useCallback((precio: number, fecha: string) => {
+    if (!variante) return
+    crear.mutate({ variante, tipo: 'horizontal', fecha1: fecha.slice(0, 10), precio1: precio, fecha2: null, precio2: null })
+  }, [crear, variante])
+
   const borrarSeleccionado = useCallback(() => {
     if (seleccionado != null) borrar.mutate(seleccionado)
   }, [borrar, seleccionado])
@@ -117,7 +141,9 @@ export function useDibujos(ticker: string | null, variante: VarianteSerie | unde
     seleccionado: seleccionado != null && lista.some(d => d.id === seleccionado) ? seleccionado : null,
     seleccionar: setSeleccionado,
     borrarSeleccionado,
-    guardando: crear.isPending || borrar.isPending,
+    mover: reemplazar.mutate,
+    fijarNivel,
+    guardando: crear.isPending || borrar.isPending || reemplazar.isPending,
     error,
   }
 }

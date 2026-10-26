@@ -4,6 +4,13 @@ import { Icon } from '../icons/Icons'
 const FOCUSABLES =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
+/** ¿Es `panel` el último diálogo modal abierto? Los dos escuchan el teclado en `document`: sin
+ * esto, Escape cerraría el modal y también el gráfico a pantalla completa que quedó debajo. */
+export function esDialogoDeArriba(panel: HTMLElement | null): boolean {
+  const abiertos = document.querySelectorAll('[role="dialog"][aria-modal="true"]')
+  return !panel || abiertos.length === 0 || abiertos[abiertos.length - 1] === panel
+}
+
 export default function Modal({
   open,
   onClose,
@@ -17,6 +24,11 @@ export default function Modal({
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
   const disparadorRef = useRef<HTMLElement | null>(null)
+  // `onClose` suele llegar como flecha nueva en cada render. Si fuera dependencia del efecto, cada
+  // render de la pantalla de atrás devolvería el foco al disparador: el input que se está editando
+  // lo pierde y en el celular se cierra el teclado con cada tecla.
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   // Escape para cerrar y foco atrapado dentro del panel: con el modal abierto, tabular no
   // debe llevar a los controles de la pantalla que quedó atrás.
@@ -26,9 +38,12 @@ export default function Modal({
     disparadorRef.current = document.activeElement as HTMLElement | null
 
     function onKeyDown(e: KeyboardEvent) {
+      // Con otro diálogo abierto encima (un modal sobre el gráfico a pantalla completa), las
+      // teclas son de ése.
+      if (!esDialogoDeArriba(panelRef.current)) return
       if (e.key === 'Escape') {
         e.stopPropagation()
-        onClose()
+        onCloseRef.current()
         return
       }
       if (e.key !== 'Tab' || !panelRef.current) return
@@ -59,7 +74,7 @@ export default function Modal({
       document.removeEventListener('keydown', onKeyDown)
       disparadorRef.current?.focus?.()
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 

@@ -197,7 +197,7 @@ export default function GraficoBacktest({
         <PanelPrecio
           barras={barras} escalaX={escalaX} alto={alto.precio} tieneVelas={tieneVelas} moneda={moneda}
           overlays={overlaysPrecio} senales={senales} operaciones={operaciones} primeraBarraEvaluable={pbe}
-          gatillo={gatillo} misOperaciones={misOperaciones}
+          gatillo={gatillo} misOperaciones={misOperaciones} escalaY={controles.escalaY}
           hoverIndex={hoverIndex} onHover={setHoverIndex}
         />
         <EjeFechas barras={barras} escalaX={escalaX} />

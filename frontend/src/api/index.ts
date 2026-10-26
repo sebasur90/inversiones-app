@@ -2464,6 +2464,9 @@ export const getDibujos = (ticker: string, variante: VarianteSerie) =>
 export const crearDibujo = (ticker: string, body: DibujoIn) =>
   api.post<DibujoOut>(rutaDibujos(ticker), body).then(r => r.data)
 
+export const reemplazarDibujo = (ticker: string, id: number, body: DibujoIn) =>
+  api.put<DibujoOut>(`${rutaDibujos(ticker)}/${id}`, body).then(r => r.data)
+
 export const borrarDibujo = (ticker: string, id: number) =>
   api.delete(`${rutaDibujos(ticker)}/${id}`).then(() => undefined)
 

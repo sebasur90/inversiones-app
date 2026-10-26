@@ -14,7 +14,14 @@ import type { EscalaX } from './useEscalaX'
 export const NIVELES_FIBONACCI = [0, 0.236, 0.382, 0.5, 0.618, 1] as const
 
 export const ETIQUETA_TIPO: Record<DibujoOut['tipo'], string> = {
-  horizontal: 'Línea horizontal', tendencia: 'Línea de tendencia', fibonacci: 'Fibonacci',
+  horizontal: 'Soporte / resistencia', tendencia: 'Línea de tendencia', fibonacci: 'Fibonacci',
+}
+
+/** Qué es una línea horizontal para el precio de hoy: soporte si queda por debajo del último
+ * cierre, resistencia si queda por encima. */
+export function rolHorizontal(precio: number, ultimoCierre: number | null): 'Soporte' | 'Resistencia' | 'Línea' {
+  if (ultimoCierre == null) return 'Línea'
+  return precio < ultimoCierre ? 'Soporte' : 'Resistencia'
 }
 
 const dia = (f: string) => f.slice(0, 10)
