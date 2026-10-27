@@ -146,6 +146,7 @@ try {
 | Descomposición de cartera | ✅ | ✓ | Pantalla nueva `/descomposicion`: árbol Familia→País→Sector→Ticker, 5 términos + guía; familia derivada de `market_data/precios.py` y `salud_engine.SECTORES_LIQUIDOS` |
 | Costo de oportunidad | ✅ | ✓ | Pantalla nueva `/costo-oportunidad`: cartera vs. referencia normalizada a la misma moneda, en % y en dinero; 7 términos + guía; reutiliza `_twr_mensual_por_moneda` y `opportunity_cost_engine.valor_shadow` |
 | Mapa de mercado | ✅ | ✓ | Pantalla nueva `/mapa-mercado`: treemap por sector/región/tamaño/tipo coloreado por variación en USD; 6 términos + guía; datos de `mapa_mercado_ingesta` y clasificación existente |
+| Calendario de eventos | ✅ | ✓ | Pantalla nueva `/eventos`: calendario, timeline e impacto en activos; 12 términos + guía; datos de `services/eventos/` (ver `docs/calendario-eventos.md`) |
 
 ## Notas para mantainers
 

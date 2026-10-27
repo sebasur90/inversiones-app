@@ -59,6 +59,10 @@ MINUTO_FUNDAMENTALES_DEFAULT = 30
 # estándar), así que el 1D que se ve a la noche es el de la rueda recién terminada.
 HORAS_MAPA_MERCADO_DEFAULT = "18"
 MINUTO_MAPA_MERCADO_DEFAULT = 30
+# Calendario de eventos: noticias (Marketaux, GDELT), balances (Yahoo) y archivos de calendarios. Todos
+# los días: los acontecimientos no esperan a la rueda.
+HORAS_EVENTOS_DEFAULT = "9,21"
+MINUTO_EVENTOS_DEFAULT = 15
 
 _scheduler = None
 
@@ -174,6 +178,27 @@ def _horas_fundamentales() -> str:
 def _horas_mapa_mercado() -> str:
     """Las horas de la descarga del mapa de mercado (`MAPA_MERCADO_HORAS`). Vacío la desactiva."""
     return _horas_env("MAPA_MERCADO_HORAS", HORAS_MAPA_MERCADO_DEFAULT)
+
+
+def _horas_eventos() -> str:
+    """Las horas de la sincronización del Calendario de eventos (`EVENTOS_HORAS`). Vacío la desactiva."""
+    return _horas_env("EVENTOS_HORAS", HORAS_EVENTOS_DEFAULT)
+
+
+def correr_eventos() -> None:
+    """Job del Calendario de eventos. Hace la red sin `sync_lock` y lo pide sólo para escribir. Nunca lanza."""
+    from ..database import SessionLocal
+    from .eventos import eventos_sync
+
+    db = SessionLocal()
+    try:
+        resumen = eventos_sync.correr(db)
+        logger.info("scheduler: eventos %s", resumen.get("resultado"))
+    except Exception as exc:
+        logger.exception("scheduler: la sincronización de eventos falló: %s", exc)
+        db.rollback()
+    finally:
+        db.close()
 
 
 def correr_sync_y_alertas() -> None:
@@ -337,6 +362,8 @@ def iniciar() -> None:
     minuto_fundamentales = _entero_env("FUNDAMENTALES_MINUTO", MINUTO_FUNDAMENTALES_DEFAULT, 0, 59)
     horas_mapa = _horas_mapa_mercado()
     minuto_mapa = _entero_env("MAPA_MERCADO_MINUTO", MINUTO_MAPA_MERCADO_DEFAULT, 0, 59)
+    horas_eventos = _horas_eventos()
+    minuto_eventos = _entero_env("EVENTOS_MINUTO", MINUTO_EVENTOS_DEFAULT, 0, 59)
 
     try:
         scheduler = BackgroundScheduler(timezone=zona)
@@ -384,6 +411,15 @@ def iniciar() -> None:
                 coalesce=True,
                 max_instances=1,
             )
+        if horas_eventos:
+            scheduler.add_job(
+                correr_eventos,
+                CronTrigger(hour=horas_eventos, minute=minuto_eventos, timezone=zona),
+                id="eventos",
+                misfire_grace_time=3600,
+                coalesce=True,
+                max_instances=1,
+            )
         scheduler.start()
     except Exception as exc:
         logger.exception("scheduler: no se pudo iniciar: %s", exc)
@@ -409,6 +445,10 @@ def iniciar() -> None:
         logger.info("scheduler: mapa de mercado lun-vie a las %s (minuto %02d)", horas_mapa, minuto_mapa)
     else:
         logger.info("scheduler: mapa de mercado desactivado (MAPA_MERCADO_HORAS vacío)")
+    if horas_eventos:
+        logger.info("scheduler: calendario de eventos todos los días a las %s (minuto %02d)", horas_eventos, minuto_eventos)
+    else:
+        logger.info("scheduler: calendario de eventos desactivado (EVENTOS_HORAS vacío)")
 
 
 def detener() -> None:

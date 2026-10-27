@@ -40,6 +40,7 @@ def request_json(
     *,
     headers: dict | None = None,
     data: dict | None = None,
+    params: dict | None = None,
     timeout: float = DEFAULT_TIMEOUT,
 ) -> tuple[int | None, object]:
     """Como `get_json`, pero para clientes autenticados (IOL): soporta POST/headers propios y
@@ -49,14 +50,17 @@ def request_json(
     Devuelve `(None, None)` si ni siquiera hubo respuesta (timeout, proxy caído, DNS). Si hubo
     respuesta pero el body no es JSON válido, devuelve `(status_code, None)`. Nunca lanza.
 
-    IMPORTANTE: nunca loguea `headers` ni `data` — pueden traer credenciales o el bearer token.
+    `params` va como query string pero **no** forma parte de la `url` que se loguea: es por donde
+    viajan los tokens de las APIs que lo piden en la URL (Marketaux).
+
+    IMPORTANTE: nunca loguea `headers`, `data` ni `params` — pueden traer credenciales o el bearer token.
     Sólo se loguean method, url y la excepción (nunca el body de la respuesta, que en un 401/403
     de IOL podría ecoar el token enviado).
     """
     merged_headers = {"User-Agent": USER_AGENT, **(headers or {})}
     try:
         with httpx.Client(trust_env=True, timeout=timeout, headers=merged_headers) as client:
-            resp = client.request(method, url, data=data)
+            resp = client.request(method, url, data=data, params=params)
             try:
                 body = resp.json()
             except ValueError:

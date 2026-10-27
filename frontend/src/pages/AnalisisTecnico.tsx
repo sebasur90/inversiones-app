@@ -466,6 +466,14 @@ export default function AnalisisTecnico() {
           Diario
           <Icon name="chevron" className="w-3.5 h-3.5 -rotate-90 transition-transform duration-150 group-hover:translate-x-0.5" />
         </button>
+        {/* Los eventos de este ticker sobre su precio: otra pantalla, que conserva el ticker. */}
+        <button
+          type="button" onClick={() => navigate(`/eventos?tab=impacto${ticker ? `&ticker=${encodeURIComponent(ticker)}` : ''}`)}
+          className="group flex-1 h-11 inline-flex items-center justify-center gap-1 text-body font-semibold text-app-text-dim transition-colors duration-150 hover:text-app-text hover:bg-white/[0.03]"
+        >
+          Eventos
+          <Icon name="chevron" className="w-3.5 h-3.5 -rotate-90 transition-transform duration-150 group-hover:translate-x-0.5" />
+        </button>
         <InfoTooltip term="analisis_tecnico_titulo" />
       </div>
 

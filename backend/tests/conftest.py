@@ -56,6 +56,10 @@ def _sin_red_yahoo_por_default(request, monkeypatch):
             mod, "fetch_cierres_semanales",
             lambda *a, _m=mod, **k: _m.ResultadoYahoo(_m.ESTADO_ERROR, error="red stubeada en tests"),
         )
+        monkeypatch.setattr(
+            mod, "fetch_fechas_resultados",
+            lambda *a, _m=mod, **k: _m.ResultadoYahoo(_m.ESTADO_ERROR, error="red stubeada en tests"),
+        )
 
 
 @pytest.fixture(autouse=True)

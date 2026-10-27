@@ -416,3 +416,77 @@ def fetch_cierres_semanales(simbolo: str, semanas: int = 56) -> ResultadoYahoo:
     if not serie:
         return ResultadoYahoo(ESTADO_ERROR, error="serie semanal sin cierres válidos")
     return ResultadoYahoo(ESTADO_OK, datos=serie)
+
+
+# ---------------------------------------------------------------------------------------------
+# Calendario de resultados (Calendario de eventos)
+# ---------------------------------------------------------------------------------------------
+
+def _a_fecha_hora_ny(valor) -> tuple[date, object] | None:
+    """`(fecha, hora | None)` en hora de Nueva York de un timestamp de pandas o un `date`."""
+    from datetime import datetime as _dt
+    try:
+        if hasattr(valor, "to_pydatetime"):
+            valor = valor.to_pydatetime()
+        if isinstance(valor, _dt):
+            if valor.tzinfo is not None:
+                from zoneinfo import ZoneInfo
+                valor = valor.astimezone(ZoneInfo("America/New_York"))
+            hora = valor.time() if (valor.hour, valor.minute) != (0, 0) else None
+            return valor.date(), hora
+        if isinstance(valor, date):
+            return valor, None
+    except Exception:
+        return None
+    return None
+
+
+def fetch_fechas_resultados(simbolo: str, limite: int = 12) -> ResultadoYahoo:
+    """Fechas de presentación de resultados (pasadas y la próxima) de `simbolo` en Yahoo.
+
+    `datos` es una lista de `{fecha, hora, eps_estimado, eps_reportado, sorpresa_pct, estimada}`:
+    - las filas de `get_earnings_dates` traen fecha y hora (de Nueva York) y, si ya pasaron, el EPS real;
+    - `calendar["Earnings Date"]` agrega la próxima; cuando Yahoo da **dos** fechas es un rango estimado y
+      la fila queda `estimada=True` con la primera.
+
+    Nunca lanza. Sin datos es `no_encontrado` (ETF, acción sin calendario o símbolo que Yahoo no conoce).
+    """
+    try:
+        import yfinance as yf
+    except ImportError:  # pragma: no cover
+        return ResultadoYahoo(ESTADO_ERROR, error="yfinance no instalado")
+
+    t = yf.Ticker(simbolo)
+    filas: dict[date, dict] = {}
+    error: Exception | None = None
+    try:
+        df = t.get_earnings_dates(limit=limite)
+    except Exception as exc:
+        df, error = None, exc
+    if df is not None and getattr(df, "empty", True) is False:
+        for idx, fila in df.iterrows():
+            fh = _a_fecha_hora_ny(idx)
+            if fh is None:
+                continue
+            filas[fh[0]] = {
+                "fecha": fh[0], "hora": fh[1],
+                "eps_estimado": _num(fila.get("EPS Estimate")), "eps_reportado": _num(fila.get("Reported EPS")),
+                "sorpresa_pct": _num(fila.get("Surprise(%)")), "estimada": False,
+            }
+    try:
+        cal = t.calendar
+    except Exception as exc:
+        cal, error = None, error or exc
+    fechas_cal = (cal or {}).get("Earnings Date") if isinstance(cal, dict) else None
+    if isinstance(fechas_cal, (list, tuple)) and fechas_cal:
+        fh = _a_fecha_hora_ny(fechas_cal[0])
+        if fh is not None and fh[0] not in filas:
+            filas[fh[0]] = {
+                "fecha": fh[0], "hora": fh[1], "eps_estimado": _num((cal or {}).get("Earnings Average")),
+                "eps_reportado": None, "sorpresa_pct": None, "estimada": len(fechas_cal) > 1,
+            }
+    if filas:
+        return ResultadoYahoo(ESTADO_OK, datos=sorted(filas.values(), key=lambda f: f["fecha"]))
+    if error is not None:
+        return _resultado_de_excepcion(simbolo, error)
+    return ResultadoYahoo(ESTADO_NO_ENCONTRADO)

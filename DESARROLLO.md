@@ -774,6 +774,45 @@ mercado (hoy sólo la línea de base de los propios eventos).
 - Para bancos ADR (balance en ARS) quedan pocos múltiplos comparables: el P/Valor libro no se
   recalcula en USD.
 
+## Calendario de eventos
+
+Pantalla `/eventos`: calendario, timeline e impacto de acontecimientos (elecciones, tasas, balances,
+guerras, aranceles, crisis) sobre el precio de los activos. Documentación completa en
+[`docs/calendario-eventos.md`](docs/calendario-eventos.md).
+
+| Módulo | Qué hace |
+|---|---|
+| `services/eventos/normalizacion_engine.py` | Puro. URLs canónicas, texto plano, fechas UTC, duplicados de noticias y eventos |
+| `services/eventos/clasificacion_engine.py` | Puro. Categoría, importancia, confianza y "incorporar sola o revisar" por reglas versionadas |
+| `services/eventos/asociacion_engine.py` | Puro. Vínculos directa / sector / país / índice con justificación; respeta lápidas y manuales |
+| `services/eventos/estudio_engine.py` | Puro. Rueda de referencia por hora y mercado, retornos por ventana, benchmark, superpuestos |
+| `services/eventos/importacion.py` | Puro. Formato JSON de calendarios oficiales y del catálogo |
+| `services/eventos/eventos_analytics.py` | Adaptador DB. Listado y filtros, ABM, fusión, vínculos, bandeja |
+| `services/eventos/eventos_sync.py` | Adaptador DB. Orquestador idempotente de proveedores (red sin lock, escritura con `sync_lock`) |
+| `services/eventos/impacto_analytics.py` | Adaptador DB. Serie + marcas, análisis y patrón por categoría |
+| `services/eventos/proveedores/` | Marketaux, Yahoo (balances), GDELT, archivos; interfaz común en `base.py` |
+| `routers/eventos.py` | Endpoints |
+
+Tablas (`create_all`): `eventos_mercado`, `noticias_mercado`, `evento_instrumentos`,
+`estado_fuentes_eventos`. El catálogo histórico (`services/eventos/datos/catalogo_historico.json`) se
+siembra en `init_db`, idempotente y respetando lo editado o descartado.
+
+### Configuración
+
+```
+MARKETAUX_API_TOKEN=                  # vacío = sin noticias automáticas (la pantalla funciona igual)
+MARKETAUX_MAX_SOLICITUDES_POR_CORRIDA=5
+MARKETAUX_LIMITE_DIARIO=90
+MARKETAUX_ARTICULOS_POR_SOLICITUD=3
+GDELT_ENABLED=false
+EVENTOS_RESULTADOS_ENABLED=true       # fechas de balances desde Yahoo (sin clave)
+EVENTOS_RESULTADOS_MAX_POR_CORRIDA=25
+EVENTOS_HORAS=9,21                    # job `eventos`, todos los días; vacío lo desactiva
+EVENTOS_MINUTO=15
+```
+
+Disparo manual: `POST /api/inversiones/eventos/sincronizar` (o el botón "Actualizar" de la pantalla).
+
 ## Logs
 
 `LOG_LEVEL` (default `INFO`) fija el nivel del root logger. **Antes no había configuración de

@@ -57,6 +57,7 @@ export const GRUPOS_PANTALLAS: GrupoPantallas[] = [
       { to: '/comparar', label: 'Comparador', desc: 'Hasta 5 tickers, series normalizadas', icon: 'search' },
       { to: '/analisis-tecnico', label: 'Análisis técnico', desc: 'Velas, indicadores y estrategias backtesteables', icon: 'trend' },
       { to: '/valuacion', label: 'Valuación vs. pares', desc: 'Qué está más barato o más caro que sus competidores, por región, sector y tipo', icon: 'scale' },
+      { to: '/eventos', label: 'Calendario de eventos', desc: 'Elecciones, tasas, balances y crisis, pasados y futuros, y qué hizo el precio alrededor de cada uno', icon: 'calendarDays' },
       { to: '/mapa-mercado', label: 'Mapa de mercado', desc: 'Todas las acciones y CEDEARs agrupados por sector o región, en verde y rojo según su variación', icon: 'grid' },
       { to: '/screener', label: 'Screener', desc: 'Qué acciones están cerca de disparar una estrategia guardada', icon: 'search' },
       { to: '/comparador-estrategias', label: 'Comparador de estrategias', desc: 'Corré varias estrategias guardadas sobre el mismo ticker y período, y compará los resultados', icon: 'search' },

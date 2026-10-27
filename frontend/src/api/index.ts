@@ -4169,3 +4169,348 @@ export const revisarDecision = (id: number, body: { evaluacion_proceso?: 'bien' 
 
 export const calificarRevision = (id: number, body: { evaluacion_proceso?: 'bien' | 'regular' | 'mal' | null; nota?: string | null }) =>
   api.patch<RevisionDecision>(`/inversiones/decisiones/revisiones/${id}`, body).then(r => r.data)
+
+// --- Calendario de eventos ---
+// Todo pasa por el backend: el frontend nunca consulta a Marketaux, GDELT ni Yahoo directamente.
+
+export type CategoriaEvento =
+  | 'elecciones' | 'politica' | 'geopolitica' | 'sanciones_aranceles' | 'regulacion' | 'banco_central'
+  | 'dato_macro' | 'resultados' | 'corporativo' | 'crisis_financiera' | 'tecnologia_sector'
+  | 'materias_primas' | 'otro'
+
+export interface EventoVinculo {
+  ticker: string
+  tipo_relacion: string
+  justificacion: string | null
+  metodo: 'manual' | 'automatico'
+  relevancia: number | null
+  estado_revision: 'propuesta' | 'confirmada' | 'descartada'
+}
+
+export interface EventoVinculoIn {
+  ticker: string
+  tipo_relacion?: string
+  justificacion?: string | null
+  relevancia?: number
+  estado_revision?: 'propuesta' | 'confirmada' | 'descartada'
+}
+
+export interface Evento {
+  id: number
+  titulo: string
+  descripcion: string | null
+  resumen: string | null
+  notas: string | null
+  categoria: CategoriaEvento
+  subcategoria: string | null
+  fecha_evento: string
+  fecha_fin: string | null
+  hora_evento: string | null
+  zona_horaria: string | null
+  fecha_publicacion: string | null
+  precision_fecha: 'exacta' | 'aproximada' | 'mes' | 'anio' | 'desconocida'
+  programado: boolean
+  pais: string | null
+  region: string | null
+  entidades: Record<string, string[]>
+  importancia: 1 | 2 | 3
+  confianza_datos: 'alta' | 'media' | 'baja'
+  estado: string
+  verificacion: string
+  origen: string
+  proveedor: string | null
+  fuente_principal: string | null
+  url_fuente: string | null
+  fijado: boolean
+  descartado: boolean
+  fusionado_en_id: number | null
+  campos_editados: string[]
+  es_futuro: boolean
+  instrumentos: EventoVinculo[]
+  n_noticias: number
+  fecha_creacion: string
+  fecha_actualizacion: string
+}
+
+export interface NoticiaEvento {
+  id: number
+  proveedor: string
+  medio: string | null
+  url: string
+  titulo: string
+  fragmento: string | null
+  idioma: string | null
+  fecha_publicacion: string
+  fecha_captura: string
+  entidades: { simbolo?: string; nombre?: string; match_score?: number | null; sentimiento?: number | null }[]
+  categoria_sugerida: string | null
+  puntaje_relevancia: number | null
+  evento_id: number | null
+  estado: 'por_revisar' | 'asociada' | 'descartada'
+}
+
+export interface EventoDetalle extends Evento {
+  noticias: NoticiaEvento[]
+  reglas_aplicadas: string[]
+}
+
+export interface EventosLista {
+  total: number
+  page: number
+  limite: number
+  eventos: Evento[]
+}
+
+export interface EventoIn {
+  titulo: string
+  descripcion?: string | null
+  resumen?: string | null
+  notas?: string | null
+  categoria: string
+  subcategoria?: string | null
+  fecha_evento: string
+  fecha_fin?: string | null
+  hora_evento?: string | null
+  zona_horaria?: string | null
+  fecha_publicacion?: string | null
+  precision_fecha?: string
+  programado?: boolean
+  pais?: string | null
+  region?: string | null
+  entidades?: Record<string, string[]> | null
+  importancia?: number
+  estado?: string | null
+  verificacion?: string
+  fuente_principal?: string | null
+  url_fuente?: string | null
+  instrumentos?: EventoVinculoIn[]
+}
+
+export type EventoPatchIn = Partial<EventoIn> & { fijado?: boolean; descartado?: boolean }
+
+export interface FiltrosEventos {
+  desde?: string
+  hasta?: string
+  categoria?: string[]
+  pais?: string[]
+  ticker?: string[]
+  sector?: string[]
+  en_cartera?: boolean
+  importancia_min?: number
+  verificacion?: string[]
+  origen?: string[]
+  proveedor?: string[]
+  temporalidad?: 'todos' | 'pasados' | 'futuros'
+  q?: string
+  incluir_descartados?: boolean
+  orden?: 'asc' | 'desc'
+  page?: number
+  limite?: number
+}
+
+export interface EventosOpciones {
+  categorias: { valor: CategoriaEvento; etiqueta: string }[]
+  precisiones: string[]
+  estados: string[]
+  verificaciones: string[]
+  origenes: string[]
+  confianzas: string[]
+  tipos_relacion: string[]
+  paises: string[]
+  sectores: string[]
+  proveedores: string[]
+  tickers: string[]
+}
+
+export interface FuenteEventos {
+  proveedor: string
+  etiqueta: string
+  capacidades: string[]
+  configurado: boolean
+  habilitado: boolean
+  motivo: string | null
+  ayuda: string
+  solo_revision: boolean
+  limite_diario: number | null
+  solicitudes_hoy: number
+  ultima_corrida: string | null
+  ultimo_ok: string | null
+  estado: string | null
+  mensaje: string | null
+  nuevos: number
+}
+
+export interface FuentesEventos {
+  fuentes: FuenteEventos[]
+  por_revisar: number
+  en_curso: boolean
+  ultima_sincronizacion: string | null
+}
+
+export interface EventosImportarOut {
+  recibidos: number
+  nuevos: number
+  actualizados: number
+  sin_cambios: number
+  omitidos: number
+  duplicados: number
+  errores: string[]
+}
+
+export interface MarcaEvento {
+  evento_id: number
+  titulo: string
+  categoria: CategoriaEvento
+  importancia: number
+  fecha_evento: string
+  precision_fecha: string
+  estado: string
+  verificacion: string
+  futuro: boolean
+  fecha_referencia: string | null
+  regla_referencia: string | null
+  relacion: string
+  relevancia: number | null
+  revision: string | null
+}
+
+export interface PuntoSerieEvento { fecha: string; cierre: number }
+
+export interface ImpactoEventos {
+  ticker: string
+  nombre: string
+  moneda: string | null
+  variante: string
+  mercado: string
+  fuente_serie: string | null
+  advertencias: string[]
+  ultima_fecha: string | null
+  desde: string | null
+  hasta: string | null
+  serie: PuntoSerieEvento[]
+  benchmark: { simbolo: string; nombre: string; serie: PuntoSerieEvento[] } | null
+  marcas: MarcaEvento[]
+}
+
+export interface VentanaEvento {
+  n: number
+  previo_pct: number | null
+  rueda_pct: number | null
+  posterior_pct: number | null
+  acumulado_pct: number | null
+  bench_previo_pct: number | null
+  bench_rueda_pct: number | null
+  bench_posterior_pct: number | null
+  bench_acumulado_pct: number | null
+  dif_rueda_pct: number | null
+  dif_posterior_pct: number | null
+  dif_acumulado_pct: number | null
+  volatilidad_previa_pct: number | null
+  volatilidad_posterior_pct: number | null
+  volumen_relativo: number | null
+  fechas: { inicio?: string | null; previa?: string | null; referencia?: string | null; fin?: string | null }
+  observaciones: number
+  completa: boolean
+  motivos: string[]
+}
+
+export interface AnalisisEvento {
+  evento_id: number
+  titulo: string | null
+  categoria: string | null
+  ticker: string
+  nombre: string | null
+  moneda: string | null
+  variante: string | null
+  mercado: string | null
+  fuente_serie: string | null
+  advertencias: string[]
+  benchmark: { simbolo: string; nombre: string } | null
+  relacion: string | null
+  referencia: {
+    indice: number | null
+    fecha: string | null
+    regla: string
+    motivo: string | null
+    avisos: string[]
+    conocimiento: { fecha?: string; hora?: string | null; zona?: string | null; fuente?: string }
+  } | null
+  ventanas: VentanaEvento[]
+  superpuestos: {
+    evento_id: number | null
+    titulo: string | null
+    categoria: string | null
+    importancia: number | null
+    fecha_referencia: string | null
+    distancia_ruedas: number
+    ventanas: number[]
+  }[]
+  avisos: string[]
+  leyenda: string
+}
+
+export interface PatronEventos {
+  ticker: string
+  categoria: string
+  n: number
+  moneda: string | null
+  variante: string | null
+  casos_validos: number
+  minimo: number
+  suficiente: boolean
+  mediana_posterior_pct: number | null
+  positivos_pct: number | null
+  mediana_base_pct: number | null
+  positivos_base_pct: number | null
+  casos: { evento_id: number; titulo: string; fecha_evento: string; fecha_referencia: string | null; rueda_pct: number | null; posterior_pct: number | null; completa: boolean }[]
+  leyenda: string
+}
+
+export type BenchmarkEventos = 'auto' | 'ninguno' | 'SPY' | 'QQQ' | '^MERV'
+
+export const getEventos = (filtros: FiltrosEventos) =>
+  api.get<EventosLista>('/inversiones/eventos', { params: filtros }).then(r => r.data)
+export const getEventoDetalle = (id: number) => api.get<EventoDetalle>(`/inversiones/eventos/${id}`).then(r => r.data)
+export const getOpcionesEventos = () => api.get<EventosOpciones>('/inversiones/eventos/opciones').then(r => r.data)
+export const crearEvento = (body: EventoIn) => api.post<EventoDetalle>('/inversiones/eventos', body).then(r => r.data)
+export const editarEvento = (id: number, body: EventoPatchIn) =>
+  api.patch<EventoDetalle>(`/inversiones/eventos/${id}`, body).then(r => r.data)
+export const borrarEvento = (id: number) =>
+  api.delete<{ resultado: string } | ''>(`/inversiones/eventos/${id}`).then(r => (r.status === 204 ? 'borrado' : 'descartado'))
+export const fusionarEvento = (id: number, destinoId: number) =>
+  api.post<EventoDetalle>(`/inversiones/eventos/${id}/fusionar`, { destino_id: destinoId }).then(r => r.data)
+export const guardarVinculoEvento = (id: number, v: EventoVinculoIn) =>
+  api.put<EventoVinculo>(`/inversiones/eventos/${id}/instrumentos/${encodeURIComponent(v.ticker)}`, v).then(r => r.data)
+export const quitarVinculoEvento = (id: number, ticker: string) =>
+  api.delete(`/inversiones/eventos/${id}/instrumentos/${encodeURIComponent(ticker)}`).then(() => undefined)
+
+export const getNoticiasEventos = (estado: 'por_revisar' | 'asociada' | 'descartada' = 'por_revisar', page = 1) =>
+  api.get<{ total: number; page: number; limite: number; noticias: NoticiaEvento[] }>('/inversiones/eventos/noticias', {
+    params: { estado, page },
+  }).then(r => r.data)
+export const asociarNoticiaEvento = (noticiaId: number, eventoId: number) =>
+  api.post<NoticiaEvento>(`/inversiones/eventos/noticias/${noticiaId}/asociar`, { evento_id: eventoId }).then(r => r.data)
+export const crearEventoDesdeNoticia = (noticiaId: number, body: { titulo?: string; categoria?: string; fecha_evento?: string; importancia?: number } = {}) =>
+  api.post<EventoDetalle>(`/inversiones/eventos/noticias/${noticiaId}/crear-evento`, body).then(r => r.data)
+export const descartarNoticiaEvento = (noticiaId: number) =>
+  api.post<NoticiaEvento>(`/inversiones/eventos/noticias/${noticiaId}/descartar`).then(r => r.data)
+
+export const getFuentesEventos = () => api.get<FuentesEventos>('/inversiones/eventos/fuentes').then(r => r.data)
+export const sincronizarEventos = () => api.post<{ resultado: string }>('/inversiones/eventos/sincronizar').then(r => r.data)
+export const importarEventos = (datos: unknown) =>
+  api.post<EventosImportarOut>('/inversiones/eventos/importar', datos).then(r => r.data)
+
+export const getUniversoImpacto = () =>
+  api.get<{ ticker: string; nombre: string; origen: string }[]>('/inversiones/eventos/impacto/universo').then(r => r.data)
+export const getImpactoEventos = (
+  ticker: string,
+  params: { desde?: string; hasta?: string; categoria?: string[]; importancia_min?: number; benchmark?: BenchmarkEventos },
+) => api.get<ImpactoEventos>(`/inversiones/eventos/impacto/${encodeURIComponent(ticker)}`, { params }).then(r => r.data)
+export const getAnalisisEvento = (eventoId: number, ticker: string, benchmark: BenchmarkEventos = 'auto') =>
+  api.get<AnalisisEvento>(`/inversiones/eventos/${eventoId}/analisis/${encodeURIComponent(ticker)}`, {
+    params: { benchmark },
+  }).then(r => r.data)
+export const getAnalisisEventoTodos = (eventoId: number, benchmark: BenchmarkEventos = 'auto') =>
+  api.get<AnalisisEvento[]>(`/inversiones/eventos/${eventoId}/analisis`, { params: { benchmark } }).then(r => r.data)
+export const getPatronEventos = (ticker: string, categoria: string, n = 5) =>
+  api.get<PatronEventos>(`/inversiones/eventos/patron/${encodeURIComponent(ticker)}`, { params: { categoria, n } }).then(r => r.data)

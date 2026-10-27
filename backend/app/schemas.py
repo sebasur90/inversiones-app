@@ -3823,3 +3823,359 @@ class AprendizajeOut(BaseModel):
     patrones: list[AprendizajePatronOut] = Field(default_factory=list)
     operaciones: list[AprendizajePatronOut] = Field(default_factory=list)
     salvedad: str = ""
+
+
+# ── Calendario de eventos ──────────────────────────────────────────────────────────────────────
+# Validaciones de fondo (categorías, estados, URLs, tickers) en `services/eventos/eventos_analytics.py`.
+
+class EventoVinculoIn(BaseModel):
+    ticker: str = Field(min_length=1, max_length=16)
+    tipo_relacion: str = "directa"
+    justificacion: Optional[str] = Field(default=None, max_length=300)
+    relevancia: float = Field(default=1.0, ge=0, le=1)
+    estado_revision: str = "confirmada"
+
+
+class EventoVinculoOut(BaseModel):
+    ticker: str
+    tipo_relacion: str
+    justificacion: Optional[str] = None
+    metodo: str
+    relevancia: Optional[float] = None
+    estado_revision: str
+
+
+class EventoIn(BaseModel):
+    """Alta manual de un evento. `hora_evento` en `HH:MM` local de `zona_horaria`."""
+    titulo: str = Field(min_length=1, max_length=300)
+    descripcion: Optional[str] = Field(default=None, max_length=4000)
+    resumen: Optional[str] = Field(default=None, max_length=4000)
+    notas: Optional[str] = Field(default=None, max_length=4000)
+    categoria: str
+    subcategoria: Optional[str] = Field(default=None, max_length=300)
+    fecha_evento: date
+    fecha_fin: Optional[date] = None
+    hora_evento: Optional[str] = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    zona_horaria: Optional[str] = Field(default=None, max_length=64)
+    fecha_publicacion: Optional[datetime] = None
+    precision_fecha: str = "exacta"
+    programado: bool = False
+    pais: Optional[str] = Field(default=None, max_length=300)
+    region: Optional[str] = Field(default=None, max_length=300)
+    entidades: Optional[dict[str, list[str]]] = None
+    importancia: int = Field(default=2, ge=1, le=3)
+    estado: Optional[str] = None
+    verificacion: str = "sin_verificar"
+    fuente_principal: Optional[str] = Field(default=None, max_length=300)
+    url_fuente: Optional[str] = Field(default=None, max_length=2000)
+    instrumentos: list[EventoVinculoIn] = Field(default_factory=list, max_length=60)
+
+
+class EventoPatchIn(BaseModel):
+    """Edición parcial: sólo se tocan los campos enviados. `instrumentos`, si viene, reemplaza la lista."""
+    titulo: Optional[str] = Field(default=None, min_length=1, max_length=300)
+    descripcion: Optional[str] = Field(default=None, max_length=4000)
+    resumen: Optional[str] = Field(default=None, max_length=4000)
+    notas: Optional[str] = Field(default=None, max_length=4000)
+    categoria: Optional[str] = None
+    subcategoria: Optional[str] = Field(default=None, max_length=300)
+    fecha_evento: Optional[date] = None
+    fecha_fin: Optional[date] = None
+    hora_evento: Optional[str] = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    zona_horaria: Optional[str] = Field(default=None, max_length=64)
+    fecha_publicacion: Optional[datetime] = None
+    precision_fecha: Optional[str] = None
+    programado: Optional[bool] = None
+    pais: Optional[str] = Field(default=None, max_length=300)
+    region: Optional[str] = Field(default=None, max_length=300)
+    entidades: Optional[dict[str, list[str]]] = None
+    importancia: Optional[int] = Field(default=None, ge=1, le=3)
+    estado: Optional[str] = None
+    verificacion: Optional[str] = None
+    fuente_principal: Optional[str] = Field(default=None, max_length=300)
+    url_fuente: Optional[str] = Field(default=None, max_length=2000)
+    fijado: Optional[bool] = None
+    descartado: Optional[bool] = None
+    instrumentos: Optional[list[EventoVinculoIn]] = Field(default=None, max_length=60)
+
+
+class EventoOut(BaseModel):
+    id: int
+    titulo: str
+    descripcion: Optional[str] = None
+    resumen: Optional[str] = None
+    notas: Optional[str] = None
+    categoria: str
+    subcategoria: Optional[str] = None
+    fecha_evento: date
+    fecha_fin: Optional[date] = None
+    hora_evento: Optional[str] = None
+    zona_horaria: Optional[str] = None
+    fecha_publicacion: Optional[datetime] = None
+    precision_fecha: str
+    programado: bool
+    pais: Optional[str] = None
+    region: Optional[str] = None
+    entidades: dict[str, Any] = Field(default_factory=dict)
+    importancia: int
+    confianza_datos: str
+    estado: str
+    verificacion: str
+    origen: str
+    proveedor: Optional[str] = None
+    fuente_principal: Optional[str] = None
+    url_fuente: Optional[str] = None
+    fijado: bool
+    descartado: bool
+    fusionado_en_id: Optional[int] = None
+    campos_editados: list[str] = Field(default_factory=list)
+    es_futuro: bool
+    instrumentos: list[EventoVinculoOut] = Field(default_factory=list)
+    n_noticias: int = 0
+    fecha_creacion: datetime
+    fecha_actualizacion: datetime
+
+
+class NoticiaEventoOut(BaseModel):
+    id: int
+    proveedor: str
+    medio: Optional[str] = None
+    url: str
+    titulo: str
+    fragmento: Optional[str] = None
+    idioma: Optional[str] = None
+    fecha_publicacion: datetime
+    fecha_captura: datetime
+    entidades: list[dict[str, Any]] = Field(default_factory=list)
+    categoria_sugerida: Optional[str] = None
+    puntaje_relevancia: Optional[float] = None
+    evento_id: Optional[int] = None
+    estado: str
+
+
+class EventoDetalleOut(EventoOut):
+    noticias: list[NoticiaEventoOut] = Field(default_factory=list)
+    reglas_aplicadas: list[Any] = Field(default_factory=list)
+
+
+class EventosListaOut(BaseModel):
+    total: int
+    page: int
+    limite: int
+    eventos: list[EventoOut] = Field(default_factory=list)
+
+
+class NoticiasEventoListaOut(BaseModel):
+    total: int
+    page: int
+    limite: int
+    noticias: list[NoticiaEventoOut] = Field(default_factory=list)
+
+
+class EventoFusionIn(BaseModel):
+    destino_id: int
+
+
+class NoticiaAsociarIn(BaseModel):
+    evento_id: int
+
+
+class NoticiaCrearEventoIn(BaseModel):
+    titulo: Optional[str] = Field(default=None, min_length=1, max_length=300)
+    categoria: Optional[str] = None
+    fecha_evento: Optional[date] = None
+    importancia: Optional[int] = Field(default=None, ge=1, le=3)
+
+
+class EventoOpcionOut(BaseModel):
+    valor: str
+    etiqueta: str
+
+
+class EventosOpcionesOut(BaseModel):
+    """Valores válidos de cada campo y los que ya existen en la base (para los filtros)."""
+    categorias: list[EventoOpcionOut] = Field(default_factory=list)
+    precisiones: list[str] = Field(default_factory=list)
+    estados: list[str] = Field(default_factory=list)
+    verificaciones: list[str] = Field(default_factory=list)
+    origenes: list[str] = Field(default_factory=list)
+    confianzas: list[str] = Field(default_factory=list)
+    tipos_relacion: list[str] = Field(default_factory=list)
+    paises: list[str] = Field(default_factory=list)
+    sectores: list[str] = Field(default_factory=list)
+    proveedores: list[str] = Field(default_factory=list)
+    tickers: list[str] = Field(default_factory=list)
+
+
+class EventoFuenteOut(BaseModel):
+    proveedor: str
+    etiqueta: str
+    capacidades: list[str] = Field(default_factory=list)
+    configurado: bool
+    habilitado: bool
+    motivo: Optional[str] = None
+    ayuda: str = ""
+    solo_revision: bool = False
+    limite_diario: Optional[int] = None
+    solicitudes_hoy: int = 0
+    ultima_corrida: Optional[datetime] = None
+    ultimo_ok: Optional[datetime] = None
+    estado: Optional[str] = None
+    mensaje: Optional[str] = None
+    nuevos: int = 0
+
+
+class EventosFuentesOut(BaseModel):
+    fuentes: list[EventoFuenteOut] = Field(default_factory=list)
+    por_revisar: int = 0
+    en_curso: bool = False
+    ultima_sincronizacion: Optional[datetime] = None
+
+
+class EventosImportarOut(BaseModel):
+    recibidos: int
+    nuevos: int = 0
+    actualizados: int = 0
+    sin_cambios: int = 0
+    omitidos: int = 0
+    duplicados: int = 0
+    errores: list[str] = Field(default_factory=list)
+
+
+class EventoPuntoSerieOut(BaseModel):
+    fecha: date
+    cierre: float
+
+
+class EventoBenchmarkSerieOut(BaseModel):
+    simbolo: str
+    nombre: str
+    serie: list[EventoPuntoSerieOut] = Field(default_factory=list)
+
+
+class EventoMarcaOut(BaseModel):
+    """Un evento sobre el eje del gráfico. `futuro=True`: posterior a la última cotización, sin precio."""
+    evento_id: int
+    titulo: str
+    categoria: str
+    importancia: int
+    fecha_evento: date
+    precision_fecha: str
+    estado: str
+    verificacion: str
+    futuro: bool
+    fecha_referencia: Optional[date] = None
+    regla_referencia: Optional[str] = None
+    relacion: str
+    relevancia: Optional[float] = None
+    revision: Optional[str] = None
+
+
+class EventoImpactoOut(BaseModel):
+    ticker: str
+    nombre: str
+    moneda: Optional[str] = None
+    variante: str
+    mercado: str
+    fuente_serie: Optional[str] = None
+    advertencias: list[str] = Field(default_factory=list)
+    ultima_fecha: Optional[date] = None
+    desde: Optional[date] = None
+    hasta: Optional[date] = None
+    serie: list[EventoPuntoSerieOut] = Field(default_factory=list)
+    benchmark: Optional[EventoBenchmarkSerieOut] = None
+    marcas: list[EventoMarcaOut] = Field(default_factory=list)
+
+
+class EventoVentanaOut(BaseModel):
+    n: int
+    previo_pct: Optional[float] = None
+    rueda_pct: Optional[float] = None
+    posterior_pct: Optional[float] = None
+    acumulado_pct: Optional[float] = None
+    bench_previo_pct: Optional[float] = None
+    bench_rueda_pct: Optional[float] = None
+    bench_posterior_pct: Optional[float] = None
+    bench_acumulado_pct: Optional[float] = None
+    dif_rueda_pct: Optional[float] = None
+    dif_posterior_pct: Optional[float] = None
+    dif_acumulado_pct: Optional[float] = None
+    volatilidad_previa_pct: Optional[float] = None
+    volatilidad_posterior_pct: Optional[float] = None
+    volumen_relativo: Optional[float] = None
+    fechas: dict[str, Optional[date]] = Field(default_factory=dict)
+    observaciones: int = 0
+    completa: bool = False
+    motivos: list[str] = Field(default_factory=list)
+
+
+class EventoSuperpuestoOut(BaseModel):
+    evento_id: Optional[int] = None
+    titulo: Optional[str] = None
+    categoria: Optional[str] = None
+    importancia: Optional[int] = None
+    fecha_referencia: Optional[date] = None
+    distancia_ruedas: int
+    ventanas: list[int] = Field(default_factory=list)
+
+
+class EventoReferenciaOut(BaseModel):
+    indice: Optional[int] = None
+    fecha: Optional[date] = None
+    regla: str
+    motivo: Optional[str] = None
+    avisos: list[str] = Field(default_factory=list)
+    conocimiento: dict[str, Any] = Field(default_factory=dict)
+
+
+class EventoAnalisisOut(BaseModel):
+    evento_id: int
+    titulo: Optional[str] = None
+    categoria: Optional[str] = None
+    ticker: str
+    nombre: Optional[str] = None
+    moneda: Optional[str] = None
+    variante: Optional[str] = None
+    mercado: Optional[str] = None
+    fuente_serie: Optional[str] = None
+    advertencias: list[str] = Field(default_factory=list)
+    benchmark: Optional[dict[str, str]] = None
+    relacion: Optional[str] = None
+    referencia: Optional[EventoReferenciaOut] = None
+    ventanas: list[EventoVentanaOut] = Field(default_factory=list)
+    superpuestos: list[EventoSuperpuestoOut] = Field(default_factory=list)
+    avisos: list[str] = Field(default_factory=list)
+    leyenda: str = ""
+
+
+class EventoPatronCasoOut(BaseModel):
+    evento_id: int
+    titulo: str
+    fecha_evento: date
+    fecha_referencia: Optional[date] = None
+    rueda_pct: Optional[float] = None
+    posterior_pct: Optional[float] = None
+    completa: bool = False
+
+
+class EventoPatronOut(BaseModel):
+    ticker: str
+    categoria: str
+    n: int
+    moneda: Optional[str] = None
+    variante: Optional[str] = None
+    casos_validos: int
+    minimo: int
+    suficiente: bool
+    mediana_posterior_pct: Optional[float] = None
+    positivos_pct: Optional[float] = None
+    mediana_base_pct: Optional[float] = None
+    positivos_base_pct: Optional[float] = None
+    casos: list[EventoPatronCasoOut] = Field(default_factory=list)
+    leyenda: str = ""
+
+
+class EventoTickerUniversoOut(BaseModel):
+    ticker: str
+    nombre: str
+    origen: str

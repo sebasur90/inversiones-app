@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, event, Column, Integer, String, Date, DateTime, Numeric, ForeignKey, UniqueConstraint, text, JSON
+from sqlalchemy import create_engine, event, Column, Integer, String, Date, DateTime, Numeric, ForeignKey, UniqueConstraint, Index, Time, text, JSON
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 import os
 
@@ -1009,6 +1009,138 @@ class MigracionAplicada(Base):
     fecha = Column(DateTime, nullable=False)
 
 
+class EventoMercado(Base):
+    """Un acontecimiento del Calendario de eventos (`services/eventos/`): una elección, una decisión de
+    tasas, un balance, una guerra, una quiebra. Pasado o futuro.
+
+    Tres escalas que no se mezclan: `importancia` (cuánto puede mover al mercado en general, 1–3),
+    `confianza_datos` (qué tan firme es la evidencia y la fecha) y, en `EventoInstrumento`, la relevancia
+    para cada ticker. Ninguna es una predicción de la dirección del precio.
+
+    Fechas: `fecha_evento` es cuándo ocurre (o está previsto); `fecha_publicacion` es cuándo lo supo el
+    mercado, si difiere (una noticia publicada después del cierre). `precision_fecha` dice si la fecha es
+    exacta, aproximada o sólo el mes/año: una estimada nunca se muestra como confirmada.
+
+    Lo que el usuario edita queda en `campos_editados` y ningún proveedor lo pisa. Un evento importado que
+    el usuario borra queda `descartado` (lápida) para que la próxima sincronización no lo vuelva a crear;
+    uno manual se borra de verdad. Al fusionar duplicados, el absorbido queda con `fusionado_en_id`.
+
+    Propia de la app: el sync del Sheet no la toca, y no tiene FK a tablas que el sync vacía (los
+    instrumentos se vinculan por ticker en `EventoInstrumento`).
+    """
+    __tablename__ = "eventos_mercado"
+    id = Column(Integer, primary_key=True, index=True)
+    titulo = Column(String, nullable=False)
+    descripcion = Column(String, nullable=True)
+    resumen = Column(String, nullable=True)
+    notas = Column(String, nullable=True)                 # notas personales del usuario
+    categoria = Column(String, nullable=False, index=True)
+    subcategoria = Column(String, nullable=True)
+    fecha_evento = Column(Date, nullable=False, index=True)
+    fecha_fin = Column(Date, nullable=True)
+    hora_evento = Column(Time, nullable=True)             # hora local en `zona_horaria`, si se conoce
+    zona_horaria = Column(String, nullable=True)
+    fecha_publicacion = Column(DateTime, nullable=True)   # UTC: cuándo lo supo el mercado
+    precision_fecha = Column(String, nullable=False, default="exacta")
+    programado = Column(Integer, nullable=False, default=0, server_default="0")
+    pais = Column(String, nullable=True)
+    region = Column(String, nullable=True)
+    entidades = Column(JSON, nullable=True)               # {empresas: [], organismos: [], sectores: [], terminos: []}
+    importancia = Column(Integer, nullable=False, default=2)
+    confianza_datos = Column(String, nullable=False, default="media")
+    estado = Column(String, nullable=False, default="confirmado")
+    verificacion = Column(String, nullable=False, default="sin_verificar")
+    origen = Column(String, nullable=False, default="manual")
+    proveedor = Column(String, nullable=True)
+    id_externo = Column(String, nullable=True)
+    fuente_principal = Column(String, nullable=True)
+    url_fuente = Column(String, nullable=True)
+    clave_dedup = Column(String, nullable=True, index=True)
+    fusionado_en_id = Column(Integer, ForeignKey("eventos_mercado.id"), nullable=True)
+    fijado = Column(Integer, nullable=False, default=0, server_default="0")
+    descartado = Column(Integer, nullable=False, default=0, server_default="0")
+    campos_editados = Column(JSON, nullable=True)         # lista de campos que tocó el usuario
+    version_reglas = Column(Integer, nullable=True)
+    reglas_aplicadas = Column(JSON, nullable=True)        # auditoría de la clasificación automática
+    fecha_creacion = Column(DateTime, nullable=False)
+    fecha_actualizacion = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("origen", "proveedor", "id_externo", name="uq_evento_origen_externo"),
+        Index("ix_eventos_fecha_categoria", "fecha_evento", "categoria"),
+    )
+
+
+class NoticiaMercado(Base):
+    """Una noticia que respalda o da contexto a un evento (Marketaux, GDELT, cargada a mano).
+
+    Se guarda **texto plano**: el fragmento externo nunca es HTML renderizable. Una misma noticia no se
+    guarda dos veces (por id del proveedor y por URL normalizada), y varios medios contando lo mismo
+    apuntan al **mismo** evento en vez de crear uno cada uno. `estado`: `por_revisar` (no superó las
+    reglas para incorporarse sola), `asociada` (tiene `evento_id`) o `descartada`.
+    """
+    __tablename__ = "noticias_mercado"
+    id = Column(Integer, primary_key=True, index=True)
+    proveedor = Column(String, nullable=False)
+    id_externo = Column(String, nullable=True)
+    medio = Column(String, nullable=True)
+    url = Column(String, nullable=False)
+    url_normalizada = Column(String, nullable=False)
+    titulo = Column(String, nullable=False)
+    fragmento = Column(String, nullable=True)
+    idioma = Column(String, nullable=True)
+    fecha_publicacion = Column(DateTime, nullable=False, index=True)
+    fecha_captura = Column(DateTime, nullable=False)
+    entidades = Column(JSON, nullable=True)               # [{simbolo, nombre, tipo, industria, match_score, sentimiento}]
+    huella_titulo = Column(String, nullable=True)
+    categoria_sugerida = Column(String, nullable=True)
+    puntaje_relevancia = Column(Numeric(6, 3), nullable=True)
+    evento_id = Column(Integer, ForeignKey("eventos_mercado.id"), nullable=True, index=True)
+    estado = Column(String, nullable=False, default="por_revisar", index=True)
+
+    __table_args__ = (
+        UniqueConstraint("proveedor", "id_externo", name="uq_noticia_proveedor_externo"),
+        UniqueConstraint("url_normalizada", name="uq_noticia_url"),
+    )
+
+
+class EventoInstrumento(Base):
+    """Relación de un evento con un instrumento: directa (el balance de la empresa), sectorial, por país,
+    macro, etc. Un evento puede tener muchas y ninguna (un evento global sin ticker).
+
+    `ticker` es el del universo de la app (`AAPL`, `GGAL`) o un benchmark (`SPY`, `^MERV`). Una relación
+    `descartada` queda como lápida: la asociación automática nunca la revive, y una `manual` nunca la pisa.
+    """
+    __tablename__ = "evento_instrumentos"
+    id = Column(Integer, primary_key=True, index=True)
+    evento_id = Column(Integer, ForeignKey("eventos_mercado.id"), nullable=False, index=True)
+    ticker = Column(String, nullable=False, index=True)
+    tipo_relacion = Column(String, nullable=False, default="directa")
+    justificacion = Column(String, nullable=True)
+    metodo = Column(String, nullable=False, default="manual")            # manual | automatico
+    relevancia = Column(Numeric(4, 3), nullable=False, default=1)       # 0–1
+    estado_revision = Column(String, nullable=False, default="confirmada")   # propuesta | confirmada | descartada
+    fecha_creacion = Column(DateTime, nullable=False)
+
+    __table_args__ = (UniqueConstraint("evento_id", "ticker", name="uq_evento_instrumento"),)
+
+
+class EstadoFuenteEventos(Base):
+    """Última corrida de cada proveedor del Calendario de eventos y su cupo diario. Una fila por
+    proveedor. No guarda secretos: sólo si está configurado, qué pasó y cuántas solicitudes se gastaron."""
+    __tablename__ = "estado_fuentes_eventos"
+    proveedor = Column(String, primary_key=True)
+    ultima_corrida = Column(DateTime, nullable=True)
+    ultimo_ok = Column(DateTime, nullable=True)
+    estado = Column(String, nullable=True)
+    mensaje = Column(String, nullable=True)
+    cursor = Column(DateTime, nullable=True)              # último `published_at` traído
+    solicitudes_hoy = Column(Integer, nullable=False, default=0, server_default="0")
+    fecha_cupo = Column(Date, nullable=True)
+    nuevos = Column(Integer, nullable=False, default=0, server_default="0")
+    rotacion = Column(Integer, nullable=False, default=0, server_default="0")   # por dónde sigue la ronda de símbolos
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -1286,6 +1418,21 @@ def init_db():
     except Exception:
         # Un catálogo no sembrado no puede impedir que la app levante: las plantillas siguen
         # disponibles en el editor y el usuario puede sembrar a mano desde la UI.
+        db.rollback()
+    finally:
+        db.close()
+
+    # Catálogo de eventos históricos del Calendario de eventos (idempotente, respeta lo editado y lo
+    # descartado). Sin vínculos propuestos: armar el universo en el arranque es caro y la primera
+    # sincronización de eventos los propone.
+    from .services.eventos import catalogo as catalogo_eventos
+
+    db = SessionLocal()
+    try:
+        catalogo_eventos.sembrar(db, con_vinculos=False)
+    except Exception:
+        import logging
+        logging.getLogger("eventos").exception("eventos: no se pudo sembrar el catálogo histórico")
         db.rollback()
     finally:
         db.close()

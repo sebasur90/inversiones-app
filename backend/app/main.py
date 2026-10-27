@@ -10,7 +10,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
 from .database import init_db, DB_PATH
-from .routers import inversiones, objetivos_inversion, escenarios, tecnico, aportes, clasificacion, mapa_mercado, decisiones
+from .routers import inversiones, objetivos_inversion, escenarios, tecnico, aportes, clasificacion, mapa_mercado, decisiones, eventos
 from .services import scheduler
 
 logger = logging.getLogger("inversiones")
@@ -100,6 +100,7 @@ app.include_router(aportes.router)
 app.include_router(clasificacion.router)
 app.include_router(mapa_mercado.router)
 app.include_router(decisiones.router)
+app.include_router(eventos.router)
 
 
 @app.get("/health")

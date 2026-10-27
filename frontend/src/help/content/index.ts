@@ -32,8 +32,9 @@ import { COMPARADORESTRATEGIAS_HELP, type ComparadorEstrategiasHelpKey } from '.
 import { VALUACION_HELP, type ValuacionHelpKey } from './valuacion'
 import { MAPAMERCADO_HELP, type MapaMercadoHelpKey } from './mapaMercado'
 import { DECISIONES_HELP, type DecisionesHelpKey } from './decisiones'
+import { EVENTOS_HELP, type EventosHelpKey } from './eventos'
 
-export type HelpKey = GlosarioKey | SimuladorHelpKey | SimuladorVidaHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey | ComisionesHelpKey | RebalanceoHelpKey | FlujoCajaHelpKey | WatchlistHelpKey | AnalisisTecnicoHelpKey | EstrategiasHelpKey | AportesHelpKey | SaludHelpKey | ExplicacionResultadoHelpKey | DescomposicionHelpKey | CostoOportunidadHelpKey | MatrizCorrelacionesHelpKey | ComparadorEstrategiasHelpKey | ValuacionHelpKey | MapaMercadoHelpKey | DecisionesHelpKey
+export type HelpKey = GlosarioKey | SimuladorHelpKey | SimuladorVidaHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey | ComisionesHelpKey | RebalanceoHelpKey | FlujoCajaHelpKey | WatchlistHelpKey | AnalisisTecnicoHelpKey | EstrategiasHelpKey | AportesHelpKey | SaludHelpKey | ExplicacionResultadoHelpKey | DescomposicionHelpKey | CostoOportunidadHelpKey | MatrizCorrelacionesHelpKey | ComparadorEstrategiasHelpKey | ValuacionHelpKey | MapaMercadoHelpKey | DecisionesHelpKey | EventosHelpKey
 
 export const HELP: Record<HelpKey, HelpContent> = {
   ...GLOSARIO_HELP,
@@ -69,6 +70,7 @@ export const HELP: Record<HelpKey, HelpContent> = {
   ...VALUACION_HELP,
   ...MAPAMERCADO_HELP,
   ...DECISIONES_HELP,
+  ...EVENTOS_HELP,
 }
 
 export {
@@ -104,4 +106,5 @@ export {
   COMPARADORESTRATEGIAS_HELP,
   VALUACION_HELP,
   MAPAMERCADO_HELP,
+  EVENTOS_HELP,
 }

@@ -44,6 +44,18 @@ services:
       - ALERTAS_ENABLED=${ALERTAS_ENABLED:-false}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      # Calendario de eventos (ver docs/calendario-eventos.md). El token de Marketaux va en .env
+      # (gitignored), nunca acá. Sin token, la pantalla funciona igual con lo manual y lo importado.
+      - MARKETAUX_API_TOKEN=${MARKETAUX_API_TOKEN:-}
+      - MARKETAUX_MAX_SOLICITUDES_POR_CORRIDA=${MARKETAUX_MAX_SOLICITUDES_POR_CORRIDA:-5}
+      - MARKETAUX_LIMITE_DIARIO=${MARKETAUX_LIMITE_DIARIO:-90}
+      - MARKETAUX_ARTICULOS_POR_SOLICITUD=${MARKETAUX_ARTICULOS_POR_SOLICITUD:-3}
+      - GDELT_ENABLED=${GDELT_ENABLED:-false}
+      - EVENTOS_RESULTADOS_ENABLED=${EVENTOS_RESULTADOS_ENABLED:-true}
+      - EVENTOS_RESULTADOS_MAX_POR_CORRIDA=${EVENTOS_RESULTADOS_MAX_POR_CORRIDA:-25}
+      # Sincronización programada del calendario (todos los días). Vacío la desactiva. Requiere SCHEDULER_ENABLED.
+      - EVENTOS_HORAS=${EVENTOS_HORAS:-9,21}
+      - EVENTOS_MINUTO=${EVENTOS_MINUTO:-15}
     volumes:
       # /app/data en un volumen nombrado: la DB (contador de cupo de IOL incluido) y la serie
       # histórica bajada por market_data sobreviven a un `docker compose up --build`.

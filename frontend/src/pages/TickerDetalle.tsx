@@ -173,6 +173,9 @@ export default function TickerDetalle() {
       <Button variant="outline" icon={<Icon name="swap" className="w-4 h-4" />} className="w-full mt-4" onClick={() => navigate(`/movimientos?ticker=${encodeURIComponent(position.ticker)}`)}>
         Ver movimientos de {position.ticker}
       </Button>
+      <Button variant="outline" icon={<Icon name="calendarDays" className="w-4 h-4" />} className="w-full mt-2" onClick={() => navigate(`/eventos?tab=impacto&ticker=${encodeURIComponent(position.ticker)}`)}>
+        Eventos de {position.ticker}
+      </Button>
     </div>
   )
 }

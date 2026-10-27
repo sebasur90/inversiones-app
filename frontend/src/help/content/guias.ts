@@ -171,6 +171,23 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
     terminos: ['diario_como_operas'],
   },
 
+  '/eventos': {
+    queEs: 'Un calendario de acontecimientos (elecciones, decisiones de tasas, balances, guerras, aranceles, crisis) pasados y futuros, con su fuente, los instrumentos que afectan y lo que hizo el precio alrededor de cada uno.',
+    comoLeerla: [
+      'Calendario: cada punto de color es un evento en su día. Los días que ya pasaron se ven más apagados; un borde punteado avisa que la fecha es estimada.',
+      'Timeline: la lista en orden, con categoría, importancia, verificación, tickers y fuente. Tocá una tarjeta para ver todo: noticias, vínculos y el análisis.',
+      'Impacto: elegís un ticker y ves su precio con los eventos marcados. La línea termina en la última cotización real; los eventos que se vienen quedan a la derecha, sobre un fondo rayado y sin precio.',
+      'Las tres escalas no se mezclan: importancia (cuánto suele mover al mercado), relevancia (qué tanto toca a ese ticker) y confianza (qué tan firme es el dato).',
+    ],
+    queHacer: [
+      'Cargá con "+ Evento" lo que quieras seguir (una fecha que sabés que se viene, algo que viste en las noticias). Puede no tener ticker.',
+      'Revisá la bandeja "Para revisar": son noticias que la app no se animó a convertir sola en evento.',
+      'Confirmá o descartá los vínculos propuestos: si decís que un evento no tiene que ver con un ticker, no vuelve a aparecer sobre él.',
+    ],
+    ojo: 'Lo que hizo el precio cerca de un evento es comportamiento observado, no la prueba de que el evento lo causó, y no es una recomendación de compra o venta.',
+    terminos: ['eventos_que_es', 'eventos_importancia', 'eventos_relevancia', 'eventos_confianza', 'eventos_verificacion', 'eventos_rueda_referencia', 'eventos_comportamiento', 'eventos_bandeja', 'eventos_fuentes'],
+  },
+
   '/mapa-mercado': {
     queEs: 'Todas las acciones, CEDEARs y ETFs del mercado dibujados como un mapa: las empresas parecidas quedan juntas y el color dice cuánto subieron o bajaron.',
     comoLeerla: [
