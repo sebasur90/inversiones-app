@@ -258,3 +258,26 @@ def test_sin_serie_iol_se_limpia_cuando_analisistecnico_empieza_a_cubrirlo(monke
         set(), {"MGCJO": date(2025, 6, 1)}, {}, hoy=HOY, estado_por_ticker=estado,
     )
     assert filas and estado["MGCJO"]["backfill_estado"] is None
+
+
+def test_backfill_iol_cedear_sin_precio_manual_usa_la_compra(monkeypatch):
+    """Sin precio en la pestaña Precios, el CEDEAR se calibra contra el cierre del día de su compra
+    (sin deriva: mismo día) y baja la historia entera desde la primera compra."""
+    serie = _serie((date(2025, 6, 2), 5000.0), (date(2025, 6, 3), 5050.0), (date(2026, 8, 27), 9800.0))
+    monkeypatch.setattr(mdp.iol_client, "fetch_historico_ohlcv", lambda db, t, d, h: serie)
+    estado: dict = {}
+    movs = mdp.precios_de_movimientos([
+        {"ticker": "GOOGL", "fecha": date(2025, 6, 2), "tipo_movimiento": "compra", "precio": 5010.0, "moneda": "ARS"},
+    ])
+
+    filas, issues = mdp.fetch_backfill_iol(
+        [_inst("GOOGL", tipo="CEDEAR")], [], set(), {"GOOGL": date(2025, 6, 2)}, {}, _DB, hoy=HOY,
+        estado_por_ticker=estado, precios_movimientos=movs,
+    )
+    assert issues == []
+    assert [(f["fecha"], f["precio"], f["moneda"], f["fuente"]) for f in filas] == [
+        (date(2025, 6, 2), 5000.0, "ARS", "iol"),
+        (date(2025, 6, 3), 5050.0, "ARS", "iol"),
+        (date(2026, 8, 27), 9800.0, "ARS", "iol"),
+    ]
+    assert estado["GOOGL"]["factor_escala"] == 1.0

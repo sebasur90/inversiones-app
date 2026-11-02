@@ -66,7 +66,8 @@ def _num(v) -> float | None:
 
 
 class CotizacionIOL(tuple):
-    """`(precio, moneda)` más, si IOL los mandó, el cierre anterior y la variación del día.
+    """`(precio, moneda)` más, si IOL los mandó, el cierre anterior, la variación del día y la fecha de
+    la última operación (`fecha`: a qué rueda pertenece el precio; antes de la apertura es la anterior).
 
     Es una tupla de dos elementos a propósito: todo lo que ya desempaqueta `(precio, moneda)` o
     compara contra una tupla sigue andando igual. Los datos extra viajan como atributos, y quien
@@ -75,12 +76,14 @@ class CotizacionIOL(tuple):
     """
     cierre_anterior: float | None
     variacion_pct: float | None
+    fecha: date | None
 
     def __new__(cls, precio: float, moneda: str, cierre_anterior: float | None = None,
-                variacion_pct: float | None = None):
+                variacion_pct: float | None = None, fecha: date | None = None):
         obj = super().__new__(cls, (precio, moneda))
         obj.cierre_anterior = cierre_anterior
         obj.variacion_pct = variacion_pct
+        obj.fecha = fecha
         return obj
 
 
@@ -88,6 +91,20 @@ class CotizacionIOL(tuple):
 # si ninguno aparece, el dato queda en None y la variación se calcula con el historial propio.
 _ALIAS_VARIACION = ("variacion", "variacionPorcentual", "variacionPorcentaje")
 _ALIAS_CIERRE_ANTERIOR = ("ultimoCierre", "cierreAnterior", "cierre_anterior")
+_ALIAS_FECHA = ("fecha", "fechaHora")
+
+
+def _fecha_operacion(fila: dict) -> date | None:
+    """Fecha de la última operación (`"2026-10-30T16:59:56.333"` -> 30/10). IOL la manda en hora de
+    Buenos Aires, así que alcanza con la parte de la fecha; sin el campo o ilegible, None."""
+    for clave in _ALIAS_FECHA:
+        crudo = fila.get(clave)
+        if crudo:
+            try:
+                return date.fromisoformat(str(crudo).strip()[:10])
+            except ValueError:
+                continue
+    return None
 
 
 def _cotizacion(fila: dict, precio: float) -> CotizacionIOL:
@@ -99,7 +116,7 @@ def _cotizacion(fila: dict, precio: float) -> CotizacionIOL:
     variacion = _primer_alias(fila, _ALIAS_VARIACION)
     if variacion is not None and not (-100.0 < variacion < 1000.0):
         variacion = None
-    return CotizacionIOL(precio, _moneda(fila.get("moneda")), cierre, variacion)
+    return CotizacionIOL(precio, _moneda(fila.get("moneda")), cierre, variacion, _fecha_operacion(fila))
 
 
 def _fetch_panel(db: Session, instrumento: str, panel: str, pais: str) -> dict[str, CotizacionIOL] | None:

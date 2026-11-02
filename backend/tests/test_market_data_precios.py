@@ -566,3 +566,99 @@ def test_a3_serie_que_no_baja_mas_se_marca_completo(monkeypatch):
     )
     assert filas2 == [] and llamadas2 == []
 
+
+
+# --- Sin precio manual: la referencia de escala es la última compra/venta ------------------------
+
+def _mov(ticker, precio, fecha, tipo="compra", moneda="ARS"):
+    return {"ticker": ticker, "fecha": fecha, "tipo_movimiento": tipo, "precio": precio, "moneda": moneda}
+
+
+def test_precios_de_movimientos_descarta_cobros_y_precios_no_positivos():
+    movs = [
+        _mov("GOOGL", 9000.0, date(2025, 1, 2)),
+        _mov("GOOGL", 9500.0, date(2025, 2, 3), tipo="venta"),
+        _mov("GOOGL", 12.0, date(2025, 3, 3), tipo="dividendo"),
+        _mov("AL30", 0.0, date(2025, 3, 3)),
+    ]
+    out = mdp.precios_de_movimientos(movs)
+    assert [(p["ticker"], p["precio"]) for p in out] == [("GOOGL", 9000.0), ("GOOGL", 9500.0)]
+
+
+def test_referencia_manda_el_sheet_aunque_el_movimiento_sea_mas_nuevo():
+    refs = mdp._referencias_escala(
+        [_px("KO", 100.0, fecha=date(2026, 1, 5))],
+        mdp.precios_de_movimientos([_mov("KO", 900.0, date(2026, 8, 1)), _mov("GOOGL", 9000.0, date(2025, 1, 2))]),
+    )
+    assert refs["KO"].origen == "sheet" and refs["KO"].precio == 100.0
+    assert refs["GOOGL"].origen == "movimiento" and refs["GOOGL"].fecha == date(2025, 1, 2)
+
+
+def test_rv_sin_precio_manual_cotiza_contra_la_compra(monkeypatch):
+    """GOOGL nunca tuvo precio en la pestaña Precios: antes quedaba sin cotización y valuado al
+    costo. Una compra de hace años (precio ×3 por inflación + suba) sigue dentro de la banda."""
+    monkeypatch.setattr(data912, "fetch_precios_renta_variable", lambda: {"GOOGL": 27000.0})
+    estado: dict = {}
+    filas, issues = mdp.fetch_precios_renta_variable_api(
+        [_inst("GOOGL", tipo="CEDEAR")], [], claves_excluir=set(), hoy=HOY, estado_por_ticker=estado,
+        precios_movimientos=mdp.precios_de_movimientos([_mov("GOOGL", 9000.0, date(2023, 3, 1))]),
+    )
+    assert issues == []
+    assert filas == [{"fecha": HOY, "ticker": "GOOGL", "precio": 27000.0, "moneda": "ARS", "fuente": "api"}]
+    assert "factor_escala" not in estado.get("GOOGL", {})  # lo calibra el backfill, no esta banda ancha
+
+
+def test_rv_sin_precio_manual_con_compra_en_otra_moneda_no_carga(monkeypatch):
+    monkeypatch.setattr(data912, "fetch_precios_renta_variable", lambda: {"GOOGL": 27000.0})
+    filas, issues = mdp.fetch_precios_renta_variable_api(
+        [_inst("GOOGL", tipo="CEDEAR")], [], claves_excluir=set(), hoy=HOY,
+        precios_movimientos=mdp.precios_de_movimientos([_mov("GOOGL", 18.5, date(2026, 8, 1), moneda="USD")]),
+    )
+    assert filas == []
+    assert issues[0].regla == "escala_desconocida"
+    assert "movimiento del 2026-08-01" in issues[0].mensaje
+
+
+def test_rv_sin_precio_manual_reusa_el_factor_persistido(monkeypatch):
+    monkeypatch.setattr(data912, "fetch_precios_renta_variable", lambda: {"GOOGL": 27000.0})
+    estado = {"GOOGL": {"factor_escala": 1.0, "factor_fecha": date(2023, 3, 1)}}
+    filas, issues = mdp.fetch_precios_renta_variable_api(
+        [_inst("GOOGL", tipo="CEDEAR")], [], claves_excluir=set(), hoy=HOY, estado_por_ticker=estado,
+        precios_movimientos=mdp.precios_de_movimientos([_mov("GOOGL", 9000.0, date(2023, 3, 1))]),
+    )
+    assert issues == [] and filas[0]["precio"] == 27000.0
+
+
+def test_rf_sin_precio_manual_calibra_contra_la_compra(monkeypatch):
+    monkeypatch.setattr(data912, "fetch_precios_renta_fija", lambda: {"TZXD7": 272.85})
+    filas, issues = mdp.fetch_precios_renta_fija_api(
+        [_inst("TZXD7")], [], claves_excluir=set(), hoy=HOY,
+        precios_movimientos=mdp.precios_de_movimientos([_mov("TZXD7", 2.6, date(2026, 6, 1))]),
+    )
+    assert issues == []
+    assert round(filas[0]["precio"], 4) == 2.7285
+
+
+def test_sin_precio_manual_ni_movimientos_sigue_reportando(monkeypatch):
+    monkeypatch.setattr(data912, "fetch_precios_renta_variable", lambda: {"GGAL": 5230.0})
+    filas, issues = mdp.fetch_precios_renta_variable_api(
+        [_inst("GGAL", tipo="Accion")], [], claves_excluir=set(), hoy=HOY, precios_movimientos=[],
+    )
+    assert filas == []
+    assert issues[0].regla == "sin_precio_para_calibrar"
+    assert "Movimientos" in issues[0].mensaje
+
+
+def test_backfill_rf_sin_precio_manual_calibra_contra_el_dia_de_la_compra(monkeypatch):
+    serie = _serie((date(2025, 6, 2), 270.0), (date(2025, 6, 3), 272.5))
+    monkeypatch.setattr(analisistecnico, "fetch_historico_ohlcv", lambda t, d, h: serie)
+    estado: dict = {}
+    filas, issues = mdp.fetch_backfill_renta_fija_api(
+        [_inst("TZXD7")], [], set(), {"TZXD7": date(2025, 6, 1)}, {}, hoy=HOY,
+        estado_por_ticker=estado,
+        precios_movimientos=mdp.precios_de_movimientos([_mov("TZXD7", 2.7, date(2025, 6, 2))]),
+    )
+    assert issues == []
+    assert [round(f["precio"], 4) for f in filas] == [2.7, 2.725]
+    assert estado["TZXD7"]["factor_escala"] == 0.01
+    assert estado["TZXD7"]["factor_fecha"] == date(2025, 6, 2)

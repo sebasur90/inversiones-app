@@ -1,6 +1,7 @@
 import { formatARSCrudo, formatPrecio, formatUSDCrudo } from '../../utils'
 import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
 import Card from '../../components/ui/Card'
+import EmptyState from '../../components/ui/EmptyState'
 import Sparkline from '../../components/charts/Sparkline'
 import VariacionDia from '../../components/ui/VariacionDia'
 import InfoTooltip from '../../help/components/InfoTooltip'
@@ -30,6 +31,16 @@ export default function TickerHistoricoTab({ historico, monedaSeleccionada }: { 
   const { monto: montoPosicion } = useFormatoFijo('USD')
   const precios = puntos.map(p => p.precio_nominal || 0)
   const esCreciente = precios.length > 1 && precios[precios.length - 1] >= precios[0]
+
+  if (puntos.length === 0) {
+    return (
+      <EmptyState
+        ilustracion="lupa"
+        title="Sin precios registrados"
+        description="Ninguna fuente cotizó este instrumento todavía, así que la posición se valúa al costo de compra. Revisá Calidad de datos para ver por qué."
+      />
+    )
+  }
 
   return (
     <div className="pb-4">

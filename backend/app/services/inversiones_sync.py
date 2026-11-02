@@ -464,11 +464,14 @@ def sync_from_sheet(db: Session) -> dict:
                 # data912 como red de contención para lo que IOL no cotizó. Sin `claves_excluir`
                 # (set()): IOL puede reclamar una fecha que el Sheet ya cubre —es la fuente primaria—,
                 # la precedencia final se resuelve más abajo al escribir en la DB.
+                # Referencia de escala para los tickers sin precio manual en el Sheet: la última
+                # compra/venta, que es la escala en la que está guardado su costo.
+                precios_movimientos = market_data_precios.precios_de_movimientos(movimientos_validos)
                 cotizaciones_iol: dict = {}
                 precios_auto, issues_precios_auto = market_data_precios.fetch_precios_api(
                     instrumentos_validos, precios_validos, set(), db,
                     estado_por_ticker=estado_por_ticker, paneles_fn=paneles_fn, fci_fn=fci_fn,
-                    cotizaciones_out=cotizaciones_iol,
+                    cotizaciones_out=cotizaciones_iol, precios_movimientos=precios_movimientos,
                 )
                 # Cierre anterior y variación del día de IOL: no cuesta llamadas (mismas respuestas).
                 cotizacion_diaria.guardar(
@@ -510,6 +513,7 @@ def sync_from_sheet(db: Session) -> dict:
                     instrumentos_validos, precios_validos, claves_sheet,
                     primeras_fechas_mov, _min_por_ticker("api"), estado_por_ticker=estado_por_ticker,
                     ohlcv_existentes=ohlcv_existentes, barras_out=barras_ohlcv_out,
+                    precios_movimientos=precios_movimientos,
                 )
                 issues.extend(issues_backfill_api)
                 filas_api.extend(backfill_api)
@@ -520,6 +524,7 @@ def sync_from_sheet(db: Session) -> dict:
                     instrumentos_validos, precios_validos, claves_sheet,
                     primeras_fechas_mov, _min_por_ticker("iol"), db, estado_por_ticker=estado_por_ticker,
                     ohlcv_existentes=ohlcv_existentes, barras_out=barras_ohlcv_out,
+                    precios_movimientos=precios_movimientos,
                 )
                 issues.extend(issues_backfill_iol)
                 filas_iol.extend(backfill_iol)
@@ -541,6 +546,7 @@ def sync_from_sheet(db: Session) -> dict:
                     instrumentos_validos, precios_validos, claves_sheet,
                     primeras_fechas_mov, fechas_conocidas, db,
                     estado_por_ticker=estado_por_ticker, barras_out=barras_ohlcv_out,
+                    precios_movimientos=precios_movimientos,
                 )
                 issues.extend(issues_relleno)
                 filas_iol.extend(relleno_iol)

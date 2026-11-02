@@ -1263,6 +1263,31 @@ def migrar_zonas_locales_de_cedears(conn, min_barras: int = 60) -> None:
     conn.commit()
 
 
+def borrar_precios_automaticos_de_fin_de_semana(conn) -> None:
+    """Borra los precios automáticos (`iol`/`api`) fechados en sábado o domingo.
+
+    El precio del día se fechaba con `date.today()` del contenedor (UTC): un sync de fin de semana, o
+    uno después de las 21 hs del viernes, guardaba el cierre del viernes como si fuera de otro día.
+    Ahora se fecha por la rueda (`market_data.precios.fecha_rueda`), pero las filas viejas quedaron
+    duplicando al viernes en el histórico y el gráfico. BYMA no opera los fines de semana, así que
+    ninguna de esas filas es un dato real. Las cargas manuales del Sheet y las series del subyacente
+    (`TICKER@SUB`, que no son de BYMA) no se tocan.
+
+    Corre **una sola vez**: después ya no se generan filas así.
+    """
+    nombre = "precios_automaticos_fin_de_semana"
+    if _migracion_aplicada(conn, nombre):
+        return
+    finde = "strftime('%w', fecha) IN ('0', '6')"
+    conn.execute(text(f"DELETE FROM precios_instrumento WHERE fuente IN ('iol', 'api') AND {finde}"))
+    conn.execute(text(f"DELETE FROM cotizacion_diaria WHERE {finde}"))
+    conn.execute(text(
+        f"DELETE FROM serie_ohlcv WHERE fuente IN ('iol', 'api') AND ticker NOT LIKE '%@%' AND {finde}"
+    ))
+    _marcar_migracion(conn, nombre)
+    conn.commit()
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
 
@@ -1372,6 +1397,7 @@ def init_db():
         # existan `estrategias_tecnicas.variante` y `zonas_precio.vencida`.
         migrar_estrategias_a_referencia(conn)
         migrar_zonas_locales_de_cedears(conn)
+        borrar_precios_automaticos_de_fin_de_semana(conn)
 
         # Interruptor de la zona de venta. Default 1 como los otros tres: dibujar la zona ya es la
         # decisión de querer el aviso. **Un tipo de nivel sin su interruptor queda silenciado**

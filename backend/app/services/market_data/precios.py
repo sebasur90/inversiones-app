@@ -11,8 +11,8 @@ ilíquidos, etc.
 Reglas comunes a todas las fuentes automáticas ('iol' y 'api'): sólo agregan el precio para
 tickers que
   1. existen en la pestaña Instrumentos del Sheet,
-  2. tienen al menos un precio manual previo en la pestaña Precios (necesario para calibrar la
-     escala — ver abajo), y
+  2. tienen una referencia contra la que calibrar la escala (ver abajo): el último precio manual
+     de la pestaña Precios o, si nunca se cargó uno, el último movimiento de compra/venta, y
   3. no tienen precio manual cargado para hoy (a nivel de `(ticker, fecha)`; qué pasa cuando IOL
      sí cotiza una fecha que el Sheet ya cubre —IOL puede desplazar al Sheet— se decide en
      `inversiones_sync.py`, no acá).
@@ -22,12 +22,15 @@ Escala: IOL y data912 cotizan la renta fija ARS por lámina de 100 VN y el Sheet
 el mismo tratamiento sin asumir 1:1. En ambos casos no se asume el factor a ciegas: para cada
 ticker se compara la cotización de la API contra el último precio manual del Sheet y se aplica
 1/100 si el ratio cae cerca de 100, o 1 si cae cerca de 1. Cualquier otro ratio -> no se carga y
-se reporta (elección del usuario: "normalizar por ratio observado", 2026-08-28).
+se reporta (elección del usuario: "normalizar por ratio observado", 2026-08-28). Sin precio manual
+la referencia es el precio del último movimiento (ver `_referencias_escala`).
 
 Backfill histórico: analisistecnico cubre renta fija soberana/letras (no ONs); IOL se usa además
 para lo que analisistecnico no cubre (ONs, renta variable) — ver `fetch_backfill_iol`.
 """
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
+from typing import NamedTuple
+from zoneinfo import ZoneInfo
 
 from ...database import BarraOHLCV, PrecioWatchlist
 from .. import clasificacion_instrumentos as clasificacion
@@ -53,6 +56,9 @@ _SUBCADENAS_FCI = ("fci", "fondo comun de inversion")
 # Ventanas de tolerancia alrededor de los dos factores de escala plausibles (1:1 y 1:100).
 _RATIO_CERCA_DE_100 = (40.0, 250.0)
 _RATIO_CERCA_DE_1 = (0.4, 2.5)
+# Precio del día de renta variable contra una compra (sin precio manual): la compra puede ser de hace
+# años, así que la banda es ancha. Sigue dejando afuera el ×100 y la mezcla ARS/USD (~×1000).
+_RATIO_CERCA_DE_1_SIN_MANUAL = (0.1, 10.0)
 
 # Backfill histórico (soberanos/letras/CER vía analisistecnico; las ONs no tienen fuente).
 _TOPE_BACKFILL = timedelta(days=366 * 5)   # piso duro: nunca más de ~5 años hacia atrás
@@ -82,6 +88,15 @@ _MAX_RELLENO_POR_SYNC = 5            # tickers (= llamadas a IOL) por sync
 _REINTENTO_RELLENO_DIAS = 30         # tras un intento, no se vuelve a pedir ese ticker antes de esto
 _HUECO_MIN_DIAS_HABILES = 4          # "hueco" = más de 3 días hábiles seguidos sin registro (tolera feriados)
 _UMBRAL_CUPO_MENSUAL_RELLENO = 0.70  # con más de este uso del cupo mensual de IOL, no se rellena
+
+# Fecha de la rueda a la que pertenece un precio "del día". El contenedor corre en UTC (después de las
+# 21 hs de Buenos Aires `date.today()` ya es mañana) y antes de la apertura IOL/data912 siguen
+# informando el cierre de la rueda anterior: fecharlo con el día del sync lo corría un día.
+_ZONA_MERCADO = ZoneInfo("America/Argentina/Buenos_Aires")
+_APERTURA_MERCADO = time(11, 0)
+# Cuánto puede tener de vieja la fecha de operación que informa IOL para creérsela (fin de semana
+# largo + feriados). Más vieja es un instrumento sin operaciones recientes: se usa la de la rueda.
+_MAX_DIAS_FECHA_OPERACION = 10
 
 # Watchlist: cuántos símbolos que los paneles NO cubren se piden de a uno a IOL por corrida
 # (`Titulos/{simbolo}/Cotizacion`, 1 llamada cada uno). Lo que queda afuera del tope se reintenta
@@ -169,6 +184,104 @@ def _resolver_factor(
     return factor, True
 
 
+def fecha_rueda(ahora: datetime | None = None) -> date:
+    """Rueda a la que pertenece el último precio publicado en este momento: hoy (hora de Buenos
+    Aires) si es día hábil y ya abrió el mercado; si no, el día hábil anterior. No conoce feriados:
+    un feriado entre semana después de las 11 se fecha como ese día, salvo que la fuente informe la
+    fecha de la operación (ver `_fecha_cotizacion`)."""
+    ahora = (ahora or datetime.now(_ZONA_MERCADO)).astimezone(_ZONA_MERCADO)
+    dia = ahora.date()
+    if dia.weekday() < 5 and ahora.time() >= _APERTURA_MERCADO:
+        return dia
+    dia -= timedelta(days=1)
+    while dia.weekday() >= 5:
+        dia -= timedelta(days=1)
+    return dia
+
+
+def _fecha_cotizacion(fecha_fuente: date | None, rueda: date) -> date:
+    """La fecha de la última operación que informó la fuente, si es creíble (no posterior a la rueda
+    en curso ni de hace semanas); si no, la rueda. Es lo que resuelve los feriados."""
+    if fecha_fuente is not None and rueda - timedelta(days=_MAX_DIAS_FECHA_OPERACION) <= fecha_fuente <= rueda:
+        return fecha_fuente
+    return rueda
+
+
+class _Referencia(NamedTuple):
+    """Último precio conocido de un ticker contra el que se calibra la escala de una fuente automática."""
+    fecha: date
+    precio: float
+    moneda: str
+    origen: str  # "sheet" | "movimiento"
+
+    def describir(self) -> str:
+        return "el Sheet" if self.origen == "sheet" else f"el movimiento del {self.fecha}"
+
+
+def precios_de_movimientos(movimientos) -> list[dict]:
+    """Compras y ventas con precio, en el formato de `precios_sheet` (`ticker/fecha/precio/moneda`).
+
+    Es el respaldo de `_referencias_escala` para los tickers sin precio manual. Los cobros
+    (dividendo, cupón, amortización) se descartan: su "precio" es un monto, no una cotización."""
+    out: list[dict] = []
+    for m in movimientos:
+        if (m.get("tipo_movimiento") or "").strip().lower() not in ("compra", "venta"):
+            continue
+        px = float(m.get("precio") or 0)
+        if px <= 0:
+            continue
+        out.append({"ticker": m["ticker"], "fecha": m["fecha"], "precio": px, "moneda": m.get("moneda") or ""})
+    return out
+
+
+def _referencias_escala(
+    precios_sheet: list[dict], precios_movimientos: list[dict] | None = None,
+) -> dict[str, _Referencia]:
+    """`ticker -> _Referencia`: el último precio manual del Sheet, que manda; si el ticker nunca tuvo
+    uno, el último movimiento de compra/venta (`precios_de_movimientos`).
+
+    El movimiento es la escala en la que está guardado el costo de la tenencia (costo = precio del
+    movimiento × cantidad), así que valuar con el factor calibrado contra él es coherente por
+    construcción. Sin este respaldo, un CEDEAR que nunca se cargó a mano en Precios quedaba sin
+    ninguna cotización y valuado al costo para siempre."""
+    refs: dict[str, _Referencia] = {}
+    for origen, filas in (("sheet", precios_sheet), ("movimiento", precios_movimientos or [])):
+        propias: dict[str, _Referencia] = {}
+        for p in filas:
+            t, f = p["ticker"], p["fecha"]
+            if t not in propias or f > propias[t].fecha:
+                propias[t] = _Referencia(f, float(p["precio"]), p.get("moneda") or "", origen)
+        for t, ref in propias.items():
+            refs.setdefault(t, ref)
+    return refs
+
+
+def _factor_live(
+    inst: dict, px_api: float, ref: _Referencia, estado_por_ticker: dict[str, dict] | None,
+) -> float | None:
+    """Factor de escala del precio del día. Como `_resolver_factor`, salvo un caso: renta variable
+    sin precio manual ni factor persistido. Ahí la referencia es una compra que puede tener años
+    (inflación + suba del activo), así que se acepta el 1:1 de IOL/data912 dentro de una banda ancha
+    y no se persiste: el backfill lo calibra después contra el cierre del día de esa compra."""
+    est = estado_por_ticker.get(inst["ticker"]) if estado_por_ticker is not None else None
+    if (ref.origen == "movimiento" and _es_renta_variable(inst.get("tipo_instrumento", ""))
+            and (est or {}).get("factor_escala") is None):
+        ratio = px_api / ref.precio
+        return 1.0 if _RATIO_CERCA_DE_1_SIN_MANUAL[0] <= ratio <= _RATIO_CERCA_DE_1_SIN_MANUAL[1] else None
+    factor, _ = _resolver_factor(inst["ticker"], px_api, ref.precio, ref.fecha, estado_por_ticker)
+    return factor
+
+
+def _issue_sin_referencia(ticker: str, que_hay: str, impacto: str) -> ValidationIssue:
+    return ValidationIssue(
+        tab="Precios (API)", campo=ticker, regla="sin_precio_para_calibrar",
+        mensaje=(f"{ticker}: {que_hay} pero no hay precio manual en el Sheet ni compras en "
+                 "Movimientos para calibrar la escala"),
+        impacto=impacto,
+        severidad=Severity.INFO,
+    )
+
+
 def _issue_moneda_difiere(ticker: str, moneda_sheet: str, moneda_inst: str) -> ValidationIssue | None:
     """A2: la fila 'api' se calibra y persiste en la moneda de la serie de Precios (contra la que
     se calibró el número), no en la declarada en Instrumentos. Si difieren, es un dato a revisar."""
@@ -195,10 +308,13 @@ def _fetch_precios_live_api(
     endpoints_label: str,
     estado_por_ticker: dict[str, dict] | None = None,
     nombre_fuente: str = "data912",
+    precios_movimientos: list[dict] | None = None,
+    fechas_por_symbol: dict[str, date] | None = None,
 ) -> tuple[list[dict] | None, list[ValidationIssue]]:
     """Motor común de `fetch_precios_renta_fija_api` y `fetch_precios_renta_variable_api`: matchea
     instrumentos por `predicate`, pide el precio del día con `fetch_fn` y calibra la escala contra
-    el último precio del Sheet. Devuelve (filas, issues); `filas` son dicts listos para
+    el último precio del Sheet o, sin él, contra el último movimiento de `precios_movimientos`
+    (ver `_referencias_escala` y `_factor_live`). Devuelve (filas, issues); `filas` son dicts listos para
     `PrecioInstrumento(**fila)` con `fuente="api"`. Devuelve None (no []) si la API no respondió en
     absoluto, para que el sync preserve las filas 'api' de una corrida anterior.
 
@@ -208,6 +324,9 @@ def _fetch_precios_live_api(
     `nombre_fuente`: de dónde salió `fetch_fn`, sólo para redactar los issues. El motor también lo
     usa IOL (ver `_fetch_precios_encadenado`), así que no puede quedar 'data912' hardcodeado en los
     mensajes: el usuario tiene que poder distinguir qué fuente disparó cada advertencia.
+
+    `hoy` es la rueda (`fecha_rueda`); `fechas_por_symbol` (opcional, IOL) es la fecha de la última
+    operación de cada símbolo, que manda sobre la rueda cuando es creíble (`_fecha_cotizacion`).
     """
     issues: list[ValidationIssue] = []
 
@@ -227,17 +346,16 @@ def _fetch_precios_live_api(
 
     api_por_symbol = {sym.upper().strip(): px for sym, px in api_por_symbol.items()}
 
-    ultimo_sheet: dict[str, tuple[date, float, str]] = {}
-    for p in precios_sheet:
-        t, f, px = p["ticker"], p["fecha"], float(p["precio"])
-        if t not in ultimo_sheet or f > ultimo_sheet[t][0]:
-            ultimo_sheet[t] = (f, px, p.get("moneda") or "")
+    referencias = _referencias_escala(precios_sheet, precios_movimientos)
+
+    fechas_por_symbol = {s.upper().strip(): f for s, f in (fechas_por_symbol or {}).items()}
 
     filas: list[dict] = []
     for inst in objetivo:
         ticker = inst["ticker"]
-        if (ticker, hoy) in claves_excluir:
-            continue  # el Sheet ya trae precio de hoy para este ticker
+        fecha = _fecha_cotizacion(fechas_por_symbol.get(ticker.upper().strip()), hoy)
+        if (ticker, fecha) in claves_excluir:
+            continue  # el Sheet ya trae precio de esa rueda para este ticker
 
         px_api = api_por_symbol.get(ticker.upper().strip())
         if px_api is None:
@@ -249,40 +367,38 @@ def _fetch_precios_live_api(
             ))
             continue
 
-        prev = ultimo_sheet.get(ticker)
-        if prev is None:
-            issues.append(ValidationIssue(
-                tab="Precios (API)", campo=ticker, regla="sin_precio_para_calibrar",
-                mensaje=(f"{ticker}: hay cotización en {nombre_fuente} pero no hay precio previo "
-                         "en el Sheet para calibrar la escala"),
-                impacto="No se carga el precio automático hasta tener una referencia manual",
-                severidad=Severity.INFO,
+        ref = referencias.get(ticker)
+        if ref is None:
+            issues.append(_issue_sin_referencia(
+                ticker, f"hay cotización en {nombre_fuente}",
+                "No se carga el precio automático hasta tener una referencia (precio manual o compra)",
             ))
             continue
 
-        f_sheet, px_sheet, moneda_sheet = prev
-        if px_sheet <= 0 or px_api <= 0:
+        if ref.precio <= 0 or px_api <= 0:
             continue
-        factor, calibrado_ahora = _resolver_factor(ticker, px_api, px_sheet, f_sheet, estado_por_ticker)
+        factor = _factor_live(inst, px_api, ref, estado_por_ticker)
         if factor is None:
             issues.append(ValidationIssue(
                 tab="Precios (API)", campo=ticker, regla="escala_desconocida",
-                mensaje=(f"{ticker}: {nombre_fuente} cotiza {px_api:g} y el último precio del "
-                         f"Sheet es {px_sheet:g} (factor {px_api / px_sheet:.2f}, fuera de ~1 o ~100)"),
+                mensaje=(f"{ticker}: {nombre_fuente} cotiza {px_api:g} y el último precio de "
+                         f"{ref.describir()} es {ref.precio:g} (factor {px_api / ref.precio:.2f}, "
+                         "fuera de ~1 o ~100)"),
                 impacto="No se carga el precio automático de este instrumento",
                 severidad=Severity.ADVERTENCIA,
             ))
             continue
 
-        issue_moneda = _issue_moneda_difiere(ticker, moneda_sheet, inst.get("moneda", ""))
-        if issue_moneda is not None:
-            issues.append(issue_moneda)
+        if ref.origen == "sheet":
+            issue_moneda = _issue_moneda_difiere(ticker, ref.moneda, inst.get("moneda", ""))
+            if issue_moneda is not None:
+                issues.append(issue_moneda)
 
         filas.append({
-            "fecha": hoy,
+            "fecha": fecha,
             "ticker": ticker,
             "precio": round(px_api * factor, 6),
-            "moneda": (moneda_sheet or inst.get("moneda") or "ARS").strip().upper(),
+            "moneda": (ref.moneda or inst.get("moneda") or "ARS").strip().upper(),
             "fuente": "api",
         })
 
@@ -295,13 +411,14 @@ def fetch_precios_renta_fija_api(
     claves_excluir: set[tuple[str, date]],
     hoy: date | None = None,
     estado_por_ticker: dict[str, dict] | None = None,
+    precios_movimientos: list[dict] | None = None,
 ) -> tuple[list[dict] | None, list[ValidationIssue]]:
     """`instrumentos` / `precios_sheet`: los dicts ya validados del Sheet (mismo formato que
     persiste el sync). `claves_excluir`: pares (ticker, fecha) que ya trae el Sheet."""
     return _fetch_precios_live_api(
-        instrumentos, precios_sheet, claves_excluir, hoy or date.today(),
+        instrumentos, precios_sheet, claves_excluir, hoy or fecha_rueda(),
         _es_renta_fija, data912.fetch_precios_renta_fija, "arg_bonds/arg_corp/arg_notes",
-        estado_por_ticker,
+        estado_por_ticker, precios_movimientos=precios_movimientos,
     )
 
 
@@ -311,14 +428,15 @@ def fetch_precios_renta_variable_api(
     claves_excluir: set[tuple[str, date]],
     hoy: date | None = None,
     estado_por_ticker: dict[str, dict] | None = None,
+    precios_movimientos: list[dict] | None = None,
 ) -> tuple[list[dict] | None, list[ValidationIssue]]:
     """Ídem `fetch_precios_renta_fija_api` para acciones y CEDEARs (Ola 4). Sin backfill
     histórico: no hay fuente pública de serie diaria para renta variable, sólo el precio del día
     vía data912 `/live/arg_stocks` + `/live/arg_cedears`."""
     return _fetch_precios_live_api(
-        instrumentos, precios_sheet, claves_excluir, hoy or date.today(),
+        instrumentos, precios_sheet, claves_excluir, hoy or fecha_rueda(),
         _es_renta_variable, data912.fetch_precios_renta_variable, "arg_stocks/arg_cedears",
-        estado_por_ticker,
+        estado_por_ticker, precios_movimientos=precios_movimientos,
     )
 
 
@@ -332,6 +450,7 @@ def fetch_backfill_renta_fija_api(
     estado_por_ticker: dict[str, dict] | None = None,
     ohlcv_existentes: dict[str, date] | None = None,
     barras_out: list[dict] | None = None,
+    precios_movimientos: list[dict] | None = None,
 ) -> tuple[list[dict], list[ValidationIssue]]:
     """Puebla *hacia atrás* la serie `precios_instrumento` (`fuente='api'`) de renta fija con la
     serie diaria de analisistecnico. Complementa a `fetch_precios_renta_fija_api`, que sólo agrega
@@ -379,11 +498,7 @@ def fetch_backfill_renta_fija_api(
     if not objetivo:
         return [], issues
 
-    ultimo_sheet: dict[str, tuple[date, float, str]] = {}
-    for p in precios_sheet:
-        t, f, px = p["ticker"], p["fecha"], float(p["precio"])
-        if t not in ultimo_sheet or f > ultimo_sheet[t][0]:
-            ultimo_sheet[t] = (f, px, p.get("moneda") or "")
+    referencias = _referencias_escala(precios_sheet, precios_movimientos)
 
     # Qué tickers necesitan backfill y cuánto; se atienden los huecos más grandes primero.
     pendientes: list[tuple[int, dict, date, date]] = []
@@ -453,19 +568,15 @@ def fetch_backfill_renta_fija_api(
         if not serie:
             continue
 
-        prev = ultimo_sheet.get(ticker)
-        if prev is None:
-            issues.append(ValidationIssue(
-                tab="Precios (API)", campo=ticker, regla="sin_precio_para_calibrar",
-                mensaje=(f"{ticker}: hay serie histórica pero no hay precio manual en el Sheet "
-                         "para calibrar la escala"),
-                impacto="No se hace backfill hasta tener una referencia manual",
-                severidad=Severity.INFO,
+        ref = referencias.get(ticker)
+        if ref is None:
+            issues.append(_issue_sin_referencia(
+                ticker, "hay serie histórica",
+                "No se hace backfill hasta tener una referencia (precio manual o compra)",
             ))
             continue
 
-        f_sheet, px_sheet, moneda_sheet = prev
-        if px_sheet <= 0:
+        if ref.precio <= 0:
             continue
 
         # Sólo las barras >= piso de valuación importan para precios_instrumento y para calibrar
@@ -473,23 +584,24 @@ def fetch_backfill_renta_fija_api(
         serie_valuacion = [b for b in serie if b.fecha >= piso]
         candidatos_ref = serie_valuacion or serie
         # Calibra contra el cierre de analisistecnico más cercano a la última fecha del Sheet.
-        px_ref = min(candidatos_ref, key=lambda b: abs((b.fecha - f_sheet).days)).cierre
-        factor, _ = _resolver_factor(ticker, px_ref, px_sheet, f_sheet, estado_por_ticker)
+        px_ref = min(candidatos_ref, key=lambda b: abs((b.fecha - ref.fecha).days)).cierre
+        factor, _ = _resolver_factor(ticker, px_ref, ref.precio, ref.fecha, estado_por_ticker)
         if factor is None:
             issues.append(ValidationIssue(
                 tab="Precios (API)", campo=ticker, regla="escala_desconocida",
-                mensaje=(f"{ticker}: analisistecnico cotiza {px_ref:g} cerca del {f_sheet} y el "
-                         f"Sheet {px_sheet:g} (factor {px_ref / px_sheet:.2f}, fuera de ~1 o ~100)"),
+                mensaje=(f"{ticker}: analisistecnico cotiza {px_ref:g} cerca del {ref.fecha} y "
+                         f"{ref.describir()} {ref.precio:g} (factor {px_ref / ref.precio:.2f}, fuera de ~1 o ~100)"),
                 impacto="No se hace backfill de este instrumento",
                 severidad=Severity.ADVERTENCIA,
             ))
             continue
 
-        issue_moneda = _issue_moneda_difiere(ticker, moneda_sheet, inst.get("moneda", ""))
-        if issue_moneda is not None:
-            issues.append(issue_moneda)
+        if ref.origen == "sheet":
+            issue_moneda = _issue_moneda_difiere(ticker, ref.moneda, inst.get("moneda", ""))
+            if issue_moneda is not None:
+                issues.append(issue_moneda)
 
-        moneda = (moneda_sheet or inst.get("moneda") or "ARS").strip().upper()
+        moneda = (ref.moneda or inst.get("moneda") or "ARS").strip().upper()
         for b in serie_valuacion:
             if b.fecha >= hoy or (ticker, b.fecha) in claves_excluir:
                 continue
@@ -542,6 +654,7 @@ def _fetch_precios_encadenado(
     endpoints_label: str,
     familia_label: str,
     estado_por_ticker: dict[str, dict] | None = None,
+    precios_movimientos: list[dict] | None = None,
 ) -> tuple[list[dict], list[ValidationIssue]]:
     """Precio del día para una familia (`predicate`): IOL primero, data912 sólo para los símbolos
     que IOL no cotizó (caída, sin cupo mensual, o no tiene ese ticker). Reusa el motor
@@ -569,7 +682,8 @@ def _fetch_precios_encadenado(
         f_iol, i_iol = _fetch_precios_live_api(
             cubiertos, precios_sheet, claves_excluir, hoy,
             lambda _t: True, lambda: precios_iol, "paneles", estado_por_ticker,
-            nombre_fuente="IOL",
+            nombre_fuente="IOL", precios_movimientos=precios_movimientos,
+            fechas_por_symbol=_fechas_operacion(iol_por_symbol),
         )
         for f in (f_iol or []):
             f["fuente"] = "iol"
@@ -591,7 +705,7 @@ def _fetch_precios_encadenado(
         f_fb, i_fb = _fetch_precios_live_api(
             restantes, precios_sheet, claves_excluir, hoy,
             lambda _t: True, fetch_fallback_fn, endpoints_label, estado_por_ticker,
-            nombre_fuente="data912",
+            nombre_fuente="data912", precios_movimientos=precios_movimientos,
         )
         if f_fb is not None:
             for f in f_fb:
@@ -600,6 +714,11 @@ def _fetch_precios_encadenado(
         issues.extend(i_fb)
 
     return filas, issues
+
+
+def _fechas_operacion(cotizaciones: dict) -> dict[str, date]:
+    """`simbolo -> fecha de la última operación` de las `CotizacionIOL` que la traen."""
+    return {s: f for s, cot in cotizaciones.items() if (f := getattr(cot, "fecha", None)) is not None}
 
 
 def memo_paneles(db):
@@ -642,6 +761,7 @@ def fetch_precios_api(
     paneles_fn=None,
     fci_fn=None,
     cotizaciones_out: dict | None = None,
+    precios_movimientos: list[dict] | None = None,
 ) -> tuple[list[dict], list[ValidationIssue]]:
     """Precio del día para renta fija + renta variable + FCI, IOL primero y data912 como
     respaldo (FCI no tiene respaldo público: si IOL no lo cotiza, no se carga). Punto de entrada
@@ -657,8 +777,11 @@ def fetch_precios_api(
 
     `cotizaciones_out`: si se pasa, se completa con `simbolo -> CotizacionIOL` de lo que IOL cotizó
     (con el cierre anterior y la variación del día, si vinieron). Sale de los mismos memos que ya se
-    pidieron: no hace ninguna llamada extra (ver `cotizacion_diaria.construir_cotizaciones_dia`)."""
-    hoy = hoy or date.today()
+    pidieron: no hace ninguna llamada extra (ver `cotizacion_diaria.construir_cotizaciones_dia`).
+
+    `precios_movimientos`: compras/ventas (`precios_de_movimientos`), referencia de escala para los
+    tickers sin precio manual en el Sheet (ver `_referencias_escala`)."""
+    hoy = hoy or fecha_rueda()
     filas: list[dict] = []
     issues: list[ValidationIssue] = []
 
@@ -674,6 +797,7 @@ def fetch_precios_api(
         f, i = _fetch_precios_encadenado(
             instrumentos, precios_sheet, claves_excluir, hoy, predicate,
             _paneles, fallback_fn, label, familia, estado_por_ticker,
+            precios_movimientos=precios_movimientos,
         )
         filas.extend(f)
         issues.extend(i)
@@ -695,7 +819,8 @@ def fetch_precios_api(
             f_fci, i_fci = _fetch_precios_live_api(
                 fci_objetivo, precios_sheet, claves_excluir, hoy,
                 lambda _t: True, lambda: precios_iol_fci, "Titulos/FCI", estado_por_ticker,
-                nombre_fuente="IOL",
+                nombre_fuente="IOL", precios_movimientos=precios_movimientos,
+                fechas_por_symbol=_fechas_operacion(iol_fci),
             )
             for f in (f_fci or []):
                 f["fuente"] = "iol"
@@ -779,7 +904,7 @@ def fetch_precios_watchlist_catalogo(
     `cotizaciones_out`: si se pasa, se completa con `simbolo -> CotizacionIOL` de cada cotización de
     IOL usada (para guardar la variación del día; sin llamadas extra).
     """
-    hoy = hoy or date.today()
+    hoy = hoy or fecha_rueda()
     if not watchlist:
         return [], []
 
@@ -818,7 +943,8 @@ def fetch_precios_watchlist_catalogo(
             if cotizaciones_out is not None:
                 cotizaciones_out[w["ticker"].upper().strip()] = encontrado
             filas.append({
-                "fecha": hoy, "ticker": w["ticker"], "precio": round(float(precio), 6),
+                "fecha": _fecha_cotizacion(getattr(encontrado, "fecha", None), hoy),
+                "ticker": w["ticker"], "precio": round(float(precio), 6),
                 "moneda": (moneda or w.get("moneda") or "ARS").strip().upper(), "fuente": "iol",
             })
 
@@ -845,7 +971,8 @@ def fetch_precios_watchlist_catalogo(
             if cotizaciones_out is not None:
                 cotizaciones_out[ticker.upper().strip()] = cotizacion
             filas.append({
-                "fecha": hoy, "ticker": ticker, "precio": round(float(precio), 6),
+                "fecha": _fecha_cotizacion(getattr(cotizacion, "fecha", None), hoy),
+                "ticker": ticker, "precio": round(float(precio), 6),
                 "moneda": (moneda or w.get("moneda") or "ARS").strip().upper(), "fuente": "iol",
             })
         sin_resolver.extend(por_antiguedad[max_simbolos_sueltos:])
@@ -909,6 +1036,7 @@ def fetch_backfill_iol(
     estado_por_ticker: dict[str, dict] | None = None,
     ohlcv_existentes: dict[str, date] | None = None,
     barras_out: list[dict] | None = None,
+    precios_movimientos: list[dict] | None = None,
 ) -> tuple[list[dict], list[ValidationIssue]]:
     """Backfill histórico vía IOL para lo que `fetch_backfill_renta_fija_api` (analisistecnico) no
     cubre: ONs corporativas (marcadas `backfill_estado == 'sin_serie'`) y renta variable (acciones/
@@ -939,11 +1067,7 @@ def fetch_backfill_iol(
     if not objetivo:
         return [], issues
 
-    ultimo_sheet: dict[str, tuple[date, float, str]] = {}
-    for p in precios_sheet:
-        t, f, px = p["ticker"], p["fecha"], float(p["precio"])
-        if t not in ultimo_sheet or f > ultimo_sheet[t][0]:
-            ultimo_sheet[t] = (f, px, p.get("moneda") or "")
+    referencias = _referencias_escala(precios_sheet, precios_movimientos)
 
     pendientes: list[tuple[int, dict, date, date]] = []
     for inst in objetivo:
@@ -1010,40 +1134,37 @@ def fetch_backfill_iol(
         if not serie:
             continue
 
-        prev = ultimo_sheet.get(ticker)
-        if prev is None:
-            issues.append(ValidationIssue(
-                tab="Precios (API)", campo=ticker, regla="sin_precio_para_calibrar",
-                mensaje=(f"{ticker}: hay serie histórica en IOL pero no hay precio manual en el "
-                         "Sheet para calibrar la escala"),
-                impacto="No se hace backfill hasta tener una referencia manual",
-                severidad=Severity.INFO,
+        ref = referencias.get(ticker)
+        if ref is None:
+            issues.append(_issue_sin_referencia(
+                ticker, "hay serie histórica en IOL",
+                "No se hace backfill hasta tener una referencia (precio manual o compra)",
             ))
             continue
 
-        f_sheet, px_sheet, moneda_sheet = prev
-        if px_sheet <= 0:
+        if ref.precio <= 0:
             continue
 
         serie_valuacion = [b for b in serie if b.fecha >= piso]
         candidatos_ref = serie_valuacion or serie
-        px_ref = min(candidatos_ref, key=lambda b: abs((b.fecha - f_sheet).days)).cierre
-        factor, _ = _resolver_factor(ticker, px_ref, px_sheet, f_sheet, estado_por_ticker)
+        px_ref = min(candidatos_ref, key=lambda b: abs((b.fecha - ref.fecha).days)).cierre
+        factor, _ = _resolver_factor(ticker, px_ref, ref.precio, ref.fecha, estado_por_ticker)
         if factor is None:
             issues.append(ValidationIssue(
                 tab="Precios (API)", campo=ticker, regla="escala_desconocida",
-                mensaje=(f"{ticker}: IOL cotiza {px_ref:g} cerca del {f_sheet} y el Sheet "
-                         f"{px_sheet:g} (factor {px_ref / px_sheet:.2f}, fuera de ~1 o ~100)"),
+                mensaje=(f"{ticker}: IOL cotiza {px_ref:g} cerca del {ref.fecha} y "
+                         f"{ref.describir()} {ref.precio:g} (factor {px_ref / ref.precio:.2f}, fuera de ~1 o ~100)"),
                 impacto="No se hace backfill de este instrumento",
                 severidad=Severity.ADVERTENCIA,
             ))
             continue
 
-        issue_moneda = _issue_moneda_difiere(ticker, moneda_sheet, inst.get("moneda", ""))
-        if issue_moneda is not None:
-            issues.append(issue_moneda)
+        if ref.origen == "sheet":
+            issue_moneda = _issue_moneda_difiere(ticker, ref.moneda, inst.get("moneda", ""))
+            if issue_moneda is not None:
+                issues.append(issue_moneda)
 
-        moneda = (moneda_sheet or inst.get("moneda") or "ARS").strip().upper()
+        moneda = (ref.moneda or inst.get("moneda") or "ARS").strip().upper()
         for b in serie_valuacion:
             if b.fecha >= hoy or (ticker, b.fecha) in claves_excluir:
                 continue
@@ -1118,6 +1239,7 @@ def fetch_relleno_huecos_iol(
     estado_por_ticker: dict[str, dict] | None = None,
     barras_out: list[dict] | None = None,
     max_tickers: int = _MAX_RELLENO_POR_SYNC,
+    precios_movimientos: list[dict] | None = None,
 ) -> tuple[list[dict], list[ValidationIssue]]:
     """Completa los huecos **internos y recientes** de la serie de precios con la serie histórica de
     IOL. Es lo que `fetch_backfill_iol` no hace: ése sólo crece hacia atrás hasta el primer
@@ -1135,7 +1257,7 @@ def fetch_relleno_huecos_iol(
         `_UMBRAL_CUPO_MENSUAL_RELLENO` del cupo mensual gastado, y respeta el tope por corrida.
 
     Mismas reglas de escala y de precedencia que el backfill: calibra el factor contra el último
-    precio del Sheet (`_resolver_factor`) y **nunca** emite una fecha que el Sheet cubre
+    precio del Sheet o, sin él, el último movimiento (`_referencias_escala` + `_resolver_factor`) y **nunca** emite una fecha que el Sheet cubre
     (`claves_excluir`) ni una que ya tiene registro. Con `barras_out` también aporta las velas de
     ese rango (viajan en la misma respuesta, sin llamadas nuevas). Devuelve siempre una lista.
     """
@@ -1150,11 +1272,7 @@ def fetch_relleno_huecos_iol(
     if not objetivo:
         return [], issues
 
-    ultimo_sheet: dict[str, tuple[date, float, str]] = {}
-    for p in precios_sheet:
-        t, f, px = p["ticker"], p["fecha"], float(p["precio"])
-        if t not in ultimo_sheet or f > ultimo_sheet[t][0]:
-            ultimo_sheet[t] = (f, px, p.get("moneda") or "")
+    referencias = _referencias_escala(precios_sheet, precios_movimientos)
 
     pendientes: list[tuple[int, dict, date, date]] = []
     for inst in objetivo:
@@ -1210,27 +1328,26 @@ def fetch_relleno_huecos_iol(
         if not serie:
             continue
 
-        prev = ultimo_sheet.get(ticker)
-        if prev is None:
-            continue  # sin precio manual no hay con qué calibrar la escala (el backfill ya lo reporta)
-        f_sheet, px_sheet, moneda_sheet = prev
-        if px_sheet <= 0:
+        ref = referencias.get(ticker)
+        if ref is None:
+            continue  # sin referencia no hay con qué calibrar la escala (el backfill ya lo reporta)
+        if ref.precio <= 0:
             continue
 
-        px_ref = min(serie, key=lambda b: abs((b.fecha - f_sheet).days)).cierre
-        factor, _ = _resolver_factor(ticker, px_ref, px_sheet, f_sheet, estado_por_ticker)
+        px_ref = min(serie, key=lambda b: abs((b.fecha - ref.fecha).days)).cierre
+        factor, _ = _resolver_factor(ticker, px_ref, ref.precio, ref.fecha, estado_por_ticker)
         if factor is None:
             issues.append(ValidationIssue(
                 tab="Precios (API)", campo=ticker, regla="escala_desconocida",
-                mensaje=(f"{ticker}: IOL cotiza {px_ref:g} cerca del {f_sheet} y el Sheet "
-                         f"{px_sheet:g} (factor {px_ref / px_sheet:.2f}, fuera de ~1 o ~100)"),
+                mensaje=(f"{ticker}: IOL cotiza {px_ref:g} cerca del {ref.fecha} y "
+                         f"{ref.describir()} {ref.precio:g} (factor {px_ref / ref.precio:.2f}, fuera de ~1 o ~100)"),
                 impacto="No se rellenan los huecos de este instrumento",
                 severidad=Severity.ADVERTENCIA,
             ))
             continue
 
         conocidas = fechas_conocidas_por_ticker.get(ticker, set())
-        moneda = (moneda_sheet or inst.get("moneda") or "ARS").strip().upper()
+        moneda = (ref.moneda or inst.get("moneda") or "ARS").strip().upper()
         for b in serie:
             if b.fecha >= hoy or b.fecha in conocidas or (ticker, b.fecha) in claves_excluir:
                 continue

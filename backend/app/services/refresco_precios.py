@@ -35,7 +35,7 @@ from datetime import date, datetime
 from sqlalchemy.orm import Session
 
 from ..database import (
-    BarraOHLCV, EstadoMarketDataTicker, InstrumentoInversion, PrecioInstrumento,
+    BarraOHLCV, EstadoMarketDataTicker, InstrumentoInversion, MovimientoInversion, PrecioInstrumento,
     PrecioSubyacente, RefrescoPrecios, ZonaPrecio,
 )
 from . import (
@@ -79,6 +79,21 @@ def _precios_manuales_desde_db(db: Session) -> list[dict]:
         }
         for fila in db.query(PrecioInstrumento).filter(PrecioInstrumento.fuente == "sheet").all()
     ]
+
+
+def _precios_movimientos_desde_db(db: Session) -> list[dict]:
+    """Compras y ventas persistidas, lo que el sync pasa como `precios_movimientos`: la referencia de
+    escala de los tickers que nunca tuvieron precio manual en el Sheet."""
+    return market_data_precios.precios_de_movimientos(
+        {
+            "ticker": fila.ticker,
+            "fecha": fila.fecha,
+            "tipo_movimiento": fila.tipo_movimiento,
+            "precio": float(fila.precio),
+            "moneda": fila.moneda,
+        }
+        for fila in db.query(MovimientoInversion).all()
+    )
 
 
 def _upsert_precios(db: Session, filas: list[dict], claves_sheet: set[tuple[str, date]]) -> int:
@@ -316,7 +331,7 @@ def refrescar(db: Session) -> dict:
     filas, issues = market_data_precios.fetch_precios_api(
         instrumentos, precios_manuales, set(), db,
         estado_por_ticker=estado_por_ticker, paneles_fn=paneles_fn, fci_fn=fci_fn,
-        cotizaciones_out=cotizaciones,
+        cotizaciones_out=cotizaciones, precios_movimientos=_precios_movimientos_desde_db(db),
     )
 
     guardados = _upsert_precios(db, filas, claves_sheet)

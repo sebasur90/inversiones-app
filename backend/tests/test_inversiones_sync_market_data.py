@@ -471,9 +471,9 @@ def test_purga_no_borra_filas_api_de_renta_variable_al_purgar_renta_fija(monkeyp
 def test_iol_desplaza_precio_manual_del_sheet_y_reporta(monkeypatch):
     """IOL cotiza la misma fecha que ya trae el Sheet: gana IOL, el Sheet queda desplazado y se
     reporta con un ValidationIssue (nunca es silencioso). El precio del día lo calcula
-    `fetch_precios_api` contra `date.today()` (el sync no fija una fecha), así que la carga
-    manual del Sheet tiene que ser justamente la de hoy para que colisionen."""
-    hoy = date.today()
+    `fetch_precios_api` contra la rueda en curso (`fecha_rueda`: el sync no fija una fecha), así que
+    la carga manual del Sheet tiene que ser justamente la de esa rueda para que colisionen."""
+    hoy = sync_module.market_data_precios.fecha_rueda()
     db = _make_db()
     original_fetch = sync_module.fetch_sheet_data
     sync_module.fetch_sheet_data = _mock_fetch({

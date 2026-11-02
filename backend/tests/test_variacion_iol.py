@@ -279,3 +279,17 @@ def test_refresco_guarda_la_variacion_de_iol(db, monkeypatch):
     refresco_precios.refrescar(db)
 
     assert cotizacion_diaria.cargar_por_clave(db) == {("SPY", hoy): (20458.0, 2.55)}
+
+
+def test_relleno_sin_precio_manual_calibra_contra_la_compra(iol_stub):
+    conocidas = {date(2026, 8, 10), date(2026, 8, 24)}
+    movs = mdp.precios_de_movimientos([
+        {"ticker": "SPY", "fecha": date(2026, 8, 10), "tipo_movimiento": "compra", "precio": 101.0, "moneda": "ARS"},
+    ])
+    filas, issues = mdp.fetch_relleno_huecos_iol(
+        INST, [], set(), {"SPY": min(conocidas)}, {"SPY": conocidas}, _DB, hoy=HOY,
+        estado_por_ticker={}, precios_movimientos=movs,
+    )
+    assert issues == []
+    assert filas and all(f["precio"] == 100.0 for f in filas)
+    assert not {f["fecha"] for f in filas} & conocidas
