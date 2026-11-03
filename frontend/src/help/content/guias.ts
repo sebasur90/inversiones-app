@@ -464,9 +464,10 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
       'Fortaleza relativa, momentum, volatilidad, máxima caída y tendencia se muestran por separado: no hay un puntaje único que los mezcle.',
       'El historial de rotación marca cuándo entró a cada cuadrante, distinguiendo los cambios confirmados de los movimientos breves.',
       'Podés elegir un período histórico o fechas a gusto para ver cómo se comportó el grupo en esas fechas exactas.',
+      '"Qué pasó después de cada estado" cuenta cuánto rindió el grupo contra su referencia en las semanas siguientes a cada estado, comparado con cualquier semana.',
     ],
     ojo: 'Lo observado en un período no se repite necesariamente, y la ficha no explica sus causas.',
-    terminos: ['ciclos_rs_ratio', 'ciclos_rs_momentum', 'ciclos_volatilidad', 'ciclos_drawdown', 'ciclos_tendencia'],
+    terminos: ['ciclos_rs_ratio', 'ciclos_rs_momentum', 'ciclos_volatilidad', 'ciclos_drawdown', 'ciclos_tendencia', 'ciclos_efectividad'],
   },
 
   '/costo-oportunidad': {

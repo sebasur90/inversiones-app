@@ -2115,6 +2115,54 @@ export const getCicloDetalle = (
     con: p.con && p.con.length > 0 ? p.con.join(',') : undefined,
   })
 
+export interface CicloEfectividadStats {
+  n: number
+  episodios: number
+  suficiente: boolean
+  mediana: number | null
+  media: number | null
+  p25: number | null
+  p75: number | null
+  /** 0–100: porcentaje de observaciones en que el grupo le ganó a la referencia. */
+  positivos_pct: number | null
+  mediana_vs_base?: number | null
+}
+
+export interface CicloEfectividadEstado {
+  cuadrante: Cuadrante
+  semanas: number
+  episodios: number
+  cambios_a_este_estado: number
+  /** Claves: semanas de horizonte ("4", "13", "26"). */
+  horizontes: Record<string, CicloEfectividadStats>
+  al_confirmar: Record<string, CicloEfectividadStats>
+}
+
+export interface CicloEfectividadOut {
+  estado: 'ok' | 'datos_insuficientes' | 'sin_datos'
+  motivo: string | null
+  alcance: 'grupo' | 'tipo'
+  grupo: CicloGrupoCatalogo
+  benchmark: CicloGrupoCatalogo | null
+  grupos: { id: string; nombre: string; benchmark?: string; semanas: number; desde: string | null; hasta: string | null; motivo: string | null }[]
+  resultado: {
+    horizontes_semanas: number[]
+    base: Record<string, CicloEfectividadStats>
+    por_estado: CicloEfectividadEstado[]
+    semanas_analizadas: number
+    desde: string | null
+    hasta: string | null
+  } | null
+  lectura: string
+  version: string
+  confirmacion_semanas: number
+  min_episodios: number
+  meta: CiclosMeta
+}
+
+export const getCicloEfectividad = (id: string, p: { alcance: 'grupo' | 'tipo'; benchmark?: string | null }) =>
+  cicloGet<CicloEfectividadOut>(`grupos/${encodeURIComponent(id)}/efectividad`, { alcance: p.alcance, benchmark: p.benchmark ?? undefined })
+
 export const getCicloPais = (id: string, p: { meses: number; moneda: CicloMoneda; benchmark?: string | null }) =>
   cicloGet<CicloPaisOut>(`paises/${encodeURIComponent(id)}`, { meses: p.meses, moneda: p.moneda, benchmark: p.benchmark ?? undefined })
 

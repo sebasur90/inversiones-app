@@ -11,6 +11,7 @@ import QueryBoundary from '../components/ui/QueryBoundary'
 import Segmented from '../components/ui/Segmented'
 import TituloSeccion from '../components/ui/TituloSeccion'
 import BadgeCuadrante from '../components/ciclos/BadgeCuadrante'
+import EfectividadEstados from '../components/ciclos/EfectividadEstados'
 import GraficoBase100 from '../components/ciclos/GraficoBase100'
 import HistorialRotacion from '../components/ciclos/HistorialRotacion'
 import InstrumentosGrupo from '../components/ciclos/InstrumentosGrupo'
@@ -241,6 +242,17 @@ export default function CicloDetalle() {
                 </TituloSeccion>
                 <Card>
                   <HistorialRotacion puntos={rot.puntos} transiciones={rot.transiciones} />
+                </Card>
+              </section>
+            )}
+
+            {rot && d.benchmark && (
+              <section>
+                <TituloSeccion icono="trend" tono="violet">
+                  Qué pasó después de cada estado
+                </TituloSeccion>
+                <Card>
+                  <EfectividadEstados grupoId={d.grupo.id} tipo={d.grupo.tipo} benchmark={benchmark} />
                 </Card>
               </section>
             )}

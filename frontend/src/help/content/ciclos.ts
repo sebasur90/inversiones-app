@@ -12,6 +12,9 @@ export type CiclosHelpKey =
   | 'ciclos_improving'
   | 'ciclos_trayectoria'
   | 'ciclos_cambio_confirmado'
+  | 'ciclos_efectividad'
+  | 'ciclos_episodio'
+  | 'ciclos_base_semanas'
   | 'ciclos_proxy'
   | 'ciclos_benchmark'
   | 'ciclos_retorno_total'
@@ -85,6 +88,27 @@ export const CICLOS_HELP: Record<CiclosHelpKey, HelpContent> = {
     whyItMatters: 'Evita leer como un nuevo ciclo lo que fue el movimiento de una sola semana.',
     howToInterpret: 'Los cambios sin confirmar figuran como pendientes: todavía no se sabe si se sostienen.',
     limitations: 'Confirmar no es predecir: el cambio sólo quedó sostenido en los datos que ya pasaron.',
+  },
+  ciclos_efectividad: {
+    title: 'Qué pasó después de cada estado',
+    shortDescription: 'Para cada vez que el grupo estuvo en un estado confirmado, cuánto rindió contra su referencia en las 4, 13 o 26 semanas siguientes.',
+    whyItMatters: 'Muestra si, en el pasado, un estado vino acompañado de una ventaja o una desventaja posterior, y qué tan dispersos fueron los resultados.',
+    howItIsCalculated: 'Rendimiento relativo = (1 + rendimiento del grupo) ÷ (1 + rendimiento de la referencia) − 1, entre la semana en que el grupo estaba en ese estado y el horizonte elegido, en dólares. El estado de cada semana usa sólo los datos hasta esa semana.',
+    howToInterpret: 'Mirá la mediana y el rango típico (de un cuarto a tres cuartos de los casos), no sólo el promedio, y compará con "cualquier semana": una ventaja que también existe en la base no es del estado. Si hay pocos episodios la app no calcula nada.',
+    limitations: 'Describe el pasado de los grupos que existen hoy, sin costos ni impuestos. Con 4 estados, 3 horizontes y 2 vistas es esperable que alguna diferencia aparezca por azar. No es una predicción ni una recomendación.',
+    relatedTerms: ['ciclos_episodio', 'ciclos_base_semanas', 'ciclos_cambio_confirmado'],
+  },
+  ciclos_episodio: {
+    title: 'Episodio',
+    shortDescription: 'Una racha continua del grupo en un mismo estado confirmado, desde que se confirmó hasta que cambió a otro.',
+    whyItMatters: 'Las semanas seguidas dentro de una racha se parecen mucho entre sí (comparten casi todo su futuro). Lo que da información independiente es la cantidad de episodios, no la de semanas.',
+    howToInterpret: 'Con menos de 5 episodios la app muestra sólo el conteo y no calcula medianas ni porcentajes.',
+  },
+  ciclos_base_semanas: {
+    title: 'Cualquier semana (base)',
+    shortDescription: 'El rendimiento relativo posterior de todas las semanas, sin mirar en qué estado estaba el grupo.',
+    whyItMatters: 'Es el punto de comparación: si un grupo le ganaba a su referencia el 60 % de las semanas, un estado que "acierta" el 60 % no aporta nada.',
+    howToInterpret: 'La diferencia de cada estado contra esta base es lo que importa, y sólo si hay suficientes episodios.',
   },
   ciclos_proxy: {
     title: 'Proxy',

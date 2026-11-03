@@ -14,11 +14,11 @@ from sqlalchemy.orm import Session
 from ..database import MovimientoInversion, SessionLocal, get_db
 from ..schemas import (
     CiclosCarteraOut, CiclosCatalogoOut, CiclosComparacionOut, CiclosCorrelacionesOut, CiclosDesfasesOut,
-    CiclosDetalleOut, CiclosEstadoOut, CiclosInstrumentosOut, CiclosPaisOut, CiclosPanoramaOut, CiclosSenalesOut,
-    CiclosSimulacionOut, CiclosSimularIn,
+    CiclosDetalleOut, CiclosEfectividadOut, CiclosEstadoOut, CiclosInstrumentosOut, CiclosPaisOut, CiclosPanoramaOut,
+    CiclosSenalesOut, CiclosSimulacionOut, CiclosSimularIn,
 )
 from ..services import (
-    ciclos_analytics, ciclos_avisos, ciclos_cartera, ciclos_catalogo, ciclos_engine, ciclos_historial, ciclos_ingesta,
+    ciclos_analytics, ciclos_avisos, ciclos_cartera, ciclos_catalogo, ciclos_efectividad, ciclos_engine, ciclos_historial, ciclos_ingesta,
     ciclos_senales_engine,
 )
 
@@ -131,6 +131,16 @@ def get_detalle(
 ):
     return _llamar(ciclos_analytics.detalle, db, grupo_id, benchmark=benchmark, moneda=moneda, horizonte=horizonte,
                    desde=desde, hasta=hasta, periodo_id=periodo_id, con=_ids(con) or (), ventana=ventana)
+
+
+@router.get("/ciclos/grupos/{grupo_id}/efectividad", response_model=CiclosEfectividadOut)
+def get_efectividad(
+    grupo_id: str, alcance: str = Query("grupo", max_length=10), benchmark: Optional[str] = Query(None, max_length=60),
+    db: Session = Depends(get_db),
+):
+    """Qué pasó con el rendimiento relativo después de cada estado del ciclo, de este grupo o de todos los de su tipo.
+    Describe el pasado con las series completas; no es una predicción ni una recomendación."""
+    return _llamar(ciclos_efectividad.efectividad, db, grupo_id, alcance=alcance, benchmark=benchmark)
 
 
 @router.get("/ciclos/grupos/{grupo_id}/senales", response_model=CiclosSenalesOut)

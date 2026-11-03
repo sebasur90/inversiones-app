@@ -4337,6 +4337,21 @@ class CiclosPaisOut(CiclosBaseOut):
     meta: CiclosMetaOut
 
 
+class CiclosEfectividadOut(CiclosBaseOut):
+    estado: str
+    motivo: Optional[str] = None
+    alcance: str
+    grupo: dict[str, Any]
+    benchmark: Optional[dict[str, Any]] = None
+    grupos: list[dict[str, Any]] = Field(default_factory=list)
+    resultado: Optional[dict[str, Any]] = None
+    lectura: str
+    version: str
+    confirmacion_semanas: int
+    min_episodios: int
+    meta: CiclosMetaOut
+
+
 class CiclosSenalesOut(CiclosBaseOut):
     grupo_id: str
     benchmark_id: Optional[str] = None

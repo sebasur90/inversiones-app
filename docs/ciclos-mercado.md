@@ -13,7 +13,7 @@ recomendaciones de compra o venta**, no combina las dimensiones en un puntaje ú
 | **Regiones** | Regiones y países, comparaciones habituales (EE.UU. vs. Europa, China vs. India...) y ficha de país |
 | **Relaciones** | Matriz de correlaciones, comparación histórica sobre un mismo período, adelantos y rezagos |
 | **Mi cartera** | Capital por estado del ciclo, instrumentos de un grupo, simulador de rotación |
-| **Ficha** (`/ciclos/grupo/:id`) | Base 100 contra la referencia, métricas por separado, historial de rotación, período histórico a elegir, tus posiciones en el grupo |
+| **Ficha** (`/ciclos/grupo/:id`) | Base 100 contra la referencia, métricas por separado, historial de rotación, qué pasó después de cada estado, período histórico a elegir, tus posiciones en el grupo |
 
 ## Arquitectura
 
@@ -27,6 +27,7 @@ services/ciclos_analytics.py     adaptador DB: panorama, detalle, relaciones, pa
 services/ciclos_cartera.py       cruce con la cartera y simulador
 services/ciclos_regimen.py       régimen macro (estructura, sin datos)
 services/ciclos_senales_engine.py + ciclos_historial.py   cambios confirmados sobre una foto semanal
+services/ciclos_efectividad.py + ciclos_efectividad_engine.py   qué rindió el grupo contra su referencia después de cada estado
 services/ciclos_avisos.py + ciclos_avisos_engine.py        aviso por Telegram de esos cambios en los grupos con posición
 routers/ciclos.py                API
 ```
@@ -144,6 +145,19 @@ Falta: actividad, indicadores adelantados, inflación global, tasas, liquidez y 
 - **Si Telegram falla**, el cambio queda pendiente y se reintenta en la corrida siguiente (hasta 35 días desde que empezó el estado; después se descarta como viejo). Si en el medio vendiste el grupo entero, no se avisa.
 - Un cambio que cumple dos tipos (perder momentum y fortaleza a la vez) es un solo aviso. Los cambios pendientes (menos de 3 semanas) nunca se avisan.
 
+## Efectividad histórica de cada estado
+`GET /ciclos/grupos/{id}/efectividad?alcance=grupo|tipo&benchmark=` y la sección «Qué pasó después de cada estado» de la ficha. **Describe el pasado; no mide si un estado sirve para anticipar nada.**
+Se recalcula desde las series completas (no depende de `ciclos_estado_historial`, que guarda pocas semanas por corrida).
+
+- **Qué se mide:** para cada semana con estado confirmado, el rendimiento relativo contra la referencia en las `h` semanas siguientes (`h` = 4, 13, 26): `RS[t+h] / RS[t] − 1`, en dólares.
+- **Sin mirar el futuro:** el estado de la semana `t` es el **confirmado con los datos hasta `t`** (3 semanas seguidas; una corrida más corta no lo cambia, igual que en la pantalla). Hay un test que lo verifica recortando la serie.
+- **Siempre contra una base:** «cualquier semana» (todas las semanas, sin mirar el estado). La diferencia de cada estado contra esa base es lo único que importa; un estado que «acierta» 60 % no dice nada si el grupo le ganaba a la referencia el 60 % de las semanas.
+- **Episodios, no semanas:** semanas contiguas comparten casi todo su futuro, así que la muestra se declara por **episodios** (rachas continuas en el estado). Con menos de 5 (`MIN_EPISODIOS`) no se calcula ni una mediana: sólo se informa el conteo.
+- **Dos vistas:** «mientras está en el estado» (todas las semanas de ese estado) y «al confirmarse el cambio» (sólo la semana en que se confirma, un dato por episodio: lo que tenías a mano el día del aviso).
+- **Alcance «tipo»:** junta los episodios de todos los grupos activos del mismo tipo (p. ej. los 11 sectores) para tener muestra. Sus episodios **no son independientes** (comparten los ciclos de mercado) y la respuesta lo advierte.
+- **Qué muestra por estado y horizonte:** mediana, media, rango típico (percentiles 25–75), % de casos en que le ganó a la referencia y la diferencia de la mediana contra la base.
+- **Limitaciones:** sólo grupos que existen hoy (sesgo de supervivencia), sin costos, spreads ni impuestos, 4 estados × 3 horizontes × 2 vistas (alguna diferencia puede aparecer por azar). Se usa el último tramo continuo de semanas en común con la referencia.
+
 ## API (`/api/inversiones`)
 
 | | |
@@ -152,6 +166,7 @@ Falta: actividad, indicadores adelantados, inflación global, tasas, liquidez y 
 | `GET /ciclos/panorama?tipo=&benchmark=&moneda=&periodo=&grupos=&ventana=&cola=` | mapa de rotación, calor, cambios, cobertura |
 | `GET /ciclos/grupos/{id}?benchmark=&moneda=&horizonte=&periodo_id=&desde=&hasta=&con=` | ficha de un grupo |
 | `GET /ciclos/grupos/{id}/senales` | cambios confirmados sobre el historial |
+| `GET /ciclos/grupos/{id}/efectividad?alcance=` | qué pasó después de cada estado (grupo o todos los de su tipo) |
 | `GET /ciclos/paises/{id}?meses=&benchmark=&moneda=` | ficha de país o región |
 | `GET /ciclos/relaciones/correlaciones` · `/desfases` · `/comparacion` | relaciones |
 | `GET /carteras/{n}/ciclos/cartera` · `/consolidado/ciclos/cartera` | capital por estado del ciclo |
@@ -192,6 +207,6 @@ docker compose -f docker-compose.yml -f docker-compose.corporate.yml run --rm \
 - El rendimiento pasado no anticipa el futuro; el cuadrante describe las últimas semanas.
 - Sin valuación, sin contexto macro global y sin tasas: son dimensiones distintas que este mapa no mide.
 
-## Pendiente (segunda etapa; las alertas por Telegram ya están)
-Régimen macro con una fuente documentada · efectividad histórica de cada estado sobre `ciclos_estado_historial` · tasas de interés para el par «tasas → crédito» ·
+## Pendiente (segunda etapa; las alertas por Telegram y la efectividad histórica ya están)
+Régimen macro con una fuente documentada · tasas de interés para el par «tasas → crédito» ·
 holdings de ETFs para una clasificación temática de fuente externa.
