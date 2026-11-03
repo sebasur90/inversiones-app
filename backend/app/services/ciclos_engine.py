@@ -413,7 +413,7 @@ def base_100(series: dict[str, Serie], desde: date | None = None, hasta: date | 
         return {"fecha_base": None, "filas": []}
     mapas = {k: dict(v) for k, v in norm.items()}
     base_ = {k: mapas[k][fechas[0]] for k in mapas}
-    filas = [{"fecha": f, **{k: 100.0 * mapas[k][f] / base_[k] for k in mapas}} for f in fechas]
+    filas = [{"fecha": f, **{k: 100.0 * (mapas[k][f] / base_[k]) for k in mapas}} for f in fechas]   # (v/base) = 1 exacto en la base
     return {"fecha_base": fechas[0], "filas": filas}
 
 
@@ -580,11 +580,11 @@ def descomponer_pais(
 
     out["proxy_usd"] = _pieza("proxy_usd", proxy)
     out["indice_local"] = _pieza("indice_local", indice_local) if indice_local else None
-    if indice_local is None:
-        out["motivos"]["indice_local"] = "no hay índice local de referencia"
+    if not indice_local:
+        out["motivos"]["indice_local"] = "no hay índice local de referencia" if indice_local is None else "el índice local no tiene datos"
     r_fx = _pieza("efecto_fx", fx) if fx else None
-    if fx is None:
-        out["motivos"]["efecto_fx"] = "no hay tipo de cambio de referencia"
+    if not fx:
+        out["motivos"]["efecto_fx"] = "no hay tipo de cambio de referencia" if fx is None else "el tipo de cambio no tiene datos"
     if r_fx is not None and cotizacion:
         out["efecto_fx"] = efecto_cambiario(r_fx, cotizacion)
     if out["indice_local"] is not None and out["efecto_fx"] is not None:

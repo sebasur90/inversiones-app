@@ -11,6 +11,8 @@
     "`cartera` = {sector, industria, pais, region, tickers} para pertenencias que PUEDEN SUPERPONERSE (no se suman entre sí).",
     "Los tickers son del emisor (AAPL cubre AAPLD y AAPLC). `lista_curada: true` marca una lista armada a mano.",
     "Países: `indice_local` {simbolo, moneda} y `fx` {simbolo, cotizacion: local_por_usd|usd_por_local|mep}.",
+    "`pares_desfase`: pares (a, b) para investigar si a se adelanta a b; son hipótesis estadísticas, no predicciones.",
+    "`comparaciones`: pares de grupos que la pantalla de Regiones y Relaciones ofrece ya armados.",
     "Sintético (sin proxy): `sintetico` {miembros: [ids], metodo: equiponderado_semanal}; ver docs/ciclos-mercado.md."
   ],
   "defecto_por_tipo": {
@@ -22,6 +24,27 @@
     "pais":      {"benchmark": "global", "exclusivo": true},
     "activo":    {"benchmark": "global", "exclusivo": false}
   },
+  "comparaciones": [
+    {"id": "eeuu-europa", "nombre": "EE.UU. vs. Europa", "grupos": ["estados-unidos", "europa"]},
+    {"id": "eeuu-china", "nombre": "EE.UU. vs. China", "grupos": ["estados-unidos", "china"]},
+    {"id": "eeuu-india", "nombre": "EE.UU. vs. India", "grupos": ["estados-unidos", "india"]},
+    {"id": "brasil-mexico", "nombre": "Brasil vs. México", "grupos": ["brasil", "mexico"]},
+    {"id": "emergentes-desarrollados", "nombre": "Emergentes vs. desarrollados", "grupos": ["emergentes", "desarrollados-ex-eeuu"]},
+    {"id": "china-india", "nombre": "China vs. India", "grupos": ["china", "india"]},
+    {"id": "commodities-tecnologia", "nombre": "Commodities vs. tecnología", "grupos": ["commodities-amplios", "tecnologia"]},
+    {"id": "bitcoin-nasdaq", "nombre": "Bitcoin vs. Nasdaq 100", "grupos": ["bitcoin", "nasdaq-100"]},
+    {"id": "oro-acciones", "nombre": "Oro vs. acciones globales", "grupos": ["oro", "global"]},
+    {"id": "emergentes-commodities", "nombre": "Emergentes vs. commodities", "grupos": ["emergentes", "commodities-amplios"]}
+  ],
+  "pares_desfase": [
+    {"id": "commodities-emergentes", "nombre": "Commodities → mercados emergentes", "grupos": ["commodities-amplios", "emergentes"]},
+    {"id": "dolar-commodities", "nombre": "Dólar → commodities", "grupos": ["dolar", "commodities-amplios"]},
+    {"id": "dolar-emergentes", "nombre": "Dólar → mercados emergentes", "grupos": ["dolar", "emergentes"]},
+    {"id": "oro-acciones", "nombre": "Oro → acciones globales", "grupos": ["oro", "global"]},
+    {"id": "bitcoin-tecnologia", "nombre": "Bitcoin → tecnología", "grupos": ["bitcoin", "tecnologia"]},
+    {"id": "bonos-financieras", "nombre": "Bonos largos → financieras", "grupos": ["bonos-tesoro-largo", "financiero"],
+     "nota": "Sustituto: la app no tiene series de tasas de interés; el precio de un bono largo es su reflejo inverso."}
+  ],
   "grupos": [
     {"id": "estados-unidos", "nombre": "Estados Unidos (S&P 500)", "tipo": "region", "vistas": ["region", "pais"], "proxy": "SPY", "es_benchmark": true, "benchmark": null,
      "descripcion": "Acciones grandes de EE.UU. (ETF SPY).", "region": "EEUU",
@@ -134,7 +157,7 @@
      "eje_cartera": [{"eje": "region", "valores": ["Desarrollados ex-EEUU"]}]},
 
     {"id": "bitcoin", "nombre": "Bitcoin", "tipo": "activo", "proxy": "BTC-USD", "tipo_rendimiento": "precio", "descripcion": "Precio spot de Bitcoin en dólares.",
-     "cartera": {"tickers": ["BTC", "IBIT", "FBTC", "GBTC"], "sector": ["Cripto"]},
+     "cartera": {"tickers": ["BTC", "IBIT", "FBTC", "GBTC", "BITO"]},
      "nota": "Cotiza todos los días; para compararlo con acciones se usan sólo las fechas en que ambos operaron. Es precio spot, sin distribuciones."},
     {"id": "ethereum", "nombre": "Ethereum", "tipo": "activo", "proxy": "ETH-USD", "tipo_rendimiento": "precio", "descripcion": "Precio spot de Ethereum en dólares.",
      "cartera": {"tickers": ["ETH", "ETHA"]}, "nota": "Cotiza todos los días; para compararlo con acciones se usan sólo las fechas en que ambos operaron."},

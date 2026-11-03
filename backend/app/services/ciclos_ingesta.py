@@ -137,9 +137,23 @@ def correr(db: Session, tanda: int = TAMANO_TANDA, pausa_seg: float | None = Non
     if not _lock_ingesta.acquire(blocking=False):
         return {"resultado": "en_curso", "simbolos": 0}
     try:
-        return _correr(db, tanda, PAUSA_ENTRE_TANDAS_SEG if pausa_seg is None else pausa_seg)
+        resultado = _correr(db, tanda, PAUSA_ENTRE_TANDAS_SEG if pausa_seg is None else pausa_seg)
+        if resultado.get("resultado") in ("ok", "rate_limited"):
+            resultado["historial"] = _registrar_historial(db)
+        return resultado
     finally:
         _lock_ingesta.release()
+
+
+def _registrar_historial(db: Session) -> dict:
+    """Foto semanal del estado de rotación con lo recién bajado. Un fallo acá no deshace la descarga."""
+    try:
+        from . import ciclos_historial
+        return ciclos_historial.registrar(db)
+    except Exception as exc:  # pragma: no cover - defensivo: la descarga ya se guardó
+        logger.exception("ciclos: no se pudo registrar el historial semanal: %s", exc)
+        db.rollback()
+        return {"resultado": "error", "error": str(exc)}
 
 
 def _bajar(simbolos: list[str], desde: date, hoy: date, tanda: int, pausa: float) -> tuple[dict[str, Serie], bool]:

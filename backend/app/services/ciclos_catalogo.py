@@ -73,6 +73,8 @@ class Catalogo:
     version: int = 0
     grupos: dict[str, Grupo] = field(default_factory=dict)
     periodos: list[dict] = field(default_factory=list)
+    comparaciones: list[dict] = field(default_factory=list)
+    pares_desfase: list[dict] = field(default_factory=list)
     errores: list[str] = field(default_factory=list)
 
     def activos(self) -> list[Grupo]:
@@ -310,7 +312,25 @@ def construir(datos_grupos: dict, datos_periodos: dict | None = None) -> Catalog
         armados[g.id] = g
     cat.grupos = _validar_relaciones(armados, cat.errores)
     cat.periodos = _periodos(datos_periodos or {}, cat.errores)
+    cat.comparaciones = _comparaciones(datos_grupos.get("comparaciones") or [], cat.grupos, cat.errores)
+    cat.pares_desfase = _comparaciones(datos_grupos.get("pares_desfase") or [], cat.grupos, cat.errores, exacto=2)
     return cat
+
+
+def _comparaciones(crudas: list, grupos: dict[str, Grupo], errores: list[str], exacto: int | None = None) -> list[dict]:
+    """Pares o conjuntos predefinidos (p. ej. EEUU vs. Europa): sólo los que tienen todos sus grupos activos en el
+    catálogo. `exacto` fija la cantidad de grupos (los pares de desfase son siempre 2)."""
+    out, vistos = [], set()
+    for c in crudas:
+        ids = _lista_texto(c.get("grupos")) if isinstance(c, dict) else ()
+        id_, nombre = (_texto(c.get("id")), _texto(c.get("nombre"))) if isinstance(c, dict) else (None, None)
+        faltan = [i for i in ids if i not in grupos or not grupos[i].activo]
+        if not id_ or not nombre or id_ in vistos or len(ids) < 2 or faltan or (exacto and len(ids) != exacto):
+            errores.append(f"comparación {id_!r}: inválida o con grupos inexistentes {faltan}; se descarta")
+            continue
+        vistos.add(id_)
+        out.append({"id": id_, "nombre": nombre, "grupos": list(ids), "nota": _texto(c.get("nota"))})
+    return out
 
 
 def _periodos(datos: dict, errores: list[str]) -> list[dict]:
