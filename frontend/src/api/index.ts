@@ -1589,6 +1589,728 @@ export const getCostoOportunidad = (
     })
     .then(r => r.data)
 
+// --- Ciclos de mercado ---
+
+export type CicloTipo = 'sector' | 'industria' | 'commodity' | 'region' | 'pais' | 'activo' | 'tema'
+export type Cuadrante = 'leading' | 'weakening' | 'lagging' | 'improving'
+export type CicloPeriodo = '3M' | '6M' | '1A' | '3A'
+export type CicloMoneda = 'USD' | 'ARS'
+
+export interface CicloGrupoCatalogo {
+  id: string
+  nombre: string
+  tipo: CicloTipo
+  vistas: CicloTipo[]
+  padre: string | null
+  descripcion: string
+  proxy: string | null
+  benchmark: string | null
+  moneda: string
+  region: string | null
+  fuente: string
+  tipo_rendimiento: 'total' | 'precio'
+  activo: boolean
+  exclusivo: boolean
+  es_benchmark: boolean
+  lista_curada: boolean
+  nota: string | null
+  pertenencia: Record<string, string[]>
+}
+
+export interface CicloPeriodoCatalogo {
+  id: string
+  nombre: string
+  desde: string
+  hasta: string | null
+  nota: string | null
+}
+
+export interface CicloAtajo {
+  id: string
+  nombre: string
+  grupos: string[]
+  nota?: string | null
+}
+
+export interface CiclosCatalogoOut {
+  version: number
+  grupos: CicloGrupoCatalogo[]
+  periodos: CicloPeriodoCatalogo[]
+  comparaciones: CicloAtajo[]
+  pares_desfase: CicloAtajo[]
+  tasas?: { id: string; nombre: string; simbolo: string; plazo_meses: number; descripcion: string; fuente: string; activo: boolean }[]
+  pendientes_curva?: { id: string; nombre: string; larga: string; corta: string }[]
+  errores: string[]
+}
+
+export interface CiclosMeta {
+  fuente: string
+  ultima_actualizacion: string | null
+  ultima_fecha_datos: string | null
+  periodo: { desde: string | null; hasta: string | null }
+  moneda: string
+  tipo_rendimiento: 'total' | 'precio' | 'mixto' | null
+  benchmark: { id: string; nombre: string; proxy: string | null } | null
+  limitaciones: string[]
+  advertencias: string[]
+}
+
+export interface CicloPuntoRrg {
+  fecha: string
+  rs_ratio: number
+  rs_momentum: number
+  cuadrante: Cuadrante
+}
+
+export interface CicloTramo {
+  cuadrante: Cuadrante
+  desde: string
+  hasta?: string
+  semanas: number
+  anterior?: Cuadrante | null
+  confirmado: boolean
+}
+
+export interface CicloRrg {
+  estado: 'ok' | 'datos_insuficientes' | 'desactualizado' | 'sin_datos' | 'sin_benchmark'
+  motivo: string | null
+  ventana?: number
+  ultima_fecha?: string | null
+  semanas_usadas?: number
+  actual?: CicloPuntoRrg | null
+  trayectoria?: CicloPuntoRrg[]
+  cuadrante_confirmado?: Cuadrante | null
+  pendiente?: CicloTramo | null
+  ultimo_cambio?: CicloTramo | null
+}
+
+export interface CicloRendCelda {
+  absoluto: number | null
+  relativo: number | null
+  motivo: string | null
+  anualizado?: number | null
+  desde?: string
+  hasta?: string
+}
+
+export interface CicloRiesgo {
+  volatilidad: { estado: string; anualizada: number | null; n_obs: number }
+  drawdown: {
+    estado: string
+    maximo: number | null
+    actual: number | null
+    fecha_pico: string | null
+    fecha_valle: string | null
+    recuperacion_semanas: number | null
+    en_recuperacion: boolean | null
+  }
+  semanas: number
+}
+
+export interface CicloTendencia {
+  estado: string
+  periodo_semanas: number
+  distancia: number | null
+  pendiente: number | null
+}
+
+export interface CicloGrupoPanorama {
+  id: string
+  nombre: string
+  tipo: CicloTipo
+  padre: string | null
+  proxy: string | null
+  benchmark: string | null
+  moneda: string
+  region: string | null
+  fuente: string
+  tipo_rendimiento: 'total' | 'precio'
+  exclusivo: boolean
+  lista_curada: boolean
+  nota: string | null
+  descripcion: string
+  ultima_fecha: string | null
+  rrg: CicloRrg
+  rendimientos: Record<string, CicloRendCelda>
+  riesgo: CicloRiesgo | null
+  tendencia: CicloTendencia | null
+}
+
+export interface CicloCambioLiderazgo {
+  grupo_id: string
+  nombre: string
+  desde: string
+  de: Cuadrante | null
+  a: Cuadrante
+  semanas: number
+}
+
+export interface CicloCobertura {
+  total: number
+  con_rotacion: number
+  sin_datos: { id: string; nombre: string; motivo: string | null }[]
+  insuficientes: { id: string; nombre: string; motivo: string | null }[]
+  desactualizados: { id: string; nombre: string; motivo: string | null }[]
+}
+
+export type CicloRegimenEje = 'acelerando' | 'desacelerando' | 'no_concluyente'
+export type CicloVoto = 'acelerando' | 'desacelerando' | 'sin_cambio' | null
+
+export interface CicloSerieMacro {
+  id: string
+  nombre: string
+  eje: string
+  frecuencia: 'diaria' | 'semanal' | 'mensual'
+  unidad: string
+  transformacion: 'variacion_12m' | 'nivel'
+  sentido: 1 | -1
+  descripcion: string
+  nota: string | null
+  clasifica: boolean
+  /** Fecha del período al que se refiere el último dato (no cuándo se publicó). */
+  fecha: string | null
+  valor: number | null
+  fecha_previa: string | null
+  valor_previo: number | null
+  cambio: number | null
+  tendencia: 'sube' | 'baja' | 'sin_cambio' | null
+  voto: CicloVoto
+  estado: 'ok' | 'sin_datos' | 'desactualizada' | 'sin_historia'
+  motivo: string | null
+  descarga?: { estado: string; ultimo_ok: string | null; error: string | null; n_obs: number }
+}
+
+export interface CicloEjeRegimen {
+  nombre: string
+  estado: CicloRegimenEje
+  motivo: string | null
+  acelerando: number
+  desacelerando: number
+  votaron: number
+  total: number
+  minimo_votos: number
+  series: CicloSerieMacro[]
+}
+
+export interface CicloRegimen {
+  estado: 'disponible' | 'no_concluyente' | 'no_disponible'
+  escenario: string | null
+  escenario_id: string | null
+  escenarios: { id: string; nombre: string; crecimiento: string; inflacion: string; actual: boolean }[]
+  ejes: Record<'crecimiento' | 'inflacion', CicloEjeRegimen>
+  contexto: Record<string, CicloSerieMacro[]>
+  aclaracion: string
+  meses_comparacion: number
+  minimo_votos: number
+  dato_mas_reciente: string | null
+  dato_mas_viejo: string | null
+  falta: string[]
+  fuente: string
+  limitaciones: string[]
+  ultima_actualizacion: string | null
+}
+
+export interface CiclosPanoramaOut {
+  filtros: { tipo: CicloTipo; benchmark: string | null; moneda: CicloMoneda; periodo: CicloPeriodo; ventana: number; cola: number; grupos: string[] }
+  opciones: {
+    tipos: CicloTipo[]
+    benchmarks: { id: string; nombre: string; proxy: string | null }[]
+    periodos: CicloPeriodo[]
+    monedas: CicloMoneda[]
+    grupos: { id: string; nombre: string }[]
+  }
+  regimen: CicloRegimen
+  benchmark: { id: string; nombre: string; proxy: string | null; ultima_fecha?: string | null } | null
+  grupos: CicloGrupoPanorama[]
+  horizontes: string[]
+  fechas_horizontes: Record<string, { desde: string; hasta: string }>
+  cambios_liderazgo: CicloCambioLiderazgo[]
+  cobertura: CicloCobertura
+  motivo: string | null
+  meta: CiclosMeta
+}
+
+export interface CicloFilaSerie {
+  fecha: string
+  [grupoId: string]: number | string
+}
+
+export interface CicloAnalizadoGrupo {
+  retorno: number | null
+  relativo?: number | null
+  motivo: string | null
+  volatilidad: CicloRiesgo['volatilidad'] | null
+  drawdown: CicloRiesgo['drawdown'] | null
+  semanas: number
+}
+
+export interface CicloDetalleOut {
+  grupo: CicloGrupoCatalogo & { hijos: { id: string; nombre: string }[] }
+  estado: string
+  motivo: string | null
+  benchmark: { id: string; nombre: string; proxy: string | null; ultima_fecha?: string | null } | null
+  rotacion:
+    | (CicloRrg & {
+        puntos: CicloPuntoRrg[]
+        transiciones: {
+          confirmacion_semanas: number
+          cambios_confirmados: CicloTramo[]
+          transitorios: CicloTramo[]
+          pendiente: CicloTramo | null
+          cuadrante_confirmado: Cuadrante | null
+        } | null
+      })
+    | null
+  rendimientos: Record<string, CicloRendCelda>
+  riesgo: CicloRiesgo | null
+  tendencia: CicloTendencia | null
+  series: { id: string; nombre: string; rol: 'grupo' | 'benchmark' | 'adicional' }[]
+  filas: CicloFilaSerie[]
+  rango: {
+    etiqueta: string
+    desde_pedido: string
+    hasta_pedido: string
+    desde_efectivo: string | null
+    hasta_efectivo: string | null
+    recortado: boolean
+    paso: 'D' | 'S'
+  } | null
+  periodo_analizado: { desde: string; hasta: string; periodo_ajustado: boolean; grupos: Record<string, CicloAnalizadoGrupo> } | null
+  periodos: CicloPeriodoCatalogo[]
+  meta: CiclosMeta
+}
+
+export interface CicloDescomposicion {
+  desde: string
+  hasta: string
+  proxy_usd: number | null
+  indice_local: number | null
+  efecto_fx: number | null
+  indice_local_usd: number | null
+  diferencia_vehiculo: number | null
+  motivos: Record<string, string>
+  completa: boolean
+}
+
+export interface CicloPaisOut {
+  grupo: CicloGrupoCatalogo & { indice_local?: { simbolo: string; moneda: string } | null; fx?: { simbolo: string | null; cotizacion: string } | null }
+  estado: string
+  motivo: string | null
+  benchmark: { id: string; nombre: string } | null
+  resumen: { rotacion: CicloRrg; rendimientos: Record<string, CicloRendCelda>; riesgo: CicloRiesgo; tendencia: CicloTendencia } | null
+  descomposicion: Record<string, CicloDescomposicion> | null
+  moneda_local_vs_usd?: { fecha: string; valor: number }[]
+  macro?: {
+    estado: string
+    motivo: string
+    ultimo?: Record<string, { fecha: string; valor: number } | null>
+    variacion_12m_pct?: Record<string, number | null>
+  }
+  relacion_commodities?: { valor: number | null; n_obs: number; estado: string; lectura: string } | null
+  comparaciones?: CicloAtajo[]
+  meta: CiclosMeta
+}
+
+export interface CicloParCorrelacion {
+  ticker_a: string
+  ticker_b: string
+  valor: number | null
+  n_obs: number
+  solapamiento_pct: number | null
+  estado: 'ok' | 'datos_insuficientes'
+  motivo: string
+}
+
+export interface CiclosCorrelacionesOut {
+  estado: string
+  motivo: string | null
+  periodo?: CicloPeriodo
+  frecuencia?: 'diaria' | 'semanal'
+  nombres: Record<string, string>
+  ids: string[]
+  matriz: (number | null)[][] | null
+  pares: CicloParCorrelacion[]
+  n_periodos?: number
+  periodo_efectivo?: { desde: string | null; hasta: string | null }
+  sin_datos: { id: string; nombre: string; motivo: string | null }[]
+  escala?: { desde: number; texto: string }[]
+  meta: CiclosMeta
+}
+
+export interface CicloDesfase {
+  desfase_semanas: number
+  valor: number | null
+  n_obs: number
+  estado: string
+  supera_azar: boolean
+}
+
+export interface CiclosDesfasesOut {
+  estado: string
+  motivo: string | null
+  a?: string
+  b?: string
+  nombres: Record<string, string>
+  desfases: CicloDesfase[]
+  mejor: CicloDesfase | null
+  banda_azar: number | null
+  lectura?: string
+  nota_par?: string | null
+  meta: CiclosMeta
+}
+
+export interface CicloFilaComparacion {
+  id: string
+  nombre: string
+  retorno: number | null
+  relativo: number | null
+  motivo: string | null
+  volatilidad: CicloRiesgo['volatilidad'] | null
+  drawdown: CicloRiesgo['drawdown'] | null
+  semanas: number
+  rotacion_actual: { estado: string; cuadrante: Cuadrante | null } | null
+}
+
+export interface CiclosComparacionOut {
+  estado: string
+  motivo: string | null
+  etiqueta_periodo?: string
+  periodo?: { desde_pedido: string; hasta_pedido: string; desde: string; hasta: string; ajustado: boolean }
+  grupos: CicloFilaComparacion[]
+  series: { id: string; nombre: string }[]
+  filas: CicloFilaSerie[]
+  paso?: 'D' | 'S'
+  sin_datos: { id: string; nombre: string; motivo: string | null }[]
+  periodos?: CicloPeriodoCatalogo[]
+  meta: CiclosMeta
+}
+
+export interface CiclosEstadoSimbolo {
+  simbolo: string
+  rol: string
+  estado: string
+  n_barras: number
+  primera_fecha: string | null
+  ultima_fecha: string | null
+  desactualizado: boolean
+  error: string | null
+  grupos: string[]
+}
+
+export interface CiclosEstadoOut {
+  simbolos: CiclosEstadoSimbolo[]
+  con_datos: number
+  sin_datos: number
+  desactualizados: number
+}
+
+export interface CicloItemExposicion {
+  etiqueta: string
+  valor_usd: number
+  valor_ars: number
+  porcentaje: number
+  grupo_id: string | null
+  grupo_nombre: string | null
+  rubro: string
+  cuadrante: Cuadrante | null
+  confirmado: Cuadrante | null
+  motivo_sin_estado: string | null
+  residual: boolean
+}
+
+export interface CicloDimensionCartera {
+  dimension: 'Sector' | 'Región' | 'País'
+  items: CicloItemExposicion[]
+  por_cuadrante: { cuadrante: Cuadrante | 'sin_estado'; porcentaje: number }[]
+  por_cuadrante_confirmado: { cuadrante: Cuadrante | 'sin_estado'; porcentaje: number }[]
+  sin_estado_detalle: { motivo: string; porcentaje: number }[]
+}
+
+export interface CicloSuperpuesta {
+  grupo_id: string
+  nombre: string
+  tipo: CicloTipo
+  padre: string | null
+  valor_usd: number
+  porcentaje: number
+  emisores: string[]
+  tickers: string[]
+  rubro: string
+  cuadrante: Cuadrante | null
+  confirmado: Cuadrante | null
+  motivo_sin_estado: string | null
+  lista_curada: boolean
+  nota: string | null
+}
+
+export interface CiclosCarteraOut {
+  version_reglas: number
+  cartera: string | null
+  total_usd: number
+  total_ars: number
+  dimensiones: CicloDimensionCartera[]
+  superpuestas: CicloSuperpuesta[]
+  aviso_superpuestos: string
+  uniones_pct: Record<string, number>
+  sin_clasificar: { ticker: string; emisor: string; valor_usd: number; porcentaje: number; faltan: string[]; sin_ficha: boolean }[]
+  avisos: Record<string, string[]>
+  resumen: {
+    en_leading_pct: number
+    en_weakening_pct: number
+    en_lagging_pct: number
+    en_improving_pct: number
+    sin_estado_pct: number
+    dimension: string
+    lectura: string
+  }
+  advertencias: string[]
+}
+
+export interface CicloInstrumentoGrupo {
+  emisor: string
+  tickers: string[]
+  nombre: string
+  valor_usd: number
+  peso_cartera_pct: number
+  peso_en_grupo_pct: number
+  rendimiento_pct: number | null
+  resultado_usd: number | null
+  rendimiento_no_calculable: string | null
+  clasificacion: { tipo: string | null; sector: string | null; industria: string | null; pais: string | null; region: string | null } | null
+}
+
+export interface CiclosInstrumentosOut {
+  grupo: CicloGrupoCatalogo
+  estado: { estado: string; cuadrante: Cuadrante | null; confirmado: Cuadrante | null } | null
+  exposicion_usd: number
+  exposicion_pct: number
+  instrumentos: CicloInstrumentoGrupo[]
+  resultado_usd: number | null
+  resultado_parcial: boolean
+  regla: Record<string, string[] | string | null>
+  avisos: string[]
+}
+
+export interface CicloEjeSimulacion {
+  eje: string
+  items: {
+    etiqueta: string
+    antes_pct: number
+    despues_pct: number
+    delta_pp: number
+    antes_usd: number
+    despues_usd: number
+    afectada: boolean
+    residual: boolean
+    tickers?: string[]
+  }[]
+  antes: { n_efectivo: number | null; mayor: { etiqueta: string; porcentaje: number } | null }
+  despues: { n_efectivo: number | null; mayor: { etiqueta: string; porcentaje: number } | null }
+}
+
+export interface CiclosSimulacionOut {
+  version_reglas: number
+  cartera: string | null
+  rotacion: {
+    origen: { id: string; nombre: string; exposicion_usd: number; exposicion_pct: number; estado: { cuadrante: Cuadrante | null } | null }
+    destino: { id: string; nombre: string; proxy: string | null; estado: { cuadrante: Cuadrante | null } | null; clasificacion: { sector: string | null; pais: string | null; region: string | null } }
+    pct_cartera: number
+    monto_usd: number
+    pct_del_origen: number
+    posiciones_origen: { ticker: string; antes_usd: number; despues_usd: number }[]
+  }
+  total: { antes_usd: number; despues_usd: number }
+  ejes: CicloEjeSimulacion[]
+  observaciones: { nivel: 'revisar' | 'atencion' | 'info'; texto: string; regla: string; eje: string }[]
+  rebalanceo: { eje: string; desvio_antes_pp: number | null; desvio_despues_pp: number | null; regla: string; items: { etiqueta: string; objetivo_pct: number; antes_pct: number; despues_pct: number }[] }[]
+  supuestos: string[]
+  notas: string[]
+}
+
+const cicloGet = <T>(ruta: string, params?: Record<string, unknown>) =>
+  api.get<T>(`/inversiones/ciclos/${ruta}`, { params }).then(r => r.data)
+
+export const getCiclosCatalogo = () => cicloGet<CiclosCatalogoOut>('catalogo')
+export const getCiclosEstado = () => cicloGet<CiclosEstadoOut>('estado')
+export const refrescarCiclos = () => api.post('/inversiones/ciclos/refrescar').then(r => r.data)
+
+export const getCiclosPanorama = (p: {
+  tipo: CicloTipo
+  periodo: CicloPeriodo
+  moneda: CicloMoneda
+  benchmark?: string | null
+  grupos?: string[] | null
+}) =>
+  cicloGet<CiclosPanoramaOut>('panorama', {
+    tipo: p.tipo,
+    periodo: p.periodo,
+    moneda: p.moneda,
+    benchmark: p.benchmark ?? undefined,
+    grupos: p.grupos && p.grupos.length > 0 ? p.grupos.join(',') : undefined,
+  })
+
+export const getCicloDetalle = (
+  id: string,
+  p: { benchmark?: string | null; moneda: CicloMoneda; horizonte?: string; periodo_id?: string | null; desde?: string; hasta?: string; con?: string[] }
+) =>
+  cicloGet<CicloDetalleOut>(`grupos/${encodeURIComponent(id)}`, {
+    benchmark: p.benchmark ?? undefined,
+    moneda: p.moneda,
+    horizonte: p.horizonte,
+    periodo_id: p.periodo_id ?? undefined,
+    desde: p.desde,
+    hasta: p.hasta,
+    con: p.con && p.con.length > 0 ? p.con.join(',') : undefined,
+  })
+
+export interface CicloCambioPp {
+  /** Diferencia en puntos porcentuales (no un rendimiento). */
+  pp: number | null
+  desde: string
+  hasta: string
+  motivo: string | null
+}
+
+export interface CicloTasa {
+  id: string
+  nombre: string
+  simbolo: string
+  plazo_meses: number
+  descripcion: string
+  estado: 'ok' | 'desactualizado' | 'sin_datos'
+  motivo: string | null
+  /** % anual. */
+  nivel: number | null
+  fecha: string | null
+  cambios: Record<string, CicloCambioPp>
+  minimo: number | null
+  maximo: number | null
+}
+
+export interface CicloPendienteCurva {
+  id: string
+  nombre: string
+  larga: string
+  corta: string
+  estado: 'ok' | 'sin_datos'
+  valor_pp: number | null
+  fecha: string | null
+  invertida: boolean | null
+  semanas_invertida_52: number | null
+  semanas_52: number
+  cambios: Record<string, CicloCambioPp>
+}
+
+export interface CiclosTasasOut {
+  estado: 'ok' | 'sin_datos'
+  motivo: string | null
+  anios: number
+  tasas: CicloTasa[]
+  pendientes: CicloPendienteCurva[]
+  curva: { id: string; nombre: string; plazo_meses: number; nivel: number | null; hace_un_anio: number | null }[]
+  /** Una fila por viernes: `fecha`, el nivel de cada tasa por su id y `pendiente:<id>` para cada pendiente. */
+  filas: ({ fecha: string } & Record<string, number | string | null>)[]
+  lectura: string
+  meta: CiclosMeta
+}
+
+export const getCiclosRegimen = () => cicloGet<CicloRegimen>('regimen')
+
+export const getCiclosTasas = (anios: number) => cicloGet<CiclosTasasOut>('tasas', { anios })
+
+export interface CicloEfectividadStats {
+  n: number
+  episodios: number
+  suficiente: boolean
+  mediana: number | null
+  media: number | null
+  p25: number | null
+  p75: number | null
+  /** 0–100: porcentaje de observaciones en que el grupo le ganó a la referencia. */
+  positivos_pct: number | null
+  mediana_vs_base?: number | null
+}
+
+export interface CicloEfectividadEstado {
+  cuadrante: Cuadrante
+  semanas: number
+  episodios: number
+  cambios_a_este_estado: number
+  /** Claves: semanas de horizonte ("4", "13", "26"). */
+  horizontes: Record<string, CicloEfectividadStats>
+  al_confirmar: Record<string, CicloEfectividadStats>
+}
+
+export interface CicloEfectividadOut {
+  estado: 'ok' | 'datos_insuficientes' | 'sin_datos'
+  motivo: string | null
+  alcance: 'grupo' | 'tipo'
+  grupo: CicloGrupoCatalogo
+  benchmark: CicloGrupoCatalogo | null
+  grupos: { id: string; nombre: string; benchmark?: string; semanas: number; desde: string | null; hasta: string | null; motivo: string | null }[]
+  resultado: {
+    horizontes_semanas: number[]
+    base: Record<string, CicloEfectividadStats>
+    por_estado: CicloEfectividadEstado[]
+    semanas_analizadas: number
+    desde: string | null
+    hasta: string | null
+  } | null
+  lectura: string
+  version: string
+  confirmacion_semanas: number
+  min_episodios: number
+  meta: CiclosMeta
+}
+
+export const getCicloEfectividad = (id: string, p: { alcance: 'grupo' | 'tipo'; benchmark?: string | null }) =>
+  cicloGet<CicloEfectividadOut>(`grupos/${encodeURIComponent(id)}/efectividad`, { alcance: p.alcance, benchmark: p.benchmark ?? undefined })
+
+export const getCicloPais = (id: string, p: { meses: number; moneda: CicloMoneda; benchmark?: string | null }) =>
+  cicloGet<CicloPaisOut>(`paises/${encodeURIComponent(id)}`, { meses: p.meses, moneda: p.moneda, benchmark: p.benchmark ?? undefined })
+
+export const getCiclosCorrelaciones = (p: { ids: string[]; periodo: CicloPeriodo; frecuencia?: 'diaria' | 'semanal' }) =>
+  cicloGet<CiclosCorrelacionesOut>('relaciones/correlaciones', {
+    ids: p.ids.length > 0 ? p.ids.join(',') : undefined,
+    periodo: p.periodo,
+    frecuencia: p.frecuencia,
+  })
+
+export const getCiclosDesfases = (p: { a: string; b: string; meses?: number }) =>
+  cicloGet<CiclosDesfasesOut>('relaciones/desfases', { a: p.a, b: p.b, meses: p.meses })
+
+export const getCiclosComparacion = (p: {
+  ids: string[]
+  moneda: CicloMoneda
+  benchmark?: string | null
+  periodo_id?: string | null
+  desde?: string
+  hasta?: string
+}) =>
+  cicloGet<CiclosComparacionOut>('relaciones/comparacion', {
+    ids: p.ids.join(','),
+    moneda: p.moneda,
+    benchmark: p.benchmark ?? undefined,
+    periodo_id: p.periodo_id ?? undefined,
+    desde: p.desde,
+    hasta: p.hasta,
+  })
+
+export const getCiclosCartera = (cartera: string | null, benchmark?: string | null) =>
+  api
+    .get<CiclosCarteraOut>(`${carteraPath(cartera)}/ciclos/cartera`, { params: { benchmark: benchmark ?? undefined } })
+    .then(r => r.data)
+
+export const getCiclosInstrumentos = (cartera: string | null, grupoId: string, benchmark?: string | null) =>
+  api
+    .get<CiclosInstrumentosOut>(`${carteraPath(cartera)}/ciclos/grupos/${encodeURIComponent(grupoId)}/instrumentos`, {
+      params: { benchmark: benchmark ?? undefined },
+    })
+    .then(r => r.data)
+
+export const simularRotacion = (cartera: string | null, body: { origen: string; destino: string; pct: number; benchmark?: string | null }) =>
+  api.post<CiclosSimulacionOut>(`${carteraPath(cartera)}/ciclos/simular`, body).then(r => r.data)
+
 // --- Contribución, concentración y correlaciones ---
 
 export interface ContribucionItem {
@@ -3084,6 +3806,7 @@ export interface AvisosConfigOut {
   avisar_venta_zona: boolean
   avisar_diagnostico: boolean
   avisar_revision_decision: boolean
+  avisar_ciclos: boolean
   estrategias: AvisoEstrategiaOut[]
 }
 
@@ -3095,6 +3818,7 @@ export interface AvisosConfigIn {
   avisar_venta_zona?: boolean
   avisar_diagnostico?: boolean
   avisar_revision_decision?: boolean
+  avisar_ciclos?: boolean
 }
 
 export interface AvisoEstrategiaIn {

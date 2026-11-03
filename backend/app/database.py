@@ -553,6 +553,12 @@ class AjustesAvisos(Base):
     # Decisiones del Centro de Decisiones cuya fecha de revisión llegó o cuya condición de
     # invalidación de precio se cumplió (`services/diario_decisiones.avisar_revisiones`).
     avisar_revision_decision = Column(Integer, nullable=False, default=1, server_default="1")
+    # Cambios de estado confirmados de Ciclos de mercado en los grupos donde hay posición
+    # (`services/ciclos_avisos`). Arranca prendido: la primera corrida siembra el estado sin mandar nada.
+    avisar_ciclos = Column(Integer, nullable=False, default=1, server_default="1")
+    # Cuándo se hizo la primera evaluación de ciclos: ahí se siembra el estado sin avisar. Es un dato aparte de
+    # `ciclos_avisos_emitidos` porque esa tabla puede seguir vacía (sin ningún cambio todavía) después de sembrar.
+    ciclos_semilla_en = Column(DateTime, nullable=True)
     fecha_actualizacion = Column(DateTime, nullable=False)
 
 
@@ -768,6 +774,108 @@ class VariacionMercado(Base):
     var_1m = Column(Numeric(12, 6), nullable=True)
     var_1a = Column(Numeric(12, 6), nullable=True)
     actualizado = Column(DateTime, nullable=False)
+
+
+class CiclosProxyEstado(Base):
+    """Qué cobertura real tiene cada símbolo de Yahoo que usa «Ciclos de mercado».
+
+    Una fila por símbolo. Es lo que permite que un grupo cuyo proxy no se pudo bajar quede como «sin
+    datos (motivo)» en vez de calcularse con lo que haya: `estado` es `ok`, `no_encontrado`, `error` o
+    `sin_intentar`. Las barras en sí viven en `serie_ohlcv` (clave `SIMBOLO@BENCH`); esto no las duplica.
+
+    `historia_completa` indica que ya se bajó todo desde el inicio pedido (la serie empieza cuando
+    empieza en Yahoo): a partir de ahí la ingesta es incremental. `reajustes` cuenta las veces que
+    Yahoo reajustó la historia (dividendo o split) y hubo que volver a bajarla entera.
+    """
+    __tablename__ = "ciclos_proxy_estado"
+    simbolo = Column(String, primary_key=True)
+    estado = Column(String, nullable=False, default="sin_intentar", server_default="sin_intentar")
+    primera_fecha = Column(Date, nullable=True)
+    ultima_fecha = Column(Date, nullable=True)
+    n_barras = Column(Integer, nullable=False, default=0, server_default="0")
+    historia_completa = Column(Integer, nullable=False, default=0, server_default="0")
+    reajustes = Column(Integer, nullable=False, default=0, server_default="0")
+    ultimo_intento = Column(DateTime, nullable=True)
+    ultimo_ok = Column(DateTime, nullable=True)
+    error = Column(String, nullable=True)
+
+
+class CiclosEstadoHistorial(Base):
+    """Foto semanal del estado de rotación de un grupo contra un benchmark (cuadrante, RS-Ratio y
+    RS-Momentum), con la versión del algoritmo que la calculó.
+
+    **No es fuente de verdad**: todo se puede recalcular desde las series. Sirve para estudiar más
+    adelante qué tan bien anticipó cada estado y para detectar cambios confirmados en una segunda
+    etapa. Sólo se guardan semanas cerradas y con grupo y benchmark completos.
+    """
+    __tablename__ = "ciclos_estado_historial"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    grupo_id = Column(String, nullable=False)
+    benchmark_id = Column(String, nullable=False)
+    semana = Column(Date, nullable=False)
+    cuadrante = Column(String, nullable=False)
+    rs_ratio = Column(Numeric(14, 6), nullable=False)
+    rs_momentum = Column(Numeric(14, 6), nullable=False)
+    version_algoritmo = Column(String, nullable=False)
+    ultima_fecha_datos = Column(Date, nullable=False)
+    calculado_en = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("grupo_id", "benchmark_id", "semana", "version_algoritmo", name="uq_ciclos_estado"),
+        Index("ix_ciclos_estado_grupo", "grupo_id", "benchmark_id", "semana"),
+    )
+
+
+class CiclosMacroObs(Base):
+    """Una observación de una serie macroeconómica (FRED) del régimen de «Ciclos de mercado».
+
+    `fecha` es el período al que se refiere el dato (el 1 de septiembre para el IPC de septiembre), **no** cuándo se
+    publicó. Los datos macro se revisan: cada descarga reemplaza la serie entera con la versión vigente."""
+    __tablename__ = "ciclos_macro_obs"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    serie_id = Column(String, nullable=False)
+    fecha = Column(Date, nullable=False)
+    valor = Column(Numeric(20, 6), nullable=False)
+
+    __table_args__ = (UniqueConstraint("serie_id", "fecha", name="uq_ciclos_macro_obs"), Index("ix_ciclos_macro_obs_serie", "serie_id", "fecha"))
+
+
+class CiclosMacroEstado(Base):
+    """Cobertura de cada serie macro: cuándo se intentó y se logró bajarla, cuántas observaciones y el último error."""
+    __tablename__ = "ciclos_macro_estado"
+    serie_id = Column(String, primary_key=True)
+    estado = Column(String, nullable=False, default="sin_intentar")      # ok | error | sin_intentar
+    ultimo_intento = Column(DateTime, nullable=True)
+    ultimo_ok = Column(DateTime, nullable=True)
+    n_obs = Column(Integer, nullable=False, default=0)
+    primera_fecha = Column(Date, nullable=True)
+    ultima_fecha = Column(Date, nullable=True)
+    error = Column(String, nullable=True)
+
+
+class CiclosAvisoEmitido(Base):
+    """Cambios de estado de Ciclos de mercado que ya se trataron (avisados, sembrados o silenciados).
+
+    La clave es el cambio mismo, `(grupo, benchmark, tipo, semana en que empezó el estado nuevo)`: un cambio
+    confirmado se detecta en cada corrida mientras dure el tramo, y esta tabla es lo que evita avisarlo dos veces.
+    `entregado = 0` es un aviso decidido cuyo envío falló (se reintenta); `emitido_en` queda vacío en lo que se
+    registró sin mandar (primera corrida, cambio viejo, grupo sin posición o aviso apagado).
+    """
+    __tablename__ = "ciclos_avisos_emitidos"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    grupo_id = Column(String, nullable=False)
+    benchmark_id = Column(String, nullable=False)
+    tipo = Column(String, nullable=False)
+    desde = Column(Date, nullable=False)
+    de = Column(String, nullable=False)
+    a = Column(String, nullable=False)
+    semanas = Column(Integer, nullable=False, default=0, server_default="0")   # sostenido al registrarlo
+    motivo = Column(String, nullable=False)        # nuevo | sembrado | viejo | sin_posicion | silenciado
+    entregado = Column(Integer, nullable=False, default=1, server_default="1")
+    emitido_en = Column(DateTime, nullable=True)
+    registrado_en = Column(DateTime, nullable=False)
+
+    __table_args__ = (UniqueConstraint("grupo_id", "benchmark_id", "tipo", "desde", name="uq_ciclos_aviso"),)
 
 
 class LogoEmpresa(Base):
@@ -1428,6 +1536,14 @@ def init_db():
             conn.execute(text(
                 "ALTER TABLE ajustes_avisos ADD COLUMN avisar_revision_decision INTEGER NOT NULL DEFAULT 1"
             ))
+            conn.commit()
+        if 'avisar_ciclos' not in cols:
+            conn.execute(text(
+                "ALTER TABLE ajustes_avisos ADD COLUMN avisar_ciclos INTEGER NOT NULL DEFAULT 1"
+            ))
+            conn.commit()
+        if 'ciclos_semilla_en' not in cols:
+            conn.execute(text("ALTER TABLE ajustes_avisos ADD COLUMN ciclos_semilla_en DATETIME"))
             conn.commit()
 
     # El nombre identifica a una estrategia (ver `estrategias_analytics.normalizar_nombre`): las

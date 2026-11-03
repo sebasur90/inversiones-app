@@ -34,6 +34,18 @@ def get_json(url: str, timeout: float = DEFAULT_TIMEOUT):
         return None
 
 
+def get_text(url: str, *, params: dict | None = None, timeout: float = DEFAULT_TIMEOUT) -> tuple[int | None, str | None]:
+    """GET de un recurso de texto (un CSV público). Devuelve `(status, texto)`; `(None, None)` si ni siquiera hubo
+    respuesta (timeout, proxy caído, DNS). Sigue redirecciones. Nunca lanza y nunca loguea `params`."""
+    try:
+        with httpx.Client(trust_env=True, timeout=timeout, headers={"User-Agent": USER_AGENT}, follow_redirects=True) as client:
+            resp = client.get(url, params=params)
+            return resp.status_code, resp.text
+    except Exception as exc:
+        logger.warning("market_data: fallo GET %s: %s", url, exc)
+        return None, None
+
+
 def request_json(
     method: str,
     url: str,

@@ -228,3 +228,17 @@ def test_niveles_auto_se_calculan_sobre_el_tramo_visible(client):
     desde = (HOY - timedelta(days=30)).isoformat()
     corto = client.get(f"/api/inversiones/tecnico/OSC/serie?variante=local&niveles_auto=true&desde={desde}").json()
     assert corto["niveles_auto"] == []                           # en 30 días no hay dos toques del mismo nivel
+
+
+def test_cierres_lee_solo_fecha_y_cierre_y_coincide_con_barras(db):
+    for i in range(5):
+        db.add(BarraOHLCV(ticker="SPY@BENCH", fecha=HOY - timedelta(days=10 - i), cierre=100.0 + i, apertura=99.0, maximo=101.0,
+                          minimo=98.0, volumen=1.0, moneda="USD", fuente="yahoo"))
+    db.add(BarraOHLCV(ticker="QQQ@BENCH", fecha=HOY - timedelta(days=9), cierre=1.0, moneda="USD", fuente="yahoo"))
+    db.commit()
+    serie = benchmarks.cierres(db, "SPY")
+    assert serie == [(b.fecha, b.cierre) for b in benchmarks.barras(db, "SPY")]
+    assert [f for f, _ in serie] == sorted(f for f, _ in serie) and len(serie) == 5          # ni la fila de otro símbolo
+    assert all(isinstance(c, float) for _, c in serie)
+    assert benchmarks.cierres(db, "SPY", desde=HOY - timedelta(days=8)) == serie[2:]
+    assert benchmarks.cierres(db, "^MERV") == []

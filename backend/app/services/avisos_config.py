@@ -36,6 +36,9 @@ CAMPO_DIAGNOSTICO = "avisar_diagnostico"
 #: Interruptor de las revisiones de decisiones del Centro de Decisiones (`diario_decisiones.avisar_revisiones`).
 CAMPO_REVISION_DECISION = "avisar_revision_decision"
 
+#: Interruptor de los cambios de estado confirmados de Ciclos de mercado (`ciclos_avisos`).
+CAMPO_CICLOS = "avisar_ciclos"
+
 _FILA = 1
 
 
@@ -62,6 +65,7 @@ def actualizar(
     avisar_venta_zona: bool | None = None,
     avisar_diagnostico: bool | None = None,
     avisar_revision_decision: bool | None = None,
+    avisar_ciclos: bool | None = None,
 ) -> AjustesAvisos:
     """Cambia los interruptores pasados; `None` es "no tocar"."""
     fila = obtener(db)
@@ -72,6 +76,7 @@ def actualizar(
         ("avisar_venta_zona", avisar_venta_zona),
         (CAMPO_DIAGNOSTICO, avisar_diagnostico),
         (CAMPO_REVISION_DECISION, avisar_revision_decision),
+        (CAMPO_CICLOS, avisar_ciclos),
     ):
         if valor is not None:
             setattr(fila, campo, 1 if valor else 0)
@@ -90,6 +95,11 @@ def tipos_habilitados(db: Session) -> set[str]:
 def diagnostico_habilitado(db: Session) -> bool:
     """Si los cambios de diagnóstico se mandan. Apagado igual se siguen (el estado avanza), sólo se silencian."""
     return bool(getattr(obtener(db), CAMPO_DIAGNOSTICO))
+
+
+def ciclos_habilitado(db: Session) -> bool:
+    """Si los cambios de ciclos se mandan. Apagado igual se siguen (se registran), sólo se silencian."""
+    return bool(getattr(obtener(db), CAMPO_CICLOS))
 
 
 def lados_por_estrategia(db: Session) -> dict[int, set[str]]:
@@ -132,6 +142,7 @@ def estado(db: Session) -> dict:
         "avisar_venta_zona": bool(fila.avisar_venta_zona),
         "avisar_diagnostico": bool(fila.avisar_diagnostico),
         "avisar_revision_decision": bool(fila.avisar_revision_decision),
+        "avisar_ciclos": bool(fila.avisar_ciclos),
         "estrategias": [
             {
                 "id": e.id,

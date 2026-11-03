@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "_doc": [
+    "Períodos históricos para estudiar cómo se comportó un grupo. Son sólo fechas con una etiqueta descriptiva:",
+    "no explican causas ni dicen que el período se vaya a repetir. `hasta: null` significa «hasta el último dato».",
+    "Las fechas de máximos y mínimos son cierres del S&P 500; el usuario también puede elegir fechas libres."
+  ],
+  "periodos": [
+    {"id": "crisis-2008", "nombre": "Caída del S&P 500 de 2007–2009", "desde": "2007-10-09", "hasta": "2009-03-09", "nota": "Del máximo al mínimo de cierre del S&P 500."},
+    {"id": "rebote-2009-2013", "nombre": "Rebote 2009–2013", "desde": "2009-03-09", "hasta": "2013-03-28", "nota": "Del mínimo de 2009 hasta que el S&P 500 volvió a su máximo de 2007."},
+    {"id": "expansion-2013-2020", "nombre": "Expansión 2013–2020", "desde": "2013-03-28", "hasta": "2020-02-19", "nota": "Del máximo de 2007 recuperado al máximo previo a la pandemia."},
+    {"id": "caida-2020", "nombre": "Caída de 2020", "desde": "2020-02-19", "hasta": "2020-03-23", "nota": "Del máximo al mínimo de cierre del S&P 500."},
+    {"id": "rebote-2020-2021", "nombre": "Rebote 2020–2022", "desde": "2020-03-23", "hasta": "2022-01-03", "nota": "Del mínimo de 2020 al máximo de comienzos de 2022."},
+    {"id": "inflacion-2021-2022", "nombre": "2021–2022 (inflación elevada)", "desde": "2021-01-01", "hasta": "2022-12-31", "nota": "Período calendario; sólo una referencia de fechas."},
+    {"id": "caida-2022", "nombre": "Caída de 2022", "desde": "2022-01-03", "hasta": "2022-10-12", "nota": "Del máximo al mínimo de cierre del S&P 500."},
+    {"id": "desde-2022", "nombre": "Desde el mínimo de 2022", "desde": "2022-10-12", "hasta": null, "nota": "Hasta el último dato disponible."}
+  ]
+}

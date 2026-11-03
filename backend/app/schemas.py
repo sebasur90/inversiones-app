@@ -140,6 +140,7 @@ class AvisosConfigOut(BaseModel):
     avisar_venta_zona: bool = True
     avisar_diagnostico: bool = True
     avisar_revision_decision: bool = True
+    avisar_ciclos: bool = True
     estrategias: list[AvisoEstrategiaOut] = Field(default_factory=list)
 
 
@@ -151,6 +152,7 @@ class AvisosConfigIn(BaseModel):
     avisar_venta_zona: Optional[bool] = None
     avisar_diagnostico: Optional[bool] = None
     avisar_revision_decision: Optional[bool] = None
+    avisar_ciclos: Optional[bool] = None
 
 
 class AvisoEstrategiaIn(BaseModel):
@@ -4179,3 +4181,263 @@ class EventoTickerUniversoOut(BaseModel):
     ticker: str
     nombre: str
     origen: str
+
+
+# --- Ciclos de mercado ---
+
+class CiclosGrupoOut(BaseModel):
+    id: str
+    nombre: str
+    tipo: str
+    vistas: list[str]
+    padre: Optional[str] = None
+    descripcion: str = ""
+    proxy: Optional[str] = None
+    benchmark: Optional[str] = None
+    moneda: str
+    region: Optional[str] = None
+    fuente: str
+    tipo_rendimiento: str
+    activo: bool
+    exclusivo: bool
+    es_benchmark: bool
+    lista_curada: bool = False
+    nota: Optional[str] = None
+    pertenencia: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class CiclosPeriodoOut(BaseModel):
+    id: str
+    nombre: str
+    desde: date
+    hasta: Optional[date] = None
+    nota: Optional[str] = None
+
+
+class CiclosCatalogoOut(BaseModel):
+    version: int
+    grupos: list[CiclosGrupoOut]
+    periodos: list[CiclosPeriodoOut]
+    comparaciones: list[dict[str, Any]] = Field(default_factory=list)
+    pares_desfase: list[dict[str, Any]] = Field(default_factory=list)
+    tasas: list[dict[str, Any]] = Field(default_factory=list)
+    pendientes_curva: list[dict[str, Any]] = Field(default_factory=list)
+    errores: list[str] = Field(default_factory=list)
+
+
+class CiclosProxyEstadoOut(BaseModel):
+    simbolo: str
+    rol: str
+    moneda: str
+    grupos: list[str]
+    estado: str
+    primera_fecha: Optional[date] = None
+    ultima_fecha: Optional[date] = None
+    n_barras: int
+    reajustes: int
+    ultimo_ok: Optional[datetime] = None
+    error: Optional[str] = None
+    desactualizado: bool
+
+
+class CiclosEstadoOut(BaseModel):
+    simbolos: list[CiclosProxyEstadoOut]
+    con_datos: int
+    sin_datos: int
+    desactualizados: int
+
+
+class CiclosBaseOut(BaseModel):
+    """Las respuestas de Ciclos tienen partes de forma variable (series, matrices, trayectorias): las claves
+    no declaradas se conservan en vez de descartarse."""
+    model_config = {"extra": "allow"}
+
+
+class CiclosMetaOut(CiclosBaseOut):
+    fuente: str
+    ultima_actualizacion: Optional[datetime] = None
+    ultima_fecha_datos: Optional[date] = None
+    periodo: dict[str, Optional[date]] = Field(default_factory=dict)
+    moneda: str
+    tipo_rendimiento: Optional[str] = None
+    benchmark: Optional[dict[str, Any]] = None
+    limitaciones: list[str] = Field(default_factory=list)
+    advertencias: list[str] = Field(default_factory=list)
+
+
+class CiclosPanoramaOut(CiclosBaseOut):
+    filtros: dict[str, Any]
+    opciones: dict[str, Any]
+    regimen: dict[str, Any]
+    benchmark: Optional[dict[str, Any]] = None
+    grupos: list[dict[str, Any]]
+    horizontes: list[str]
+    fechas_horizontes: dict[str, Any]
+    cambios_liderazgo: list[dict[str, Any]]
+    cobertura: dict[str, Any]
+    motivo: Optional[str] = None
+    meta: CiclosMetaOut
+
+
+class CiclosDetalleOut(CiclosBaseOut):
+    grupo: dict[str, Any]
+    estado: str
+    motivo: Optional[str] = None
+    benchmark: Optional[dict[str, Any]] = None
+    rotacion: Optional[dict[str, Any]] = None
+    rendimientos: dict[str, Any] = Field(default_factory=dict)
+    riesgo: Optional[dict[str, Any]] = None
+    tendencia: Optional[dict[str, Any]] = None
+    series: list[dict[str, Any]] = Field(default_factory=list)
+    filas: list[dict[str, Any]] = Field(default_factory=list)
+    rango: Optional[dict[str, Any]] = None
+    periodo_analizado: Optional[dict[str, Any]] = None
+    periodos: list[dict[str, Any]] = Field(default_factory=list)
+    meta: CiclosMetaOut
+
+
+class CiclosCorrelacionesOut(CiclosBaseOut):
+    estado: str
+    motivo: Optional[str] = None
+    periodo: Optional[str] = None
+    frecuencia: Optional[str] = None
+    nombres: dict[str, str] = Field(default_factory=dict)
+    ids: list[str] = Field(default_factory=list)
+    matriz: Optional[list[list[Optional[float]]]] = None
+    pares: list[dict[str, Any]] = Field(default_factory=list)
+    sin_datos: list[dict[str, Any]] = Field(default_factory=list)
+    meta: CiclosMetaOut
+
+
+class CiclosDesfasesOut(CiclosBaseOut):
+    estado: str
+    motivo: Optional[str] = None
+    nombres: dict[str, str] = Field(default_factory=dict)
+    desfases: list[dict[str, Any]] = Field(default_factory=list)
+    mejor: Optional[dict[str, Any]] = None
+    banda_azar: Optional[float] = None
+    meta: CiclosMetaOut
+
+
+class CiclosComparacionOut(CiclosBaseOut):
+    estado: str
+    motivo: Optional[str] = None
+    grupos: list[dict[str, Any]] = Field(default_factory=list)
+    series: list[dict[str, Any]] = Field(default_factory=list)
+    filas: list[dict[str, Any]] = Field(default_factory=list)
+    sin_datos: list[dict[str, Any]] = Field(default_factory=list)
+    meta: CiclosMetaOut
+
+
+class CiclosPaisOut(CiclosBaseOut):
+    grupo: dict[str, Any]
+    estado: str
+    motivo: Optional[str] = None
+    benchmark: Optional[dict[str, Any]] = None
+    resumen: Optional[dict[str, Any]] = None
+    descomposicion: Optional[dict[str, Any]] = None
+    meta: CiclosMetaOut
+
+
+class CiclosRegimenOut(CiclosBaseOut):
+    estado: str
+    escenario: Optional[str] = None
+    escenario_id: Optional[str] = None
+    escenarios: list[dict[str, Any]] = Field(default_factory=list)
+    ejes: dict[str, Any] = Field(default_factory=dict)
+    contexto: dict[str, Any] = Field(default_factory=dict)
+    aclaracion: str
+    meses_comparacion: int
+    minimo_votos: int
+    dato_mas_reciente: Optional[date] = None
+    dato_mas_viejo: Optional[date] = None
+    falta: list[str] = Field(default_factory=list)
+    fuente: str
+    limitaciones: list[str] = Field(default_factory=list)
+    ultima_actualizacion: Optional[datetime] = None
+
+
+class CiclosTasasOut(CiclosBaseOut):
+    estado: str
+    motivo: Optional[str] = None
+    anios: int
+    tasas: list[dict[str, Any]] = Field(default_factory=list)
+    pendientes: list[dict[str, Any]] = Field(default_factory=list)
+    curva: list[dict[str, Any]] = Field(default_factory=list)
+    filas: list[dict[str, Any]] = Field(default_factory=list)
+    lectura: str
+    meta: CiclosMetaOut
+
+
+class CiclosEfectividadOut(CiclosBaseOut):
+    estado: str
+    motivo: Optional[str] = None
+    alcance: str
+    grupo: dict[str, Any]
+    benchmark: Optional[dict[str, Any]] = None
+    grupos: list[dict[str, Any]] = Field(default_factory=list)
+    resultado: Optional[dict[str, Any]] = None
+    lectura: str
+    version: str
+    confirmacion_semanas: int
+    min_episodios: int
+    meta: CiclosMetaOut
+
+
+class CiclosSenalesOut(CiclosBaseOut):
+    grupo_id: str
+    benchmark_id: Optional[str] = None
+    eventos: list[dict[str, Any]] = Field(default_factory=list)
+    estado_confirmado: Optional[str] = None
+    semanas_en_estado: int = 0
+    liderazgo_sostenido: bool = False
+    semanas_usadas: int = 0
+    semanas_descartadas: int = 0
+    confirmacion_semanas: int
+    aviso: str
+
+
+class CiclosCarteraOut(CiclosBaseOut):
+    version_reglas: int
+    cartera: Optional[str] = None
+    total_usd: float
+    total_ars: float
+    dimensiones: list[dict[str, Any]]
+    superpuestas: list[dict[str, Any]]
+    aviso_superpuestos: str
+    uniones_pct: dict[str, float]
+    sin_clasificar: list[dict[str, Any]]
+    avisos: dict[str, list[str]] = Field(default_factory=dict)
+    resumen: dict[str, Any]
+    advertencias: list[str] = Field(default_factory=list)
+
+
+class CiclosInstrumentosOut(CiclosBaseOut):
+    grupo: dict[str, Any]
+    estado: Optional[dict[str, Any]] = None
+    cartera: Optional[str] = None
+    exposicion_usd: float
+    exposicion_pct: float
+    instrumentos: list[dict[str, Any]]
+    resultado_usd: Optional[float] = None
+    resultado_parcial: bool = False
+
+
+class CiclosSimularIn(BaseModel):
+    origen: str = Field(min_length=1, max_length=60)
+    destino: str = Field(min_length=1, max_length=60)
+    pct: float
+    benchmark: Optional[str] = Field(default=None, max_length=60)
+
+
+class CiclosSimulacionOut(CiclosBaseOut):
+    version_reglas: int
+    cartera: Optional[str] = None
+    rotacion: dict[str, Any]
+    total: dict[str, float]
+    ejes: list[dict[str, Any]]
+    observaciones: list[ImpactoObservacionOut] = Field(default_factory=list)
+    rebalanceo: list[dict[str, Any]] = Field(default_factory=list)
+    supuestos: list[str] = Field(default_factory=list)
+    notas: list[str] = Field(default_factory=list)
+    avisos: dict[str, list[str]] = Field(default_factory=dict)

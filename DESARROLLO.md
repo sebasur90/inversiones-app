@@ -813,6 +813,22 @@ EVENTOS_MINUTO=15
 
 Disparo manual: `POST /api/inversiones/eventos/sincronizar` (o el botón "Actualizar" de la pantalla).
 
+## Ciclos de mercado
+
+Pantalla `/ciclos`: rotación relativa de sectores, regiones, commodities, activos y temas contra una referencia, relaciones entre ellos y cruce
+con la cartera. Documentación completa (fórmulas, cobertura real de datos, catálogo, API, límites) en [`docs/ciclos-mercado.md`](docs/ciclos-mercado.md).
+
+```
+CICLOS_HORAS=19        # lun-vie, después del cierre de EE.UU.; vacío lo desactiva (requiere SCHEDULER_ENABLED)
+CICLOS_MINUTO=0
+```
+
+- Qué se mide lo dice `catalogos/ciclos_grupos.json` (grupos, proxies de Yahoo, referencias, reglas de pertenencia de la cartera); se edita sin tocar código.
+- Las series (cierres ajustados) se guardan en `serie_ohlcv` bajo `SIMBOLO@BENCH`. La primera descarga baja ~66 símbolos desde 2005 (~100 s); después es incremental y, si Yahoo reajusta la historia por un dividendo o split, se vuelve a bajar el símbolo entero.
+- Tablas nuevas (`create_all`, sin migración): `ciclos_proxy_estado` (cobertura por símbolo) y `ciclos_estado_historial` (foto semanal del estado, para una segunda etapa de alertas).
+- Disparo a mano y control: `POST /api/inversiones/ciclos/refrescar`, `GET /api/inversiones/ciclos/estado`, `python -m scripts.verificar_ciclos`.
+- Variables de entorno nuevas: pasarlas una por una en `docker-compose.yml` (ya están `CICLOS_HORAS` y `CICLOS_MINUTO`).
+
 ## Logs
 
 `LOG_LEVEL` (default `INFO`) fija el nivel del root logger. **Antes no había configuración de

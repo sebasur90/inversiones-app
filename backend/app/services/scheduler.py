@@ -59,6 +59,8 @@ MINUTO_FUNDAMENTALES_DEFAULT = 30
 # estándar), así que el 1D que se ve a la noche es el de la rueda recién terminada.
 HORAS_MAPA_MERCADO_DEFAULT = "18"
 MINUTO_MAPA_MERCADO_DEFAULT = 30
+HORAS_CICLOS_DEFAULT = "19"
+MINUTO_CICLOS_DEFAULT = 0
 # Calendario de eventos: noticias (Marketaux, GDELT), balances (Yahoo) y archivos de calendarios. Todos
 # los días: los acontecimientos no esperan a la rueda.
 HORAS_EVENTOS_DEFAULT = "9,21"
@@ -173,6 +175,11 @@ def _horas_refresco() -> str:
 def _horas_fundamentales() -> str:
     """Las horas de la ingesta de fundamentales (`FUNDAMENTALES_HORAS`). Vacío la desactiva."""
     return _horas_env("FUNDAMENTALES_HORAS", HORAS_FUNDAMENTALES_DEFAULT)
+
+
+def _horas_ciclos() -> str:
+    """Las horas de la descarga de series de Ciclos de mercado (`CICLOS_HORAS`). Vacío la desactiva."""
+    return _horas_env("CICLOS_HORAS", HORAS_CICLOS_DEFAULT)
 
 
 def _horas_mapa_mercado() -> str:
@@ -299,6 +306,54 @@ def correr_mapa_mercado() -> None:
         db.close()
 
 
+def correr_ciclos() -> None:
+    """Job de Ciclos de mercado: baja las series de los proxies del catálogo desde Yahoo. Nunca lanza.
+
+    Como el mapa de mercado, hace la red sin `sync_lock` y lo pide sólo para escribir.
+    """
+    from ..database import SessionLocal
+    from . import ciclos_ingesta
+
+    db = SessionLocal()
+    try:
+        resumen = ciclos_ingesta.correr(db)
+        logger.info("scheduler: ciclos de mercado %s", resumen)
+    except Exception as exc:
+        logger.exception("scheduler: la descarga de ciclos de mercado falló: %s", exc)
+        db.rollback()
+    finally:
+        db.close()
+    _bajar_macro()
+    _avisar_ciclos()
+
+
+def _bajar_macro() -> None:
+    """Series macro del régimen (FRED). Sesión propia; nunca lanza. Cambian poco: sólo baja las que tienen más de un día."""
+    from ..database import SessionLocal
+    from . import ciclos_macro_ingesta
+
+    db = SessionLocal()
+    try:
+        logger.info("scheduler: macro de ciclos %s", ciclos_macro_ingesta.correr_seguro(db))
+    finally:
+        db.close()
+
+
+def _avisar_ciclos() -> None:
+    """Cambios de estado confirmados de Ciclos de mercado en los grupos con posición. Sesión propia; nunca lanza.
+
+    Va **después** de cerrar la sesión de la descarga: avisa con lo que haya en la base aunque la descarga haya fallado.
+    """
+    from ..database import SessionLocal
+    from . import ciclos_avisos
+
+    db = SessionLocal()
+    try:
+        logger.info("scheduler: avisos de ciclos %s", ciclos_avisos.correr(db))
+    finally:
+        db.close()
+
+
 def _bajar_logos() -> None:
     """Logos de los emisores que la ingesta acaba de enterarse de que tienen sitio web. Nunca lanza.
 
@@ -362,6 +417,8 @@ def iniciar() -> None:
     minuto_fundamentales = _entero_env("FUNDAMENTALES_MINUTO", MINUTO_FUNDAMENTALES_DEFAULT, 0, 59)
     horas_mapa = _horas_mapa_mercado()
     minuto_mapa = _entero_env("MAPA_MERCADO_MINUTO", MINUTO_MAPA_MERCADO_DEFAULT, 0, 59)
+    horas_ciclos = _horas_ciclos()
+    minuto_ciclos = _entero_env("CICLOS_MINUTO", MINUTO_CICLOS_DEFAULT, 0, 59)
     horas_eventos = _horas_eventos()
     minuto_eventos = _entero_env("EVENTOS_MINUTO", MINUTO_EVENTOS_DEFAULT, 0, 59)
 
@@ -411,6 +468,15 @@ def iniciar() -> None:
                 coalesce=True,
                 max_instances=1,
             )
+        if horas_ciclos:
+            scheduler.add_job(
+                correr_ciclos,
+                CronTrigger(day_of_week="mon-fri", hour=horas_ciclos, minute=minuto_ciclos, timezone=zona),
+                id="ciclos",
+                misfire_grace_time=3600,
+                coalesce=True,
+                max_instances=1,
+            )
         if horas_eventos:
             scheduler.add_job(
                 correr_eventos,
@@ -445,6 +511,10 @@ def iniciar() -> None:
         logger.info("scheduler: mapa de mercado lun-vie a las %s (minuto %02d)", horas_mapa, minuto_mapa)
     else:
         logger.info("scheduler: mapa de mercado desactivado (MAPA_MERCADO_HORAS vacío)")
+    if horas_ciclos:
+        logger.info("scheduler: ciclos de mercado lun-vie a las %s (minuto %02d)", horas_ciclos, minuto_ciclos)
+    else:
+        logger.info("scheduler: ciclos de mercado desactivado (CICLOS_HORAS vacío)")
     if horas_eventos:
         logger.info("scheduler: calendario de eventos todos los días a las %s (minuto %02d)", horas_eventos, minuto_eventos)
     else:

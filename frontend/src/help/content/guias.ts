@@ -439,6 +439,37 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
     comoLeerla: ['Elegí el período y los benchmarks/tickers a comparar; la tabla y el gráfico muestran el rendimiento de cada uno en ese lapso.'],
   },
 
+  '/ciclos': {
+    queEs: 'Un mapa de qué sectores, regiones, commodities y activos le vienen ganando o perdiendo fuerza a su referencia, y cuánto de tu cartera está en cada situación.',
+    comoLeerla: [
+      'En el mapa de rotación, cada punto es un grupo. A la derecha de la línea central rinde mejor que su referencia; arriba, esa ventaja viene creciendo. La cola muestra de dónde viene.',
+      'Los cuatro cuadrantes (Leading, Weakening, Lagging, Improving) describen lo que pasó en las últimas semanas, no lo que va a pasar.',
+      'Un cambio de cuadrante recién es "confirmado" si se sostiene 3 semanas seguidas; antes de eso puede ser un movimiento de una sola semana.',
+      'El mapa de calor muestra el rendimiento por horizonte. "—" significa que no hay historia suficiente: nunca se completa con estimaciones.',
+      'En "Mi cartera" ves qué porcentaje de tu capital está en grupos en cada cuadrante. Sector, región y país suman 100 %; industrias, commodities y temas se superponen y se muestran aparte.',
+    ],
+    queHacer: [
+      'Tocá un punto del mapa para ver su detalle, o "Ver ficha completa" para su historia, su rendimiento contra la referencia y tus posiciones en ese grupo.',
+      'Cambiá la referencia arriba: un grupo puede verse fuerte contra una y débil contra otra.',
+      'Probá el simulador de rotación en "Mi cartera" para ver cómo quedaría tu mezcla, sin guardar nada.',
+    ],
+    ojo: 'Es información sobre lo que ya ocurrió, no una recomendación: estar en Leading no significa que convenga comprar, ni estar en Lagging que convenga vender. La valuación, el contexto macro y tus objetivos son otras dimensiones que este mapa no mide.',
+    terminos: ['ciclos_rotacion', 'ciclos_cambio_confirmado', 'ciclos_proxy', 'ciclos_no_suman', 'ciclos_correlacion'],
+  },
+
+  '/ciclos/grupo': {
+    queEs: 'La ficha de un grupo: cómo rindió frente a su referencia, qué tan fuerte es hoy y cómo fue cambiando su posición en el tiempo.',
+    comoLeerla: [
+      'El gráfico base 100 arranca todas las series en 100 en la primera fecha en la que todas tienen datos, así se comparan sin importar el precio.',
+      'Fortaleza relativa, momentum, volatilidad, máxima caída y tendencia se muestran por separado: no hay un puntaje único que los mezcle.',
+      'El historial de rotación marca cuándo entró a cada cuadrante, distinguiendo los cambios confirmados de los movimientos breves.',
+      'Podés elegir un período histórico o fechas a gusto para ver cómo se comportó el grupo en esas fechas exactas.',
+      '"Qué pasó después de cada estado" cuenta cuánto rindió el grupo contra su referencia en las semanas siguientes a cada estado, comparado con cualquier semana.',
+    ],
+    ojo: 'Lo observado en un período no se repite necesariamente, y la ficha no explica sus causas.',
+    terminos: ['ciclos_rs_ratio', 'ciclos_rs_momentum', 'ciclos_volatilidad', 'ciclos_drawdown', 'ciclos_tendencia', 'ciclos_efectividad'],
+  },
+
   '/costo-oportunidad': {
     queEs: 'Cómo se comportó tu cartera durante un período, comparada con una referencia que elegís: en porcentaje y en dinero.',
     comoLeerla: [
@@ -499,6 +530,7 @@ export function claveRutaGuia(pathname: string): string {
   if (pathname.startsWith('/ticker/')) return '/ticker'
   if (pathname.startsWith('/decisiones/analisis/')) return '/decisiones/analisis'
   if (pathname.startsWith('/decisiones/posicion/')) return '/decisiones/posicion'
+  if (pathname.startsWith('/ciclos/grupo/')) return '/ciclos/grupo'
   return pathname
 }
 

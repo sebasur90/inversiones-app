@@ -36,6 +36,10 @@ services:
       - MAPA_MERCADO_HORAS=${MAPA_MERCADO_HORAS:-18}
       - MAPA_MERCADO_MINUTO=${MAPA_MERCADO_MINUTO:-30}
       - LOGOS_MAX_POR_CORRIDA=${LOGOS_MAX_POR_CORRIDA:-40}
+      # Ciclos de mercado: descarga de las series de los proxies del catálogo desde Yahoo, lun-vie, tras
+      # el cierre. Vacío la desactiva.
+      - CICLOS_HORAS=${CICLOS_HORAS:-19}
+      - CICLOS_MINUTO=${CICLOS_MINUTO:-0}
       # Qué emisores guarda el historial de diagnósticos tras cada ingesta (cartera, watchlist, catalogo).
       - HISTORIAL_UNIVERSO=${HISTORIAL_UNIVERSO:-cartera,watchlist}
       # Clasificación automática (Yahoo + correcciones) en todas las pantallas; false = la del Sheet.

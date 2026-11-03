@@ -5,6 +5,10 @@ con el mismo upsert y la misma precedencia que el resto de las series, pero no f
 universo técnico: no se pueden graficar ni analizar, y el sync no los purga. Se leen directo de
 `BarraOHLCV`, no con `get_serie_barras`.
 
+«Ciclos de mercado» (`ciclos_ingesta`) guarda bajo la misma clave los proxies de su catálogo (ETFs
+sectoriales, países, commodities...): sólo cierres, y una descarga entera reemplaza lo guardado de ese
+símbolo (ver ahí por qué). `BENCHMARKS` sigue siendo la lista de la fuerza relativa del técnico.
+
 Ciclo de vida: **backfill la primera vez que se piden** (`asegurar`) y **refresco diario** en el
 job liviano de precios (`refrescar`). Sólo se refrescan los que ya existen: no se bajan índices que
 nadie miró. Se guardan únicamente ruedas cerradas (`fecha < hoy`); el valor intradía de hoy no
@@ -90,6 +94,18 @@ def barras(db: Session, simbolo: str, desde: date | None = None) -> list[Barra]:
               minimo=_f(r.minimo), volumen=_f(r.volumen))
         for r in q.order_by(BarraOHLCV.fecha).all()
     ]
+
+
+def cierres(db: Session, simbolo: str, desde: date | None = None) -> list[tuple[date, float]]:
+    """`[(fecha, cierre)]` ordenado de la serie de referencia, leyendo sólo esas dos columnas.
+
+    `barras()` arma un objeto ORM por fila (decenas de miles por símbolo) y es lo que domina el tiempo cuando un análisis
+    mira decenas de series; para rendimientos, rotación y correlaciones alcanza con el cierre.
+    """
+    q = db.query(BarraOHLCV.fecha, BarraOHLCV.cierre).filter(BarraOHLCV.ticker == clave(simbolo))
+    if desde is not None:
+        q = q.filter(BarraOHLCV.fecha >= desde)
+    return [(f, float(c)) for f, c in q.order_by(BarraOHLCV.fecha).all() if c is not None]
 
 
 def asegurar(db: Session, simbolo: str) -> bool:
