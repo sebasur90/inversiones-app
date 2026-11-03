@@ -140,6 +140,7 @@ class AvisosConfigOut(BaseModel):
     avisar_venta_zona: bool = True
     avisar_diagnostico: bool = True
     avisar_revision_decision: bool = True
+    avisar_ciclos: bool = True
     estrategias: list[AvisoEstrategiaOut] = Field(default_factory=list)
 
 
@@ -151,6 +152,7 @@ class AvisosConfigIn(BaseModel):
     avisar_venta_zona: Optional[bool] = None
     avisar_diagnostico: Optional[bool] = None
     avisar_revision_decision: Optional[bool] = None
+    avisar_ciclos: Optional[bool] = None
 
 
 class AvisoEstrategiaIn(BaseModel):

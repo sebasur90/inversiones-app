@@ -323,6 +323,22 @@ def correr_ciclos() -> None:
         db.rollback()
     finally:
         db.close()
+    _avisar_ciclos()
+
+
+def _avisar_ciclos() -> None:
+    """Cambios de estado confirmados de Ciclos de mercado en los grupos con posición. Sesión propia; nunca lanza.
+
+    Va **después** de cerrar la sesión de la descarga: avisa con lo que haya en la base aunque la descarga haya fallado.
+    """
+    from ..database import SessionLocal
+    from . import ciclos_avisos
+
+    db = SessionLocal()
+    try:
+        logger.info("scheduler: avisos de ciclos %s", ciclos_avisos.correr(db))
+    finally:
+        db.close()
 
 
 def _bajar_logos() -> None:

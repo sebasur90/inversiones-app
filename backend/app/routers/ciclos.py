@@ -18,7 +18,7 @@ from ..schemas import (
     CiclosSimulacionOut, CiclosSimularIn,
 )
 from ..services import (
-    ciclos_analytics, ciclos_cartera, ciclos_catalogo, ciclos_engine, ciclos_historial, ciclos_ingesta,
+    ciclos_analytics, ciclos_avisos, ciclos_cartera, ciclos_catalogo, ciclos_engine, ciclos_historial, ciclos_ingesta,
     ciclos_senales_engine,
 )
 
@@ -96,6 +96,8 @@ def _corrida_en_segundo_plano() -> None:
     except Exception:  # pragma: no cover - se loguea dentro; un hilo no puede propagar
         ciclos_ingesta.logger.exception("ciclos: la corrida manual falló")
         db.rollback()
+    else:
+        ciclos_avisos.correr(db)
     finally:
         db.close()
 

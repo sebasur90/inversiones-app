@@ -3655,6 +3655,7 @@ export interface AvisosConfigOut {
   avisar_venta_zona: boolean
   avisar_diagnostico: boolean
   avisar_revision_decision: boolean
+  avisar_ciclos: boolean
   estrategias: AvisoEstrategiaOut[]
 }
 
@@ -3666,6 +3667,7 @@ export interface AvisosConfigIn {
   avisar_venta_zona?: boolean
   avisar_diagnostico?: boolean
   avisar_revision_decision?: boolean
+  avisar_ciclos?: boolean
 }
 
 export interface AvisoEstrategiaIn {

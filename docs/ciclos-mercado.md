@@ -26,7 +26,8 @@ services/ciclos_engine.py        motor PURO: rotación, rendimientos, riesgo, co
 services/ciclos_analytics.py     adaptador DB: panorama, detalle, relaciones, país
 services/ciclos_cartera.py       cruce con la cartera y simulador
 services/ciclos_regimen.py       régimen macro (estructura, sin datos)
-services/ciclos_senales_engine.py + ciclos_historial.py   cambios confirmados sobre una foto semanal (etapa 2)
+services/ciclos_senales_engine.py + ciclos_historial.py   cambios confirmados sobre una foto semanal
+services/ciclos_avisos.py + ciclos_avisos_engine.py        aviso por Telegram de esos cambios en los grupos con posición
 routers/ciclos.py                API
 ```
 
@@ -131,10 +132,17 @@ La **rotación se calcula siempre en USD**: el tipo de cambio se cancela en el c
 Estructura de los cuatro escenarios (reflación, expansión equilibrada, estanflación, desinflación) lista; **estado `no_disponible`**. La app sólo tiene CER, MEP, riesgo país e inflación de INDEC (Argentina): no alcanzan para el régimen global.
 Falta: actividad, indicadores adelantados, inflación global, tasas, liquidez y condiciones financieras. Nada se inventa y no bloquea el análisis de precios.
 
-## Señales (preparado para una segunda etapa)
+## Señales y avisos por Telegram
 `ciclos_historial.registrar` guarda, tras cada ingesta, el estado de cada grupo por **semana cerrada** y sólo si el grupo y su benchmark están completos y al día. `ciclos_senales_engine.detectar` (puro) identifica
 `empieza_a_mejorar` (Lagging→Improving), `pasa_a_liderar` (Improving→Leading), `pierde_momentum` (Leading→Weakening) y `pierde_fortaleza_relativa`, cada uno confirmado o pendiente.
-`GET /ciclos/grupos/{id}/senales` los expone. **No envía nada**: las alertas por Telegram quedan para la segunda etapa.
+`GET /ciclos/grupos/{id}/senales` los expone.
+
+**Aviso por Telegram** (`ciclos_avisos` + `ciclos_avisos_engine`, interruptor `avisar_ciclos` en Ajustes → Avisos, prendido por defecto). Corre después de cada descarga (job `ciclos` y `POST /ciclos/refrescar`) y manda **un solo mensaje** con los cambios nuevos:
+- **Sólo cambios confirmados** (3 semanas sostenidas) **y sólo de grupos donde hay posición** (el mismo cálculo que «tus posiciones en el grupo» de la ficha, sobre el consolidado; un grupo padre cuenta a sus hijos). El mensaje dice qué cambió, frente a qué referencia, cuántas semanas lleva y cuánto del capital pesa el grupo; no dice qué hacer.
+- **Una vez por cambio.** La identidad es `(grupo, benchmark, tipo, semana en que empezó el estado)` y vive en `ciclos_avisos_emitidos` (también guarda lo sembrado, lo viejo, lo silenciado y lo que no tenía posición).
+- **Primera evaluación = siembra:** se toma el estado actual sin avisar (`ajustes_avisos.ciclos_semilla_en`). Un cambio que ya había empezado hace más de 35 días también se registra sin avisar, igual que el que llega con el interruptor apagado: prenderlo después no manda de golpe lo que pasó.
+- **Si Telegram falla**, el cambio queda pendiente y se reintenta en la corrida siguiente (hasta 35 días desde que empezó el estado; después se descarta como viejo). Si en el medio vendiste el grupo entero, no se avisa.
+- Un cambio que cumple dos tipos (perder momentum y fortaleza a la vez) es un solo aviso. Los cambios pendientes (menos de 3 semanas) nunca se avisan.
 
 ## API (`/api/inversiones`)
 
@@ -184,6 +192,6 @@ docker compose -f docker-compose.yml -f docker-compose.corporate.yml run --rm \
 - El rendimiento pasado no anticipa el futuro; el cuadrante describe las últimas semanas.
 - Sin valuación, sin contexto macro global y sin tasas: son dimensiones distintas que este mapa no mide.
 
-## Pendiente (segunda etapa)
-Régimen macro con una fuente documentada · alertas por Telegram sobre `ciclos_senales_engine` · efectividad histórica de cada estado sobre `ciclos_estado_historial` · tasas de interés para el par «tasas → crédito» ·
+## Pendiente (segunda etapa; las alertas por Telegram ya están)
+Régimen macro con una fuente documentada · efectividad histórica de cada estado sobre `ciclos_estado_historial` · tasas de interés para el par «tasas → crédito» ·
 holdings de ETFs para una clasificación temática de fuente externa.

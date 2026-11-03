@@ -74,6 +74,11 @@ const TIPOS_DE_NIVEL: { campo: keyof AvisosConfigIn; etiqueta: string; ayuda: st
     etiqueta: 'Revisión de decisiones',
     ayuda: 'Cuando llega la fecha de revisión de una decisión guardada en el Centro de Decisiones, o se cumple su condición de invalidación de precio. Una vez por evento.',
   },
+  {
+    campo: 'avisar_ciclos',
+    etiqueta: 'Ciclos de mercado',
+    ayuda: 'Cuando un sector, región o tema donde tenés posición cambia de estado en el mapa de rotación y el cambio se sostiene tres semanas. Describe lo que pasó; no es una indicación de operar.',
+  },
 ]
 
 /**

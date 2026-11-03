@@ -553,6 +553,12 @@ class AjustesAvisos(Base):
     # Decisiones del Centro de Decisiones cuya fecha de revisión llegó o cuya condición de
     # invalidación de precio se cumplió (`services/diario_decisiones.avisar_revisiones`).
     avisar_revision_decision = Column(Integer, nullable=False, default=1, server_default="1")
+    # Cambios de estado confirmados de Ciclos de mercado en los grupos donde hay posición
+    # (`services/ciclos_avisos`). Arranca prendido: la primera corrida siembra el estado sin mandar nada.
+    avisar_ciclos = Column(Integer, nullable=False, default=1, server_default="1")
+    # Cuándo se hizo la primera evaluación de ciclos: ahí se siembra el estado sin avisar. Es un dato aparte de
+    # `ciclos_avisos_emitidos` porque esa tabla puede seguir vacía (sin ningún cambio todavía) después de sembrar.
+    ciclos_semilla_en = Column(DateTime, nullable=True)
     fecha_actualizacion = Column(DateTime, nullable=False)
 
 
@@ -818,6 +824,31 @@ class CiclosEstadoHistorial(Base):
         UniqueConstraint("grupo_id", "benchmark_id", "semana", "version_algoritmo", name="uq_ciclos_estado"),
         Index("ix_ciclos_estado_grupo", "grupo_id", "benchmark_id", "semana"),
     )
+
+
+class CiclosAvisoEmitido(Base):
+    """Cambios de estado de Ciclos de mercado que ya se trataron (avisados, sembrados o silenciados).
+
+    La clave es el cambio mismo, `(grupo, benchmark, tipo, semana en que empezó el estado nuevo)`: un cambio
+    confirmado se detecta en cada corrida mientras dure el tramo, y esta tabla es lo que evita avisarlo dos veces.
+    `entregado = 0` es un aviso decidido cuyo envío falló (se reintenta); `emitido_en` queda vacío en lo que se
+    registró sin mandar (primera corrida, cambio viejo, grupo sin posición o aviso apagado).
+    """
+    __tablename__ = "ciclos_avisos_emitidos"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    grupo_id = Column(String, nullable=False)
+    benchmark_id = Column(String, nullable=False)
+    tipo = Column(String, nullable=False)
+    desde = Column(Date, nullable=False)
+    de = Column(String, nullable=False)
+    a = Column(String, nullable=False)
+    semanas = Column(Integer, nullable=False, default=0, server_default="0")   # sostenido al registrarlo
+    motivo = Column(String, nullable=False)        # nuevo | sembrado | viejo | sin_posicion | silenciado
+    entregado = Column(Integer, nullable=False, default=1, server_default="1")
+    emitido_en = Column(DateTime, nullable=True)
+    registrado_en = Column(DateTime, nullable=False)
+
+    __table_args__ = (UniqueConstraint("grupo_id", "benchmark_id", "tipo", "desde", name="uq_ciclos_aviso"),)
 
 
 class LogoEmpresa(Base):
@@ -1478,6 +1509,14 @@ def init_db():
             conn.execute(text(
                 "ALTER TABLE ajustes_avisos ADD COLUMN avisar_revision_decision INTEGER NOT NULL DEFAULT 1"
             ))
+            conn.commit()
+        if 'avisar_ciclos' not in cols:
+            conn.execute(text(
+                "ALTER TABLE ajustes_avisos ADD COLUMN avisar_ciclos INTEGER NOT NULL DEFAULT 1"
+            ))
+            conn.commit()
+        if 'ciclos_semilla_en' not in cols:
+            conn.execute(text("ALTER TABLE ajustes_avisos ADD COLUMN ciclos_semilla_en DATETIME"))
             conn.commit()
 
     # El nombre identifica a una estrategia (ver `estrategias_analytics.normalizar_nombre`): las
