@@ -4220,6 +4220,8 @@ class CiclosCatalogoOut(BaseModel):
     periodos: list[CiclosPeriodoOut]
     comparaciones: list[dict[str, Any]] = Field(default_factory=list)
     pares_desfase: list[dict[str, Any]] = Field(default_factory=list)
+    tasas: list[dict[str, Any]] = Field(default_factory=list)
+    pendientes_curva: list[dict[str, Any]] = Field(default_factory=list)
     errores: list[str] = Field(default_factory=list)
 
 
@@ -4334,6 +4336,18 @@ class CiclosPaisOut(CiclosBaseOut):
     benchmark: Optional[dict[str, Any]] = None
     resumen: Optional[dict[str, Any]] = None
     descomposicion: Optional[dict[str, Any]] = None
+    meta: CiclosMetaOut
+
+
+class CiclosTasasOut(CiclosBaseOut):
+    estado: str
+    motivo: Optional[str] = None
+    anios: int
+    tasas: list[dict[str, Any]] = Field(default_factory=list)
+    pendientes: list[dict[str, Any]] = Field(default_factory=list)
+    curva: list[dict[str, Any]] = Field(default_factory=list)
+    filas: list[dict[str, Any]] = Field(default_factory=list)
+    lectura: str
     meta: CiclosMetaOut
 
 

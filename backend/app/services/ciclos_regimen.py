@@ -28,8 +28,9 @@ INDICADORES = (
      "motivo": "No hay indicadores adelantados cargados."},
     {"id": "inflacion", "nombre": "Inflación", "eje": "inflacion", "disponible": False,
      "motivo": "La app tiene la inflación de INDEC (Argentina), no la de EE.UU. ni la global."},
-    {"id": "tasas", "nombre": "Tasas de interés", "eje": "ambos", "disponible": False,
-     "motivo": "No hay series de tasas de política monetaria ni de rendimiento de bonos."},
+    {"id": "tasas", "nombre": "Tasas de interés", "eje": "ambos", "disponible": True,
+     "motivo": "Hay rendimientos del Tesoro de EE.UU. a 3 meses, 5, 10 y 30 años (pestaña Relaciones). No hay la tasa de política "
+               "monetaria ni las de otras regiones, y solas no determinan crecimiento ni inflación."},
     {"id": "liquidez", "nombre": "Liquidez", "eje": "ambos", "disponible": False,
      "motivo": "No hay series de balance de bancos centrales ni de agregados monetarios."},
     {"id": "condiciones-financieras", "nombre": "Condiciones financieras", "eje": "ambos", "disponible": False,
@@ -44,11 +45,12 @@ DISPONIBLE_HOY = (
     {"id": "mep", "nombre": "Dólar MEP", "alcance": "Argentina"},
     {"id": "riesgo-pais", "nombre": "Riesgo país", "alcance": "Argentina"},
     {"id": "inflacion-indec", "nombre": "Inflación mensual de INDEC", "alcance": "Argentina"},
+    {"id": "tasas-tesoro-eeuu", "nombre": "Rendimientos del Tesoro de EE.UU. (3 meses a 30 años)", "alcance": "EE.UU."},
 )
 
 ACLARACION = (
-    "CER, MEP y riesgo país describen a la Argentina: no alcanzan para determinar el régimen macroeconómico global, "
-    "y por eso la app no asigna ninguno de los cuatro escenarios."
+    "CER, MEP y riesgo país describen a la Argentina y las tasas del Tesoro sólo a EE.UU.: no alcanzan para determinar el régimen "
+    "macroeconómico global (faltan actividad e inflación), y por eso la app no asigna ninguno de los cuatro escenarios."
 )
 
 

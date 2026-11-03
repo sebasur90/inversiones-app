@@ -30,6 +30,10 @@ ROL_PROXY = "proxy"
 ROL_INDICE = "indice_local"
 ROL_FX = "fx"
 MONEDA_FX = "FX"
+ROL_TASA = "tasa"
+#: Las tasas se guardan como porcentaje anual (4,25 = 4,25 %), no como precio: no se ajustan por dividendos ni splits y
+#: pueden valer 0. La ingesta y los cálculos las tratan aparte de los precios.
+MONEDA_TASA = "PCT"
 
 _ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
@@ -61,6 +65,18 @@ class Grupo:
 
 
 @dataclass(frozen=True)
+class Tasa:
+    """Una tasa de interés del Tesoro de EE.UU. (porcentaje anual). No es un grupo: no tiene rendimiento ni rotación."""
+    id: str
+    nombre: str
+    simbolo: str
+    plazo_meses: int
+    descripcion: str
+    fuente: str
+    activo: bool
+
+
+@dataclass(frozen=True)
 class Simbolo:
     """Un símbolo de Yahoo que la ingesta tiene que bajar y qué moneda se guarda con él."""
     simbolo: str
@@ -75,10 +91,16 @@ class Catalogo:
     periodos: list[dict] = field(default_factory=list)
     comparaciones: list[dict] = field(default_factory=list)
     pares_desfase: list[dict] = field(default_factory=list)
+    tasas: dict[str, Tasa] = field(default_factory=dict)
+    pendientes_curva: list[dict] = field(default_factory=list)
     errores: list[str] = field(default_factory=list)
 
     def activos(self) -> list[Grupo]:
         return [g for g in self.grupos.values() if g.activo]
+
+    def tasas_activas(self) -> list[Tasa]:
+        """Ordenadas por plazo, de la más corta a la más larga."""
+        return sorted((t for t in self.tasas.values() if t.activo), key=lambda t: t.plazo_meses)
 
     def benchmarks(self) -> list[Grupo]:
         return [g for g in self.activos() if g.es_benchmark]
@@ -98,6 +120,8 @@ class Catalogo:
             if g.fx and g.fx.get("simbolo"):
                 s = g.fx["simbolo"]
                 out.setdefault(s, Simbolo(s, MONEDA_FX, ROL_FX))
+        for t in self.tasas_activas():
+            out.setdefault(t.simbolo, Simbolo(t.simbolo, MONEDA_TASA, ROL_TASA))
         return out
 
 
@@ -292,6 +316,57 @@ def _ciclos_de_padres(grupos: dict[str, Grupo]) -> set[str]:
     return en_ciclo
 
 
+def _armar_tasa(crudo: dict) -> Tasa:
+    if not isinstance(crudo, dict):
+        raise ValueError("no es un objeto")
+    id_ = _texto(crudo.get("id")) or ""
+    if not _ID_RE.match(id_):
+        raise ValueError(f"id inválido {id_!r} (minúsculas, números y guiones)")
+    nombre, simbolo = _texto(crudo.get("nombre")), _texto(crudo.get("simbolo"))
+    if not nombre or not simbolo:
+        raise ValueError("faltan `nombre` o `simbolo`")
+    plazo = crudo.get("plazo_meses")
+    if isinstance(plazo, bool) or not isinstance(plazo, int) or plazo <= 0:
+        raise ValueError("`plazo_meses` debe ser un entero positivo")
+    return Tasa(id_, nombre, simbolo, plazo, _texto(crudo.get("descripcion")) or "",
+                _texto(crudo.get("fuente")) or FUENTE_DEFECTO, crudo.get("activo", True) is not False)
+
+
+def _tasas(crudas: list, grupos: dict[str, Grupo], errores: list[str]) -> dict[str, Tasa]:
+    out: dict[str, Tasa] = {}
+    for crudo in crudas:
+        id_ = crudo.get("id") if isinstance(crudo, dict) else None
+        try:
+            t = _armar_tasa(crudo)
+        except ValueError as exc:
+            errores.append(f"tasa {id_!r}: {exc}; se descarta")
+            continue
+        if t.id in out or t.id in grupos:
+            errores.append(f"tasa {t.id}: id repetido o igual al de un grupo; se descarta")
+            continue
+        if any(o.simbolo == t.simbolo for o in out.values()):
+            errores.append(f"tasa {t.id}: el símbolo {t.simbolo} ya lo usa otra tasa; se descarta")
+            continue
+        out[t.id] = t
+    return out
+
+
+def _pendientes_curva(crudas: list, tasas: dict[str, Tasa], errores: list[str]) -> list[dict]:
+    """Pendientes de la curva: `larga − corta` entre dos tasas activas, con la larga de mayor plazo."""
+    out, vistos = [], set()
+    for c in crudas:
+        c = c if isinstance(c, dict) else {}
+        id_, nombre, larga, corta = (_texto(c.get(k)) for k in ("id", "nombre", "larga", "corta"))
+        ok = (id_ and nombre and id_ not in vistos and larga in tasas and corta in tasas and tasas[larga].activo and tasas[corta].activo
+              and tasas[larga].plazo_meses > tasas[corta].plazo_meses)
+        if not ok:
+            errores.append(f"pendiente de curva {id_!r}: inválida (la tasa larga debe tener mayor plazo que la corta); se descarta")
+            continue
+        vistos.add(id_)
+        out.append({"id": id_, "nombre": nombre, "larga": larga, "corta": corta})
+    return out
+
+
 def construir(datos_grupos: dict, datos_periodos: dict | None = None) -> Catalogo:
     """Valida el contenido ya leído. Puro: lo usan `cargar()` y los tests."""
     cat = Catalogo(version=int(datos_grupos.get("version") or 0))
@@ -312,19 +387,24 @@ def construir(datos_grupos: dict, datos_periodos: dict | None = None) -> Catalog
         armados[g.id] = g
     cat.grupos = _validar_relaciones(armados, cat.errores)
     cat.periodos = _periodos(datos_periodos or {}, cat.errores)
+    cat.tasas = _tasas(datos_grupos.get("tasas") or [], cat.grupos, cat.errores)
+    cat.pendientes_curva = _pendientes_curva(datos_grupos.get("pendientes_curva") or [], cat.tasas, cat.errores)
     cat.comparaciones = _comparaciones(datos_grupos.get("comparaciones") or [], cat.grupos, cat.errores)
-    cat.pares_desfase = _comparaciones(datos_grupos.get("pares_desfase") or [], cat.grupos, cat.errores, exacto=2)
+    # Un par de desfase puede incluir una tasa (p. ej. «Tasa a 10 años → financieras»): lo que se compara es su cambio semanal.
+    cat.pares_desfase = _comparaciones(datos_grupos.get("pares_desfase") or [], cat.grupos, cat.errores, exacto=2, tasas=cat.tasas)
     return cat
 
 
-def _comparaciones(crudas: list, grupos: dict[str, Grupo], errores: list[str], exacto: int | None = None) -> list[dict]:
+def _comparaciones(
+    crudas: list, grupos: dict[str, Grupo], errores: list[str], exacto: int | None = None, tasas: dict[str, Tasa] | None = None,
+) -> list[dict]:
     """Pares o conjuntos predefinidos (p. ej. EEUU vs. Europa): sólo los que tienen todos sus grupos activos en el
     catálogo. `exacto` fija la cantidad de grupos (los pares de desfase son siempre 2)."""
     out, vistos = [], set()
     for c in crudas:
         ids = _lista_texto(c.get("grupos")) if isinstance(c, dict) else ()
         id_, nombre = (_texto(c.get("id")), _texto(c.get("nombre"))) if isinstance(c, dict) else (None, None)
-        faltan = [i for i in ids if i not in grupos or not grupos[i].activo]
+        faltan = [i for i in ids if not ((i in grupos and grupos[i].activo) or (tasas and i in tasas and tasas[i].activo))]
         if not id_ or not nombre or id_ in vistos or len(ids) < 2 or faltan or (exacto and len(ids) != exacto):
             errores.append(f"comparación {id_!r}: inválida o con grupos inexistentes {faltan}; se descarta")
             continue

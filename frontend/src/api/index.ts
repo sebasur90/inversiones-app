@@ -1638,6 +1638,8 @@ export interface CiclosCatalogoOut {
   periodos: CicloPeriodoCatalogo[]
   comparaciones: CicloAtajo[]
   pares_desfase: CicloAtajo[]
+  tasas?: { id: string; nombre: string; simbolo: string; plazo_meses: number; descripcion: string; fuente: string; activo: boolean }[]
+  pendientes_curva?: { id: string; nombre: string; larga: string; corta: string }[]
   errores: string[]
 }
 
@@ -2114,6 +2116,59 @@ export const getCicloDetalle = (
     hasta: p.hasta,
     con: p.con && p.con.length > 0 ? p.con.join(',') : undefined,
   })
+
+export interface CicloCambioPp {
+  /** Diferencia en puntos porcentuales (no un rendimiento). */
+  pp: number | null
+  desde: string
+  hasta: string
+  motivo: string | null
+}
+
+export interface CicloTasa {
+  id: string
+  nombre: string
+  simbolo: string
+  plazo_meses: number
+  descripcion: string
+  estado: 'ok' | 'desactualizado' | 'sin_datos'
+  motivo: string | null
+  /** % anual. */
+  nivel: number | null
+  fecha: string | null
+  cambios: Record<string, CicloCambioPp>
+  minimo: number | null
+  maximo: number | null
+}
+
+export interface CicloPendienteCurva {
+  id: string
+  nombre: string
+  larga: string
+  corta: string
+  estado: 'ok' | 'sin_datos'
+  valor_pp: number | null
+  fecha: string | null
+  invertida: boolean | null
+  semanas_invertida_52: number | null
+  semanas_52: number
+  cambios: Record<string, CicloCambioPp>
+}
+
+export interface CiclosTasasOut {
+  estado: 'ok' | 'sin_datos'
+  motivo: string | null
+  anios: number
+  tasas: CicloTasa[]
+  pendientes: CicloPendienteCurva[]
+  curva: { id: string; nombre: string; plazo_meses: number; nivel: number | null; hace_un_anio: number | null }[]
+  /** Una fila por viernes: `fecha`, el nivel de cada tasa por su id y `pendiente:<id>` para cada pendiente. */
+  filas: ({ fecha: string } & Record<string, number | string | null>)[]
+  lectura: string
+  meta: CiclosMeta
+}
+
+export const getCiclosTasas = (anios: number) => cicloGet<CiclosTasasOut>('tasas', { anios })
 
 export interface CicloEfectividadStats {
   n: number

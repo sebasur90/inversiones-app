@@ -13,6 +13,8 @@
     "Países: `indice_local` {simbolo, moneda} y `fx` {simbolo, cotizacion: local_por_usd|usd_por_local|mep}.",
     "`pares_desfase`: pares (a, b) para investigar si a se adelanta a b; son hipótesis estadísticas, no predicciones.",
     "`comparaciones`: pares de grupos que la pantalla de Regiones y Relaciones ofrece ya armados.",
+    "`pendientes_curva`: tasa larga menos tasa corta (en puntos porcentuales) que muestra el panel de tasas.",
+    "`tasas`: series de rendimiento del Tesoro de EE.UU. (id, nombre, simbolo, plazo_meses, descripcion). No son grupos: son porcentajes anuales, no precios.",
     "Sintético (sin proxy): `sintetico` {miembros: [ids], metodo: equiponderado_semanal}; ver docs/ciclos-mercado.md."
   ],
   "defecto_por_tipo": {
@@ -42,8 +44,24 @@
     {"id": "dolar-emergentes", "nombre": "Dólar → mercados emergentes", "grupos": ["dolar", "emergentes"]},
     {"id": "oro-acciones", "nombre": "Oro → acciones globales", "grupos": ["oro", "global"]},
     {"id": "bitcoin-tecnologia", "nombre": "Bitcoin → tecnología", "grupos": ["bitcoin", "tecnologia"]},
-    {"id": "bonos-financieras", "nombre": "Bonos largos → financieras", "grupos": ["bonos-tesoro-largo", "financiero"],
-     "nota": "Sustituto: la app no tiene series de tasas de interés; el precio de un bono largo es su reflejo inverso."}
+    {"id": "tasa-financieras", "nombre": "Tasa a 10 años → financieras", "grupos": ["tasa-10a", "financiero"],
+     "nota": "De la tasa se toma su cambio semanal en puntos porcentuales (no un rendimiento); del grupo, su rendimiento semanal."},
+    {"id": "tasa-inmobiliario", "nombre": "Tasa a 10 años → inmobiliario", "grupos": ["tasa-10a", "inmobiliario"],
+     "nota": "De la tasa se toma su cambio semanal en puntos porcentuales (no un rendimiento); del grupo, su rendimiento semanal."}
+  ],
+  "tasas": [
+    {"id": "tasa-3m", "nombre": "Tesoro EE.UU. a 3 meses", "simbolo": "^IRX", "plazo_meses": 3,
+     "descripcion": "Rendimiento de la Letra del Tesoro a 13 semanas (índice CBOE ^IRX), en % anual."},
+    {"id": "tasa-5a", "nombre": "Tesoro EE.UU. a 5 años", "simbolo": "^FVX", "plazo_meses": 60,
+     "descripcion": "Rendimiento del bono del Tesoro a 5 años (índice CBOE ^FVX), en % anual."},
+    {"id": "tasa-10a", "nombre": "Tesoro EE.UU. a 10 años", "simbolo": "^TNX", "plazo_meses": 120,
+     "descripcion": "Rendimiento del bono del Tesoro a 10 años (índice CBOE ^TNX), en % anual."},
+    {"id": "tasa-30a", "nombre": "Tesoro EE.UU. a 30 años", "simbolo": "^TYX", "plazo_meses": 360,
+     "descripcion": "Rendimiento del bono del Tesoro a 30 años (índice CBOE ^TYX), en % anual."}
+  ],
+  "pendientes_curva": [
+    {"id": "10a-3m", "nombre": "10 años − 3 meses", "larga": "tasa-10a", "corta": "tasa-3m"},
+    {"id": "30a-5a", "nombre": "30 años − 5 años", "larga": "tasa-30a", "corta": "tasa-5a"}
   ],
   "grupos": [
     {"id": "estados-unidos", "nombre": "Estados Unidos (S&P 500)", "tipo": "region", "vistas": ["region", "pais"], "proxy": "SPY", "es_benchmark": true, "benchmark": null,

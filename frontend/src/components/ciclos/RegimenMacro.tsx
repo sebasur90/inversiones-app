@@ -53,13 +53,13 @@ export default function RegimenMacro({ regimen }: { regimen: CicloRegimen }) {
             <ul className="list-disc pl-4 text-label text-app-text-dim space-y-0.5">
               {regimen.indicadores_necesarios.map(i => (
                 <li key={i.id}>
-                  <b className="text-app-text">{i.nombre}:</b> {i.motivo}
+                  <b className="text-app-text">{i.nombre}{i.disponible ? ' (parcial)' : ''}:</b> {i.motivo}
                 </li>
               ))}
             </ul>
           </div>
           <p className="text-label text-app-text-faint">
-            Hoy sólo hay {regimen.disponible_hoy.map(d => d.nombre).join(', ')} (Argentina). {regimen.proxima_etapa}
+            Hoy sólo hay {regimen.disponible_hoy.map(d => `${d.nombre} (${d.alcance})`).join(', ')}. {regimen.proxima_etapa}
           </p>
         </div>
       )}

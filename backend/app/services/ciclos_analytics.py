@@ -86,18 +86,28 @@ class Fuentes:
             return eng.sintetico_equiponderado([self.nativa(m) for m in miembros])
         return self.simbolo(g.proxy)
 
+    def tasa(self, t: cc.Tasa) -> eng.Serie:
+        """Serie de una tasa (% anual). Es un nivel: conserva el cero, a diferencia de un precio."""
+        clave = f"nivel:{t.simbolo}"
+        if clave not in self._series:
+            self._series[clave] = eng.normalizar_nivel(benchmarks.cierres(self.db, t.simbolo))
+        return self._series[clave]
+
     def motivo_sin_datos(self, g: cc.Grupo) -> str | None:
         if g.moneda != "USD":
             return f"moneda de referencia {g.moneda} no soportada"
         if g.sintetico:
             return "algún miembro del grupo sintético no tiene datos"
-        est = self.estados().get(g.proxy)
+        return self.motivo_sin_datos_simbolo(g.proxy)
+
+    def motivo_sin_datos_simbolo(self, simbolo: str) -> str:
+        est = self.estados().get(simbolo)
         if est is None:
-            return f"todavía no se descargó {g.proxy} (la ingesta de ciclos no corrió)"
+            return f"todavía no se descargó {simbolo} (la ingesta de ciclos no corrió)"
         if est.estado == "no_encontrado":
-            return f"Yahoo no devolvió datos para {g.proxy}"
+            return f"Yahoo no devolvió datos para {simbolo}"
         if est.estado == "error" and est.error:
-            return f"error al descargar {g.proxy}: {est.error}"
+            return f"error al descargar {simbolo}: {est.error}"
         return "sin datos"
 
     def mep(self) -> tuple[list[date], list[float]]:
@@ -544,31 +554,56 @@ def correlaciones(
     }
 
 
+def _elemento(cat: cc.Catalogo, id_: str):
+    """Un grupo o una tasa del catálogo (los pares de desfase pueden incluir una tasa)."""
+    t = cat.tasas.get(id_)
+    return t if t is not None and t.activo else _grupo(cat, id_)
+
+
 def desfases(db: Session, *, a: str, b: str, meses: int = 36, hoy: date | None = None) -> dict:
-    """Correlación entre el retorno semanal de `a` y el de `b` desplazado k semanas. Hipótesis estadísticas, no predicciones."""
+    """Correlación entre el retorno semanal de `a` y el de `b` desplazado k semanas. Hipótesis estadísticas, no predicciones.
+
+    Si `a` o `b` es una tasa se usa su **cambio semanal en puntos porcentuales** en lugar de un retorno."""
     if not 12 <= meses <= 120:
         raise ValueError("`meses` debe estar entre 12 y 120")
     cat = cc.cargar()
     fuentes = Fuentes(db, cat)
-    series, sin_datos, grupos = _series_usd(fuentes, [a, b])
+    elementos = [_elemento(cat, i) for i in dict.fromkeys((a, b))]
+    series, sin_datos = {}, []
+    for e in elementos:
+        es_tasa = isinstance(e, cc.Tasa)
+        s = fuentes.tasa(e) if es_tasa else fuentes.nativa(e)
+        if s:
+            series[e.id] = s
+        else:
+            sin_datos.append({"id": e.id, "nombre": e.nombre,
+                              "motivo": fuentes.motivo_sin_datos_simbolo(e.simbolo) if es_tasa else fuentes.motivo_sin_datos(e)})
+    grupos = [e for e in elementos if isinstance(e, cc.Grupo)]
+    con_tasa = any(isinstance(e, cc.Tasa) for e in elementos)
+    nombres = {e.id: e.nombre for e in elementos}
     par = next((p for p in cat.pares_desfase if p["grupos"] == [a, b]), None)
     if len(series) < 2 or a == b:
-        return {"estado": eng.ESTADO_INSUFICIENTE, "motivo": "hacen falta dos grupos distintos con datos", "sin_datos": sin_datos,
-                "desfases": [], "mejor": None, "nombres": {g.id: g.nombre for g in grupos}, "nota_par": par and par["nota"],
+        return {"estado": eng.ESTADO_INSUFICIENTE, "motivo": "hacen falta dos series distintas con datos", "sin_datos": sin_datos,
+                "desfases": [], "mejor": None, "nombres": nombres, "nota_par": par and par["nota"],
                 "meta": _meta(fuentes, grupos, None, moneda="USD", desde=None, hasta=None, ultima_fecha_datos=None, nota_moneda=False)}
     hasta = max(series[a][-1][0], series[b][-1][0])
     desde = eng.restar_meses(hasta, meses)
-    res = eng.desfases(series[a], series[b], desde, hasta)
+    res = eng.desfases(series[a], series[b], desde, hasta,
+                       nivel_a=isinstance(elementos[0], cc.Tasa), nivel_b=isinstance(elementos[-1], cc.Tasa))
+    advertencias = [
+        "Se probaron 17 desfases: es esperable que alguno supere la banda de azar sin que haya relación real.",
+        "Correlación con desfase no implica causalidad ni permite anticipar movimientos.",
+    ]
+    if con_tasa:
+        advertencias.append("De una tasa se usa su cambio semanal en puntos porcentuales (no un rendimiento); del grupo, su rendimiento semanal.")
     return {
         "estado": eng.ESTADO_OK if res["mejor"] else eng.ESTADO_INSUFICIENTE,
         "motivo": None if res["mejor"] else "pocas observaciones para calcular desfases", "a": a, "b": b,
-        "nombres": {g.id: g.nombre for g in grupos}, "desfases": res["desfases"], "mejor": res["mejor"], "banda_azar": res["banda_azar"],
+        "nombres": nombres, "desfases": res["desfases"], "mejor": res["mejor"], "banda_azar": res["banda_azar"],
         "max_semanas": res["max_semanas"], "nota_par": par and par["nota"], "sin_datos": sin_datos,
         "lectura": "k > 0: el retorno de «a» de una semana se parece al de «b» k semanas después. Es una hipótesis estadística, no una predicción.",
-        "meta": _meta(fuentes, grupos, None, moneda="USD", desde=desde, hasta=hasta, ultima_fecha_datos=hasta, nota_moneda=False, advertencias=[
-            "Se probaron 17 desfases: es esperable que alguno supere la banda de azar sin que haya relación real.",
-            "Correlación con desfase no implica causalidad ni permite anticipar movimientos.",
-        ]),
+        "meta": _meta(fuentes, grupos, None, moneda="USD", desde=desde, hasta=hasta, ultima_fecha_datos=hasta, nota_moneda=False,
+                      advertencias=advertencias),
     }
 
 

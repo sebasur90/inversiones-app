@@ -15,11 +15,11 @@ from ..database import MovimientoInversion, SessionLocal, get_db
 from ..schemas import (
     CiclosCarteraOut, CiclosCatalogoOut, CiclosComparacionOut, CiclosCorrelacionesOut, CiclosDesfasesOut,
     CiclosDetalleOut, CiclosEfectividadOut, CiclosEstadoOut, CiclosInstrumentosOut, CiclosPaisOut, CiclosPanoramaOut,
-    CiclosSenalesOut, CiclosSimulacionOut, CiclosSimularIn,
+    CiclosSenalesOut, CiclosSimulacionOut, CiclosSimularIn, CiclosTasasOut,
 )
 from ..services import (
     ciclos_analytics, ciclos_avisos, ciclos_cartera, ciclos_catalogo, ciclos_efectividad, ciclos_engine, ciclos_historial, ciclos_ingesta,
-    ciclos_senales_engine,
+    ciclos_senales_engine, ciclos_tasas,
 )
 
 router = APIRouter(prefix="/api/inversiones", tags=["ciclos"])
@@ -73,6 +73,9 @@ def get_catalogo():
         "periodos": cat.periodos,
         "comparaciones": cat.comparaciones,
         "pares_desfase": cat.pares_desfase,
+        "tasas": [{"id": t.id, "nombre": t.nombre, "simbolo": t.simbolo, "plazo_meses": t.plazo_meses, "descripcion": t.descripcion,
+                   "fuente": t.fuente, "activo": t.activo} for t in cat.tasas.values()],
+        "pendientes_curva": cat.pendientes_curva,
         "errores": cat.errores,
     }
 
@@ -131,6 +134,12 @@ def get_detalle(
 ):
     return _llamar(ciclos_analytics.detalle, db, grupo_id, benchmark=benchmark, moneda=moneda, horizonte=horizonte,
                    desde=desde, hasta=hasta, periodo_id=periodo_id, con=_ids(con) or (), ventana=ventana)
+
+
+@router.get("/ciclos/tasas", response_model=CiclosTasasOut)
+def get_tasas(anios: int = Query(5), db: Session = Depends(get_db)):
+    """Tasas del Tesoro de EE.UU.: nivel, cambios en puntos porcentuales, curva y pendientes. Describe; no pronostica."""
+    return _llamar(ciclos_tasas.panorama, db, anios=anios)
 
 
 @router.get("/ciclos/grupos/{grupo_id}/efectividad", response_model=CiclosEfectividadOut)

@@ -32,6 +32,7 @@ import ComparacionCiclos from '../components/ciclos/ComparacionCiclos'
 import ExposicionCiclos from '../components/ciclos/ExposicionCiclos'
 import FichaPais from '../components/ciclos/FichaPais'
 import GraficoDesfases from '../components/ciclos/GraficoDesfases'
+import TasasInteres from '../components/ciclos/TasasInteres'
 import GraficoRotacion from '../components/ciclos/GraficoRotacion'
 import InstrumentosGrupo from '../components/ciclos/InstrumentosGrupo'
 import LeyendaCuadrantes from '../components/ciclos/LeyendaCuadrantes'
@@ -531,6 +532,13 @@ function RelacionesTab({ moneda }: { moneda: CicloMoneda }) {
       </section>
 
       <section>
+        <TituloSeccion icono="trend" tono="cyan"><InfoTooltip term="ciclos_tasas" label="Tasas de interés" /></TituloSeccion>
+        <Card>
+          <TasasInteres />
+        </Card>
+      </section>
+
+      <section>
         <TituloSeccion icono="swap" tono="warn"><InfoTooltip term="ciclos_desfase" label="Adelantos y rezagos" /></TituloSeccion>
         <div className="flex flex-col gap-2">
           <select
@@ -558,7 +566,7 @@ function RelacionesTab({ moneda }: { moneda: CicloMoneda }) {
                 ))}
             </QueryBoundary>
           )}
-          <p className="text-label text-app-text-faint">«Tasas de interés y sectores sensibles al crédito» no está disponible: la app no tiene series de tasas.</p>
+          <p className="text-label text-app-text-faint">En los pares con una tasa se compara su cambio semanal en puntos porcentuales con el rendimiento semanal del grupo.</p>
         </div>
       </section>
     </div>

@@ -39,11 +39,15 @@ def test_los_cuatro_escenarios_cruzan_crecimiento_e_inflacion():
 
 def test_dice_que_falta_y_que_cer_y_mep_no_alcanzan():
     r = reg.evaluar()
-    assert {"Actividad económica", "Inflación", "Tasas de interés", "Liquidez", "Condiciones financieras", "Dólar", "Indicadores adelantados"} <= set(r["falta"])
-    assert all(i["disponible"] is False and i["motivo"] for i in r["indicadores_necesarios"])
+    assert {"Actividad económica", "Inflación", "Liquidez", "Condiciones financieras", "Dólar", "Indicadores adelantados"} <= set(r["falta"])
+    assert "Tasas de interés" not in r["falta"]                                    # hay rendimientos del Tesoro de EE.UU. (parcial)
+    assert all(i["motivo"] for i in r["indicadores_necesarios"])
+    assert {i["id"] for i in r["indicadores_necesarios"] if i["disponible"]} == {"tasas"}
     assert "CER" in r["aclaracion"] and "MEP" in r["aclaracion"] and "no alcanzan" in r["aclaracion"]
-    assert {i["id"] for i in r["disponible_hoy"]} == {"cer", "mep", "riesgo-pais", "inflacion-indec"}
-    assert all(i["alcance"] == "Argentina" for i in r["disponible_hoy"])
+    assert {i["id"] for i in r["disponible_hoy"]} == {"cer", "mep", "riesgo-pais", "inflacion-indec", "tasas-tesoro-eeuu"}
+    assert {i["id"] for i in r["disponible_hoy"] if i["alcance"] == "EE.UU."} == {"tasas-tesoro-eeuu"}
+    assert all(i["alcance"] == "Argentina" for i in r["disponible_hoy"] if i["id"] != "tasas-tesoro-eeuu")
+    assert r["estado"] == "no_disponible" and r["escenario"] is None             # con tasas solas no se asigna ningún escenario
 
 
 def test_el_resultado_es_independiente_de_las_llamadas():

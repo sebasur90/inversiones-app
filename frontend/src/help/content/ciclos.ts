@@ -12,6 +12,9 @@ export type CiclosHelpKey =
   | 'ciclos_improving'
   | 'ciclos_trayectoria'
   | 'ciclos_cambio_confirmado'
+  | 'ciclos_tasas'
+  | 'ciclos_pendiente_curva'
+  | 'ciclos_puntos_porcentuales'
   | 'ciclos_efectividad'
   | 'ciclos_episodio'
   | 'ciclos_base_semanas'
@@ -88,6 +91,29 @@ export const CICLOS_HELP: Record<CiclosHelpKey, HelpContent> = {
     whyItMatters: 'Evita leer como un nuevo ciclo lo que fue el movimiento de una sola semana.',
     howToInterpret: 'Los cambios sin confirmar figuran como pendientes: todavía no se sabe si se sostienen.',
     limitations: 'Confirmar no es predecir: el cambio sólo quedó sostenido en los datos que ya pasaron.',
+  },
+  ciclos_tasas: {
+    title: 'Tasas de interés del Tesoro de EE.UU.',
+    shortDescription: 'Lo que rinde por año un bono del Tesoro estadounidense a 3 meses, 5, 10 y 30 años. Es el "precio del dinero" de referencia para casi todo el mercado.',
+    whyItMatters: 'Cuando las tasas largas suben, el precio de los bonos largos baja y cambia el atractivo relativo de las acciones; algunos sectores (financieras, inmobiliario) son especialmente sensibles.',
+    howItIsCalculated: 'Se toma el rendimiento diario que publican los índices CBOE (^IRX, ^FVX, ^TNX, ^TYX) vía Yahoo Finance. Los cambios se miden en puntos porcentuales; nunca se completan fechas faltantes.',
+    howToInterpret: 'Mirá el nivel, hacia dónde se movió en los últimos meses y la pendiente de la curva. Son las tasas de EE.UU., no las de Argentina.',
+    limitations: 'Fuente no oficial, con posibles huecos o atrasos. Describe las tasas de hoy; no pronostica su evolución ni dice qué hacer.',
+    relatedTerms: ['ciclos_pendiente_curva', 'ciclos_puntos_porcentuales'],
+  },
+  ciclos_pendiente_curva: {
+    title: 'Pendiente de la curva',
+    shortDescription: 'La tasa de un plazo largo menos la de un plazo corto, en la misma fecha (por ejemplo 10 años menos 3 meses).',
+    whyItMatters: 'Muestra si las tasas largas pagan más que las cortas (curva "normal") o menos (curva "invertida"), algo que se suele mirar al evaluar el contexto financiero.',
+    howToInterpret: 'Positiva: las tasas largas superan a las cortas. Negativa (invertida): las cortas superan a las largas. Se muestra cuántas de las últimas 52 semanas estuvo invertida.',
+    limitations: 'Describe los datos de hoy. Una curva invertida no es un pronóstico de nada ni una indicación de operar.',
+    relatedTerms: ['ciclos_tasas', 'ciclos_puntos_porcentuales'],
+  },
+  ciclos_puntos_porcentuales: {
+    title: 'Puntos porcentuales (pp)',
+    shortDescription: 'La diferencia entre dos tasas o dos niveles expresados en %. De 4,0 % a 4,5 % son +0,5 pp.',
+    whyItMatters: 'Con una tasa no se calcula un "rendimiento": pasar de 0,1 % a 0,2 % no es "+100 %" que importe. Lo que informa es cuántos puntos se movió.',
+    howToInterpret: '+0,50 pp significa que la tasa subió medio punto (por ejemplo de 4,00 % a 4,50 %).',
   },
   ciclos_efectividad: {
     title: 'Qué pasó después de cada estado',

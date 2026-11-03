@@ -20,6 +20,7 @@ Decisiones:
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from datetime import date, datetime, timedelta
@@ -70,11 +71,18 @@ def detectar_reajuste(
     return False
 
 
-def filas_barras(simbolo: str, moneda: str, serie: Serie, hoy: date, desde: date | None = None) -> list[dict]:
-    """Filas para `upsert_barras`: sólo ruedas cerradas, sin duplicar fechas, sólo cierre."""
+def filas_barras(
+    simbolo: str, moneda: str, serie: Serie, hoy: date, desde: date | None = None, nivel: bool = False,
+) -> list[dict]:
+    """Filas para `upsert_barras`: sólo ruedas cerradas, sin duplicar fechas, sólo cierre.
+
+    `nivel=True` es una tasa de interés (% anual): un cero es un dato válido, no una barra rota, así que sólo se
+    descarta lo que no es un número. Un precio, en cambio, nunca es cero ni negativo."""
     por_fecha: dict[date, float] = {}
     for fecha, cierre in serie:
-        if fecha < hoy and (desde is None or fecha >= desde) and cierre and cierre > 0:
+        if fecha >= hoy or (desde is not None and fecha < desde) or cierre is None:
+            continue
+        if (math.isfinite(cierre) if nivel else cierre > 0):
             por_fecha[fecha] = cierre
     return [
         {"ticker": benchmarks.clave(simbolo), "fecha": f, "apertura": None, "maximo": None, "minimo": None,
@@ -156,13 +164,23 @@ def _registrar_historial(db: Session) -> dict:
         return {"resultado": "error", "error": str(exc)}
 
 
-def _bajar(simbolos: list[str], desde: date, hoy: date, tanda: int, pausa: float) -> tuple[dict[str, Serie], bool]:
+def _pedir(lote: list[str], desde: date, hoy: date, niveles: set[str]) -> tuple[dict[str, Serie], bool]:
+    """Una llamada de Yahoo. `niveles` (tasas) sólo se pasa si el lote tiene alguna: es lo único que cambia para ellas."""
+    propios = niveles & set(lote)
+    if propios:
+        return yahoo.fetch_cierres_lote(lote, desde, hoy, niveles=propios)
+    return yahoo.fetch_cierres_lote(lote, desde, hoy)
+
+
+def _bajar(
+    simbolos: list[str], desde: date, hoy: date, tanda: int, pausa: float, niveles: set[str] | None = None,
+) -> tuple[dict[str, Serie], bool]:
     """Baja `simbolos` en tandas. `(series, rate_limited)`; ante un límite de tasa devuelve lo obtenido."""
     out: dict[str, Serie] = {}
     for i in range(0, len(simbolos), tanda):
         if i and pausa:
             time.sleep(pausa)
-        lote, limitado = yahoo.fetch_cierres_lote(simbolos[i:i + tanda], desde, hoy)
+        lote, limitado = _pedir(simbolos[i:i + tanda], desde, hoy, niveles or set())
         out.update(lote)
         if limitado:
             return out, True
@@ -175,6 +193,7 @@ def _correr(db: Session, tanda: int, pausa: float) -> dict:
     catalogo = ciclos_catalogo.cargar()
     info = catalogo.simbolos()
     simbolos = sorted(info)
+    niveles = {s for s, i in info.items() if i.rol == ciclos_catalogo.ROL_TASA}
     if not simbolos:
         return {"resultado": "catalogo_vacio", "simbolos": 0, "errores": catalogo.errores}
 
@@ -187,7 +206,7 @@ def _correr(db: Session, tanda: int, pausa: float) -> dict:
 
     # -- 2. Red (sin lock) --
     limitado = False
-    series_completas, lim = _bajar(completos, INICIO_HISTORIA, hoy, tanda, pausa)
+    series_completas, lim = _bajar(completos, INICIO_HISTORIA, hoy, tanda, pausa, niveles)
     limitado = limitado or lim
     series_incrementales: dict[str, Serie] = {}
     if incrementales and not limitado:
@@ -196,20 +215,21 @@ def _correr(db: Session, tanda: int, pausa: float) -> dict:
             lote = orden[i:i + tanda]
             if i and pausa:
                 time.sleep(pausa)
-            datos, lim = yahoo.fetch_cierres_lote(lote, min(incrementales[s] for s in lote), hoy)
+            datos, lim = _pedir(lote, min(incrementales[s] for s in lote), hoy, niveles)
             series_incrementales.update(datos)
             if lim:
                 limitado = True
                 break
 
+    # Una tasa no se ajusta por dividendos ni splits (y cerca de cero cualquier diferencia relativa se dispara): sin reajuste.
     reajustados = [
         s for s, nuevo in series_incrementales.items()
-        if detectar_reajuste(guardados.get(s, {}), nuevo)
+        if info[s].rol != ciclos_catalogo.ROL_TASA and detectar_reajuste(guardados.get(s, {}), nuevo)
     ]
     if reajustados:
         logger.info("ciclos: Yahoo reajustó la historia de %s; se re-baja entera", ", ".join(reajustados))
         if not limitado:
-            rebajadas, lim = _bajar(reajustados, INICIO_HISTORIA, hoy, tanda, pausa)
+            rebajadas, lim = _bajar(reajustados, INICIO_HISTORIA, hoy, tanda, pausa, niveles)
             limitado = limitado or lim
         else:
             rebajadas = {}
@@ -230,13 +250,14 @@ def _correr(db: Session, tanda: int, pausa: float) -> dict:
 
         for s, serie in series_completas.items():
             # Una descarga entera reemplaza lo guardado: una sola escala para toda la serie.
-            filas = filas_barras(s, info[s].moneda, serie, hoy)
+            filas = filas_barras(s, info[s].moneda, serie, hoy, nivel=info[s].rol == ciclos_catalogo.ROL_TASA)
             if not filas:
                 continue
             db.query(BarraOHLCV).filter(BarraOHLCV.ticker == benchmarks.clave(s)).delete(synchronize_session=False)
             ohlcv_analytics.upsert_barras(db, filas)
         for s, serie in series_incrementales.items():
-            ohlcv_analytics.upsert_barras(db, filas_barras(s, info[s].moneda, serie, hoy, desde=incrementales[s]))
+            ohlcv_analytics.upsert_barras(db, filas_barras(
+                s, info[s].moneda, serie, hoy, desde=incrementales[s], nivel=info[s].rol == ciclos_catalogo.ROL_TASA))
 
         for s in simbolos:
             est = estados.get(s)
@@ -322,6 +343,8 @@ def estado(db: Session, hoy: date | None = None) -> list[dict]:
         for s in (g.proxy, (g.indice_local or {}).get("simbolo"), (g.fx or {}).get("simbolo")):
             if s:
                 usados.setdefault(s, []).append(g.id)
+    for t in catalogo.tasas_activas():
+        usados.setdefault(t.simbolo, []).append(t.id)
     out = []
     for s, info in sorted(catalogo.simbolos().items()):
         est = estados.get(s)

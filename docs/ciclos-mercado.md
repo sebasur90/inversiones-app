@@ -11,7 +11,7 @@ recomendaciones de compra o venta**, no combina las dimensiones en un puntaje ú
 | **Panorama** | Régimen macro (hoy «no disponible»), mapa de rotación relativa con trayectorias, cambios de liderazgo confirmados, mapa de calor de rendimientos |
 | **Sectores y activos** | Sectores, industrias, commodities (separados), activos y temas, cada uno con su estado y rendimiento |
 | **Regiones** | Regiones y países, comparaciones habituales (EE.UU. vs. Europa, China vs. India...) y ficha de país |
-| **Relaciones** | Matriz de correlaciones, comparación histórica sobre un mismo período, adelantos y rezagos |
+| **Relaciones** | Matriz de correlaciones, comparación histórica sobre un mismo período, tasas de interés del Tesoro de EE.UU., adelantos y rezagos |
 | **Mi cartera** | Capital por estado del ciclo, instrumentos de un grupo, simulador de rotación |
 | **Ficha** (`/ciclos/grupo/:id`) | Base 100 contra la referencia, métricas por separado, historial de rotación, qué pasó después de cada estado, período histórico a elegir, tus posiciones en el grupo |
 
@@ -27,6 +27,7 @@ services/ciclos_analytics.py     adaptador DB: panorama, detalle, relaciones, pa
 services/ciclos_cartera.py       cruce con la cartera y simulador
 services/ciclos_regimen.py       régimen macro (estructura, sin datos)
 services/ciclos_senales_engine.py + ciclos_historial.py   cambios confirmados sobre una foto semanal
+services/ciclos_tasas.py + ciclos_tasas_engine.py          panel de tasas de interés (nivel, cambios en pp, curva, pendientes)
 services/ciclos_efectividad.py + ciclos_efectividad_engine.py   qué rindió el grupo contra su referencia después de cada estado
 services/ciclos_avisos.py + ciclos_avisos_engine.py        aviso por Telegram de esos cambios en los grupos con posición
 routers/ciclos.py                API
@@ -130,8 +131,8 @@ La **rotación se calcula siempre en USD**: el tipo de cambio se cancela en el c
   Muestra emisor, instrumento, sector, país y región antes/después, los umbrales de Salud y la distancia a objetivos. **En memoria: no escribe nada, no estima rendimientos, no calcula impuestos.**
 
 ## Régimen macroeconómico
-Estructura de los cuatro escenarios (reflación, expansión equilibrada, estanflación, desinflación) lista; **estado `no_disponible`**. La app sólo tiene CER, MEP, riesgo país e inflación de INDEC (Argentina): no alcanzan para el régimen global.
-Falta: actividad, indicadores adelantados, inflación global, tasas, liquidez y condiciones financieras. Nada se inventa y no bloquea el análisis de precios.
+Estructura de los cuatro escenarios (reflación, expansión equilibrada, estanflación, desinflación) lista; **estado `no_disponible`**. La app tiene CER, MEP, riesgo país e inflación de INDEC (Argentina) y los rendimientos del Tesoro de EE.UU. (parcial): no alcanzan para el régimen global.
+Falta: actividad, indicadores adelantados, inflación global, liquidez y condiciones financieras (y la tasa de política monetaria). Nada se inventa y no bloquea el análisis de precios.
 
 ## Señales y avisos por Telegram
 `ciclos_historial.registrar` guarda, tras cada ingesta, el estado de cada grupo por **semana cerrada** y sólo si el grupo y su benchmark están completos y al día. `ciclos_senales_engine.detectar` (puro) identifica
@@ -144,6 +145,16 @@ Falta: actividad, indicadores adelantados, inflación global, tasas, liquidez y 
 - **Primera evaluación = siembra:** se toma el estado actual sin avisar (`ajustes_avisos.ciclos_semilla_en`). Un cambio que ya había empezado hace más de 35 días también se registra sin avisar, igual que el que llega con el interruptor apagado: prenderlo después no manda de golpe lo que pasó.
 - **Si Telegram falla**, el cambio queda pendiente y se reintenta en la corrida siguiente (hasta 35 días desde que empezó el estado; después se descarta como viejo). Si en el medio vendiste el grupo entero, no se avisa.
 - Un cambio que cumple dos tipos (perder momentum y fortaleza a la vez) es un solo aviso. Los cambios pendientes (menos de 3 semanas) nunca se avisan.
+
+## Tasas de interés
+`GET /ciclos/tasas?anios=` y la sección «Tasas de interés» de la pestaña Relaciones. Describe; **no pronostica ni recomienda**.
+
+- **Qué hay:** rendimientos del Tesoro de EE.UU. a 3 meses (`^IRX`, Letra a 13 semanas), 5 años (`^FVX`), 10 años (`^TNX`) y 30 años (`^TYX`), en % anual, desde los índices CBOE vía Yahoo. Se declaran en la sección `tasas` del catálogo (id, nombre, símbolo, plazo) y las pendientes de la curva en `pendientes_curva` (`larga − corta`, la larga con mayor plazo). Hoy: 10 años − 3 meses y 30 años − 5 años.
+- **Una tasa no es un precio.** Se guarda en `serie_ohlcv` bajo `SIMBOLO@BENCH` como las demás (moneda `PCT`), pero: (1) el **cero y los valores negativos son datos válidos** (la ingesta y `normalizar_nivel` no los descartan, a diferencia de un precio); (2) **no hay reajuste** por dividendos ni splits (y cerca de cero cualquier diferencia relativa se dispararía); (3) sus cambios se miden en **puntos porcentuales** (diferencia), nunca como rendimiento.
+- **Qué muestra:** nivel actual y su fecha, cambio en pp a 1M/3M/6M/1A (sin acortar el período: si no hay dato cerca, queda «sin dato» con su motivo), mínimo y máximo del período, forma de la curva hoy y hace un año, y la pendiente con cuántas de las últimas 52 semanas estuvo invertida. «Invertida» es un hecho de los datos (tasas cortas por encima de las largas), no un pronóstico.
+- **Desfases con una tasa:** un par de `pares_desfase` puede incluir una tasa (hoy «Tasa a 10 años → financieras» e «→ inmobiliario», que reemplazan al sustituto con el bono largo). De la tasa se usa el **cambio semanal en pp**; del grupo, el rendimiento semanal.
+- **Cobertura verificada (2026-11-03):** las cuatro desde 2005-01-03, ~5.490 observaciones; sólo un hueco de 12 días en `^IRX` (marzo de 2020).
+- **Limitaciones:** son tasas de EE.UU. (no las de Argentina), de una fuente no oficial que puede tener huecos o atrasos. El régimen macro las cuenta como disponibles pero **parciales**: no alcanzan, solas, para determinar crecimiento ni inflación.
 
 ## Efectividad histórica de cada estado
 `GET /ciclos/grupos/{id}/efectividad?alcance=grupo|tipo&benchmark=` y la sección «Qué pasó después de cada estado» de la ficha. **Describe el pasado; no mide si un estado sirve para anticipar nada.**
@@ -166,6 +177,7 @@ Se recalcula desde las series completas (no depende de `ciclos_estado_historial`
 | `GET /ciclos/panorama?tipo=&benchmark=&moneda=&periodo=&grupos=&ventana=&cola=` | mapa de rotación, calor, cambios, cobertura |
 | `GET /ciclos/grupos/{id}?benchmark=&moneda=&horizonte=&periodo_id=&desde=&hasta=&con=` | ficha de un grupo |
 | `GET /ciclos/grupos/{id}/senales` | cambios confirmados sobre el historial |
+| `GET /ciclos/tasas?anios=` | tasas del Tesoro de EE.UU., curva y pendientes |
 | `GET /ciclos/grupos/{id}/efectividad?alcance=` | qué pasó después de cada estado (grupo o todos los de su tipo) |
 | `GET /ciclos/paises/{id}?meses=&benchmark=&moneda=` | ficha de país o región |
 | `GET /ciclos/relaciones/correlaciones` · `/desfases` · `/comparacion` | relaciones |
@@ -205,8 +217,8 @@ docker compose -f docker-compose.yml -f docker-compose.corporate.yml run --rm \
 - Bitcoin y Ethereum son precio spot; los índices locales de países son de precio. Si se mezclan con retorno total en una comparación, la pantalla lo avisa.
 - Yahoo es una fuente no oficial: puede tener huecos o atrasos (ver «Cobertura real»).
 - El rendimiento pasado no anticipa el futuro; el cuadrante describe las últimas semanas.
-- Sin valuación, sin contexto macro global y sin tasas: son dimensiones distintas que este mapa no mide.
+- Sin valuación y sin contexto macro global (actividad, inflación): son dimensiones distintas que este mapa no mide. Las tasas son sólo las del Tesoro de EE.UU.
 
-## Pendiente (segunda etapa; las alertas por Telegram y la efectividad histórica ya están)
-Régimen macro con una fuente documentada · tasas de interés para el par «tasas → crédito» ·
+## Pendiente (segunda etapa; alertas, efectividad histórica y tasas ya están)
+Régimen macro con una fuente documentada (actividad, inflación, liquidez, condiciones financieras) ·
 holdings de ETFs para una clasificación temática de fuente externa.

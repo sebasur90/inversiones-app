@@ -84,6 +84,16 @@ def normalizar(serie) -> Serie:
     return sorted(por_fecha.items())
 
 
+def normalizar_nivel(serie) -> Serie:
+    """Como `normalizar`, pero para series que son un **nivel** (una tasa en % anual): conserva el cero y los negativos.
+    Descartarlos, como se hace con un precio, abriría huecos falsos justo cuando la tasa estuvo más baja."""
+    por_fecha: dict[date, float] = {}
+    for fecha, valor in serie or ():
+        if valor is not None and math.isfinite(valor):
+            por_fecha[fecha] = float(valor)
+    return sorted(por_fecha.items())
+
+
 def _idx_semana(d: date) -> int:
     """Número de semana ISO continuo: dos semanas consecutivas difieren en 1 (también entre años)."""
     return (d - timedelta(days=d.weekday())).toordinal() // 7
@@ -467,6 +477,20 @@ def retornos_en_grilla(serie: Serie, grilla: list[date], tolerancia: int) -> dic
     return out
 
 
+def cambios_en_grilla(serie: Serie, grilla: list[date], tolerancia: int) -> dict[date, float]:
+    """Como `retornos_en_grilla`, pero la **diferencia** entre fechas consecutivas (puntos porcentuales de una tasa).
+    Un rendimiento sobre una tasa no tiene sentido (pasar de 0,1 % a 0,2 % no es «+100 %»)."""
+    fechas, cierres = _arrays(serie)
+    out: dict[date, float] = {}
+    previo = None
+    for g in grilla:
+        c = cierre_en(fechas, cierres, g, tolerancia) if fechas else None
+        if c is not None and previo is not None:
+            out[g] = c - previo
+        previo = c
+    return out
+
+
 def matriz_correlacion(
     series: dict[str, Serie], desde: date, hasta: date, frecuencia: str = "semanal",
     grilla_diaria: list[date] | None = None,
@@ -494,16 +518,25 @@ def matriz_correlacion(
             "periodo": {"desde": fechas[0] if fechas else None, "hasta": fechas[-1] if fechas else None}}
 
 
-def desfases(a: Serie, b: Serie, desde: date, hasta: date, max_semanas: int = MAX_DESFASE_SEMANAS) -> dict:
+def desfases(
+    a: Serie, b: Serie, desde: date, hasta: date, max_semanas: int = MAX_DESFASE_SEMANAS,
+    nivel_a: bool = False, nivel_b: bool = False,
+) -> dict:
     """Correlación entre el retorno semanal de `a` en la semana t y el de `b` en la semana t+k, para k entre
     −max y +max. **k > 0 significa que `a` va primero.** Son hipótesis estadísticas, no predicciones.
+
+    `nivel_a` / `nivel_b`: la serie es una tasa (un nivel en %), así que en lugar del retorno se usa su cambio semanal
+    en puntos porcentuales.
 
     Con 2·max+1 desfases probados es normal que alguno supere la banda por azar (la banda es ±1,96/√n:
     cubre 95 % de un solo desfase, no de todos).
     """
     grilla = grilla_semanal(desde, hasta)
-    ra = {_idx_semana(f): v for f, v in retornos_en_grilla(normalizar(a), grilla, 3).items()}
-    rb = {_idx_semana(f): v for f, v in retornos_en_grilla(normalizar(b), grilla, 3).items()}
+    def _semanal(serie: Serie, nivel: bool) -> dict[int, float]:
+        medidas = cambios_en_grilla(normalizar_nivel(serie), grilla, 3) if nivel else retornos_en_grilla(normalizar(serie), grilla, 3)
+        return {_idx_semana(f): v for f, v in medidas.items()}
+
+    ra, rb = _semanal(a, nivel_a), _semanal(b, nivel_b)
     filas = []
     for k in range(-max_semanas, max_semanas + 1):
         rb_desplazado = {t - k: v for t, v in rb.items()}

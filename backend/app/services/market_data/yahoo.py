@@ -124,7 +124,7 @@ def fetch_historico_ohlcv(ticker: str, desde: date, hasta: date) -> list[BarraCr
 
 
 def fetch_cierres_lote(
-    simbolos: list[str], desde: date, hasta: date | None = None,
+    simbolos: list[str], desde: date, hasta: date | None = None, niveles: frozenset[str] | set[str] = frozenset(),
 ) -> tuple[dict[str, list[tuple[date, float]]], bool]:
     """Cierres diarios ajustados de varios símbolos en una sola llamada: `({simbolo: [(fecha, cierre)]}, rate_limited)`.
 
@@ -132,6 +132,9 @@ def fetch_cierres_lote(
     no devuelve (o devuelve vacío) simplemente no aparece en el resultado: no corta al resto. Ante
     un límite de tasa se devuelve lo que haya y `rate_limited=True`, para que quien llama deje de
     pedir. Nunca lanza.
+
+    `niveles`: símbolos que no son un precio sino un nivel (una tasa en %): ahí el cero es un dato válido, así que sólo
+    se descarta lo que no es un número. Para el resto, un cierre no positivo es una barra rota y se descarta.
     """
     if not simbolos:
         return {}, False
@@ -175,7 +178,7 @@ def fetch_cierres_lote(
             serie: list[tuple[date, float]] = []
             for idx, valor in sub["Close"].items():
                 cierre = _num(valor)
-                if cierre is None or cierre <= 0:
+                if cierre is None or (cierre <= 0 and simbolo not in niveles):
                     continue
                 serie.append((idx.date(), cierre))
         except (KeyError, AttributeError, ValueError):
