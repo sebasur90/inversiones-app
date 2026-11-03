@@ -157,7 +157,7 @@ La **rotación se calcula siempre en USD**: el tipo de cambio se cancela en el c
 `empieza_a_mejorar` (Lagging→Improving), `pasa_a_liderar` (Improving→Leading), `pierde_momentum` (Leading→Weakening) y `pierde_fortaleza_relativa`, cada uno confirmado o pendiente.
 `GET /ciclos/grupos/{id}/senales` los expone.
 
-**Aviso por Telegram** (`ciclos_avisos` + `ciclos_avisos_engine`, interruptor `avisar_ciclos` en Ajustes → Avisos, prendido por defecto). Corre después de cada descarga (job `ciclos` y `POST /ciclos/refrescar`) y manda **un solo mensaje** con los cambios nuevos:
+**Aviso por Telegram** (`ciclos_avisos` + `ciclos_avisos_engine`, interruptor `avisar_ciclos` en Ajustes → «Qué avisar», prendido por defecto). Corre después de cada descarga (job `ciclos` y `POST /ciclos/refrescar`) y manda **un solo mensaje** con los cambios nuevos:
 - **Sólo cambios confirmados** (3 semanas sostenidas) **y sólo de grupos donde hay posición** (el mismo cálculo que «tus posiciones en el grupo» de la ficha, sobre el consolidado; un grupo padre cuenta a sus hijos). El mensaje dice qué cambió, frente a qué referencia, cuántas semanas lleva y cuánto del capital pesa el grupo; no dice qué hacer.
 - **Una vez por cambio.** La identidad es `(grupo, benchmark, tipo, semana en que empezó el estado)` y vive en `ciclos_avisos_emitidos` (también guarda lo sembrado, lo viejo, lo silenciado y lo que no tenía posición).
 - **Primera evaluación = siembra:** se toma el estado actual sin avisar (`ajustes_avisos.ciclos_semilla_en`). Un cambio que ya había empezado hace más de 35 días también se registra sin avisar, igual que el que llega con el interruptor apagado: prenderlo después no manda de golpe lo que pasó.
