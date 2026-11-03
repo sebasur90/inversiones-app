@@ -770,6 +770,56 @@ class VariacionMercado(Base):
     actualizado = Column(DateTime, nullable=False)
 
 
+class CiclosProxyEstado(Base):
+    """Qué cobertura real tiene cada símbolo de Yahoo que usa «Ciclos de mercado».
+
+    Una fila por símbolo. Es lo que permite que un grupo cuyo proxy no se pudo bajar quede como «sin
+    datos (motivo)» en vez de calcularse con lo que haya: `estado` es `ok`, `no_encontrado`, `error` o
+    `sin_intentar`. Las barras en sí viven en `serie_ohlcv` (clave `SIMBOLO@BENCH`); esto no las duplica.
+
+    `historia_completa` indica que ya se bajó todo desde el inicio pedido (la serie empieza cuando
+    empieza en Yahoo): a partir de ahí la ingesta es incremental. `reajustes` cuenta las veces que
+    Yahoo reajustó la historia (dividendo o split) y hubo que volver a bajarla entera.
+    """
+    __tablename__ = "ciclos_proxy_estado"
+    simbolo = Column(String, primary_key=True)
+    estado = Column(String, nullable=False, default="sin_intentar", server_default="sin_intentar")
+    primera_fecha = Column(Date, nullable=True)
+    ultima_fecha = Column(Date, nullable=True)
+    n_barras = Column(Integer, nullable=False, default=0, server_default="0")
+    historia_completa = Column(Integer, nullable=False, default=0, server_default="0")
+    reajustes = Column(Integer, nullable=False, default=0, server_default="0")
+    ultimo_intento = Column(DateTime, nullable=True)
+    ultimo_ok = Column(DateTime, nullable=True)
+    error = Column(String, nullable=True)
+
+
+class CiclosEstadoHistorial(Base):
+    """Foto semanal del estado de rotación de un grupo contra un benchmark (cuadrante, RS-Ratio y
+    RS-Momentum), con la versión del algoritmo que la calculó.
+
+    **No es fuente de verdad**: todo se puede recalcular desde las series. Sirve para estudiar más
+    adelante qué tan bien anticipó cada estado y para detectar cambios confirmados en una segunda
+    etapa. Sólo se guardan semanas cerradas y con grupo y benchmark completos.
+    """
+    __tablename__ = "ciclos_estado_historial"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    grupo_id = Column(String, nullable=False)
+    benchmark_id = Column(String, nullable=False)
+    semana = Column(Date, nullable=False)
+    cuadrante = Column(String, nullable=False)
+    rs_ratio = Column(Numeric(14, 6), nullable=False)
+    rs_momentum = Column(Numeric(14, 6), nullable=False)
+    version_algoritmo = Column(String, nullable=False)
+    ultima_fecha_datos = Column(Date, nullable=False)
+    calculado_en = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("grupo_id", "benchmark_id", "semana", "version_algoritmo", name="uq_ciclos_estado"),
+        Index("ix_ciclos_estado_grupo", "grupo_id", "benchmark_id", "semana"),
+    )
+
+
 class LogoEmpresa(Base):
     """Estado del logo de un emisor. El archivo vive en el volumen de datos (`services/logos.py`),
     no en la base: acá sólo se sabe si hay, de qué dominio salió y cuándo reintentar.

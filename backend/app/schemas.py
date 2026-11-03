@@ -4179,3 +4179,63 @@ class EventoTickerUniversoOut(BaseModel):
     ticker: str
     nombre: str
     origen: str
+
+
+# --- Ciclos de mercado ---
+
+class CiclosGrupoOut(BaseModel):
+    id: str
+    nombre: str
+    tipo: str
+    vistas: list[str]
+    padre: Optional[str] = None
+    descripcion: str = ""
+    proxy: Optional[str] = None
+    benchmark: Optional[str] = None
+    moneda: str
+    region: Optional[str] = None
+    fuente: str
+    tipo_rendimiento: str
+    activo: bool
+    exclusivo: bool
+    es_benchmark: bool
+    lista_curada: bool = False
+    nota: Optional[str] = None
+    pertenencia: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class CiclosPeriodoOut(BaseModel):
+    id: str
+    nombre: str
+    desde: date
+    hasta: Optional[date] = None
+    nota: Optional[str] = None
+
+
+class CiclosCatalogoOut(BaseModel):
+    version: int
+    grupos: list[CiclosGrupoOut]
+    periodos: list[CiclosPeriodoOut]
+    errores: list[str] = Field(default_factory=list)
+
+
+class CiclosProxyEstadoOut(BaseModel):
+    simbolo: str
+    rol: str
+    moneda: str
+    grupos: list[str]
+    estado: str
+    primera_fecha: Optional[date] = None
+    ultima_fecha: Optional[date] = None
+    n_barras: int
+    reajustes: int
+    ultimo_ok: Optional[datetime] = None
+    error: Optional[str] = None
+    desactualizado: bool
+
+
+class CiclosEstadoOut(BaseModel):
+    simbolos: list[CiclosProxyEstadoOut]
+    con_datos: int
+    sin_datos: int
+    desactualizados: int
