@@ -826,6 +826,33 @@ class CiclosEstadoHistorial(Base):
     )
 
 
+class CiclosMacroObs(Base):
+    """Una observación de una serie macroeconómica (FRED) del régimen de «Ciclos de mercado».
+
+    `fecha` es el período al que se refiere el dato (el 1 de septiembre para el IPC de septiembre), **no** cuándo se
+    publicó. Los datos macro se revisan: cada descarga reemplaza la serie entera con la versión vigente."""
+    __tablename__ = "ciclos_macro_obs"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    serie_id = Column(String, nullable=False)
+    fecha = Column(Date, nullable=False)
+    valor = Column(Numeric(20, 6), nullable=False)
+
+    __table_args__ = (UniqueConstraint("serie_id", "fecha", name="uq_ciclos_macro_obs"), Index("ix_ciclos_macro_obs_serie", "serie_id", "fecha"))
+
+
+class CiclosMacroEstado(Base):
+    """Cobertura de cada serie macro: cuándo se intentó y se logró bajarla, cuántas observaciones y el último error."""
+    __tablename__ = "ciclos_macro_estado"
+    serie_id = Column(String, primary_key=True)
+    estado = Column(String, nullable=False, default="sin_intentar")      # ok | error | sin_intentar
+    ultimo_intento = Column(DateTime, nullable=True)
+    ultimo_ok = Column(DateTime, nullable=True)
+    n_obs = Column(Integer, nullable=False, default=0)
+    primera_fecha = Column(Date, nullable=True)
+    ultima_fecha = Column(Date, nullable=True)
+    error = Column(String, nullable=True)
+
+
 class CiclosAvisoEmitido(Base):
     """Cambios de estado de Ciclos de mercado que ya se trataron (avisados, sembrados o silenciados).
 

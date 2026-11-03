@@ -215,9 +215,11 @@ export const CICLOS_HELP: Record<CiclosHelpKey, HelpContent> = {
   },
   ciclos_regimen: {
     title: 'Régimen macroeconómico',
-    shortDescription: 'Un escenario según si el crecimiento y la inflación se aceleran o se desaceleran: reflación, expansión equilibrada, estanflación o desinflación.',
-    whyItMatters: 'Distintos activos suelen comportarse distinto en cada escenario, y por eso interesa saber en cuál estamos.',
-    limitations: 'Hoy la app no tiene series macro globales confiables (actividad, inflación, tasas, liquidez), así que no asigna ningún escenario. CER, MEP y riesgo país describen a la Argentina y no alcanzan.',
+    shortDescription: 'Un escenario según si el crecimiento y la inflación de EE.UU. se aceleran o se desaceleran: reflación, expansión equilibrada, estanflación o desinflación.',
+    whyItMatters: 'Distintos activos suelen comportarse distinto en cada escenario, y por eso interesa saber cómo vienen los datos.',
+    howItIsCalculated: 'Cada serie (producción industrial, empleo, IPC, etc.) vota "acelera" si su variación de hoy es mayor que la de hace 3 meses, y "desacelera" si es menor. Cada eje se define por mayoría estricta y sólo si votaron al menos 3 series; si hay empate o pocos votos, no concluye y no se asigna ningún escenario.',
+    howToInterpret: 'Mirá cuántas series votan cada cosa y de qué tamaño es cada cambio: una mayoría de cambios muy chicos es una señal débil. Liquidez, condiciones financieras y dólar se muestran como contexto y no entran en la clasificación.',
+    limitations: 'Son datos de EE.UU. (FRED), que se revisan después de publicarse y llegan con uno o dos meses de rezago. Describe cómo vienen los datos frente a hace unos meses; no anticipa el régimen siguiente ni dice qué hacer con la cartera.',
   },
   ciclos_simulador: {
     title: 'Simulador de rotación',

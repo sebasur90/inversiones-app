@@ -323,7 +323,20 @@ def correr_ciclos() -> None:
         db.rollback()
     finally:
         db.close()
+    _bajar_macro()
     _avisar_ciclos()
+
+
+def _bajar_macro() -> None:
+    """Series macro del régimen (FRED). Sesión propia; nunca lanza. Cambian poco: sólo baja las que tienen más de un día."""
+    from ..database import SessionLocal
+    from . import ciclos_macro_ingesta
+
+    db = SessionLocal()
+    try:
+        logger.info("scheduler: macro de ciclos %s", ciclos_macro_ingesta.correr_seguro(db))
+    finally:
+        db.close()
 
 
 def _avisar_ciclos() -> None:

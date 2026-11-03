@@ -15,10 +15,11 @@ from ..database import MovimientoInversion, SessionLocal, get_db
 from ..schemas import (
     CiclosCarteraOut, CiclosCatalogoOut, CiclosComparacionOut, CiclosCorrelacionesOut, CiclosDesfasesOut,
     CiclosDetalleOut, CiclosEfectividadOut, CiclosEstadoOut, CiclosInstrumentosOut, CiclosPaisOut, CiclosPanoramaOut,
-    CiclosSenalesOut, CiclosSimulacionOut, CiclosSimularIn, CiclosTasasOut,
+    CiclosRegimenOut, CiclosSenalesOut, CiclosSimulacionOut, CiclosSimularIn, CiclosTasasOut,
 )
 from ..services import (
     ciclos_analytics, ciclos_avisos, ciclos_cartera, ciclos_catalogo, ciclos_efectividad, ciclos_engine, ciclos_historial, ciclos_ingesta,
+    ciclos_macro, ciclos_macro_ingesta,
     ciclos_senales_engine, ciclos_tasas,
 )
 
@@ -100,6 +101,7 @@ def _corrida_en_segundo_plano() -> None:
         ciclos_ingesta.logger.exception("ciclos: la corrida manual falló")
         db.rollback()
     else:
+        ciclos_macro_ingesta.correr_seguro(db, forzar=True)
         ciclos_avisos.correr(db)
     finally:
         db.close()
@@ -134,6 +136,13 @@ def get_detalle(
 ):
     return _llamar(ciclos_analytics.detalle, db, grupo_id, benchmark=benchmark, moneda=moneda, horizonte=horizonte,
                    desde=desde, hasta=hasta, periodo_id=periodo_id, con=_ids(con) or (), ventana=ventana)
+
+
+@router.get("/ciclos/regimen", response_model=CiclosRegimenOut)
+def get_regimen(db: Session = Depends(get_db)):
+    """Crecimiento e inflación de EE.UU. (FRED), cada uno acelerando o desacelerando por mayoría de sus series, y el contexto de
+    liquidez, condiciones financieras y dólar. Describe los datos; no anticipa el régimen siguiente ni recomienda operar."""
+    return ciclos_macro.regimen(db)
 
 
 @router.get("/ciclos/tasas", response_model=CiclosTasasOut)

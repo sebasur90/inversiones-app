@@ -8,7 +8,7 @@ recomendaciones de compra o venta**, no combina las dimensiones en un puntaje ú
 
 | Pestaña | Qué muestra |
 |---|---|
-| **Panorama** | Régimen macro (hoy «no disponible»), mapa de rotación relativa con trayectorias, cambios de liderazgo confirmados, mapa de calor de rendimientos |
+| **Panorama** | Régimen macro de EE.UU. (crecimiento e inflación), mapa de rotación relativa con trayectorias, cambios de liderazgo confirmados, mapa de calor de rendimientos |
 | **Sectores y activos** | Sectores, industrias, commodities (separados), activos y temas, cada uno con su estado y rendimiento |
 | **Regiones** | Regiones y países, comparaciones habituales (EE.UU. vs. Europa, China vs. India...) y ficha de país |
 | **Relaciones** | Matriz de correlaciones, comparación histórica sobre un mismo período, tasas de interés del Tesoro de EE.UU., adelantos y rezagos |
@@ -25,7 +25,8 @@ services/ciclos_ingesta.py       descarga de Yahoo -> serie_ohlcv (clave SIMBOLO
 services/ciclos_engine.py        motor PURO: rotación, rendimientos, riesgo, correlaciones, país
 services/ciclos_analytics.py     adaptador DB: panorama, detalle, relaciones, país
 services/ciclos_cartera.py       cruce con la cartera y simulador
-services/ciclos_regimen.py       régimen macro (estructura, sin datos)
+services/ciclos_regimen.py       régimen macro: votos por serie, mayoría por eje, escenario (puro)
+services/ciclos_macro_catalogo.py + ciclos_macro_ingesta.py + ciclos_macro.py   series de FRED: catálogo, descarga y adaptador
 services/ciclos_senales_engine.py + ciclos_historial.py   cambios confirmados sobre una foto semanal
 services/ciclos_tasas.py + ciclos_tasas_engine.py          panel de tasas de interés (nivel, cambios en pp, curva, pendientes)
 services/ciclos_efectividad.py + ciclos_efectividad_engine.py   qué rindió el grupo contra su referencia después de cada estado
@@ -131,8 +132,25 @@ La **rotación se calcula siempre en USD**: el tipo de cambio se cancela en el c
   Muestra emisor, instrumento, sector, país y región antes/después, los umbrales de Salud y la distancia a objetivos. **En memoria: no escribe nada, no estima rendimientos, no calcula impuestos.**
 
 ## Régimen macroeconómico
-Estructura de los cuatro escenarios (reflación, expansión equilibrada, estanflación, desinflación) lista; **estado `no_disponible`**. La app tiene CER, MEP, riesgo país e inflación de INDEC (Argentina) y los rendimientos del Tesoro de EE.UU. (parcial): no alcanzan para el régimen global.
-Falta: actividad, indicadores adelantados, inflación global, liquidez y condiciones financieras (y la tasa de política monetaria). Nada se inventa y no bloquea el análisis de precios.
+`GET /ciclos/regimen` (y el campo `regimen` del panorama) y la tarjeta «Régimen macroeconómico (EE.UU.)» del Panorama. **Describe cómo vienen los datos frente a hace unos meses; no anticipa el régimen siguiente ni recomienda operar.**
+
+**Fuente:** FRED (Reserva Federal de St. Louis), CSV público **sin API key** (`fredgraph.csv?id=…`), declarado en `catalogos/ciclos_macro.json` (se edita sin tocar código; `CICLOS_MACRO_FILE` lo reubica). Se descarga con el job `ciclos` (sólo las series con más de 20 h) y con `POST /ciclos/refrescar` (fuerza). Cada descarga **reemplaza la serie entera** (los datos se revisan); una respuesta inválida deja lo guardado como estaba. Tablas `ciclos_macro_obs` y `ciclos_macro_estado`.
+
+**Cómo se decide** (sin puntaje único ni ponderaciones):
+1. Cada serie de **crecimiento** (producción industrial `INDPRO`, empleo no agrícola `PAYEMS`, actividad Chicago Fed `CFNAIMA3`, pedidos de subsidio `IC4WSA`) e **inflación** (IPC `CPIAUCSL`, PCE subyacente `PCEPILFE`, inflación implícita a 5 años `T5YIE`) **vota**: su transformación (variación contra un año antes, o el nivel) hoy contra la de hace `meses_comparacion` (3) meses. Mayor → «acelera»; menor → «desacelera». Una serie de sentido inverso (más pedidos de subsidio = menos crecimiento) invierte su voto. Sin cambio exacto, no vota.
+2. Una serie **sin datos, desactualizada** (más de 75 días las mensuales, 21 las semanales, 10 las diarias) **o sin historia para el año de comparación no vota**: no se completa ni se estima.
+3. El eje se define por **mayoría estricta** y sólo si votaron al menos `minimo_votos` (3) series. Con un empate o pocos votos queda «no concluyente» y **no se asigna ningún escenario**.
+4. Los cuatro escenarios cruzan los ejes: reflación (crecimiento y inflación aceleran), expansión equilibrada (crecimiento acelera, inflación desacelera), estanflación (al revés) y desinflación (ambos desaceleran).
+
+**Contexto** (se muestra, **no entra en la clasificación**): liquidez (balance de la Fed `WALCL`, M2 `M2SL`), condiciones financieras (índice Chicago Fed `NFCI`, tasa de fondos federales `DFF`) y dólar (índice amplio `DTWEXBGS`).
+
+**Estados:** `disponible` (los dos ejes concluyen), `no_concluyente` (alguno no concluye: se explica cuál y por qué) y `no_disponible` (todavía no se descargó nada).
+
+**Qué mostrar y qué no:** la pantalla muestra cada voto con su valor de hoy, el de hace 3 meses y el cambio (en pp o en unidades del índice): una mayoría de cambios mínimos es una señal débil, y la unanimidad no dice cuán fuerte es. Cada dato lleva la fecha del **período** al que se refiere, no la de publicación.
+
+**Limitaciones:** datos de EE.UU. (no describen la economía argentina), fuente no oficial como API (el CSV es público y estable pero no es una API contractual), **datos revisables** (FRED entrega la versión vigente; los datos «tal como se publicaron» exigen API key, por eso no se calcula ninguna efectividad histórica del régimen) y rezago de publicación de uno o dos meses.
+
+**Cobertura verificada (2026-11-03):** las 12 series bajaron; el régimen salió «Reflación» (4 de 4 series de crecimiento y 3 de 3 de inflación aceleran), varias con cambios mínimos (p. ej. empleo +0,05 pp).
 
 ## Señales y avisos por Telegram
 `ciclos_historial.registrar` guarda, tras cada ingesta, el estado de cada grupo por **semana cerrada** y sólo si el grupo y su benchmark están completos y al día. `ciclos_senales_engine.detectar` (puro) identifica
@@ -154,7 +172,7 @@ Falta: actividad, indicadores adelantados, inflación global, liquidez y condici
 - **Qué muestra:** nivel actual y su fecha, cambio en pp a 1M/3M/6M/1A (sin acortar el período: si no hay dato cerca, queda «sin dato» con su motivo), mínimo y máximo del período, forma de la curva hoy y hace un año, y la pendiente con cuántas de las últimas 52 semanas estuvo invertida. «Invertida» es un hecho de los datos (tasas cortas por encima de las largas), no un pronóstico.
 - **Desfases con una tasa:** un par de `pares_desfase` puede incluir una tasa (hoy «Tasa a 10 años → financieras» e «→ inmobiliario», que reemplazan al sustituto con el bono largo). De la tasa se usa el **cambio semanal en pp**; del grupo, el rendimiento semanal.
 - **Cobertura verificada (2026-11-03):** las cuatro desde 2005-01-03, ~5.490 observaciones; sólo un hueco de 12 días en `^IRX` (marzo de 2020).
-- **Limitaciones:** son tasas de EE.UU. (no las de Argentina), de una fuente no oficial que puede tener huecos o atrasos. El régimen macro las cuenta como disponibles pero **parciales**: no alcanzan, solas, para determinar crecimiento ni inflación.
+- **Limitaciones:** son tasas de EE.UU. (no las de Argentina), de una fuente no oficial que puede tener huecos o atrasos. El régimen macro no las usa para clasificar: la tasa de fondos federales de FRED (`DFF`) se muestra como contexto.
 
 ## Efectividad histórica de cada estado
 `GET /ciclos/grupos/{id}/efectividad?alcance=grupo|tipo&benchmark=` y la sección «Qué pasó después de cada estado» de la ficha. **Describe el pasado; no mide si un estado sirve para anticipar nada.**
@@ -177,6 +195,7 @@ Se recalcula desde las series completas (no depende de `ciclos_estado_historial`
 | `GET /ciclos/panorama?tipo=&benchmark=&moneda=&periodo=&grupos=&ventana=&cola=` | mapa de rotación, calor, cambios, cobertura |
 | `GET /ciclos/grupos/{id}?benchmark=&moneda=&horizonte=&periodo_id=&desde=&hasta=&con=` | ficha de un grupo |
 | `GET /ciclos/grupos/{id}/senales` | cambios confirmados sobre el historial |
+| `GET /ciclos/regimen` | régimen macro de EE.UU. (FRED): ejes, votos por serie y contexto |
 | `GET /ciclos/tasas?anios=` | tasas del Tesoro de EE.UU., curva y pendientes |
 | `GET /ciclos/grupos/{id}/efectividad?alcance=` | qué pasó después de cada estado (grupo o todos los de su tipo) |
 | `GET /ciclos/paises/{id}?meses=&benchmark=&moneda=` | ficha de país o región |
@@ -219,6 +238,7 @@ docker compose -f docker-compose.yml -f docker-compose.corporate.yml run --rm \
 - El rendimiento pasado no anticipa el futuro; el cuadrante describe las últimas semanas.
 - Sin valuación y sin contexto macro global (actividad, inflación): son dimensiones distintas que este mapa no mide. Las tasas son sólo las del Tesoro de EE.UU.
 
-## Pendiente (segunda etapa; alertas, efectividad histórica y tasas ya están)
-Régimen macro con una fuente documentada (actividad, inflación, liquidez, condiciones financieras) ·
-holdings de ETFs para una clasificación temática de fuente externa.
+## Pendiente
+- Holdings de ETFs para una clasificación temática de fuente externa.
+- Efectividad histórica del régimen: no se hace a propósito (ver «Limitaciones» del régimen: los datos son la versión revisada).
+- Series macro de otras regiones (Argentina, Europa, China) y la tasa de política de otros bancos centrales.

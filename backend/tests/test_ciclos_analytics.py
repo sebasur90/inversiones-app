@@ -237,8 +237,8 @@ def test_un_cambio_viejo_no_figura_entre_los_recientes(db):
 def test_el_regimen_macro_no_se_inventa(db):
     cargar_series(db, series_basicas())
     r = ca.panorama(db, "sector")["regimen"]
-    assert r["estado"] == "no_disponible" and r["escenario"] is None and "Actividad económica" in r["falta"]
-    assert "CER" in r["aclaracion"] and all(e["actual"] is False for e in r["escenarios"])
+    assert r["estado"] == "no_disponible" and r["escenario"] is None and any("Producción industrial" in f for f in r["falta"])
+    assert "Todavía no se descargaron" in r["aclaracion"] and all(e["actual"] is False for e in r["escenarios"])
 
 
 def test_los_temas_y_commodities_se_listan_por_su_tipo(db):

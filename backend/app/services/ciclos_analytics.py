@@ -22,7 +22,7 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from ..database import CiclosProxyEstado, IndiceMercado
-from . import benchmarks, ciclos_catalogo as cc, ciclos_engine as eng, ciclos_regimen
+from . import benchmarks, ciclos_catalogo as cc, ciclos_engine as eng, ciclos_macro
 from .cache import cache_por_sync
 
 MONEDAS = ("USD", "ARS")
@@ -304,7 +304,7 @@ def panorama(
     base = {"filtros": {"tipo": tipo, "benchmark": bench.id if bench else None, "moneda": moneda, "periodo": periodo,
                         "ventana": ventana, "cola": cola, "grupos": [g.id for g in disponibles]},
             "opciones": {**_opciones(cat), "grupos": [{"id": g.id, "nombre": g.nombre} for g in cat.activos() if tipo in g.vistas]},
-            "regimen": ciclos_regimen.evaluar()}
+            "regimen": ciclos_macro.regimen(db, hoy)}
 
     b_usd = fuentes.nativa(bench) if bench else []
     if not b_usd:

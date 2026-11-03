@@ -21,12 +21,13 @@ def _historial(secuencia: str, desde: date = V0, salteando: tuple = ()):
     return [{"semana": desde + timedelta(days=7 * i), "cuadrante": nombres[c]} for i, c in enumerate(secuencia) if i not in salteando]
 
 
-# -- régimen -----------------------------------------------------------------------------------
+# -- régimen sin datos (el régimen con datos está en test_ciclos_macro.py) ------------------------
 
-def test_el_regimen_nunca_asigna_un_escenario():
+def test_sin_datos_el_regimen_no_asigna_ningun_escenario():
     r = reg.evaluar()
-    assert r["estado"] == "no_disponible" and r["escenario"] is None
+    assert r["estado"] == "no_disponible" and r["escenario"] is None and r["escenario_id"] is None
     assert all(e["actual"] is False for e in r["escenarios"])
+    assert "Todavía no se descargaron" in r["aclaracion"]
 
 
 def test_los_cuatro_escenarios_cruzan_crecimiento_e_inflacion():
@@ -37,17 +38,12 @@ def test_los_cuatro_escenarios_cruzan_crecimiento_e_inflacion():
     }
 
 
-def test_dice_que_falta_y_que_cer_y_mep_no_alcanzan():
+def test_sin_datos_dice_que_falta_y_el_contexto_no_clasifica():
     r = reg.evaluar()
-    assert {"Actividad económica", "Inflación", "Liquidez", "Condiciones financieras", "Dólar", "Indicadores adelantados"} <= set(r["falta"])
-    assert "Tasas de interés" not in r["falta"]                                    # hay rendimientos del Tesoro de EE.UU. (parcial)
-    assert all(i["motivo"] for i in r["indicadores_necesarios"])
-    assert {i["id"] for i in r["indicadores_necesarios"] if i["disponible"]} == {"tasas"}
-    assert "CER" in r["aclaracion"] and "MEP" in r["aclaracion"] and "no alcanzan" in r["aclaracion"]
-    assert {i["id"] for i in r["disponible_hoy"]} == {"cer", "mep", "riesgo-pais", "inflacion-indec", "tasas-tesoro-eeuu"}
-    assert {i["id"] for i in r["disponible_hoy"] if i["alcance"] == "EE.UU."} == {"tasas-tesoro-eeuu"}
-    assert all(i["alcance"] == "Argentina" for i in r["disponible_hoy"] if i["id"] != "tasas-tesoro-eeuu")
-    assert r["estado"] == "no_disponible" and r["escenario"] is None             # con tasas solas no se asigna ningún escenario
+    assert r["falta"] and all("todavía no se descargó" in f for f in r["falta"])
+    assert set(r["ejes"]) == {"crecimiento", "inflacion"}
+    assert set(r["contexto"]) == {"liquidez", "condiciones_financieras", "dolar"}
+    assert all(s["voto"] is None for e in r["contexto"].values() for s in e)
 
 
 def test_el_resultado_es_independiente_de_las_llamadas():

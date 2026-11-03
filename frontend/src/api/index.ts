@@ -1753,15 +1753,61 @@ export interface CicloCobertura {
   desactualizados: { id: string; nombre: string; motivo: string | null }[]
 }
 
+export type CicloRegimenEje = 'acelerando' | 'desacelerando' | 'no_concluyente'
+export type CicloVoto = 'acelerando' | 'desacelerando' | 'sin_cambio' | null
+
+export interface CicloSerieMacro {
+  id: string
+  nombre: string
+  eje: string
+  frecuencia: 'diaria' | 'semanal' | 'mensual'
+  unidad: string
+  transformacion: 'variacion_12m' | 'nivel'
+  sentido: 1 | -1
+  descripcion: string
+  nota: string | null
+  clasifica: boolean
+  /** Fecha del período al que se refiere el último dato (no cuándo se publicó). */
+  fecha: string | null
+  valor: number | null
+  fecha_previa: string | null
+  valor_previo: number | null
+  cambio: number | null
+  tendencia: 'sube' | 'baja' | 'sin_cambio' | null
+  voto: CicloVoto
+  estado: 'ok' | 'sin_datos' | 'desactualizada' | 'sin_historia'
+  motivo: string | null
+  descarga?: { estado: string; ultimo_ok: string | null; error: string | null; n_obs: number }
+}
+
+export interface CicloEjeRegimen {
+  nombre: string
+  estado: CicloRegimenEje
+  motivo: string | null
+  acelerando: number
+  desacelerando: number
+  votaron: number
+  total: number
+  minimo_votos: number
+  series: CicloSerieMacro[]
+}
+
 export interface CicloRegimen {
-  estado: string
+  estado: 'disponible' | 'no_concluyente' | 'no_disponible'
   escenario: string | null
+  escenario_id: string | null
   escenarios: { id: string; nombre: string; crecimiento: string; inflacion: string; actual: boolean }[]
-  indicadores_necesarios: { id: string; nombre: string; eje: string; disponible: boolean; motivo: string }[]
-  disponible_hoy: { id: string; nombre: string; alcance: string }[]
+  ejes: Record<'crecimiento' | 'inflacion', CicloEjeRegimen>
+  contexto: Record<string, CicloSerieMacro[]>
   aclaracion: string
+  meses_comparacion: number
+  minimo_votos: number
+  dato_mas_reciente: string | null
+  dato_mas_viejo: string | null
   falta: string[]
-  proxima_etapa: string
+  fuente: string
+  limitaciones: string[]
+  ultima_actualizacion: string | null
 }
 
 export interface CiclosPanoramaOut {
@@ -2167,6 +2213,8 @@ export interface CiclosTasasOut {
   lectura: string
   meta: CiclosMeta
 }
+
+export const getCiclosRegimen = () => cicloGet<CicloRegimen>('regimen')
 
 export const getCiclosTasas = (anios: number) => cicloGet<CiclosTasasOut>('tasas', { anios })
 

@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "_doc": [
+    "Series macroeconómicas del régimen de «Ciclos de mercado». Se editan sin tocar código; los algoritmos sólo leen este archivo.",
+    "Fuente: FRED (Reserva Federal de St. Louis), CSV público sin API key. El dato es de EE.UU.; FRED entrega la versión vigente (los datos se revisan).",
+    "Campos: id (código FRED), nombre, eje (crecimiento|inflacion para CLASIFICAR; liquidez|condiciones_financieras|dolar sólo de CONTEXTO),",
+    "frecuencia (diaria|semanal|mensual), transformacion (variacion_12m = % contra el mismo período de un año antes | nivel = el valor tal cual),",
+    "sentido (1: que suba significa más; -1: que suba significa menos, p. ej. los pedidos de subsidio por desempleo), unidad, descripcion, nota.",
+    "Cada serie de los ejes crecimiento e inflacion VOTA: acelera si su transformación hoy es mayor que hace `meses_comparacion` meses, desacelera si es menor.",
+    "El eje se define por mayoría estricta y sólo si votan al menos `minimo_votos` series; si no, queda sin concluir. No hay puntaje único."
+  ],
+  "meses_comparacion": 3,
+  "minimo_votos": 3,
+  "dias_maximos_de_atraso": {"diaria": 10, "semanal": 21, "mensual": 75},
+  "series": [
+    {"id": "INDPRO", "nombre": "Producción industrial", "eje": "crecimiento", "frecuencia": "mensual", "transformacion": "variacion_12m", "sentido": 1,
+     "unidad": "% interanual", "descripcion": "Índice de producción industrial de EE.UU. (desestacionalizado)."},
+    {"id": "PAYEMS", "nombre": "Empleo no agrícola", "eje": "crecimiento", "frecuencia": "mensual", "transformacion": "variacion_12m", "sentido": 1,
+     "unidad": "% interanual", "descripcion": "Puestos de trabajo no agrícolas de EE.UU. (desestacionalizado)."},
+    {"id": "CFNAIMA3", "nombre": "Actividad nacional (Chicago Fed, media de 3 meses)", "eje": "crecimiento", "frecuencia": "mensual", "transformacion": "nivel", "sentido": 1,
+     "unidad": "índice", "descripcion": "Índice compuesto de 85 indicadores de actividad. Cero = crecimiento de tendencia.",
+     "nota": "Cero es el crecimiento de tendencia; por encima, actividad más fuerte que la tendencia."},
+    {"id": "IC4WSA", "nombre": "Pedidos de subsidio por desempleo (media de 4 semanas)", "eje": "crecimiento", "frecuencia": "semanal", "transformacion": "variacion_12m", "sentido": -1,
+     "unidad": "% interanual", "descripcion": "Pedidos iniciales de subsidio por desempleo. Que suban indica un mercado laboral más débil."},
+
+    {"id": "CPIAUCSL", "nombre": "IPC de EE.UU.", "eje": "inflacion", "frecuencia": "mensual", "transformacion": "variacion_12m", "sentido": 1,
+     "unidad": "% interanual", "descripcion": "Índice de precios al consumidor, todos los rubros (desestacionalizado)."},
+    {"id": "PCEPILFE", "nombre": "PCE subyacente", "eje": "inflacion", "frecuencia": "mensual", "transformacion": "variacion_12m", "sentido": 1,
+     "unidad": "% interanual", "descripcion": "Gasto de consumo personal sin alimentos ni energía: la medida que mira la Fed."},
+    {"id": "T5YIE", "nombre": "Inflación implícita a 5 años", "eje": "inflacion", "frecuencia": "diaria", "transformacion": "nivel", "sentido": 1,
+     "unidad": "% anual", "descripcion": "Inflación promedio que descuenta el mercado de bonos a 5 años (diferencia entre bonos nominales y bonos ajustables)."},
+
+    {"id": "WALCL", "nombre": "Balance de la Reserva Federal", "eje": "liquidez", "frecuencia": "semanal", "transformacion": "variacion_12m", "sentido": 1,
+     "unidad": "% interanual", "descripcion": "Activos totales de la Fed: crece cuando inyecta liquidez y baja cuando la retira."},
+    {"id": "M2SL", "nombre": "Dinero M2", "eje": "liquidez", "frecuencia": "mensual", "transformacion": "variacion_12m", "sentido": 1,
+     "unidad": "% interanual", "descripcion": "Agregado monetario M2 de EE.UU."},
+
+    {"id": "NFCI", "nombre": "Condiciones financieras (Chicago Fed)", "eje": "condiciones_financieras", "frecuencia": "semanal", "transformacion": "nivel", "sentido": 1,
+     "unidad": "índice", "descripcion": "Índice nacional de condiciones financieras.",
+     "nota": "Cero es el promedio histórico; por debajo, condiciones más laxas que el promedio; por encima, más ajustadas."},
+    {"id": "DFF", "nombre": "Tasa de fondos federales", "eje": "condiciones_financieras", "frecuencia": "diaria", "transformacion": "nivel", "sentido": 1,
+     "unidad": "% anual", "descripcion": "Tasa de política monetaria efectiva de la Reserva Federal."},
+
+    {"id": "DTWEXBGS", "nombre": "Dólar frente a las monedas del comercio de EE.UU.", "eje": "dolar", "frecuencia": "diaria", "transformacion": "variacion_12m", "sentido": 1,
+     "unidad": "% interanual", "descripcion": "Índice amplio del dólar ponderado por comercio (sube cuando el dólar se aprecia)."}
+  ]
+}

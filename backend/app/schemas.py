@@ -4339,6 +4339,24 @@ class CiclosPaisOut(CiclosBaseOut):
     meta: CiclosMetaOut
 
 
+class CiclosRegimenOut(CiclosBaseOut):
+    estado: str
+    escenario: Optional[str] = None
+    escenario_id: Optional[str] = None
+    escenarios: list[dict[str, Any]] = Field(default_factory=list)
+    ejes: dict[str, Any] = Field(default_factory=dict)
+    contexto: dict[str, Any] = Field(default_factory=dict)
+    aclaracion: str
+    meses_comparacion: int
+    minimo_votos: int
+    dato_mas_reciente: Optional[date] = None
+    dato_mas_viejo: Optional[date] = None
+    falta: list[str] = Field(default_factory=list)
+    fuente: str
+    limitaciones: list[str] = Field(default_factory=list)
+    ultima_actualizacion: Optional[datetime] = None
+
+
 class CiclosTasasOut(CiclosBaseOut):
     estado: str
     motivo: Optional[str] = None
