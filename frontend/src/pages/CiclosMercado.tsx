@@ -107,6 +107,11 @@ function SinDatos({ motivo }: { motivo: string | null }) {
   )
 }
 
+/** Ningún grupo tiene serie (la referencia sí puede tenerla: la usan otras pantallas): la descarga de ciclos todavía no corrió. */
+function sinNingunaSerie(data: CiclosPanoramaOut): boolean {
+  return data.cobertura.total > 0 && data.cobertura.sin_datos.length === data.cobertura.total
+}
+
 function Encabezado({ data }: { data: CiclosPanoramaOut }) {
   const m = data.meta
   return (
@@ -206,8 +211,8 @@ export default function CiclosMercado() {
 
       {usaPanorama && (
         <QueryBoundary isLoading={panorama.isLoading} error={panorama.error} onRetry={() => void panorama.refetch()}>
-          {!data ? null : data.motivo || data.cobertura.total === 0 ? (
-            <SinDatos motivo={data.motivo} />
+          {!data ? null : data.motivo || data.cobertura.total === 0 || sinNingunaSerie(data) ? (
+            <SinDatos motivo={data.motivo ?? data.cobertura.sin_datos[0]?.motivo ?? null} />
           ) : (
             <>
               {pestana === 'panorama' && (
