@@ -145,6 +145,7 @@ try {
 | Salud de cartera | ✅ | ✓ | Pantalla nueva `/salud`: 23 términos (dimensiones + indicadores) + guía + 2 FAQ; reutiliza umbrales de `diagnostico_engine.py` |
 | Descomposición de cartera | ✅ | ✓ | Pantalla nueva `/descomposicion`: árbol Familia→País→Sector→Ticker, 5 términos + guía; familia derivada de `market_data/precios.py` y `salud_engine.SECTORES_LIQUIDOS` |
 | Costo de oportunidad | ✅ | ✓ | Pantalla nueva `/costo-oportunidad`: cartera vs. referencia normalizada a la misma moneda, en % y en dinero; 7 términos + guía; reutiliza `_twr_mensual_por_moneda` y `opportunity_cost_engine.valor_shadow` |
+| Ciclos de mercado (`/ciclos`, `/ciclos/grupo/:id`) | ✅ | ✓ | Pantalla nueva con 5 pestañas y ficha de grupo: rotación relativa (RRG propio), mapa de calor, relaciones, país y cruce con la cartera; 26 términos (`content/ciclos.ts`) + 2 guías; reutiliza `MatrizCorrelacionHeatmap`, `TablaOrdenable`, `MetricTile` |
 | Mapa de mercado | ✅ | ✓ | Pantalla nueva `/mapa-mercado`: treemap por sector/región/tamaño/tipo coloreado por variación en USD; 6 términos + guía; datos de `mapa_mercado_ingesta` y clasificación existente |
 | Calendario de eventos | ✅ | ✓ | Pantalla nueva `/eventos`: calendario, timeline e impacto en activos; 12 términos + guía; datos de `services/eventos/` (ver `docs/calendario-eventos.md`) |
 

@@ -34,6 +34,8 @@ const Rebalanceo = lazy(() => import('./pages/Rebalanceo'))
 const Riesgo = lazy(() => import('./pages/Riesgo'))
 const PerformanceRelativa = lazy(() => import('./pages/PerformanceRelativa'))
 const CostoOportunidad = lazy(() => import('./pages/CostoOportunidad'))
+const CiclosMercado = lazy(() => import('./pages/CiclosMercado'))
+const CicloDetalle = lazy(() => import('./pages/CicloDetalle'))
 const Contribucion = lazy(() => import('./pages/Contribucion'))
 const MatrizCorrelaciones = lazy(() => import('./pages/MatrizCorrelaciones'))
 const ExplicacionResultado = lazy(() => import('./pages/ExplicacionResultado'))
@@ -177,6 +179,8 @@ function Root() {
             <Route path="riesgo" element={<Riesgo />} />
             <Route path="performance-relativa" element={<PerformanceRelativa />} />
             <Route path="costo-oportunidad" element={<CostoOportunidad />} />
+            <Route path="ciclos" element={<CiclosMercado />} />
+            <Route path="ciclos/grupo/:id" element={<CicloDetalle />} />
             <Route path="contribucion" element={<Contribucion />} />
             <Route path="correlaciones" element={<MatrizCorrelaciones />} />
             <Route path="explicacion-resultado" element={<ExplicacionResultado />} />

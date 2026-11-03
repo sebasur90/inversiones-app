@@ -96,6 +96,18 @@ def barras(db: Session, simbolo: str, desde: date | None = None) -> list[Barra]:
     ]
 
 
+def cierres(db: Session, simbolo: str, desde: date | None = None) -> list[tuple[date, float]]:
+    """`[(fecha, cierre)]` ordenado de la serie de referencia, leyendo sólo esas dos columnas.
+
+    `barras()` arma un objeto ORM por fila (decenas de miles por símbolo) y es lo que domina el tiempo cuando un análisis
+    mira decenas de series; para rendimientos, rotación y correlaciones alcanza con el cierre.
+    """
+    q = db.query(BarraOHLCV.fecha, BarraOHLCV.cierre).filter(BarraOHLCV.ticker == clave(simbolo))
+    if desde is not None:
+        q = q.filter(BarraOHLCV.fecha >= desde)
+    return [(f, float(c)) for f, c in q.order_by(BarraOHLCV.fecha).all() if c is not None]
+
+
 def asegurar(db: Session, simbolo: str) -> bool:
     """Garantiza que el índice tenga historia; la primera vez que se pide la baja entera.
     Devuelve si hay datos después. Best effort: sin red devuelve lo que haya. Commitea si bajó."""

@@ -69,7 +69,7 @@ class Fuentes:
 
     def simbolo(self, simbolo: str) -> eng.Serie:
         if simbolo not in self._series:
-            self._series[simbolo] = eng.normalizar([(b.fecha, b.cierre) for b in benchmarks.barras(self.db, simbolo)])
+            self._series[simbolo] = eng.normalizar(benchmarks.cierres(self.db, simbolo))
         return self._series[simbolo]
 
     def estados(self) -> dict[str, CiclosProxyEstado]:
@@ -724,6 +724,7 @@ def pais(db: Session, grupo_id: str, *, meses: int = 12, benchmark: str | None =
 # Catálogo y cobertura
 # ---------------------------------------------------------------------------------------------
 
+@cache_por_sync
 def estados_de_rotacion(db: Session, benchmark: str | None = None, hoy: date | None = None) -> dict[str, dict]:
     """`{grupo_id: {estado, cuadrante, confirmado, ultima_fecha, benchmark}}` de todos los grupos activos, contra
     `benchmark` o contra el habitual de cada uno. Lo usa la vista de cartera."""
