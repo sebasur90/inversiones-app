@@ -4698,7 +4698,7 @@ export interface OpcionPosicion {
   nombre: string
   a_favor: string[]
   en_contra: string[]
-  cambio_en_cartera: { peso_antes_pct: number; peso_despues_pct: number; liquidez_usd: number
+  cambio_en_cartera: { peso_antes_pct: number | null; peso_despues_pct: number | null; liquidez_usd: number
     observaciones: ObservacionSimulacion[]; comision_estimada_usd: number | null
     venta: { resultado_estimado_usd: number | null } | null } | null
   condiciones: string[]
@@ -4718,7 +4718,7 @@ export interface PosicionDecision {
     moneda: string | null; valuado_al_costo: boolean; valor_actual_usd: number | null; valor_actual_ars: number | null
     valor_invertido_usd: number | null; rendimiento_usd: number | null; realizado_usd: number | null
     no_realizado_usd: number | null; ingresos_usd: number | null; peso_ticker_pct: number | null
-    peso_emisor_pct: number; umbral_atencion_pct: number; umbral_revisar_pct: number; nota_resultado: string
+    peso_emisor_pct: number | null; umbral_atencion_pct: number; umbral_revisar_pct: number; nota_resultado: string
   }
   tesis: { existe: boolean; deteriorada: boolean; cambios: { nombre: string; antes: number; ahora: number; delta: number }[]
     banderas_nuevas: BanderaDecision[] }

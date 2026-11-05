@@ -30,11 +30,15 @@ def _num(v):
 
 
 def condiciones_cumplidas(condiciones: list[dict], precio_actual: float | None, moneda_actual: str | None,
-                          evaluacion_actual: dict | None) -> list[dict]:
-    """Cada condición de invalidación con `cumplida` True/False/None (None = no se puede evaluar)."""
-    dims = _dims(evaluacion_actual)
+                          evaluacion_actual: dict | None,
+                          evaluaciones_por_ticker: dict[str, dict] | None = None) -> list[dict]:
+    """Cada condición de invalidación con `cumplida` True/False/None (None = no se puede evaluar).
+
+    Una condición de dimensión con `ticker` (la alternativa elegida) se evalúa con la evaluación de ese ticker en
+    `evaluaciones_por_ticker`, no con la del activo analizado."""
     salida = []
     for c in condiciones or []:
+        dims = _dims((evaluaciones_por_ticker or {}).get(c["ticker"]) if c.get("ticker") else evaluacion_actual)
         estado = None
         if c.get("tipo") == "precio_bajo":
             valor = _num(c.get("valor"))
@@ -54,10 +58,14 @@ def condiciones_cumplidas(condiciones: list[dict], precio_actual: float | None, 
 
 
 def comparar(decision: dict, inicial: dict, actual: dict, precio_actual: float | None, moneda_actual: str | None,
-             bench: dict | None, alternativas_actuales: dict[str, float | None], volatilidad_observada: float | None,
-             movimientos_posteriores: list[dict], hoy: date) -> dict:
+             bench: dict | None, alternativas_actuales: dict[str, tuple[float | None, str | None]],
+             volatilidad_observada: float | None, movimientos_posteriores: list[dict], hoy: date) -> dict:
     """`decision` = fila de la decisión como dict; `inicial`/`actual` = payloads del análisis (inicial congelado,
-    actual recalculado). `bench = {simbolo, nombre, inicio, fin}` o None. `alternativas_actuales = {ticker: precio}`.
+    actual recalculado). `bench = {simbolo, nombre, inicio, fin}` o None.
+    `alternativas_actuales = {ticker: (precio, moneda)}` (precio del snapshot, la misma fuente que al decidir).
+
+    El precio principal es el del ticker seguido (`condiciones.seguimiento.ticker` si se eligió una alternativa,
+    si no el activo analizado); ese ticker no se repite en la lista de alternativas.
     """
     ev0, ev1 = inicial.get("evaluacion") or {}, actual.get("evaluacion") or {}
     d0, d1 = _dims(ev0), _dims(ev1)
@@ -80,16 +88,23 @@ def comparar(decision: dict, inicial: dict, actual: dict, precio_actual: float |
     var_precio = _var(precio_ref, precio_actual) if misma_moneda else None
     var_bench = _var((bench or {}).get("inicio"), (bench or {}).get("fin"))
 
+    seguido = ((decision.get("condiciones") or {}).get("seguimiento") or {}).get("ticker") or decision.get("ticker_base")
     alternativas = []
     for alt in decision.get("alternativas", []):
-        if alt.get("rol") == "elegida" and alt.get("ticker") == decision.get("ticker_base"):
+        if alt.get("ticker") == seguido:
             continue
-        p0, p1 = _num(alt.get("precio_ref")), alternativas_actuales.get(alt.get("ticker"))
+        p0 = _num(alt.get("precio_ref"))
+        p1, m1 = alternativas_actuales.get(alt.get("ticker")) or (None, None)
+        m0 = alt.get("moneda")
+        comparable = m0 is None or m1 is None or m0 == m1
         alternativas.append({"ticker": alt.get("ticker"), "rol": alt.get("rol"), "precio_ref": p0, "precio_actual": p1,
-                             "variacion": _var(p0, p1), "moneda": alt.get("moneda")})
+                             "variacion": _var(p0, p1) if comparable else None, "moneda": m0,
+                             "nota": None if comparable else "monedas distintas: no se compara"})
 
+    por_ticker = {a["ticker"]: a["evaluacion"] for a in (actual.get("alternativas") or {}).get("items") or []
+                  if a.get("ticker") and a.get("evaluacion")}
     condiciones = condiciones_cumplidas((decision.get("condiciones") or {}).get("invalidacion", []),
-                                        precio_actual, moneda_actual, ev1)
+                                        precio_actual, moneda_actual, ev1, por_ticker)
 
     supuestos = []
     f0, f1 = (d0.get("fundamentales") or {}).get("puntaje"), (d1.get("fundamentales") or {}).get("puntaje")

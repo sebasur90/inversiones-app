@@ -110,8 +110,9 @@ def _encaje(db: Session, cartera: str | None, ticker: str, e, monto_ref_usd: flo
     return {
         "sin_cartera": False,
         "monto_ref_usd": monto,
-        "monto_ref_texto": (f"{monto:,.0f} USD".replace(",", ".")
-                            + (" (5 % de la cartera)" if not monto_ref_usd else "")),
+        # Sin cifra: el monto es un importe de la cartera (×20 da el total) y este texto viaja al resumen de la
+        # dimensión, que no pasa por el modo privacidad. La cifra va estructurada en `monto_ref_usd`.
+        "monto_ref_texto": "el monto que elegiste" if monto_ref_usd else f"el {FRACCION_MONTO_REF * 100:.0f} % de la cartera",
         "observaciones": [o for o in sim["observaciones"] if o["nivel"] in ("revisar", "atencion")],
         "todas_observaciones": sim["observaciones"],
         "en_cartera": _tiene("Emisor", e.base),
@@ -154,9 +155,14 @@ def _excluida(prefs: dict, base: str, e) -> str | None:
     return None
 
 
-def _alternativas(u: Universo, db: Session, e, comp: dict, prefs: dict, cartera: str | None,
-                  monto_ref_usd: float | None, hoy: date, secciones: dict) -> dict:
-    """Evalúa al activo y a sus alternativas aptas con la misma metodología (diagnóstico dentro del grupo)."""
+def _alternativas(u: Universo, db: Session, ticker: str, e, comp: dict, prefs: dict, cartera: str | None,
+                  monto_ref_usd: float | None, hoy: date, secciones: dict, tecnico: dict | None,
+                  encaje: dict | None) -> dict:
+    """Evalúa al activo y a sus alternativas aptas con la misma metodología (diagnóstico dentro del grupo).
+
+    Para el activo se reusan el técnico y el encaje ya calculados con el ticker pedido (`AAPLD`, no `AAPL`):
+    recalcularlos con la base le sacaría el técnico si la base no está en cartera ni watchlist, y la conclusión
+    (que sale del grupo) contradiría lo que muestra la pantalla."""
     if not comp or comp.get("estado") != "ok":
         return {"estado": (comp or {}).get("estado", "sin_datos"), "mensaje": (comp or {}).get("mensaje", ""),
                 "items": [], "excluidas": [], "robustez": {}, "advertencias_fechas": [], "evaluaciones": {}}
@@ -180,16 +186,20 @@ def _alternativas(u: Universo, db: Session, e, comp: dict, prefs: dict, cartera:
     meta: dict[str, dict] = {}
     for base in fichas:
         em = u.emisor(base)
-        tec = _seguro(f"tecnico:{base}", secciones, _tecnico, db, base)
-        enc = _seguro(f"encaje:{base}", secciones, _encaje, db, cartera, base, em, monto_ref_usd)
-        ins = _insumos(u, db, base, em, asdict(diags[base]), None, tec, enc)
+        if base == e.base:
+            tec, enc = tecnico, encaje
+            ins = _insumos(u, db, ticker, em, asdict(diags[base]), None, tec, enc)
+            ins.ticker = base
+        else:
+            tec = _seguro(f"tecnico:{base}", secciones, _tecnico, db, base)
+            enc = _seguro(f"encaje:{base}", secciones, _encaje, db, cartera, base, em, monto_ref_usd)
+            ins = _insumos(u, db, base, em, asdict(diags[base]), None, tec, enc)
         evaluaciones[base] = ev.evaluar(ins, prefs, hoy)
         precio, moneda, fecha = _precio_snapshot(em)
         meta[base] = {"nombre": em.nombre, "precio_ref": precio, "moneda": moneda, "fecha_precio": fecha,
                       "fecha_dato": fichas[base].fecha_dato, "periodo_contable": fichas[base].periodo_contable,
                       "sector": em.clasif.sector, "industria": em.clasif.industria, "region": em.clasif.region,
                       "con_tecnico": tec is not None}
-    secciones.pop(f"tecnico:{e.base}", None)
 
     robustez = {}
     confianzas = {b: (asdict(diags[b]).get("confianza")) for b in fichas}
@@ -333,8 +343,8 @@ def calcular_analisis(u: Universo, db: Session, ticker: str, prefs: dict, carter
 
     ins = _insumos(u, db, t, e, diag, vr, tecnico, encaje)
     evaluacion = ev.evaluar(ins, prefs, hoy)
-    alternativas = _seguro("alternativas", secciones, _alternativas, u, db, e, comp, prefs, cartera, monto_ref_usd, hoy,
-                           secciones) or {"estado": "no_disponible", "items": [], "excluidas": [], "robustez": {},
+    alternativas = _seguro("alternativas", secciones, _alternativas, u, db, t, e, comp, prefs, cartera, monto_ref_usd, hoy,
+                           secciones, tecnico, encaje) or {"estado": "no_disponible", "items": [], "excluidas": [], "robustez": {},
                                           "advertencias_fechas": [], "evaluaciones": {}}
     for k in [k for k in secciones if k.startswith(("tecnico:", "encaje:"))]:
         if secciones[k]["estado"] == "ok":
@@ -381,7 +391,6 @@ def calcular_analisis(u: Universo, db: Session, ticker: str, prefs: dict, carter
     return salida
 
 
-@cache_por_sync
 def preparar_tecnico(db: Session, ticker: str) -> dict:
     """Deja al ticker listo para el análisis técnico: lo da de alta en la watchlist si no está en
     ninguna parte y le baja ya las velas (ver `watchlist_analytics.descargar_series`).
@@ -420,9 +429,11 @@ def preparar_tecnico(db: Session, ticker: str) -> dict:
             "con_series": con_series, "mensaje": mensaje, "avisos": sorted({i.mensaje for i in issues})[:5]}
 
 
-def analizar(ticker: str, prefs: dict, cartera: str | None, con: tuple, monto_ref_usd: float | None, db: Session) -> dict:
-    """Análisis completo de un activo con las preferencias dadas (ver el docstring del módulo)."""
-    return calcular_analisis(Universo(db), db, ticker, prefs, cartera, con, monto_ref_usd)
+def analizar(ticker: str, prefs: dict, cartera: str | None, con: tuple, monto_ref_usd: float | None, db: Session,
+             u: Universo | None = None) -> dict:
+    """Análisis completo de un activo con las preferencias dadas (ver el docstring del módulo). `u` = el
+    `Universo` del pedido, si el que llama ya lo armó (armarlo es caro: no se repite)."""
+    return calcular_analisis(u or Universo(db), db, ticker, prefs, cartera, con, monto_ref_usd)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -530,15 +541,15 @@ def facetas(db: Session) -> dict:
 # ---------------------------------------------------------------------------------------------
 
 def analizar_posicion(ticker: str, cartera: str | None, prefs: dict, db: Session, tesis: dict | None,
-                      invalidacion_cumplida: list[str]) -> dict:
+                      invalidacion_cumplida: list[str], u: Universo | None = None) -> dict:
     """Mantener / aumentar / reducir / salir de una posición. `tesis` = evaluación congelada de la última
-    decisión guardada sobre el emisor (o None)."""
+    decisión guardada sobre el emisor (o None). `u` = el `Universo` del pedido, si ya está armado."""
     t = ticker.strip().upper()
     rend = next((r for r in get_rendimiento_por_ticker(cartera, db) if r["ticker"] == t), None)
     if rend is None or not rend.get("cantidad_actual") or rend["cantidad_actual"] <= 0:
         raise NoEsPosicion(t)
     pnl = next((p for p in get_pnl_realizado_no_realizado(cartera, db)["por_ticker"] if p["ticker"] == t), None)
-    analisis = analizar(t, prefs, cartera, (), None, db)
+    analisis = analizar(t, prefs, cartera, (), None, db, u)
     secciones = {}
 
     valor = rend.get("valor_actual_usd") or 0.0
@@ -549,7 +560,10 @@ def analizar_posicion(ticker: str, cartera: str | None, prefs: dict, db: Session
 
     base = analisis.get("ticker_base") or t
     eje_emisor = next((x for x in (sims.get(pde.AUMENTAR) or sims.get(pde.REDUCIR) or {}).get("ejes", []) if x["eje"] == "Emisor"), None)
-    peso_emisor = next((f["antes_pct"] for f in (eje_emisor or {}).get("items", []) if f["etiqueta"] == base), 0.0)
+    # Sin simulación (posición sin valor o simulador caído) el peso es desconocido, no 0 %: un 0 % inventado
+    # sumaría "debajo del umbral" a favor de mantener.
+    peso_emisor = (next((f["antes_pct"] for f in eje_emisor.get("items", []) if f["etiqueta"] == base), 0.0)
+                   if eje_emisor else None)
     total = _clasificados_valorizados(cartera, db).total_usd()
     peso_ticker = valor / total * 100 if total > 0 else None
     config = get_configuracion_cartera(cartera, db)

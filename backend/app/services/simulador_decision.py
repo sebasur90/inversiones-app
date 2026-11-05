@@ -41,6 +41,7 @@ MAX_OPERACIONES = 8
 MONTO_MAXIMO_USD = 1_000_000_000.0
 CARTERA_SIMULADA = "(simulada)"
 LIQUIDEZ = "Liquidez (simulada)"
+LIQUIDEZ_EJE = "Liquidez"          # la misma liquidez en los ejes Sector, País, Región y Tipo
 EJE_MONEDA = "Moneda"
 TOLERANCIA_USD = 0.01
 _TICKER = re.compile(r"^[A-Z0-9][A-Z0-9._-]{0,14}$")
@@ -107,7 +108,7 @@ def _observaciones(ejes: list[dict], peso_maximo: float | None, liquidez_pct: fl
         elif eje["eje"] == "País":
             for f in eje["items"]:
                 a, d = f["antes_pct"], f["despues_pct"]
-                if f["residual"] or f["etiqueta"] == LIQUIDEZ or d < se.UMBRAL_PAIS_ATENCION_PCT or d <= a + 0.05:
+                if f["residual"] or f["etiqueta"] in (LIQUIDEZ, LIQUIDEZ_EJE) or d < se.UMBRAL_PAIS_ATENCION_PCT or d <= a + 0.05:
                     continue
                 nivel = engine.REVISAR if d >= se.UMBRAL_PAIS_REVISAR_PCT else engine.ATENCION
                 umbral = se.UMBRAL_PAIS_REVISAR_PCT if nivel == engine.REVISAR else se.UMBRAL_PAIS_ATENCION_PCT
@@ -220,7 +221,7 @@ def simular_operaciones(cartera: str | None, db: Session, operaciones: list[tupl
 
     def _attr(p, t, a):
         if t == LIQUIDEZ:
-            return "Liquidez"
+            return LIQUIDEZ_EJE
         return _atributo(p.instrumentos, t, a, p.clasif)
 
     def _emisor(t):

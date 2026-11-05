@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import html
 import logging
 from datetime import date, datetime, timedelta
 
@@ -20,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from ..database import Decision, DecisionAlternativa, DecisionRevision, DecisionSnapshot, MovimientoInversion
 from . import aprendizaje_engine, avisos_config, benchmarks, centro_decisiones_analytics as cda
-from . import decision_preferencias, diario_operaciones, ohlcv_analytics, revision_engine
+from . import decision_datos, decision_preferencias, diario_operaciones, ohlcv_analytics, revision_engine
 from .valuacion_analytics import Universo
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,12 @@ ACCIONES_POSICION = ("mantener", "aumentar", "reducir", "salir", "reasignar", "n
 ACCIONES = tuple(dict.fromkeys(ACCIONES_OPORTUNIDAD + ACCIONES_POSICION))
 ESCENARIO_DE_ACCION = {"entrar_ahora": "entrar_ahora", "esperar_tecnica": "esperar_tecnica",
                        "esperar_valoracion": "esperar_valoracion", "escalonada": "escalonada"}
+# Sólo las acciones que dejan o abren exposición al activo se invalidan con una caída de precio: para "salir" o
+# "descartar" una caída confirma la decisión, no la invalida. Y sólo las de entrada tienen un precio de entrada.
+ACCIONES_CON_ENTRADA = frozenset({"entrar_ahora", "escalonada", "esperar_tecnica", "esperar_valoracion", "aumentar"})
+ACCIONES_CON_INVALIDACION_PRECIO = ACCIONES_CON_ENTRADA | {"mantener"}
+# Con estas, lo que se sigue (precio, condiciones, revisión) es la alternativa elegida, no el activo analizado.
+ACCIONES_CON_ALTERNATIVA = ("elegir_alternativa", "reasignar")
 REVISAR_DIAS_DEFAULT = {"corto": 30, "mediano": 90, "largo": 180}
 MAX_NOTA = 2000
 CAMPO_AVISO = "avisar_revision_decision"
@@ -115,34 +122,49 @@ def ultima_tesis(db: Session, ticker_base: str) -> dict | None:
 # Guardar
 # ---------------------------------------------------------------------------------------------
 
-def _condiciones(analisis: dict, accion: str) -> dict:
+def _condiciones(analisis: dict, accion: str, elegida: str | None = None) -> dict:
+    """Entrada, invalidación y (si se eligió una alternativa) qué ticker se sigue.
+
+    - Precio de entrada: sólo en `ACCIONES_CON_ENTRADA`; invalidación por precio: sólo en
+      `ACCIONES_CON_INVALIDACION_PRECIO` (los escenarios son del activo analizado).
+    - Con `ACCIONES_CON_ALTERNATIVA` no hay condiciones de precio (no hay escenarios de la alternativa) y las de
+      dimensión llevan `ticker`: la revisión las evalúa sobre la alternativa elegida.
+    """
     escenarios = {e["clave"]: e for e in ((analisis.get("escenarios") or {}).get("escenarios") or [])}
     esc_info = analisis.get("escenarios") or {}
     moneda, fuente = esc_info.get("moneda"), esc_info.get("fuente_precio")
     clave = ESCENARIO_DE_ACCION.get(accion, "entrar_ahora")
     esc = escenarios.get(clave) or escenarios.get("entrar_ahora")
     entrada, invalidacion = {}, []
-    if esc and esc.get("disponible"):
-        entrada = {"escenario": esc["clave"], "texto": esc.get("condicion"), "precio": esc.get("precio_entrada"),
-                   "moneda": moneda, "fuente": fuente}
+    if esc and esc.get("disponible") and accion in ACCIONES_CON_INVALIDACION_PRECIO:
+        if accion in ACCIONES_CON_ENTRADA:
+            entrada = {"escenario": esc["clave"], "texto": esc.get("condicion"), "precio": esc.get("precio_entrada"),
+                       "moneda": moneda, "fuente": fuente}
         if esc.get("invalidacion") is not None:
             invalidacion.append({"tipo": "precio_bajo", "valor": esc["invalidacion"], "moneda": moneda, "fuente": fuente,
                                  "texto": f"cierre por debajo de {esc['invalidacion']:.2f} {moneda or ''} ({esc.get('regla_invalidacion')})".strip()})
-    invalidacion.append({"tipo": "dimension", "dimension": "fundamentales", "umbral": 35.0,
-                         "texto": "Fundamentales por debajo de 35 (deterioro de calidad, crecimiento o solidez)"})
-    invalidacion.append({"tipo": "dimension", "dimension": "valoracion", "umbral": 35.0,
-                         "texto": "Valoración por debajo de 35 (pasa a estar entre las más caras de sus pares)"})
-    return {"entrada": entrada, "salida": {}, "invalidacion": invalidacion}
+    sobre = elegida if accion in ACCIONES_CON_ALTERNATIVA else None
+    extra, prefijo = ({"ticker": sobre}, f"{sobre}: ") if sobre else ({}, "")
+    invalidacion.append({"tipo": "dimension", "dimension": "fundamentales", "umbral": 35.0, **extra,
+                         "texto": f"{prefijo}Fundamentales por debajo de 35 (deterioro de calidad, crecimiento o solidez)"})
+    invalidacion.append({"tipo": "dimension", "dimension": "valoracion", "umbral": 35.0, **extra,
+                         "texto": f"{prefijo}Valoración por debajo de 35 (pasa a estar entre las más caras de sus pares)"})
+    salida = {"entrada": entrada, "salida": {}, "invalidacion": invalidacion}
+    if sobre:
+        salida["seguimiento"] = {"ticker": sobre, "fuente": "fundamentales"}
+    return salida
 
 
-def _analisis_para(db: Session, modo: str, ticker: str, cartera: str | None, prefs: dict, con: tuple,
+def _analisis_para(db: Session, u: Universo, modo: str, ticker: str, cartera: str | None, prefs: dict, con: tuple,
                    monto_ref_usd: float | None) -> tuple[dict, dict]:
-    """`(analisis_del_activo, payload_a_congelar)`."""
+    """`(analisis_del_activo, payload_a_congelar)`. La posición se congela con las mismas invalidaciones que
+    muestra `GET /decisiones/posicion` (si no, lo guardado difiere de lo que se vio)."""
     if modo == "posicion":
-        base = Universo(db).ctx.base(ticker)
-        pos = cda.analizar_posicion(ticker, cartera, prefs, db, ultima_tesis(db, base), [])
+        base = u.ctx.base(ticker)
+        pos = cda.analizar_posicion(ticker, cartera, prefs, db, ultima_tesis(db, base),
+                                    invalidacion_de_ticker(db, base, u), u)
         return pos["analisis"], pos
-    a = cda.analizar(ticker, prefs, cartera, con, monto_ref_usd, db)
+    a = cda.analizar(ticker, prefs, cartera, con, monto_ref_usd, db, u)
     return a, a
 
 
@@ -162,7 +184,8 @@ def crear(db: Session, modo: str, ticker: str, accion_elegida: str, cartera: str
     ahora = ahora or datetime.utcnow()
     prefs = decision_preferencias.combinar(db, preferencias)
     t = ticker.strip().upper()
-    analisis, payload = _analisis_para(db, modo, t, cartera, prefs, con, monto_ref_usd)
+    u = Universo(db)
+    analisis, payload = _analisis_para(db, u, modo, t, cartera, prefs, con, monto_ref_usd)
     if analisis.get("estado") != "ok":
         raise ValueError(analisis.get("mensaje") or "no se puede analizar este instrumento")
 
@@ -171,10 +194,16 @@ def crear(db: Session, modo: str, ticker: str, accion_elegida: str, cartera: str
     esc = analisis.get("escenarios") or {}
     alternativas = (analisis.get("alternativas") or {}).get("items") or []
     elegida = (alternativa_elegida or "").strip().upper() or None
-    if accion_elegida in ("elegir_alternativa", "reasignar") and not elegida:
+    if accion_elegida in ACCIONES_CON_ALTERNATIVA and not elegida:
         raise ValueError("indicá la alternativa elegida")
+    if accion_elegida in ACCIONES_CON_ALTERNATIVA and elegida == analisis["ticker_base"]:
+        raise ValueError("la alternativa elegida tiene que ser otro activo")
     if elegida and elegida not in {a["ticker"] for a in alternativas} | {analisis["ticker_base"]}:
         raise ValueError(f"{elegida} no está entre las alternativas analizadas")
+    # Con una alternativa elegida, el precio de referencia, la moneda y la volatilidad son los de esa alternativa
+    # (snapshot de fundamentales, la misma fuente con la que se la compara en la tabla).
+    alt_elegida = (next((a for a in alternativas if a["ticker"] == elegida), None)
+                   if accion_elegida in ACCIONES_CON_ALTERNATIVA else None)
 
     banderas_altas = [b for b in ev["banderas"] if b["severidad"] == "alta"]
     riesgos = [{"texto": b["texto"], "regla": b["regla"], "severidad": b["severidad"], "tipo": "observado"} for b in ev["banderas"]]
@@ -192,11 +221,19 @@ def crear(db: Session, modo: str, ticker: str, accion_elegida: str, cartera: str
         "El valor razonable es relativo a los múltiplos de los pares, no un valor intrínseco.",
         (esc.get("regla_potencial") or ""),
     ]
-    vol = (analisis.get("riesgo") or {}).get("volatilidad")
     revisar_el = (ahora.date() + timedelta(days=revisar_en_dias or REVISAR_DIAS_DEFAULT[prefs["horizonte"]]))
-    fecha_dato = next((f["fecha"] for f in analisis.get("fuentes", []) if f["dato"].startswith("Fundamentales")), None)
-    favorable = next((e.get("favorable_pct") for e in esc.get("escenarios", [])
-                      if e["clave"] == ESCENARIO_DE_ACCION.get(accion_elegida, "entrar_ahora")), None)
+    if alt_elegida is not None:
+        vol = decision_datos.riesgo_de(u, alt_elegida["ticker"])["volatilidad"]
+        precio_ref, moneda_ref = alt_elegida.get("precio_ref"), alt_elegida.get("moneda")
+        fecha_precio, fecha_dato = alt_elegida.get("fecha_precio"), alt_elegida.get("fecha_dato")
+        favorable = None        # los escenarios son del activo analizado, no de la alternativa
+    else:
+        vol = (analisis.get("riesgo") or {}).get("volatilidad")
+        precio_ref, moneda_ref, fecha_precio = esc.get("precio"), esc.get("moneda"), esc.get("fecha_precio")
+        fecha_dato = next((f["fecha"] for f in analisis.get("fuentes", []) if f["dato"].startswith("Fundamentales")), None)
+        favorable = (next((e.get("favorable_pct") for e in esc.get("escenarios", [])
+                           if e["clave"] == ESCENARIO_DE_ACCION.get(accion_elegida, "entrar_ahora")), None)
+                     if accion_elegida in ACCIONES_CON_ENTRADA else None)
 
     d = Decision(
         creada_en=ahora, cartera=cartera, modo=modo, ticker=t, ticker_base=analisis["ticker_base"],
@@ -208,7 +245,7 @@ def crear(db: Session, modo: str, ticker: str, accion_elegida: str, cartera: str
         argumentos=jsonable_encoder({"a_favor": analisis.get("fortalezas", []),
                                      "en_contra": concl.get("evidencia_en_contra", [])}),
         riesgos=jsonable_encoder(riesgos), supuestos=[s for s in supuestos if s],
-        condiciones=jsonable_encoder(_condiciones(analisis, accion_elegida)),
+        condiciones=jsonable_encoder(_condiciones(analisis, accion_elegida, elegida)),
         versiones=jsonable_encoder(analisis.get("versiones") or {}),
         calidad=jsonable_encoder({
             "cobertura": ev["orden"]["cobertura"], "incompleto": ev["orden"]["incompleto"], "motivo": ev["orden"]["motivo"],
@@ -219,17 +256,21 @@ def crear(db: Session, modo: str, ticker: str, accion_elegida: str, cartera: str
             "banderas_altas": len(banderas_altas),
             "concentracion_revisar": any(o.get("nivel") == "revisar" for o in (analisis.get("encaje") or {}).get("observaciones", [])),
         }),
-        orden=ev["orden"]["puntaje"], precio_ref=esc.get("precio"), moneda=esc.get("moneda"),
-        fecha_precio=_fecha(esc.get("fecha_precio")), fecha_dato=_fecha(fecha_dato), volatilidad_ref=vol,
+        orden=ev["orden"]["puntaje"], precio_ref=precio_ref, moneda=moneda_ref,
+        fecha_precio=_fecha(fecha_precio), fecha_dato=_fecha(fecha_dato), volatilidad_ref=vol,
         revisar_el=revisar_el, estado="abierta",
     )
     db.add(d)
     db.flush()
     principal = elegida or analisis["ticker_base"]
+    # El activo con la misma metodología que sus alternativas (diagnóstico dentro del grupo); sin grupo, el
+    # análisis individual. Precio: el del snapshot, como las alternativas (si no, la revisión mezcla fuentes).
     obj_grupo = (analisis.get("alternativas") or {}).get("objetivo_en_grupo")
-    filas = [(analisis["ticker_base"], ev["orden"]["puntaje"], esc.get("precio"), esc.get("moneda"), ev["dimensiones"])]
-    if obj_grupo is None:
-        pass
+    if obj_grupo is not None:
+        filas = [(analisis["ticker_base"], obj_grupo["evaluacion"]["orden"]["puntaje"], obj_grupo.get("precio_ref"),
+                  obj_grupo.get("moneda"), obj_grupo["evaluacion"]["dimensiones"])]
+    else:
+        filas = [(analisis["ticker_base"], ev["orden"]["puntaje"], esc.get("precio"), esc.get("moneda"), ev["dimensiones"])]
     for a in alternativas:
         filas.append((a["ticker"], a["evaluacion"]["orden"]["puntaje"], a.get("precio_ref"), a.get("moneda"),
                       a["evaluacion"]["dimensiones"]))
@@ -317,7 +358,8 @@ def _volatilidad_desde(u: Universo, base: str, desde: date) -> float | None:
 
 def _movimientos_posteriores(db: Session, d: Decision, u: Universo) -> list[dict]:
     salida = []
-    for m in db.query(MovimientoInversion).filter(MovimientoInversion.fecha >= d.creada_en.date()):
+    for m in (db.query(MovimientoInversion).filter(MovimientoInversion.fecha >= d.creada_en.date())
+              .order_by(MovimientoInversion.fecha, MovimientoInversion.id)):
         if m.ticker == d.ticker or u.ctx.base(m.ticker) == d.ticker_base:
             if d.cartera and m.cartera != d.cartera:
                 continue
@@ -339,11 +381,16 @@ def revisar(db: Session, decision_id: int, evaluacion_proceso: str | None = None
     alternativas = _alternativas_de(db, d.id)
     con = tuple(a["ticker"] for a in alternativas if a["ticker"] != d.ticker_base)[:cda.MAX_ALTERNATIVAS]
     prefs = decision_preferencias.normalizar(d.preferencias)
-    actual = cda.analizar(d.ticker, prefs, d.cartera, con, None, db)
-
     u = Universo(db)
-    fuente = ((d.condiciones or {}).get("entrada") or {}).get("fuente") or (inicial_analisis.get("escenarios") or {}).get("fuente_precio")
-    p_hoy, m_hoy = precio_actual(db, d.ticker, fuente, u)
+    actual = cda.analizar(d.ticker, prefs, d.cartera, con, None, db, u)
+
+    cond = d.condiciones or {}
+    seguido = (cond.get("seguimiento") or {}).get("ticker")
+    if seguido:
+        fuente = cond["seguimiento"].get("fuente")
+    else:
+        fuente = (cond.get("entrada") or {}).get("fuente") or (inicial_analisis.get("escenarios") or {}).get("fuente_precio")
+    p_hoy, m_hoy = precio_actual(db, seguido or d.ticker, fuente, u)
     bench = None
     if d.moneda:
         simbolo = benchmarks.por_defecto(d.moneda)
@@ -351,13 +398,11 @@ def revisar(db: Session, decision_id: int, evaluacion_proceso: str | None = None
         inicio, fin = _cierre_en(barras, d.fecha_precio or d.creada_en.date()), _cierre_en(barras, None)
         if inicio and fin:
             bench = {"simbolo": simbolo, "nombre": benchmarks.BENCHMARKS[simbolo]["nombre"], "inicio": inicio, "fin": fin}
-    alt_hoy = {}
-    for a in alternativas:
-        alt_hoy[a["ticker"]] = cda._precio_snapshot(u.emisor(a["ticker"]))[0]
+    alt_hoy = {a["ticker"]: cda._precio_snapshot(u.emisor(a["ticker"]))[:2] for a in alternativas}
     decision_dict = {**a_dict(db, d), "creada_en": d.creada_en}
     comparacion = revision_engine.comparar(
         decision_dict, inicial_analisis or {}, actual, p_hoy, m_hoy, bench, alt_hoy,
-        _volatilidad_desde(u, d.ticker_base or d.ticker, d.creada_en.date()), _movimientos_posteriores(db, d, u),
+        _volatilidad_desde(u, seguido or d.ticker_base or d.ticker, d.creada_en.date()), _movimientos_posteriores(db, d, u),
         ahora.date(),
     )
     if bench is None:
@@ -423,9 +468,9 @@ def pendientes(db: Session, hoy: date | None = None) -> list[dict]:
     return salida
 
 
-def invalidacion_de_ticker(db: Session, ticker_base: str) -> list[str]:
+def invalidacion_de_ticker(db: Session, ticker_base: str, u: Universo | None = None) -> list[str]:
     """Condiciones de precio cumplidas de las decisiones abiertas sobre un emisor."""
-    u = Universo(db)
+    u = u or Universo(db)
     salida = []
     for d in db.query(Decision).filter(Decision.ticker_base == ticker_base, Decision.estado == "abierta"):
         salida += _invalidacion_cumplida(db, d, u)
@@ -448,9 +493,10 @@ def aprendizaje(db: Session, hoy: date | None = None) -> dict:
             "ejecutada": bool(d.ejecutada), "revisar_el": d.revisar_el, "condiciones": d.condiciones,
             "banderas_altas": (d.calidad or {}).get("banderas_altas", 0) > 0,
             "concentracion_revisar": bool((d.calidad or {}).get("concentracion_revisar")),
-            "favorable_pct": (d.conclusion or {}).get("favorable_pct"),
+            "favorable_pct": (d.conclusion or {}).get("favorable_pct"), "con_tesis": bool((d.nota or "").strip()),
         })
-    revisiones = [{"decision_id": r.decision_id, "comparacion": r.comparacion} for r in db.query(DecisionRevision)]
+    revisiones = [{"decision_id": r.decision_id, "comparacion": r.comparacion}
+                  for r in db.query(DecisionRevision).order_by(DecisionRevision.id)]
     diario = None
     try:
         diario = diario_operaciones.get_diario(db)
@@ -495,7 +541,8 @@ def avisar_revisiones(db: Session, notificar: bool = True, hoy: date | None = No
         return {"eventos": len(eventos), "entregado": False, "motivo": "aviso silenciado"}
     lineas = ["<b>DECISIÓN PARA REVISAR</b>"]
     for d, _, texto in eventos:
-        lineas.append(f"• {d.ticker} ({d.accion_elegida.replace('_', ' ')}, {d.creada_en.date().isoformat()}): {texto}")
+        lineas.append(f"• {html.escape(d.ticker)} ({html.escape(d.accion_elegida.replace('_', ' '))}, "
+                      f"{d.creada_en.date().isoformat()}): {html.escape(texto)}")
     lineas.append("Abrí Centro de Decisiones → Historial para revisarla. Información de seguimiento, no una indicación de operar.")
     entregado, motivo = telegram.enviar("\n".join(lineas), parse_mode="HTML")
     if entregado:

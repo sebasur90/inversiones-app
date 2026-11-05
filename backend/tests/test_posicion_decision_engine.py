@@ -78,3 +78,17 @@ def test_textos_no_indican_operar():
     textos = [pde.NOTA_RESULTADO, pde.REGLA_OPCIONES] + [
         t for o in ops for t in o["a_favor"] + o["en_contra"] + o["condiciones"] + o["invalidaria"]]
     assert [t for t in textos if PROHIBIDAS.search(t)] == []
+
+
+def test_sin_peso_conocido_la_concentracion_no_se_usa():
+    ops = pde.evaluar_opciones(_eval(), "KO", None, (20.0, 30.0), {}, SIN_TESIS, None, [])
+    textos = [t for o in ops for t in o["a_favor"] + o["en_contra"]]
+    assert not [t for t in textos if "pesa" in t]
+    assert _op(ops, pde.MANTENER)["cambio_en_cartera"]["peso_antes_pct"] is None
+
+
+def test_los_textos_de_costo_no_llevan_el_monto():
+    ops = pde.evaluar_opciones(_eval(), "KO", 10.0, (20.0, 30.0), SIMS, SIN_TESIS, None, [])
+    textos = [t for o in ops for t in o["en_contra"]]
+    assert any("comisión" in t for t in textos) and not [t for t in textos if "USD" in t or "1,50" in t or "1.50" in t]
+    assert _op(ops, pde.REDUCIR)["cambio_en_cartera"]["comision_estimada_usd"] == 1.5

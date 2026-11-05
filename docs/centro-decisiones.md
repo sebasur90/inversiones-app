@@ -130,14 +130,21 @@ reasignar: la mitad a cada una de las tres mejores alternativas y la mitad a liq
 
 - Guardar re-corre el análisis en el servidor y congela la salida completa (`decision_snapshots` tipo `inicial`).
   Del cliente sólo se toman parámetros y elecciones. Inmutable salvo `ejecutada`, `nota`, `revisar_el`, `estado`.
+- Condiciones según la acción: precio de entrada sólo en entrar ahora / escalonada / esperar / aumentar;
+  invalidación por precio en esas y en mantener (para salir o descartar una caída confirma, no invalida). Con
+  "elegir alternativa" o "reasignar" se sigue a la **alternativa elegida**: su precio del snapshot, su volatilidad
+  y las condiciones de dimensión evaluadas sobre ella (`condiciones.seguimiento`); no hay invalidación de precio
+  porque los escenarios son del activo analizado.
+- En `decision_alternativas` el activo se guarda con su evaluación dentro del grupo (la misma metodología que las
+  alternativas) y el precio del snapshot.
 - Revisar: análisis de hoy con las mismas preferencias y alternativas; compara dimensiones, banderas nuevas y
   resueltas, precio en la misma fuente, índice del período (SPY en USD, Merval en ARS, si están en la base),
-  alternativas, condiciones de invalidación, supuestos (confirmado / refutado / pendiente / a tu juicio) y
+  alternativas (sin repetir el ticker seguido y sin comparar monedas distintas), condiciones de invalidación, supuestos (confirmado / refutado / pendiente / a tu juicio) y
   volatilidad observada vs. la del día de la decisión. El resultado sólo si está marcada como ejecutada (y es
   aproximado por precio). Si hay movimientos del ticker posteriores sin marcar, se sugiere marcarla.
 - Aprendizaje (calculado, no persistido): revisiones a tiempo, entradas contra la conclusión, entradas con banderas
-  críticas, concentración recurrente, condiciones de invalidación definidas, expectativa vs. resultado, riesgo
-  mayor al esperado, ideas invalidadas y, del diario de operaciones, compras cerca de máximos, ventas antes de
+  críticas, concentración recurrente, tesis escrita (la nota de la decisión), expectativa vs. resultado, riesgo
+  mayor al esperado, ideas invalidadas (estas tres, con la última revisión de cada decisión) y, del diario de operaciones, compras cerca de máximos, ventas antes de
   subas y ventas cerca de mínimos. < 3 casos: no se dice; 3–9: descriptivo; ≥ 10: se repite. Nunca "estadístico".
 - Aviso por Telegram (interruptor **Revisión de decisiones** en Ajustes → Avisos): después de cada evaluación de
   alertas del scheduler, una vez por evento (revisión vencida / invalidación de precio). Apagado, se marca igual.

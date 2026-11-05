@@ -1,7 +1,7 @@
 """Aprendizaje sobre el propio proceso de decisión. Puro: calculado en cada pedido, no se persiste.
 
 Busca patrones en las decisiones guardadas, sus revisiones y las operaciones reales (el diario de operaciones). El
-foco es la **calidad del proceso** (¿definiste cómo invalidar la idea?, ¿la revisaste?, ¿seguiste tu estrategia?),
+foco es la **calidad del proceso** (¿escribiste tu tesis?, ¿la revisaste?, ¿seguiste tu estrategia?),
 no sólo si una operación ganó o perdió.
 
 Muestra mínima, sin excepciones:
@@ -38,9 +38,14 @@ def _patron(clave: str, titulo: str, k: int, n: int, texto: str, regla: str, foc
 
 def patrones(decisiones: list[dict], revisiones: list[dict], diario: dict | None, hoy: date) -> dict:
     """`decisiones`: dicts con accion_elegida, conclusion.tipo, ejecutada, revisar_el, condiciones, calidad,
-    banderas_altas, concentracion_revisar, favorable_pct, id. `revisiones`: dicts con decision_id, comparacion."""
+    banderas_altas, concentracion_revisar, favorable_pct, con_tesis, id. `revisiones`: dicts con decision_id,
+    comparacion, en orden de creación.
+
+    Los patrones sobre revisiones (6–8) cuentan **una por decisión** (la última): una decisión revisada cuatro
+    veces no puede pesar cuatro casos."""
     salida = []
     n = len(decisiones)
+    ultimas = list({r["decision_id"]: r for r in revisiones}.values())
 
     # 1. Revisiones a tiempo
     vencidas = [d for d in decisiones if d.get("revisar_el") and d["revisar_el"] <= hoy]
@@ -71,43 +76,41 @@ def patrones(decisiones: list[dict], revisiones: list[dict], diario: dict | None
                           f"En {k} de {len(aumentos)} decisiones de entrar o aumentar, la simulación ya marcaba concentración "
                           "en nivel «revisar».", "observación «revisar» del encaje con la cartera al decidir"))
 
-    # 5. Condiciones de invalidación definidas
-    k = sum(1 for d in decisiones if (d.get("condiciones") or {}).get("invalidacion"))
-    salida.append(_patron("invalidacion", "Definís cómo invalidar la idea", k, n,
-                          f"{k} de {n} decisiones tienen al menos una condición de invalidación.",
-                          "condiciones de invalidación guardadas en la decisión"))
+    # 5. Tesis escrita. (Las condiciones de invalidación las arma la app en cada decisión: contarlas daría
+    # siempre 100 %. La tesis es lo que depende del usuario.)
+    k = sum(1 for d in decisiones if d.get("con_tesis"))
+    salida.append(_patron("tesis", "Registrás tu tesis", k, n,
+                          f"{k} de {n} decisiones tienen tu tesis o motivo escrito.",
+                          "decisiones con la nota «tu tesis o motivo» no vacía"))
 
     # 6. Expectativa vs. resultado (sólo ejecutadas y revisadas)
     pares = []
-    for r in revisiones:
+    for r in ultimas:
         d = next((x for x in decisiones if x["id"] == r["decision_id"]), None)
         var = ((r.get("comparacion") or {}).get("precio") or {}).get("variacion")
         if d and d.get("ejecutada") and d.get("favorable_pct") is not None and var is not None:
             pares.append((d["favorable_pct"], var))
     k = sum(1 for fav, var in pares if fav > 0 and var < fav * 0.25)
     salida.append(_patron("expectativa", "Escenario favorable vs. lo observado", k, len(pares),
-                          f"En {k} de {len(pares)} revisiones de decisiones ejecutadas, el precio avanzó menos de un cuarto del "
+                          f"En {k} de {len(pares)} decisiones ejecutadas y revisadas, el precio avanzó menos de un cuarto del "
                           "escenario favorable que se veía.", "variación de precio a la revisión < 25 % del potencial favorable",
                           foco="expectativas"))
 
     # 7. Riesgo esperado vs. observado
-    rs = [((r.get("comparacion") or {}).get("riesgo") or {}) for r in revisiones]
+    rs = [((r.get("comparacion") or {}).get("riesgo") or {}) for r in ultimas]
     rs = [x for x in rs if x.get("volatilidad_al_decidir") and x.get("volatilidad_observada")]
     k = sum(1 for x in rs if x["volatilidad_observada"] > 1.25 * x["volatilidad_al_decidir"])
     salida.append(_patron("riesgo", "Riesgo mayor al esperado", k, len(rs),
-                          f"En {k} de {len(rs)} revisiones la volatilidad observada superó en más de 25 % a la histórica que se "
+                          f"En {k} de {len(rs)} decisiones revisadas la volatilidad observada superó en más de 25 % a la histórica que se "
                           "veía al decidir.", "volatilidad semanal anualizada desde la decisión > 1,25 × la de la serie al decidir",
                           foco="riesgo"))
 
     # 8. Invalidación cumplida sin revisar
-    k, m = 0, 0
-    for r in revisiones:
-        conds = (r.get("comparacion") or {}).get("condiciones") or []
-        if any(c.get("cumplida") for c in conds):
-            m += 1
-    salida.append(_patron("invalidacion_cumplida", "Ideas invalidadas", m, len(revisiones),
-                          f"En {m} de {len(revisiones)} revisiones se había cumplido alguna condición de invalidación.",
-                          "condición de invalidación cumplida al revisar"))
+    m = sum(1 for r in ultimas if any(c.get("cumplida") for c in (r.get("comparacion") or {}).get("condiciones") or []))
+    salida.append(_patron("invalidacion_cumplida", "Ideas invalidadas", m, len(ultimas),
+                          f"En {m} de {len(ultimas)} decisiones revisadas se había cumplido alguna condición de invalidación "
+                          "(última revisión de cada una).",
+                          "condición de invalidación cumplida en la última revisión de cada decisión"))
 
     # Operaciones reales (diario de operaciones): reusa sus números
     operaciones = []

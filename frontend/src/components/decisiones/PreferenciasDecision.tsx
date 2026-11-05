@@ -14,6 +14,11 @@ const DIMS: { clave: string; nombre: string }[] = [
   { clave: 'riesgo', nombre: 'Riesgo' }, { clave: 'tecnico', nombre: 'Técnico' }, { clave: 'encaje', nombre: 'Encaje' },
 ]
 
+/** Lista separada por comas → valores limpios. Se parsea al guardar, no en cada tecla (si no, la coma se borra). */
+function lista(texto: string, mayusculas = false): string[] {
+  return texto.split(',').map(x => (mayusculas ? x.trim().toUpperCase() : x.trim())).filter(Boolean)
+}
+
 /** Preferencias de análisis: se guardan en el servidor porque cada decisión las congela y el aviso las usa. */
 export default function PreferenciasDecisionModal({ abierto, onClose, actuales }: {
   abierto: boolean; onClose: () => void; actuales: PreferenciasDecisionOut
@@ -21,12 +26,22 @@ export default function PreferenciasDecisionModal({ abierto, onClose, actuales }
   const queryClient = useQueryClient()
   const [p, setP] = useState<PreferenciasDecision>(actuales)
   const [pesosPropios, setPesosPropios] = useState(actuales.pesos != null)
-  useEffect(() => { setP(actuales); setPesosPropios(actuales.pesos != null) }, [actuales])
+  const [textoSectores, setTextoSectores] = useState((actuales.excluir.sectores ?? []).join(', '))
+  const [textoTickers, setTextoTickers] = useState((actuales.excluir.tickers ?? []).join(', '))
+  useEffect(() => {
+    setP(actuales)
+    setPesosPropios(actuales.pesos != null)
+    setTextoSectores((actuales.excluir.sectores ?? []).join(', '))
+    setTextoTickers((actuales.excluir.tickers ?? []).join(', '))
+  }, [actuales])
   const tabla = actuales.pesos_tabla[p.enfoque]?.[p.horizonte] ?? {}
   const pesos = p.pesos ?? tabla
 
   const guardar = useMutation({
-    mutationFn: () => guardarPreferenciasDecision({ ...p, pesos: pesosPropios ? pesos : null }),
+    mutationFn: () => guardarPreferenciasDecision({
+      ...p, pesos: pesosPropios ? pesos : null,
+      excluir: { ...p.excluir, sectores: lista(textoSectores), tickers: lista(textoTickers, true) },
+    }),
     onSuccess: datos => {
       queryClient.setQueryData(qk.de('decisiones-preferencias'), datos)
       void queryClient.invalidateQueries({ queryKey: qk.de('decision-analisis') })
@@ -66,13 +81,11 @@ export default function PreferenciasDecisionModal({ abierto, onClose, actuales }
                      value={p.universo} onChange={v => set('universo', v)} />
         </Campo>
         <Campo titulo="Excluir sectores (separados por coma)">
-          <input value={(p.excluir.sectores ?? []).join(', ')}
-                 onChange={e => set('excluir', { ...p.excluir, sectores: e.target.value.split(',').map(x => x.trim()).filter(Boolean) })}
+          <input value={textoSectores} onChange={e => setTextoSectores(e.target.value)}
                  className="h-11 px-3 rounded-xl bg-app-surface-2 border border-app-border text-body text-app-text" />
         </Campo>
         <Campo titulo="Excluir tickers (separados por coma)">
-          <input value={(p.excluir.tickers ?? []).join(', ')}
-                 onChange={e => set('excluir', { ...p.excluir, tickers: e.target.value.split(',').map(x => x.trim().toUpperCase()).filter(Boolean) })}
+          <input value={textoTickers} onChange={e => setTextoTickers(e.target.value.toUpperCase())}
                  className="h-11 px-3 rounded-xl bg-app-surface-2 border border-app-border text-body text-app-text" />
         </Campo>
         <div>

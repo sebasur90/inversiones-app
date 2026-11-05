@@ -474,3 +474,93 @@ def test_aviso_apagado_se_marca_sin_mandar(client, sesion, monkeypatch):
     assert db.query(Decision).get(d["id"]).aviso_revision_en is not None
     assert db.query(AjustesAvisos).first().avisar_revision_decision == 0
     db.close()
+
+
+# ── Condiciones por acción, alternativa elegida y privacidad ───────────────
+
+def _tipos_invalidacion(d):
+    return [c["tipo"] for c in d["condiciones"]["invalidacion"]]
+
+
+def test_la_invalidacion_de_precio_depende_de_la_accion(client):
+    entrar = _crear(client, accion_elegida="entrar_ahora")
+    assert "precio_bajo" in _tipos_invalidacion(entrar) and entrar["condiciones"]["entrada"]["precio"] is not None
+    # para descartar una caída confirma la decisión: ni entrada ni invalidación por precio (no hay aviso que mandar)
+    descartar = _crear(client, accion_elegida="descartar")
+    assert "precio_bajo" not in _tipos_invalidacion(descartar) and descartar["condiciones"]["entrada"] == {}
+    assert descartar["conclusion"]["favorable_pct"] is None
+    salir = _crear(client, modo="posicion", accion_elegida="salir", cartera="Principal")
+    assert "precio_bajo" not in _tipos_invalidacion(salir) and salir["condiciones"]["entrada"] == {}
+    mantener = _crear(client, modo="posicion", accion_elegida="mantener", cartera="Principal")
+    assert "precio_bajo" in _tipos_invalidacion(mantener) and mantener["condiciones"]["entrada"] == {}
+    # la revisión de "descartar" no pinta una condición de entrada
+    c = client.post(f"{URL}/decisiones/{descartar['id']}/revisiones", json={}).json()["comparacion"]
+    assert not [s for s in c["supuestos"] if s["supuesto"].startswith("Condición de entrada")]
+
+
+def test_elegir_una_alternativa_sigue_a_la_alternativa(client):
+    d = _crear(client, accion_elegida="elegir_alternativa", alternativa_elegida="PEP")
+    cond = d["condiciones"]
+    assert cond["seguimiento"]["ticker"] == "PEP" and cond["entrada"] == {}
+    assert "precio_bajo" not in _tipos_invalidacion(d)
+    assert all(c.get("ticker") == "PEP" for c in cond["invalidacion"])
+    pep = next(a for a in d["alternativas"] if a["ticker"] == "PEP")
+    assert pep["rol"] == "elegida" and d["precio_ref"] == pytest.approx(pep["precio_ref"])
+    assert d["conclusion"]["favorable_pct"] is None     # los escenarios son de KO, no de PEP
+
+    c = client.post(f"{URL}/decisiones/{d['id']}/revisiones", json={}).json()["comparacion"]
+    assert c["precio"]["actual"] == pytest.approx(pep["precio_ref"])          # el precio de PEP, no el de KO
+    assert "PEP" not in {a["ticker"] for a in c["alternativas"]} and "KO" in {a["ticker"] for a in c["alternativas"]}
+    assert all(x["cumplida"] is not None for x in c["condiciones"])           # evaluadas sobre PEP
+
+    r = client.post(f"{URL}/decisiones", json={"modo": "oportunidad", "ticker": "KO", "accion_elegida": "elegir_alternativa",
+                                               "alternativa_elegida": "KO"})
+    assert r.status_code == 422
+
+
+def test_la_revision_no_repite_el_activo_entre_las_alternativas(client):
+    d = _crear(client, accion_elegida="descartar")
+    c = client.post(f"{URL}/decisiones/{d['id']}/revisiones", json={}).json()["comparacion"]
+    assert "KO" not in {a["ticker"] for a in c["alternativas"]} and c["alternativas"]
+
+
+def test_el_activo_se_guarda_con_la_metodologia_del_grupo(client):
+    d = _crear(client, accion_elegida="ninguna")
+    ko = next(a for a in d["alternativas"] if a["ticker"] == "KO")
+    grupo = d["snapshot"]["alternativas"]["objetivo_en_grupo"]
+    assert ko["orden"] == pytest.approx(grupo["evaluacion"]["orden"]["puntaje"])
+    assert ko["precio_ref"] == pytest.approx(grupo["precio_ref"])
+
+
+def test_el_tecnico_del_activo_en_el_grupo_es_el_del_ticker_pedido(client, sesion, monkeypatch):
+    # PEPD es la variante en dólares de PEP: la serie diaria está en PEPD, no en PEP.
+    monkeypatch.setattr(ca, "cargar_seed", lambda: {"variantes": {"PEPD": "PEP"}, "simbolos_yahoo": {}, "exposicion": {}})
+    db = sesion()
+    db.add(InstrumentoInversion(ticker="PEPD", nombre="PEPD", tipo_instrumento="CEDEAR", mercado="BYMA", moneda="USD",
+                                sector="Consumo básico", pais="Estados Unidos"))
+    _barras(db, "PEPD")
+    db.commit()
+    db.close()
+    b = client.get(f"{URL}/decisiones/analisis/PEPD").json()
+    assert b["ticker_base"] == "PEP" and b["alternativas"]["estado"] == "ok"
+    individual = next(x for x in b["evaluacion"]["dimensiones"] if x["clave"] == "tecnico")
+    en_grupo = next(x for x in b["alternativas"]["objetivo_en_grupo"]["evaluacion"]["dimensiones"] if x["clave"] == "tecnico")
+    assert individual["puntaje"] is not None and en_grupo["puntaje"] == individual["puntaje"]
+    assert b["conclusion"]["condiciones"] == [] or not any("no hay serie diaria" in x for x in b["conclusion"]["condiciones"])
+
+
+def test_simular_salidas_no_marca_la_liquidez_como_pais(client):
+    b = client.post(f"{URL}/carteras/Principal/simular-decision",
+                    json={"operaciones": [{"ticker": "MSFT", "monto_usd": -1000}, {"ticker": "BBB", "monto_usd": -500}]}).json()
+    assert b["liquidez_usd"] == pytest.approx(1500.0)       # 75 % de la cartera: pasaría el umbral de país (70 %)
+    assert not [o for o in b["observaciones"] if o["eje"] == "País" and "Liquidez" in o["texto"]]
+
+
+def test_los_textos_no_llevan_importes_de_la_cartera(client):
+    """Modo privacidad: el resumen del encaje y las opciones de la posición no traen montos (USD) en texto."""
+    b = client.get(f"{URL}/decisiones/analisis/KO", params={"cartera": "Principal"}).json()
+    encaje = next(x for x in b["evaluacion"]["dimensiones"] if x["clave"] == "encaje")
+    assert "USD" not in encaje["resumen"] and "5 % de la cartera" in encaje["resumen"]
+    assert b["encaje"]["monto_ref_usd"] == pytest.approx(100.0)      # la cifra sigue estructurada
+    p = client.get(f"{URL}/decisiones/posicion/KO", params={"cartera": "Principal"}).json()
+    assert not [t for o in p["opciones"] for t in o["a_favor"] + o["en_contra"] if "USD" in t]

@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { getAnalisisDecision, prepararTecnicoDecision, type AnalisisDecision as Analisis, type DimensionEval, type EscenarioEntrada } from '../../api'
 import { qk } from '../../api/queryClient'
 import { useInversionesContext } from '../../context/InversionesContext'
+import { useMontosOcultos } from '../../utils/privacidad'
 import ScreenHeader from '../../components/layout/ScreenHeader'
 import Card from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
@@ -32,6 +33,7 @@ export default function AnalisisDecision() {
   const { ticker = '' } = useParams()
   const navigate = useNavigate()
   const { carteraSeleccionada } = useInversionesContext()
+  const montosOcultos = useMontosOcultos()
   const [con, setCon] = useState<string[]>([])
   const [guardarAbierto, setGuardarAbierto] = useState(false)
   const t = ticker.toUpperCase()
@@ -102,7 +104,8 @@ export default function AnalisisDecision() {
                 <Conclusion c={a.conclusion} />
               </Seccion>
             )}
-            <SimuladorDecision iniciales={[{ ticker: a.ticker, monto: String(Math.round(a.encaje?.monto_ref_usd ?? 1000)) }]} />
+            {/* El monto de referencia es el 5 % de la cartera: con el modo privacidad no se precarga. */}
+            <SimuladorDecision iniciales={[{ ticker: a.ticker, monto: montosOcultos ? '' : String(Math.round(a.encaje?.monto_ref_usd ?? 1000)) }]} />
             <Button onClick={() => setGuardarAbierto(true)}>Guardar decisión</Button>
             <GuardarDecision abierto={guardarAbierto} onClose={() => setGuardarAbierto(false)} modo="oportunidad" ticker={a.ticker}
                              cartera={carteraSeleccionada} con={con} alternativas={(a.alternativas?.items ?? []).map(x => x.ticker)} />

@@ -5,6 +5,7 @@ import { getDecisiones, getPosicionDecision, type OpcionPosicion, type PosicionD
 import { qk } from '../../api/queryClient'
 import { useInversionesContext } from '../../context/InversionesContext'
 import { useFormatoFijo } from '../../hooks/useFormatoMoneda'
+import { useMontosOcultos } from '../../utils/privacidad'
 import ScreenHeader from '../../components/layout/ScreenHeader'
 import Card from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
@@ -27,6 +28,7 @@ export default function PosicionDecision() {
   const navigate = useNavigate()
   const { carteraSeleccionada } = useInversionesContext()
   const fmt = useFormatoFijo('USD')
+  const montosOcultos = useMontosOcultos()
   const [guardar, setGuardar] = useState<string | null>(null)
   const t = ticker.toUpperCase()
   const q = useQuery({ queryKey: qk.de('decision-posicion', t, carteraSeleccionada), queryFn: () => getPosicionDecision(t, carteraSeleccionada) })
@@ -79,8 +81,9 @@ export default function PosicionDecision() {
               {!p.reasignaciones.length && <p className="text-caption text-app-text-dim">No hay alternativas comparables para simular una reasignación.</p>}
               <p className="text-label text-app-text-faint">Un rendimiento pasado mejor no garantiza uno futuro mejor. Impuestos no calculados.</p>
             </Seccion>
+            {/* Con el modo privacidad el monto arranca vacío: la mitad de la posición, escrita en el input, la delata. */}
             <SimuladorDecision titulo="Simular otra combinación"
-                               iniciales={[{ ticker: p.ticker, monto: String(-Math.round((p.situacion.valor_actual_usd ?? 0) / 2)) }]} />
+                               iniciales={[{ ticker: p.ticker, monto: montosOcultos ? '' : String(-Math.round((p.situacion.valor_actual_usd ?? 0) / 2)) }]} />
             {(historial.data?.length ?? 0) > 0 && (
               <Card>
                 <div className="text-strong font-bold text-app-text mb-2">Decisiones sobre {p.ticker}</div>
@@ -119,7 +122,7 @@ function Situacion({ p }: { p: Posicion }) {
         {fila('Realizado', fmt.montoConSigno(s.realizado_usd))}
         {fila('Dividendos y cupones', fmt.monto(s.ingresos_usd))}
         {fila('Peso del ticker', s.peso_ticker_pct != null ? `${num(s.peso_ticker_pct, 1)} %` : '—')}
-        {fila('Peso del emisor', `${num(s.peso_emisor_pct, 1)} % (atención desde ${num(s.umbral_atencion_pct, 0)} %)`)}
+        {fila('Peso del emisor', `${s.peso_emisor_pct != null ? `${num(s.peso_emisor_pct, 1)} %` : '—'} (atención desde ${num(s.umbral_atencion_pct, 0)} %)`)}
       </div>
       {s.valuado_al_costo && <p className="text-label text-app-warn mt-1">Sin cotización: valuada al costo.</p>}
       <p className="text-label text-app-text-faint mt-2">{s.nota_resultado}</p>
@@ -158,9 +161,10 @@ function TarjetaOpcion({ o, onGuardar }: { o: OpcionPosicion; onGuardar: () => v
           <div>
             <div className="text-label font-bold uppercase text-app-text-faint">Cómo quedaría la cartera</div>
             <p className="text-caption text-app-text">
-              Peso del emisor: {num(c.peso_antes_pct, 1)} % → {num(c.peso_despues_pct, 1)} %
+              Peso del emisor: {c.peso_antes_pct != null ? `${num(c.peso_antes_pct, 1)} % → ${num(c.peso_despues_pct, 1)} %` : 'sin dato'}
               {c.liquidez_usd > 0 ? `; liquidez ${fmt.monto(c.liquidez_usd)}` : ''}
-              {c.venta?.resultado_estimado_usd != null ? `; resultado estimado ${fmt.montoConSigno(c.venta.resultado_estimado_usd)}` : ''}.
+              {c.venta?.resultado_estimado_usd != null ? `; resultado estimado ${fmt.montoConSigno(c.venta.resultado_estimado_usd)}` : ''}
+              {c.comision_estimada_usd ? `; comisión estimada ${fmt.monto(c.comision_estimada_usd)} (sin impuestos)` : ''}.
             </p>
             {c.observaciones.length > 0 && <Observaciones items={c.observaciones} />}
           </div>

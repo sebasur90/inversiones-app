@@ -75,16 +75,21 @@ def _obs_niveles(sim: dict | None) -> set[str]:
     return {o["nivel"] for o in (sim or {}).get("observaciones", [])}
 
 
-def evaluar_opciones(evaluacion: dict, emisor: str, peso_emisor_pct: float, umbrales: tuple[float, float],
+def evaluar_opciones(evaluacion: dict, emisor: str, peso_emisor_pct: float | None, umbrales: tuple[float, float],
                      sims: dict[str, dict | None], tesis: dict, alternativa_superior: str | None,
                      invalidacion_cumplida: list[str]) -> list[dict]:
-    """`umbrales = (atencion, revisar)` de peso por emisor; `sims[opción]` = salida de `simular_operaciones`."""
+    """`umbrales = (atencion, revisar)` de peso por emisor; `sims[opción]` = salida de `simular_operaciones`.
+    `peso_emisor_pct = None` (no se pudo simular): la concentración no se usa ni a favor ni en contra.
+
+    Los textos no llevan importes (son de la cartera y no pasan por el modo privacidad): la comisión estimada
+    viaja en `cambio_en_cartera.comision_estimada_usd` y la pantalla la formatea."""
     fund = ev.puntaje_de(evaluacion, ev.FUNDAMENTALES)
     val = ev.puntaje_de(evaluacion, ev.VALORACION)
     riesgo = ev.puntaje_de(evaluacion, ev.RIESGO)
     criticas = [b for b in evaluacion["banderas"] if b["severidad"] == ev.ALTA]
     atencion, revisar = umbrales
-    concentrada = peso_emisor_pct >= atencion
+    peso_conocido = peso_emisor_pct is not None
+    concentrada = peso_conocido and peso_emisor_pct >= atencion
 
     def _pct(v):
         return f"{v:.1f} %".replace(".", ",")
@@ -99,11 +104,11 @@ def evaluar_opciones(evaluacion: dict, emisor: str, peso_emisor_pct: float, umbr
         af.append("La tesis de tu última decisión no muestra deterioro grande.")
     if not criticas:
         af.append("No hay banderas críticas.")
-    if not concentrada:
+    if peso_conocido and not concentrada:
         af.append(f"El emisor pesa {_pct(peso_emisor_pct)}, debajo del umbral de atención ({_pct(atencion)}).")
     if criticas:
         ec += [f"Bandera crítica: {b['texto']}" for b in criticas]
-    if peso_emisor_pct >= revisar:
+    if peso_conocido and peso_emisor_pct >= revisar:
         ec.append(f"El emisor pesa {_pct(peso_emisor_pct)}, sobre el umbral de revisar ({_pct(revisar)}).")
     if tesis["deteriorada"]:
         ec.append("La tesis se deterioró desde tu última decisión.")
@@ -158,7 +163,7 @@ def evaluar_opciones(evaluacion: dict, emisor: str, peso_emisor_pct: float, umbr
     ec.append("Lo liberado habría que reasignarlo o dejarlo líquido (ver la comparación con alternativas).")
     sim_red = sims.get(REDUCIR)
     if sim_red and sim_red.get("comision_estimada_usd"):
-        ec.append(f"Costo estimado de la operación: {sim_red['comision_estimada_usd']:.2f} USD de comisión (sin impuestos).")
+        ec.append("La operación tiene un costo de comisión estimado (ver cómo quedaría la cartera); impuestos no calculados.")
     opciones.append({
         "clave": REDUCIR, "nombre": NOMBRE[REDUCIR], "a_favor": af, "en_contra": ec,
         "cambio_en_cartera": _cambio(sim_red, emisor),
@@ -178,7 +183,7 @@ def evaluar_opciones(evaluacion: dict, emisor: str, peso_emisor_pct: float, umbr
         ec.append(f"Fundamentales sin deterioro (puntaje {fund:.0f}) y sin banderas críticas.")
     sim_salir = sims.get(SALIR)
     if sim_salir and sim_salir.get("comision_estimada_usd"):
-        ec.append(f"Costo estimado: {sim_salir['comision_estimada_usd']:.2f} USD de comisión; impuestos no calculados.")
+        ec.append("La salida tiene un costo de comisión estimado (ver cómo quedaría la cartera); impuestos no calculados.")
     else:
         ec.append("Costos de salida: impuestos no calculados.")
     if not alternativa_superior:

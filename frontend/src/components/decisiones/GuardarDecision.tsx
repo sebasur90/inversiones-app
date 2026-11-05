@@ -60,6 +60,9 @@ export default function GuardarDecision({ abierto, onClose, modo, ticker, carter
     onSuccess: d => {
       void queryClient.invalidateQueries({ queryKey: qk.de('decisiones') })
       void queryClient.invalidateQueries({ queryKey: qk.de('decisiones-pendientes') })
+      void queryClient.invalidateQueries({ queryKey: qk.de('decisiones-aprendizaje') })
+      // La Posición compara contra la última decisión guardada (tesis e invalidaciones).
+      void queryClient.invalidateQueries({ queryKey: qk.de('decision-posicion') })
       onClose()
       navigate(`/decisiones/${d.id}`)
     },

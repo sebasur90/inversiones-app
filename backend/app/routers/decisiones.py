@@ -145,10 +145,11 @@ def posicion(
     t = _ticker(ticker)
     c = _cartera(cartera, db)
     prefs = _prefs(db, horizonte, objetivo, enfoque, moneda, tolerancia)
-    base = Universo(db).ctx.base(t)
+    u = Universo(db)        # uno solo para todo el pedido: armarlo es caro
+    base = u.ctx.base(t)
     try:
         return cda.analizar_posicion(t, c, prefs, db, diario_decisiones.ultima_tesis(db, base),
-                                     diario_decisiones.invalidacion_de_ticker(db, base))
+                                     diario_decisiones.invalidacion_de_ticker(db, base, u), u)
     except cda.NoEsPosicion:
         raise HTTPException(status_code=404, detail=f"No hay una posición abierta de {t} en {'esa cartera' if c else 'el consolidado'}")
 

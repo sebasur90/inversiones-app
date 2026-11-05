@@ -28,6 +28,7 @@ export default function DecisionDetalle() {
   const n = Number(id)
   const q = useQuery({ queryKey: qk.de('decision', n), queryFn: () => getDecision(n), enabled: Number.isFinite(n) })
   const d = q.data
+  const [nota, setNota] = useState<string | null>(null)
   const refrescar = () => {
     void queryClient.invalidateQueries({ queryKey: qk.de('decision', n) })
     void queryClient.invalidateQueries({ queryKey: qk.de('decisiones') })
@@ -36,8 +37,12 @@ export default function DecisionDetalle() {
   }
   const revisar = useMutation({ mutationFn: () => revisarDecision(n, {}), onSuccess: refrescar })
   const editar = useMutation({ mutationFn: (b: Parameters<typeof editarDecision>[1]) => editarDecision(n, b), onSuccess: refrescar })
+  // La nota en edición se descarta sólo cuando el servidor la guardó: si el PATCH falla, el texto queda.
+  const guardarNota = useMutation({
+    mutationFn: (texto: string) => editarDecision(n, { nota: texto }),
+    onSuccess: () => { setNota(null); refrescar() },
+  })
   const borrar = useMutation({ mutationFn: () => borrarDecision(n), onSuccess: () => { refrescar(); navigate('/decisiones?tab=historial') } })
-  const [nota, setNota] = useState<string | null>(null)
 
   return (
     <div className="pb-4">
@@ -73,8 +78,9 @@ export default function DecisionDetalle() {
               <textarea value={nota ?? d.nota ?? ''} onChange={e => setNota(e.target.value)} rows={3} maxLength={2000}
                         className="w-full px-3 py-2 rounded-xl bg-app-surface-2 border border-app-border text-body text-app-text" />
               {nota != null && nota !== (d.nota ?? '') && (
-                <Button variant="outline" onClick={() => { editar.mutate({ nota }); setNota(null) }}>Guardar nota</Button>
+                <Button variant="outline" loading={guardarNota.isPending} onClick={() => guardarNota.mutate(nota)}>Guardar nota</Button>
               )}
+              {guardarNota.error && <div className="mt-2"><ErrorBanner error={parseApiError(guardarNota.error)} /></div>}
             </Card>
 
             <Card>
