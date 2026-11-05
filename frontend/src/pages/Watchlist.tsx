@@ -25,6 +25,7 @@ import InfoTooltip from '../help/components/InfoTooltip'
 import AlertaPrecioBadge from '../components/inversiones/AlertaPrecioBadge'
 import SelectorInstrumento from '../components/inversiones/SelectorInstrumento'
 import DetalleWatchlist from '../components/inversiones/DetalleWatchlist'
+import RecordatorioForm from '../components/recordatorios/RecordatorioForm'
 import { Icon } from '../components/icons/Icons'
 import AvatarTicker from '../components/ui/AvatarTicker'
 import VariacionDia from '../components/ui/VariacionDia'
@@ -59,6 +60,7 @@ export default function Watchlist() {
   const [agregarAbierto, setAgregarAbierto] = useState(false)
   const [tickerAbierto, setTickerAbierto] = useState<string | null>(null)
   const [aviso, setAviso] = useState<{ texto: string; tono: 'success' | 'error' } | null>(null)
+  const [recordatorioDe, setRecordatorioDe] = useState<string | null>(null)
 
   const watchlistQuery = useQuery({
     queryKey: qk.watchlist,
@@ -298,6 +300,18 @@ export default function Watchlist() {
             onEliminar={() => eliminarMut.mutate(itemAbierto.ticker)}
             onVerTecnico={() => navigate(`/analisis-tecnico?ticker=${encodeURIComponent(itemAbierto.ticker)}`)}
             onVerPosicion={() => navigate(`/ticker/${encodeURIComponent(itemAbierto.ticker)}`)}
+            onRecordatorio={() => { setRecordatorioDe(itemAbierto.ticker); setTickerAbierto(null) }}
+          />
+        )}
+      </Modal>
+
+      <Modal open={recordatorioDe !== null} onClose={() => setRecordatorioDe(null)} title="Nuevo recordatorio">
+        {recordatorioDe && (
+          <RecordatorioForm
+            key={recordatorioDe}
+            inicial={{ titulo: `Revisar ${recordatorioDe}`, tickers: [recordatorioDe] }}
+            onCancelar={() => setRecordatorioDe(null)}
+            onListo={() => { setRecordatorioDe(null); setAviso({ texto: 'Recordatorio creado', tono: 'success' }) }}
           />
         )}
       </Modal>

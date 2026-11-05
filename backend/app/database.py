@@ -1249,6 +1249,37 @@ class EstadoFuenteEventos(Base):
     rotacion = Column(Integer, nullable=False, default=0, server_default="0")   # por dónde sigue la ronda de símbolos
 
 
+class Recordatorio(Base):
+    """Un aviso que el usuario se deja para una fecha (`services/recordatorios.py`).
+
+    `fecha` y `hora` están en la zona del scheduler (`SCHEDULER_TZ`), no en UTC: "el 10 de julio a las
+    9" es la hora de quien lo cargó. Los `*_en` sí son UTC, como el resto de las marcas de la base.
+
+    `aviso_enviado_en` sólo se marca cuando Telegram confirmó la entrega: `None` en un recordatorio
+    vencido significa que todavía hay que mandarlo. Cambiar la fecha o la hora lo vuelve a `None`.
+
+    Propia de la app: el sync del Sheet no la toca. Los tickers se guardan como texto (un ticker puede
+    no estar ni en cartera ni en la watchlist) y `evento_id` lo limpia `eventos_analytics.borrar`.
+    """
+    __tablename__ = "recordatorios"
+    id = Column(Integer, primary_key=True, index=True)
+    titulo = Column(String, nullable=False)
+    nota = Column(String, nullable=True)
+    fecha = Column(Date, nullable=False)
+    hora = Column(String, nullable=True)                  # "HH:MM"; sin hora avisa a la hora por defecto
+    tickers = Column(JSON, nullable=False, default=list)
+    evento_id = Column(Integer, ForeignKey("eventos_mercado.id"), nullable=True)
+    estado = Column(String, nullable=False, default="pendiente")   # "pendiente" | "hecho"
+    aviso_enviado_en = Column(DateTime, nullable=True)
+    hecho_en = Column(DateTime, nullable=True)
+    creado_en = Column(DateTime, nullable=False)
+    actualizado_en = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        Index("ix_recordatorios_estado_fecha", "estado", "fecha"),
+    )
+
+
 def get_db():
     db = SessionLocal()
     try:

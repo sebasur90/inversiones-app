@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { CalidadDatosOut, DiagnosticoOut, RendimientoPorTickerItem, WatchlistItemOut } from '../../api'
+import type { CalidadDatosOut, DiagnosticoOut, Recordatorio, RendimientoPorTickerItem, WatchlistItemOut } from '../../api'
 import { priorizarHallazgos } from '../../utils/hallazgos'
 import { alertasDeCompra, alertasDePrecio, type EstadoAlerta } from '../../utils/alertasPrecio'
+import { fechaCorta } from '../../utils/fechas'
 import { Icon, type IconName } from '../icons/Icons'
 import SeverityBadge, { type Severidad } from './SeverityBadge'
 import AlertaPrecioBadge from './AlertaPrecioBadge'
 
 const MAX_HALLAZGOS = 3
 const MAX_TICKERS = 4
+const MAX_RECORDATORIOS = 3
 
 type Vista = 'alertas' | 'compras'
 
@@ -32,8 +34,8 @@ const FILA = `${BORDE_FILA} flex items-center gap-3`
 const FILA_TEXTO = `${BORDE_FILA} flex flex-col gap-0.5`
 
 /**
- * Lo que el usuario necesita mirar hoy, junto y en el Resumen: las alertas de precio de sus
- * posiciones, los hallazgos del diagnóstico, los errores del sync y —en otra pestaña— los
+ * Lo que el usuario necesita mirar hoy, junto y en el Resumen: los recordatorios vencidos, las
+ * alertas de precio de sus posiciones, los hallazgos del diagnóstico, los errores del sync y —en otra pestaña— los
  * instrumentos de la Watchlist que entraron (o están por entrar) en su zona de compra. Antes
  * eran dos bloques de tarjetas sueltas que empujaban todo lo demás hacia abajo.
  *
@@ -46,12 +48,15 @@ export default function ParaMirarHoy({
   posiciones,
   watchlist,
   umbralProximidad,
+  recordatorios,
 }: {
   diagnostico: DiagnosticoOut | null
   calidad: CalidadDatosOut | null
   posiciones: RendimientoPorTickerItem[]
   watchlist: WatchlistItemOut[]
   umbralProximidad: number
+  /** Sólo los vencidos: siguen acá hasta que se marquen como hechos o se pospongan. */
+  recordatorios: Recordatorio[]
 }) {
   const navigate = useNavigate()
   const [vistaElegida, setVistaElegida] = useState<Vista>('alertas')
@@ -83,7 +88,7 @@ export default function ParaMirarHoy({
 
   const issuesCriticos = calidad?.issues.filter(i => i.severidad === 'critico').length ?? 0
 
-  const totalAlertas = alertas.length + hallazgos.length + (issuesCriticos > 0 ? 1 : 0)
+  const totalAlertas = recordatorios.length + alertas.length + hallazgos.length + (issuesCriticos > 0 ? 1 : 0)
   const totalCompras = compras.length
 
   // Con una sola de las dos listas no hace falta elegir: se muestra esa, sin pestañas.
@@ -140,6 +145,26 @@ export default function ParaMirarHoy({
           <div className="bg-app-surface border border-app-border rounded-2xl overflow-hidden">
             {vista === 'alertas' && (
               <>
+                {recordatorios.slice(0, MAX_RECORDATORIOS).map(r => (
+                  <button key={`recordatorio-${r.id}`} onClick={() => navigate('/recordatorios')} className={FILA}>
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-app-accent-soft text-app-accent">
+                      <Icon name="calendar" className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-body font-semibold text-app-text truncate">{r.titulo}</div>
+                      <div className="text-caption text-app-text-dim truncate">
+                        Recordatorio del {fechaCorta(r.fecha)}{r.tickers.length > 0 ? ` · ${r.tickers.join(', ')}` : ''}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+
+                {recordatorios.length > MAX_RECORDATORIOS && (
+                  <button onClick={() => navigate('/recordatorios')} className={`${FILA} text-caption font-semibold text-app-text-dim`}>
+                    Ver los {recordatorios.length - MAX_RECORDATORIOS} recordatorios restantes →
+                  </button>
+                )}
+
                 {alertas.slice(0, MAX_TICKERS).map(a => (
                   <button
                     key={`${a.estado}-${a.ticker}`}

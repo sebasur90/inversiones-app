@@ -7,6 +7,7 @@ export default function Chip({ children, onRemove }: { children: ReactNode; onRe
       {children}
       {onRemove && (
         <button
+          type="button"
           onClick={onRemove}
           aria-label="Quitar filtro"
           className="flex items-center rounded-full transition-[background-color,transform] duration-150 hover:bg-app-accent/25 active:scale-90"

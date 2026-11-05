@@ -34,8 +34,9 @@ import { MAPAMERCADO_HELP, type MapaMercadoHelpKey } from './mapaMercado'
 import { DECISIONES_HELP, type DecisionesHelpKey } from './decisiones'
 import { EVENTOS_HELP, type EventosHelpKey } from './eventos'
 import { CICLOS_HELP, type CiclosHelpKey } from './ciclos'
+import { RECORDATORIOS_HELP, type RecordatoriosHelpKey } from './recordatorios'
 
-export type HelpKey = GlosarioKey | SimuladorHelpKey | SimuladorVidaHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey | ComisionesHelpKey | RebalanceoHelpKey | FlujoCajaHelpKey | WatchlistHelpKey | AnalisisTecnicoHelpKey | EstrategiasHelpKey | AportesHelpKey | SaludHelpKey | ExplicacionResultadoHelpKey | DescomposicionHelpKey | CostoOportunidadHelpKey | MatrizCorrelacionesHelpKey | ComparadorEstrategiasHelpKey | ValuacionHelpKey | MapaMercadoHelpKey | DecisionesHelpKey | EventosHelpKey | CiclosHelpKey
+export type HelpKey = GlosarioKey | SimuladorHelpKey | SimuladorVidaHelpKey | ObjetivoHelpKey | BenchmarksHelpKey | PatrimonioHelpKey | CalidadDatosHelpKey | DiagnosticoHelpKey | MovimientosHelpKey | PosicionesHelpKey | ExposicionHelpKey | VencimientosHelpKey | PreciosHelpKey | IndicadoresMacroHelpKey | ComparadorHelpKey | PerformanceRelativaHelpKey | TickerDetalleHelpKey | ComisionesHelpKey | RebalanceoHelpKey | FlujoCajaHelpKey | WatchlistHelpKey | AnalisisTecnicoHelpKey | EstrategiasHelpKey | AportesHelpKey | SaludHelpKey | ExplicacionResultadoHelpKey | DescomposicionHelpKey | CostoOportunidadHelpKey | MatrizCorrelacionesHelpKey | ComparadorEstrategiasHelpKey | ValuacionHelpKey | MapaMercadoHelpKey | DecisionesHelpKey | EventosHelpKey | CiclosHelpKey | RecordatoriosHelpKey
 
 export const HELP: Record<HelpKey, HelpContent> = {
   ...GLOSARIO_HELP,
@@ -73,6 +74,7 @@ export const HELP: Record<HelpKey, HelpContent> = {
   ...DECISIONES_HELP,
   ...EVENTOS_HELP,
   ...CICLOS_HELP,
+  ...RECORDATORIOS_HELP,
 }
 
 export {
@@ -110,4 +112,5 @@ export {
   MAPAMERCADO_HELP,
   EVENTOS_HELP,
   CICLOS_HELP,
+  RECORDATORIOS_HELP,
 }

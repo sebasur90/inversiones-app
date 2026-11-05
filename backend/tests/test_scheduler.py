@@ -166,3 +166,27 @@ def test_horas_mapa_mercado_configurables_y_desactivables(monkeypatch):
     assert scheduler._horas_mapa_mercado() == "18,20"
     monkeypatch.setenv("MAPA_MERCADO_HORAS", "")
     assert scheduler._horas_mapa_mercado() == ""
+
+
+# --- Recordatorios -----------------------------------------------------------------------------
+
+def test_recordatorios_corren_todos_los_dias_cada_cinco_minutos(monkeypatch):
+    pytest.importorskip("apscheduler")
+    monkeypatch.setenv("SCHEDULER_ENABLED", "true")
+    scheduler.iniciar()
+    try:
+        trigger = str(scheduler._scheduler.get_job("recordatorios").trigger)
+    finally:
+        scheduler.detener()
+    assert "minute='*/5'" in trigger
+    assert "day_of_week" not in trigger        # un recordatorio puede caer un sábado
+
+
+def test_recordatorios_que_fallan_no_propagan_la_excepcion(monkeypatch):
+    from app.services import recordatorios
+
+    def falla(_db):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(recordatorios, "avisar_vencidos", falla)
+    scheduler.correr_recordatorios()

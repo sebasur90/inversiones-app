@@ -20,7 +20,7 @@ from datetime import date, datetime, time
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from ...database import EventoInstrumento, EventoMercado, NoticiaMercado
+from ...database import EventoInstrumento, EventoMercado, NoticiaMercado, Recordatorio
 from . import (
     CAMPOS_EDITABLES, CATEGORIAS, CONFIANZAS, ESTADOS, ESTADOS_NOTICIA, ESTADOS_REVISION, ORIGENES,
     PRECISIONES, TIPOS_RELACION, VERIFICACIONES,
@@ -433,6 +433,8 @@ def borrar(db: Session, e: EventoMercado) -> str:
         db.query(EventoInstrumento).filter(EventoInstrumento.evento_id == e.id).delete()
         for absorbido in db.query(EventoMercado).filter(EventoMercado.fusionado_en_id == e.id):
             absorbido.fusionado_en_id = None
+        # Sin FK activa en SQLite: un id que quedara colgado podría terminar apuntando a otro evento.
+        db.query(Recordatorio).filter(Recordatorio.evento_id == e.id).update({Recordatorio.evento_id: None})
         db.delete(e)
         db.commit()
         return "borrado"

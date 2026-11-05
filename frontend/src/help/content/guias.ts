@@ -171,6 +171,21 @@ export const GUIAS_PANTALLA: Record<string, GuiaPantalla> = {
     terminos: ['diario_como_operas'],
   },
 
+  '/recordatorios': {
+    queEs: 'Avisos que te dejás para una fecha: "el 10 de julio, revisar estas acciones". Cuando llega el momento te llega un mensaje por Telegram y aparece en "Para mirar hoy" del Resumen.',
+    comoLeerla: [
+      'Pendientes: primero lo vencido, después lo que se viene, del más cercano al más lejano. Cada tarjeta dice cuándo avisa y si el mensaje ya salió.',
+      'Tocá un ticker para abrir su análisis técnico.',
+      'Si arriba aparece un aviso de que los mensajes no van a llegar, el recordatorio se guarda igual y se ve en la app, pero falta activar algo en el servidor.',
+    ],
+    queHacer: [
+      'Creá uno con título y fecha. La hora, la nota y los tickers son opcionales: sin hora avisa a las 9:00.',
+      'Cuando llegue, marcalo como hecho o posponelo 1 día, 1 semana u otra fecha con Editar.',
+      'También podés crearlo desde un evento del Calendario ("Avisarme") o desde un ticker de la Watchlist.',
+    ],
+    ojo: 'El aviso es uno solo, no se repite, y puede demorar hasta 5 minutos. El precio del mensaje es el último guardado en la app, no uno en vivo: la fecha entre paréntesis dice de cuándo es.',
+    terminos: ['recordatorios_que_es'],
+  },
   '/eventos': {
     queEs: 'Un calendario de acontecimientos (elecciones, decisiones de tasas, balances, guerras, aranceles, crisis) pasados y futuros, con su fuente, los instrumentos que afectan y lo que hizo el precio alrededor de cada uno.',
     comoLeerla: [

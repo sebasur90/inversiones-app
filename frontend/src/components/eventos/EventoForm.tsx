@@ -1,26 +1,15 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { crearEvento, editarEvento, type Evento, type EventoIn, type EventoVinculoIn } from '../../api'
 import { qk } from '../../api/queryClient'
 import { parseApiError } from '../../help/errors/apiErrors'
 import Button from '../ui/Button'
+import Campo, { CLASE_AREA, CLASE_INPUT } from '../ui/Campo'
 import Chip from '../ui/Chip'
 import { CATEGORIAS, ETIQUETA_CATEGORIA, ETIQUETA_ESTADO, ETIQUETA_PRECISION, ETIQUETA_RELACION, ETIQUETA_VERIFICACION } from '../../utils/eventos'
 
-const CLASE_INPUT = 'w-full h-11 rounded-xl bg-app-surface-2 border border-app-border px-3.5 text-body text-app-text outline-none focus:border-app-accent/60'
-const CLASE_AREA = 'w-full rounded-xl bg-app-surface-2 border border-app-border px-3.5 py-2.5 text-body text-app-text outline-none focus:border-app-accent/60'
 const ZONAS = ['', 'America/Argentina/Buenos_Aires', 'America/New_York', 'America/Sao_Paulo', 'Europe/London', 'Europe/Berlin', 'Asia/Shanghai', 'Asia/Tokyo', 'UTC']
 const RELACIONES_FORM = ['directa', 'matriz', 'sector', 'pais', 'macro', 'materia_prima', 'indice', 'otra']
-
-function Campo({ etiqueta, children, ayuda }: { etiqueta: string; children: ReactNode; ayuda?: string }) {
-  return (
-    <label className="flex flex-col gap-1 mb-3">
-      <span className="text-label font-bold uppercase tracking-wide text-app-text-faint">{etiqueta}</span>
-      {children}
-      {ayuda && <span className="text-label text-app-text-faint">{ayuda}</span>}
-    </label>
-  )
-}
 
 const aLista = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean)
 

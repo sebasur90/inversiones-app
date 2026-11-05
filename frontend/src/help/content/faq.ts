@@ -77,4 +77,10 @@ export const FAQ: FaqItem[] = [
       'No: reutiliza exactamente los mismos cálculos (TWR, XIRR, P&L realizado/no realizado). Lo único nuevo es cómo se presenta: en vez de un porcentaje final, separa el resultado en sus causas (precio, dividendos, comisiones, efecto del dólar) para el período que elijas, sin mezclar nunca un aporte de capital con una ganancia.',
     termino: 'explicacion_que_es',
   },
+  {
+    pregunta: '¿Cómo hago para que la app me avise en una fecha que elijo?',
+    respuesta:
+      'Entrá a Recordatorios (en Más → Herramientas) y creá uno con título y fecha; si querés, sumale hora, una nota y los tickers que vas a revisar. Ese día te llega un mensaje por Telegram y aparece en "Para mirar hoy" del Resumen, hasta que lo marques como hecho o lo pospongas.',
+    termino: 'recordatorios_que_es',
+  },
 ]

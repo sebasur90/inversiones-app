@@ -5,6 +5,7 @@ import { useInversionesContext } from '../context/InversionesContext'
 import { getEvolucionInversiones, getDiagnostico, getCalidadDatos } from '../api'
 import { qk } from '../api/queryClient'
 import { calcularDesde } from '../utils'
+import { consultaRecordatorios } from '../utils/recordatorios'
 import { variacionDiaCartera } from '../utils/resumenCartera'
 import { Icon } from '../components/icons/Icons'
 import ScreenHeader from '../components/layout/ScreenHeader'
@@ -45,6 +46,13 @@ export default function Resumen() {
     queryKey: qk.calidadDatos,
     queryFn: () => getCalidadDatos(),
   })
+
+  // Fuera del `QueryBoundary` de abajo: si esta consulta falla, la portada sigue funcionando sin ellos.
+  const recordatoriosQuery = useQuery(consultaRecordatorios)
+  const recordatoriosVencidos = useMemo(
+    () => (recordatoriosQuery.data?.items ?? []).filter(r => r.vencido),
+    [recordatoriosQuery.data],
+  )
 
   const evolucion = evolucionQuery.data?.puntos ?? []
   const diagnostico = diagnosticoQuery.data ?? null
@@ -95,6 +103,7 @@ export default function Resumen() {
               posiciones={rendimientoPorTicker}
               watchlist={watchlist}
               umbralProximidad={umbralProximidad}
+              recordatorios={recordatoriosVencidos}
             />
             <EstadoGeneral diagnostico={diagnostico} calidad={calidad} />
           </QueryBoundary>

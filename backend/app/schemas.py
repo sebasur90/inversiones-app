@@ -4441,3 +4441,53 @@ class CiclosSimulacionOut(CiclosBaseOut):
     supuestos: list[str] = Field(default_factory=list)
     notas: list[str] = Field(default_factory=list)
     avisos: dict[str, list[str]] = Field(default_factory=dict)
+
+
+# --- Recordatorios con fecha ---------------------------------------------------------------
+
+class RecordatorioIn(BaseModel):
+    """Alta de un recordatorio. `fecha` y `hora` (`HH:MM`) son las de la zona del scheduler."""
+    titulo: str = Field(min_length=1, max_length=200)
+    nota: Optional[str] = Field(default=None, max_length=1000)
+    fecha: date
+    hora: Optional[str] = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    tickers: list[str] = Field(default_factory=list, max_length=20)
+    evento_id: Optional[int] = None
+
+
+class RecordatorioPatchIn(BaseModel):
+    """Edición parcial: sólo se tocan los campos enviados. `hora: null` la quita."""
+    titulo: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    nota: Optional[str] = Field(default=None, max_length=1000)
+    fecha: Optional[date] = None
+    hora: Optional[str] = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    tickers: Optional[list[str]] = Field(default=None, max_length=20)
+    estado: Optional[Literal["pendiente", "hecho"]] = None
+
+
+class RecordatorioPosponerIn(BaseModel):
+    dias: Literal[1, 7]
+
+
+class RecordatorioOut(BaseModel):
+    id: int
+    titulo: str
+    nota: Optional[str] = None
+    fecha: date
+    hora: Optional[str] = None
+    tickers: list[str] = Field(default_factory=list)
+    evento_id: Optional[int] = None
+    evento_titulo: Optional[str] = None
+    estado: str
+    #: Cuándo avisa, en la zona del scheduler y sin offset: no pasarlo por una conversión a hora local.
+    vence_en: str
+    vencido: bool
+    aviso_enviado_en: Optional[datetime] = None
+    hecho_en: Optional[datetime] = None
+    creado_en: datetime
+
+
+class RecordatoriosListaOut(BaseModel):
+    items: list[RecordatorioOut] = Field(default_factory=list)
+    avisos_activos: bool
+    motivo_inactivo: Optional[str] = None

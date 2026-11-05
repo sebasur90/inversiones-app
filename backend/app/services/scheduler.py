@@ -208,6 +208,31 @@ def correr_eventos() -> None:
         db.close()
 
 
+def correr_recordatorios() -> None:
+    """Manda los recordatorios vencidos. Sólo loguea si había alguno: corre cada pocos minutos. Nunca lanza."""
+    from ..database import SessionLocal
+    from . import recordatorios
+
+    db = SessionLocal()
+    try:
+        resumen = recordatorios.avisar_vencidos(db)
+        if resumen["vencidos"]:
+            logger.info("scheduler: recordatorios %s", resumen)
+    except Exception as exc:
+        logger.exception("scheduler: los recordatorios fallaron: %s", exc)
+        db.rollback()
+    finally:
+        db.close()
+
+
+class _SinRutinaDeRecordatorios(logging.Filter):
+    """APScheduler anota cada corrida en INFO, y este job son casi 600 líneas por día sin contenido.
+    De WARNING para arriba (un job trabado o que falló) sigue pasando todo."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.levelno >= logging.WARNING or "correr_recordatorios" not in record.getMessage()
+
+
 def correr_sync_y_alertas() -> None:
     """Job de cierre: sync completo del Sheet + alertas. Nunca lanza."""
     # Imports locales: este módulo se importa desde `main`, y a nivel de módulo arrastraría toda
@@ -486,6 +511,18 @@ def iniciar() -> None:
                 coalesce=True,
                 max_instances=1,
             )
+        # Un job periódico y no uno por fecha: sin jobstore persistente, uno por fecha se perdería al
+        # reiniciar. Todos los días, porque un recordatorio puede caer un sábado.
+        logging.getLogger("apscheduler.executors.default").addFilter(_SinRutinaDeRecordatorios())
+        scheduler.add_job(
+            correr_recordatorios,
+            CronTrigger(minute="*/5", timezone=zona),
+            id="recordatorios",
+            # Lo que no alcanzó a correr lo levanta la pasada siguiente: lo vencido sigue vencido.
+            misfire_grace_time=300,
+            coalesce=True,
+            max_instances=1,
+        )
         scheduler.start()
     except Exception as exc:
         logger.exception("scheduler: no se pudo iniciar: %s", exc)
@@ -519,6 +556,7 @@ def iniciar() -> None:
         logger.info("scheduler: calendario de eventos todos los días a las %s (minuto %02d)", horas_eventos, minuto_eventos)
     else:
         logger.info("scheduler: calendario de eventos desactivado (EVENTOS_HORAS vacío)")
+    logger.info("scheduler: recordatorios cada 5 minutos, todos los días")
 
 
 def detener() -> None:

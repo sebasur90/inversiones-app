@@ -5238,3 +5238,50 @@ export const getAnalisisEventoTodos = (eventoId: number, benchmark: BenchmarkEve
   api.get<AnalisisEvento[]>(`/inversiones/eventos/${eventoId}/analisis`, { params: { benchmark } }).then(r => r.data)
 export const getPatronEventos = (ticker: string, categoria: string, n = 5) =>
   api.get<PatronEventos>(`/inversiones/eventos/patron/${encodeURIComponent(ticker)}`, { params: { categoria, n } }).then(r => r.data)
+
+// --- Recordatorios con fecha ---
+
+export interface Recordatorio {
+  id: number
+  titulo: string
+  nota: string | null
+  fecha: string
+  hora: string | null
+  tickers: string[]
+  evento_id: number | null
+  evento_titulo: string | null
+  estado: 'pendiente' | 'hecho'
+  /** Cuándo avisa, en la hora del servidor y sin offset. */
+  vence_en: string
+  vencido: boolean
+  /** UTC, como el resto de las marcas: se muestran con `+ 'Z'`. */
+  aviso_enviado_en: string | null
+  hecho_en: string | null
+  creado_en: string
+}
+
+export interface RecordatoriosLista {
+  items: Recordatorio[]
+  avisos_activos: boolean
+  motivo_inactivo: string | null
+}
+
+export interface RecordatorioIn {
+  titulo: string
+  nota?: string | null
+  fecha: string
+  hora?: string | null
+  tickers?: string[]
+  evento_id?: number | null
+}
+
+export type RecordatorioPatch = Partial<Omit<RecordatorioIn, 'evento_id'>> & { estado?: Recordatorio['estado'] }
+
+export const getRecordatorios = () => api.get<RecordatoriosLista>('/inversiones/recordatorios').then(r => r.data)
+export const crearRecordatorio = (body: RecordatorioIn) =>
+  api.post<Recordatorio>('/inversiones/recordatorios', body).then(r => r.data)
+export const editarRecordatorio = (id: number, body: RecordatorioPatch) =>
+  api.patch<Recordatorio>(`/inversiones/recordatorios/${id}`, body).then(r => r.data)
+export const posponerRecordatorio = (id: number, dias: 1 | 7) =>
+  api.post<Recordatorio>(`/inversiones/recordatorios/${id}/posponer`, { dias }).then(r => r.data)
+export const borrarRecordatorio = (id: number) => api.delete(`/inversiones/recordatorios/${id}`).then(() => undefined)

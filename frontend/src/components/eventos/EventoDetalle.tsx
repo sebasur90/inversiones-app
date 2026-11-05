@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import dayjs from 'dayjs'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   borrarEvento, editarEvento, fusionarEvento, getAnalisisEventoTodos, getEventoDetalle, getEventos, guardarVinculoEvento,
@@ -10,10 +11,12 @@ import { parseApiError } from '../../help/errors/apiErrors'
 import InfoTooltip from '../../help/components/InfoTooltip'
 import { fechaCorta, fechaHora } from '../../utils/fechas'
 import { ETIQUETA_CONFIANZA, ETIQUETA_ORIGEN, ETIQUETA_RELACION } from '../../utils/eventos'
+import { Icon } from '../icons/Icons'
 import Button from '../ui/Button'
 import CampoBusqueda from '../ui/CampoBusqueda'
 import QueryBoundary from '../ui/QueryBoundary'
 import { SkeletonCard } from '../ui/Skeleton'
+import RecordatorioForm from '../recordatorios/RecordatorioForm'
 import AnalisisEvento from './AnalisisEvento'
 import EventoForm from './EventoForm'
 import {
@@ -88,11 +91,17 @@ function Fusionar({ evento, onListo }: { evento: EventoDetalleT; onListo: (desti
   )
 }
 
+/** Un día después de que termina: es cuando ya se puede mirar qué pasó. Si ese día ya pasó, la fecha queda para elegir. */
+function fechaParaRecordatorio(e: EventoDetalleT): string {
+  const dia = dayjs(e.fecha_fin ?? e.fecha_evento).add(1, 'day')
+  return dia.isBefore(dayjs(), 'day') ? '' : dia.format('YYYY-MM-DD')
+}
+
 /** Ficha completa de un evento, dentro de un modal: no saca al usuario de lo que estaba mirando. */
 export default function EventoDetalle({ id, onCerrar, onAbrir }: { id: number; onCerrar: () => void; onAbrir: (id: number) => void }) {
   const qc = useQueryClient()
   const { showToast } = useInversionesContext()
-  const [modo, setModo] = useState<'ver' | 'editar' | 'fusionar'>('ver')
+  const [modo, setModo] = useState<'ver' | 'editar' | 'fusionar' | 'recordatorio'>('ver')
   const [verAnalisis, setVerAnalisis] = useState(false)
   const [nuevoTicker, setNuevoTicker] = useState('')
 
@@ -133,6 +142,20 @@ export default function EventoDetalle({ id, onCerrar, onAbrir }: { id: number; o
         }
         if (modo === 'fusionar') {
           return <Fusionar evento={e} onListo={destino => { setModo('ver'); onAbrir(destino) }} />
+        }
+        if (modo === 'recordatorio') {
+          return (
+            <RecordatorioForm
+              inicial={{
+                titulo: `Revisar: ${e.titulo}`.slice(0, 200),
+                fecha: fechaParaRecordatorio(e),
+                tickers: e.instrumentos.filter(v => v.estado_revision === 'confirmada').map(v => v.ticker).slice(0, 20),
+                evento_id: e.id,
+              }}
+              onCancelar={() => setModo('ver')}
+              onListo={() => { setModo('ver'); showToast('Recordatorio creado', 'success') }}
+            />
+          )
         }
         const conocimiento = textoConocimiento(e)
         const editados = e.campos_editados.filter(c => c !== 'descartado')
@@ -238,6 +261,7 @@ export default function EventoDetalle({ id, onCerrar, onAbrir }: { id: number; o
             )}
 
             <div className="grid grid-cols-2 gap-2">
+              <Button className="col-span-2" variant="outline" icon={<Icon name="calendar" className="w-4 h-4" />} onClick={() => setModo('recordatorio')}>Avisarme</Button>
               <Button variant="outline" onClick={() => setModo('editar')}>Editar</Button>
               <Button variant="outline" onClick={() => marcar.mutate({ fijado: !e.fijado })}>{e.fijado ? 'Desfijar' : 'Fijar arriba'}</Button>
               <Button variant="outline" onClick={() => setModo('fusionar')}>Fusionar duplicado</Button>

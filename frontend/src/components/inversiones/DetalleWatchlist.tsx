@@ -25,6 +25,7 @@ export default function DetalleWatchlist({
   onEliminar,
   onVerTecnico,
   onVerPosicion,
+  onRecordatorio,
   guardando,
   refrescando,
   eliminando,
@@ -39,6 +40,7 @@ export default function DetalleWatchlist({
    * **posición** y sin tenencia no tiene nada que mostrar. El análisis técnico, en cambio, sale de
    * la serie del ticker y existe para cualquier instrumento seguido. */
   onVerPosicion: () => void
+  onRecordatorio: () => void
   guardando?: boolean
   refrescando?: boolean
   eliminando?: boolean
@@ -208,6 +210,9 @@ export default function DetalleWatchlist({
             </Button>
           )}
         </div>
+        <Button variant="ghost" onClick={onRecordatorio} icon={<Icon name="calendar" className="w-4 h-4" />}>
+          Crear recordatorio
+        </Button>
         {confirmandoBaja ? (
           <Button
             variant="danger"

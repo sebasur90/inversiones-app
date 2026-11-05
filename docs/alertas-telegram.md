@@ -13,6 +13,7 @@ volver acá.
 | 🔵 **Zona de venta** | la zona que dibujaste en el gráfico de Análisis técnico. Dispara el **piso**: el precio sube y entra |
 | 🟠 **Señal de venta** de una estrategia | una estrategia de Análisis técnico con "Ventas" prendido |
 | 🟢 **Señal de compra** de una estrategia | una estrategia de Análisis técnico con "Compras" prendido |
+| ⏰ **Recordatorio** con fecha | la pantalla Recordatorios. Corre cada 5 minutos, todos los días, y no tiene interruptor en Ajustes: cada uno es un pedido explícito. Necesita `SCHEDULER_ENABLED=true` |
 
 Los cuatro tipos de nivel vienen prendidos; las estrategias arrancan **todas apagadas** (ver el
 paso 6). Una zona se compara siempre contra el precio de **su propia serie**: si la dibujaste sobre
